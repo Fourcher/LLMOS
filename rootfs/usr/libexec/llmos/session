@@ -1,0 +1,34 @@
+#!/bin/sh
+# Graphical session: cage (Wayland kiosk) running foot fullscreen with the
+# LLMOS client. Falls back to a plain console client if no display works.
+export PYTHONPATH=/usr/lib/llmos LANG=C.UTF-8
+export XDG_RUNTIME_DIR=/run/llmos/xdg
+mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+
+text_only=0
+grep -qw llmos.text /proc/cmdline && text_only=1
+ls /dev/dri/card* >/dev/null 2>&1 || text_only=1
+
+# Serial line (VMs, headless boxes): always offer a text client there too.
+if [ -c /dev/ttyS0 ] && grep -q 'console=ttyS0' /proc/cmdline; then
+	( while true; do /usr/libexec/llmos/text-shell ttyS0; sleep 1; done ) &
+fi
+
+run_text() {
+	chvt 1 2>/dev/null
+	while true; do /usr/libexec/llmos/text-shell tty1; sleep 1; done
+}
+
+[ "$text_only" = 1 ] && run_text
+
+# Wait for the daemon to write the theme file used by foot.
+i=0; while [ ! -f /run/llmos/foot.ini ] && [ $i -lt 100 ]; do sleep 0.2; i=$((i+1)); done
+export WLR_RENDERER=${WLR_RENDERER:-pixman} WLR_NO_HARDWARE_CURSORS=1 LIBSEAT_BACKEND=seatd
+fails=0
+while [ $fails -lt 3 ]; do
+	start=$(date +%s)
+	openvt -c 1 -s -w -- cage -s -- foot -c /run/llmos/foot.ini -- python3 -m llmos.client
+	[ $(( $(date +%s) - start )) -lt 10 ] && fails=$((fails+1)) || fails=0
+done
+echo "graphical session failed, using text console" >&2
+run_text

@@ -1,0 +1,57 @@
+#!/bin/busybox sh
+# LLMOS early boot: find the system medium, mount the read-only squashfs
+# image, put a tmpfs overlay on top and hand over to OpenRC.
+/bin/busybox --install -s /bin
+export PATH=/bin
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /run /media/sys /media/lower /media/rw /newroot
+
+log() { echo "llmos-init: $*" > /dev/kmsg 2>/dev/null; echo "llmos-init: $*"; }
+rescue() { log "$*"; log "dropping to rescue shell"; exec sh; }
+
+label=LLMOS
+for arg in $(cat /proc/cmdline); do
+	case "$arg" in
+		llmos.label=*) label="${arg#llmos.label=}" ;;
+		llmos.rescue) rescue "rescue requested" ;;
+	esac
+done
+
+KV=$(uname -r)
+for m in $(cat /etc/modules-early); do
+	modprobe -q "$m" 2>/dev/null
+done
+# Load drivers for whatever storage the hardware exposes.
+find /sys/devices -name modalias -exec cat {} + 2>/dev/null | sort -u | while read -r a; do
+	modprobe -q "$a" 2>/dev/null
+done
+
+dev=""
+i=0
+while [ $i -lt 40 ]; do
+	mdev -s 2>/dev/null
+	dev=$(findfs LABEL="$label" 2>/dev/null)
+	[ -n "$dev" ] && break
+	sleep 0.5
+	i=$((i + 1))
+done
+[ -n "$dev" ] || rescue "no device labelled $label"
+log "system medium: $dev"
+
+mount -o ro "$dev" /media/sys 2>/dev/null || mount -t iso9660 -o ro "$dev" /media/sys || rescue "cannot mount $dev"
+[ -f /media/sys/llmos/system.sqfs ] || rescue "system.sqfs missing"
+mount -t squashfs -o ro,loop /media/sys/llmos/system.sqfs /media/lower || rescue "cannot mount squashfs"
+mount -t tmpfs -o mode=0755,size=75% tmpfs /media/rw
+mkdir -p /media/rw/upper /media/rw/work
+mount -t overlay overlay -o lowerdir=/media/lower,upperdir=/media/rw/upper,workdir=/media/rw/work /newroot || rescue "overlay failed"
+
+mkdir -p /newroot/run/llmos/sys /newroot/run/llmos/lower
+mount --move /media/sys /newroot/run/llmos/sys
+mount --move /media/lower /newroot/run/llmos/lower
+echo "$dev" > /newroot/run/llmos/sysdev
+
+umount /proc /sys 2>/dev/null
+mount --move /dev /newroot/dev
+exec switch_root /newroot /sbin/init

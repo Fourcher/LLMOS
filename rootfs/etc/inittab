@@ -1,0 +1,7 @@
+# LLMOS: no login prompts. tty1 belongs to the LLMOS service.
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+tty2::respawn:/usr/libexec/llmos/text-shell tty2
+::ctrlaltdel:/sbin/reboot
+::shutdown:/sbin/openrc shutdown

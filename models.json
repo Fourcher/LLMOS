@@ -1,0 +1,93 @@
+{
+ "_note": "Every entry is a GGUF file on Hugging Face, pinned by SHA-256. Downloads are verified before use.",
+ "models": [
+  {
+   "id": "lfm2.5-1.2b",
+   "name": "LFM2.5 1.2B Instruct (Liquid AI)",
+   "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+   "file": "LFM2.5-1.2B-Instruct-Q4_K_M.gguf",
+   "size": 730895168,
+   "sha256": "b1b3de114215d9507409a662a501a631095a479a419584e8a2ded6304b19b4f5",
+   "ram_gb": 2,
+   "license": "LFM Open License v1.0",
+   "note": "Fastest usable model. Bundled default."
+  },
+  {
+   "id": "qwen3.5-0.8b",
+   "name": "Qwen3.5 0.8B",
+   "repo": "bartowski/Qwen_Qwen3.5-0.8B-GGUF",
+   "file": "Qwen_Qwen3.5-0.8B-Q4_0.gguf",
+   "size": 537517152,
+   "sha256": "407c9dec5a813ebe4ed381e26b9b04f62b9041ea96f1a054ff9aa67c2fe46b36",
+   "ram_gb": 1.5,
+   "license": "Apache-2.0",
+   "note": "For very old machines. Makes more mistakes."
+  },
+  {
+   "id": "qwen3.5-2b",
+   "name": "Qwen3.5 2B",
+   "repo": "unsloth/Qwen3.5-2B-GGUF",
+   "file": "Qwen3.5-2B-Q4_K_M.gguf",
+   "size": 1280835840,
+   "sha256": "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
+   "ram_gb": 3,
+   "license": "Apache-2.0",
+   "note": "Good balance for 8 GB machines."
+  },
+  {
+   "id": "minicpm5-2b",
+   "name": "MiniCPM5 2B (OpenBMB)",
+   "repo": "openbmb/MiniCPM5-2B-GGUF",
+   "file": "MiniCPM5-2B-Q4_K_M.gguf",
+   "size": 1561318368,
+   "sha256": "ec2d5801640099e97d8d7e8003ad4d81f336e757811f03a26173dddf386602fd",
+   "ram_gb": 3,
+   "license": "Apache-2.0",
+   "note": "Released September 2026."
+  },
+  {
+   "id": "lfm2.5-2.6b",
+   "name": "LFM2.5 2.6B (Liquid AI)",
+   "repo": "LiquidAI/LFM2.5-2.6B-GGUF",
+   "file": "LFM2.5-2.6B-Q4_K_M.gguf",
+   "size": 1674455040,
+   "sha256": "02a8b7e17487d326e46d68ce0ba24211e1b80a14c4cd0597fa73c1cd697f52ed",
+   "ram_gb": 3.5,
+   "license": "LFM Open License v1.0",
+   "note": "Fast for its size."
+  },
+  {
+   "id": "jan-nano-4b",
+   "name": "Jan-nano 4B (Menlo, research/search tuned)",
+   "repo": "Menlo/Jan-nano-gguf",
+   "file": "jan-nano-4b-Q4_K_M.gguf",
+   "size": 2497280448,
+   "sha256": "c345a1c0eda29e56c73c4c4c00035f28470e649cf4f551dea80a7baffe79a798",
+   "ram_gb": 4.5,
+   "license": "Apache-2.0",
+   "note": "Tuned for web research with tools."
+  },
+  {
+   "id": "qwen3.5-4b",
+   "name": "Qwen3.5 4B",
+   "repo": "unsloth/Qwen3.5-4B-GGUF",
+   "file": "Qwen3.5-4B-Q4_K_M.gguf",
+   "size": 2740937888,
+   "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+   "ram_gb": 5,
+   "license": "Apache-2.0",
+   "note": "Smartest option for 8 GB machines. Slower."
+  },
+  {
+   "id": "qwen3.5-9b",
+   "name": "Qwen3.5 9B",
+   "repo": "unsloth/Qwen3.5-9B-GGUF",
+   "file": "Qwen3.5-9B-Q4_K_M.gguf",
+   "size": 5680522464,
+   "sha256": "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8",
+   "ram_gb": 8,
+   "license": "Apache-2.0",
+   "note": "Needs 12 GB+ RAM."
+  }
+ ]
+}

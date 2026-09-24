@@ -1,0 +1,30 @@
+#!/sbin/openrc-run
+# LLMOS: the agent daemon plus the graphical session on tty1.
+description="LLMOS agent and session"
+
+depend() {
+	need localmount seatd
+	after udev-settle nftables
+}
+
+start() {
+	ebegin "Starting LLMOS"
+	mkdir -p /run/llmos
+	start-stop-daemon --start --background --make-pidfile \
+		--pidfile /run/llmos/daemon.pid \
+		--stdout /run/llmos/daemon.log --stderr /run/llmos/daemon.log \
+		--env PYTHONPATH=/usr/lib/llmos --exec /usr/bin/python3 -- -m llmos.daemon
+	start-stop-daemon --start --background --make-pidfile \
+		--pidfile /run/llmos/session.pid \
+		--stdout /run/llmos/session.log --stderr /run/llmos/session.log \
+		--exec /usr/libexec/llmos/session
+	eend 0
+}
+
+stop() {
+	ebegin "Stopping LLMOS"
+	start-stop-daemon --stop --pidfile /run/llmos/session.pid 2>/dev/null
+	start-stop-daemon --stop --pidfile /run/llmos/daemon.pid 2>/dev/null
+	pkill -f llama-server 2>/dev/null
+	eend 0
+}

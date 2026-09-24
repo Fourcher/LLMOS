@@ -1,0 +1,30 @@
+#!/usr/sbin/nft -f
+# LLMOS firewall. Default deny in both directions.
+# Outbound traffic is only possible after the user consents: the agent
+# fills the "egress" chain (see llmos/net.py). Nothing is allowed at boot
+# except DHCP so the machine can get an address without talking to anyone.
+flush ruleset
+
+table inet llmos {
+	chain input {
+		type filter hook input priority 0; policy drop;
+		iif lo accept
+		ct state established,related accept
+		ct state invalid drop
+		udp sport 67 udp dport 68 accept
+		meta nfproto ipv6 icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert } accept
+	}
+	chain forward {
+		type filter hook forward priority 0; policy drop;
+	}
+	chain output {
+		type filter hook output priority 0; policy drop;
+		oif lo accept
+		ct state established,related accept
+		udp sport 68 udp dport 67 accept
+		meta nfproto ipv6 icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-solicit } accept
+		jump egress
+	}
+	chain egress {
+	}
+}

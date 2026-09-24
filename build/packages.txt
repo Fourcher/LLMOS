@@ -1,0 +1,48 @@
+# Base system
+alpine-base
+openrc
+eudev
+linux-lts
+linux-firmware-none
+busybox-static
+util-linux
+e2fsprogs
+dosfstools
+sfdisk
+cryptsetup
+grub-bios
+grub-efi
+efibootmgr
+tzdata
+ca-certificates
+# Network (off until the user consents)
+nftables
+dhcpcd
+iwd
+tor
+# Inference
+llama-server
+# Agent runtime (stdlib only, no pip packages)
+python3
+# Display: Wayland kiosk + terminal
+cage
+seatd
+foot
+mesa-dri-gallium
+font-dejavu
+font-jetbrains-mono
+font-noto
+font-noto-cjk
+# Media, images, hardware control
+mpv
+yt-dlp
+chafa
+alsa-utils
+brightnessctl
+wlr-randr
+# Firmware for common real hardware (GPU, Wi-Fi, Ethernet)
+linux-firmware-i915
+linux-firmware-amdgpu
+linux-firmware-intel
+linux-firmware-rtl_nic
+linux-firmware-rtw88

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Plain-text LLMOS shell on a virtual console or serial line. It talks to
+# the running LLMOS daemon, so it shares state with the graphical session.
+tty=${1:-tty2}
+exec </dev/$tty >/dev/$tty 2>&1
+export TERM=linux LANG=C.UTF-8 PYTHONPATH=/usr/lib/llmos
+exec python3 -m llmos.client
