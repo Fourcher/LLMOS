@@ -176,9 +176,9 @@ llmos/tools/*.py with a signature that mirrors the schema.
   the model. When a tool needs consent the shell prints a one-line prompt
   "[allow] <tool> <summary>  y/n/always" and the answer "always" stores a per-tool
   grant in profile.json (auto grants are listed by "show my permissions").
-- No moralizing or refusal layer in the OS. The system prompt tells the model it is the
-  user's own computer and that requests are to be carried out. Model-side refusals are
-  none.
+- The permission gate is the control surface: destructive (D) and data-egress (E)
+  actions always go through it according to the profile. Model behavior is whatever
+  the chosen mainstream model does; the OS does not add prompts that override it.
 - The agent runs as root. Rationale: it is the operating system; a permission profile
   is the control, not Unix users.
 
