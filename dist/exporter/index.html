@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM OS Exporter</title>
+<style>
+  :root { --bg: #0b0d14; --fg: #e8e9ef; --accent: #7c5cff; --card: #141722; --line: #262a3a; --dim: #9aa0b4; --danger: #ef5a6f; --ok: #3ecf8e; --warn: #f2b84b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(1100px 600px at 20% -10%, #241f4a 0%, var(--bg) 60%); color: var(--fg); font: 16px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; }
+  header { display: flex; align-items: center; gap: 14px; padding: 22px 28px 6px; }
+  .orb { width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle at 35% 32%, #c9bcff 0%, var(--accent) 42%, #3a2b8a 100%); box-shadow: 0 0 18px 6px rgba(124,92,255,.35); }
+  h1 { font-size: 22px; margin: 0; } .ver { color: var(--dim); font-size: 14px; }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 16px 28px 40px; max-width: 1180px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
+  .card h2 { font-size: 16px; margin: 0 0 6px; } .card p { margin: 0 0 12px; color: var(--dim); font-size: 14.5px; }
+  .btn { border: 1px solid var(--line); background: #1d2130; color: var(--fg); border-radius: 9px; padding: 9px 16px; font: inherit; font-weight: 600; font-size: 15px; cursor: pointer; }
+  .btn:hover { background: #262b3d; } .btn.primary { background: var(--accent); border-color: transparent; color: #fff; } .btn.primary:hover { filter: brightness(1.08); }
+  .btn.danger { color: var(--danger); } .btn:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  select, input[type=checkbox] { font: inherit; } select { background: #0f1119; color: var(--fg); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; min-width: 260px; }
+  .img { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; } .img:last-child { border-bottom: 0; }
+  .img b { font-weight: 600; } .img .m { color: var(--dim); font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #1f2335; color: var(--dim); font-size: 12px; margin-left: 6px; }
+  .rec { background: #121626; border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; font-size: 14px; color: var(--dim); margin: 10px 0; }
+  .rec b { color: var(--fg); }
+  .warn { color: var(--warn); } .err { color: var(--danger); } .ok { color: var(--ok); }
+  #progress { grid-column: 1 / -1; display: none; } #progress.show { display: block; }
+  .bar { height: 10px; background: #1f2335; border-radius: 6px; overflow: hidden; margin: 10px 0 6px; } .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #4cc9f0); transition: width .4s; }
+  details { margin-top: 10px; } summary { cursor: pointer; font-weight: 600; } .steps { color: var(--dim); font-size: 14.5px; } .steps li { margin: 4px 0; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: #1f2335; padding: 1px 6px; border-radius: 6px; }
+  footer { padding: 0 28px 24px; color: var(--dim); font-size: 13px; }
+</style>
+</head>
+<body>
+<header><div class="orb"></div><div><h1>LLM OS Exporter</h1><div class="ver" id="ver">reading this folder…</div></div></header>
+<main>
+  <section class="card" id="images"><h2>In this folder</h2><p>Images and ISOs with their checksums. Everything stays on this machine.</p><div id="imglist"></div>
+    <div class="row"><button class="btn" onclick="act('open',{what:'folder'})">Show the folder</button><button class="btn" onclick="act('open',{what:'vm'})">Run in a virtual machine</button></div></section>
+
+  <section class="card"><h2>Save the ISO</h2><p>Copies the bootable ISO into your Downloads folder and verifies it against its checksum, so you can share it, archive it, or write it with any tool.</p>
+    <div class="row"><select id="saveSel"></select><button class="btn primary" onclick="save()">Save to Downloads</button></div></section>
+
+  <section class="card"><h2>Write to a USB stick</h2><p>Makes a stick that boots straight into LLM OS. From that desk, say <i>"install LLM OS alongside macOS"</i> (or Windows) to put it on the computer.</p>
+    <div class="rec"><b>Stick:</b> USB 3.0 or faster, <b>8 GB minimum, 16 GB recommended</b>. <b>Everything on it is erased.</b><br><b>Computer:</b> any 64‑bit PC or Intel Mac from the last ~10 years, 4 GB RAM (8 GB comfortable), 32 GB free on the internal disk for an install.</div>
+    <div class="row"><select id="driveSel"><option value="">no removable drive found</option></select><button class="btn" onclick="drives()">Refresh</button></div>
+    <div class="row"><select id="writeSel"></select><label><input type="checkbox" id="sure"> I understand the stick will be erased</label><button class="btn danger" id="writeBtn" onclick="write()" disabled>Write</button></div>
+    <p id="winnote" style="display:none">On Windows the write needs administrator rights; a prompt will appear. If it is refused, write the ISO with <a href="https://rufus.ie" style="color:#b9a9ff">Rufus</a> (DD image mode) or balenaEtcher instead.</p></section>
+
+  <section class="card" id="howto"><h2>Install, dual boot, first start</h2><p>Pick your machine.</p><div id="howlist"></div></section>
+
+  <section class="card" id="progress"><h2 id="ptitle">Working…</h2><div class="bar"><i id="pbar"></i></div><div id="pmsg" class="steps"></div></section>
+</main>
+<footer>LLM OS Exporter · local only · <button class="btn" style="padding:4px 10px;font-size:13px" onclick="act('quit',{})">Quit</button></footer>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const gb = (n) => (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + " GB";
+  let rel = null;
+  async function api(path, body) { const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}); return r.json(); }
+  async function act(what, body) { const r = await api("/api/" + what, body); if (r && r.error) alert(r.error); }
+  async function load() {
+    rel = await api("/api/status");
+    $("ver").textContent = `Version ${rel.version || "?"}${rel.built ? " · built " + rel.built : ""} · ${rel.platform} · Python ${rel.python}`;
+    const list = $("imglist"); list.innerHTML = "";
+    const isos = rel.images.filter(i => i.kind === "iso");
+    for (const i of rel.images) {
+      const d = document.createElement("div"); d.className = "img";
+      d.innerHTML = `<div><b>${i.file}</b><span class="tag">${i.kind === "iso" ? "bootable ISO" : "VM disk"}</span><span class="tag">${i.arch}</span><div class="m">${i.sha256 ? i.sha256.slice(0, 16) + "…" : "no checksum"} · ${i.built}</div></div><div>${gb(i.size)}</div>`;
+      list.appendChild(d);
+    }
+    for (const sel of [$("saveSel"), $("writeSel")]) {
+      sel.innerHTML = isos.length ? isos.map(i => `<option value="${i.file}">${i.file} (${gb(i.size)})</option>`).join("") : `<option value="">no ISO in this folder yet — build one with tools/build-iso.sh</option>`;
+    }
+    $("winnote").style.display = rel.platform === "Windows" ? "block" : "none";
+    drives(); howto();
+  }
+  async function drives() {
+    const r = await api("/api/drives"); const sel = $("driveSel"); sel.innerHTML = "";
+    if (!r.drives || !r.drives.length) { sel.innerHTML = `<option value="">no removable drive found${r.error ? " (" + r.error + ")" : ""} — plug a stick in and refresh</option>`; }
+    for (const d of r.drives) { const o = document.createElement("option"); o.value = d.id; o.textContent = `${d.name || d.id} — ${gb(d.size)}${d.bus ? " · " + d.bus : ""}${d.label ? " · " + d.label : ""}${d.size && d.size < 8e9 ? " (too small)" : ""}`; sel.appendChild(o); }
+    gate();
+  }
+  function gate() { $("writeBtn").disabled = !($("sure").checked && $("driveSel").value && $("writeSel").value); }
+  $("sure").onchange = gate; $("driveSel").onchange = gate;
+  async function save() { const f = $("saveSel").value; if (!f) return; const r = await api("/api/save", { file: f }); if (r.error) return alert(r.error); watch("Saving the ISO"); }
+  async function write() {
+    const f = $("writeSel").value, d = $("driveSel").value, name = $("driveSel").selectedOptions[0].textContent;
+    if (!f || !d) return;
+    if (!confirm(`Erase "${name}" and write ${f} to it?\n\nThis cannot be undone.`)) return;
+    const r = await api("/api/write", { file: f, drive: d }); if (r.error) return alert(r.error); watch("Writing the stick");
+  }
+  let timer = null;
+  function watch(title) {
+    $("progress").classList.add("show"); $("ptitle").textContent = title; clearInterval(timer);
+    timer = setInterval(async () => {
+      const p = await api("/api/progress");
+      const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
+      $("pbar").style.width = pct + "%";
+      const rate = p.elapsed && p.done ? ` · ${(p.done / p.elapsed / 1e6).toFixed(0)} MB/s` : "";
+      if (p.phase === "error") { $("pmsg").innerHTML = `<span class="err">${p.error}</span>`; clearInterval(timer); }
+      else if (p.phase === "done") { $("pmsg").innerHTML = `<span class="ok">${p.message}</span>`; $("pbar").style.width = "100%"; clearInterval(timer); }
+      else $("pmsg").textContent = `${p.message} — ${pct}%${rate}`;
+    }, 800);
+  }
+  async function howto() {
+    const h = await api("/api/instructions"); const box = $("howlist"); box.innerHTML = "";
+    for (const sec of h.sections) {
+      const d = document.createElement("details"); if (sec.id === h.default_for[rel.platform]) d.open = true;
+      d.innerHTML = `<summary>${sec.title}</summary><ol class="steps">${sec.steps.map(s => `<li>${s}</li>`).join("")}</ol>${sec.note ? `<p class="steps warn">${sec.note}</p>` : ""}`;
+      box.appendChild(d);
+    }
+  }
+  load();
+</script>
+</body>
+</html>

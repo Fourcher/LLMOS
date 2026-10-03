@@ -1,0 +1,38 @@
+#!/bin/sh
+# Start the graphical desk on this screen: seat daemon -> labwc compositor
+# -> the desk application. Falls back to the text console if the graphical
+# stack is missing. Everything renders on the CPU when there is no 3D
+# acceleration (a virtual machine); on real graphics hardware Mesa is used.
+export HOME=/root LANG=C.UTF-8 PYTHONUNBUFFERED=1
+# caches (fontconfig, Mesa's shader cache, Python) live outside the passphrase vault: a cache file
+# mapped from inside it would keep the vault from closing when the owner locks
+export XDG_CACHE_HOME=/var/cache/llmos MESA_SHADER_CACHE_DIR=/var/cache/llmos/mesa
+mkdir -p /var/cache/llmos/mesa
+export XDG_RUNTIME_DIR=/run/llmos
+mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
+export XDG_CONFIG_DIRS=/etc/xdg XDG_DATA_DIRS=/usr/share:/usr/local/share
+export XDG_SESSION_TYPE=wayland
+# GTK and WebKit look for an accessibility bus and a settings portal at
+# start-up and wait for them to time out; there are none here
+export GTK_A11Y=none NO_AT_BRIDGE=1 GTK_USE_PORTAL=0
+
+gpu=""
+for c in /sys/class/drm/card0 /sys/class/drm/card1; do
+    [ -e "$c/device/driver" ] && gpu=$(basename "$(readlink "$c/device/driver")") && break
+done
+case "$gpu" in
+    virtio_gpu|virtio-pci|bochs-drm|cirrus|vmwgfx|simple-framebuffer|"")
+        export WLR_RENDERER=pixman GSK_RENDERER=cairo LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 ;;
+    *)
+        export GSK_RENDERER=ngl ;;
+esac
+
+if ! command -v labwc >/dev/null 2>&1 || ! python3 -c "import gi; gi.require_version('WebKit','6.0'); from gi.repository import WebKit" 2>/dev/null; then
+    exec /usr/bin/llmos console
+fi
+rm -f /run/seatd.sock
+# a private session bus for the desk (GTK/WebKit expect one; nothing else uses it)
+if command -v dbus-run-session >/dev/null 2>&1; then
+    exec dbus-run-session -- seatd-launch -- labwc -s "/usr/bin/llmos desk-app"
+fi
+exec seatd-launch -- labwc -s "/usr/bin/llmos desk-app"

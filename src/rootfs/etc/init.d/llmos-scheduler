@@ -1,0 +1,22 @@
+#!/sbin/openrc-run
+# Runs scheduled tasks in the background and ends timed focus sessions.
+
+name="llmos-scheduler"
+description="LLM OS background task scheduler"
+command="/usr/bin/llmos"
+command_args="scheduler"
+supervisor=supervise-daemon
+respawn_delay=5
+respawn_max=0
+pidfile="/run/llmos-scheduler.pid"
+output_log="/run/llmos/scheduler.log"
+error_log="/run/llmos/scheduler.log"
+
+depend() {
+    need localmount
+    after llmos-model
+}
+
+start_pre() {
+    checkpath -d -m 0755 /run/llmos
+}

@@ -1,0 +1,44 @@
+#!/bin/sh
+# Started by getty on every console (autologin: there is no password prompt;
+# the encrypted vault, if enabled, is what protects the owner's data).
+#
+# The screen (tty1) runs the graphical desk when there is a display; the
+# serial line, if any, runs the text console. Only one of them should run
+# first-boot onboarding, so the console that is NOT the kernel's preferred
+# console waits for an Enter press before it starts. The preferred console
+# is the last console= on the kernel command line; both images make that
+# tty1 (the screen), so the serial line is a spare.
+export HOME=/root XDG_CACHE_HOME=/var/cache/llmos MESA_SHADER_CACHE_DIR=/var/cache/llmos/mesa
+mkdir -p /var/cache/llmos/mesa
+export TERM="${TERM:-xterm-256color}"
+export LANG=C.UTF-8
+export PYTHONUNBUFFERED=1
+
+tty=$(tty 2>/dev/null)
+me=${tty#/dev/}
+# automated tests under QEMU only (a firmware flag the launcher never sets):
+# the serial line becomes a plain root shell so tests can drive the desk
+case "$me" in tty[0-9]*) ;; *)
+    if [ -r /sys/firmware/qemu_fw_cfg/by_name/opt/llmos/testshell/raw ]; then
+        printf '\n   LLM OS test shell\n\n'
+        exec /bin/sh -l
+    fi ;;
+esac
+preferred=$(sed -n 's/.*console=\([a-zA-Z0-9]*\).*/\1/p' /proc/cmdline | tail -1)
+if [ -n "$preferred" ] && [ "$preferred" != "$me" ] && [ -e "/dev/$preferred" ]; then
+    case "$preferred" in
+        tty*) where="the screen" ;;
+        *)    where="the serial terminal" ;;
+    esac
+    printf '\n\n   LLM OS\n\n   The console is on %s.\n   Press Enter to use it here instead.\n\n' "$where"
+    read -r _
+fi
+
+case "$me" in
+    tty[0-9]*)
+        if [ -e /dev/dri/card0 ] || [ -e /dev/dri/card1 ]; then
+            /usr/bin/llmos desk
+            printf '\n   The graphical desk exited; using the text console.\n\n'
+        fi ;;
+esac
+exec /usr/bin/llmos console

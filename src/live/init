@@ -1,0 +1,47 @@
+#!/bin/sh
+# LLM OS live boot: the ISO/USB stick holds the whole system as a squashfs
+# (root.sfs) plus the model file. This init finds the medium by its label,
+# mounts the squashfs read-only under a RAM overlay and hands over to OpenRC.
+# Nothing is written to the stick; "install LLM OS" copies the running
+# system to the internal disk.
+export PATH=/usr/bin:/usr/sbin:/bin:/sbin
+mount -t proc -o nodev,noexec,nosuid proc /proc
+mount -t sysfs -o nodev,noexec,nosuid sysfs /sys
+mount -t devtmpfs -o exec,nosuid,mode=0755,size=2M devtmpfs /dev 2>/dev/null || mount -t tmpfs -o exec,nosuid,mode=0755,size=2M tmpfs /dev
+mkdir -p /dev/pts /dev/shm
+mount -t devpts -o gid=5,mode=0620,noexec,nosuid devpts /dev/pts
+echo "LLM OS live: looking for the medium…" > /dev/kmsg
+for m in loop squashfs overlay isofs cdrom sr_mod sd_mod usb-storage uas nvme virtio_blk virtio_pci virtio_scsi ahci xhci-pci xhci-hcd ehci-pci ehci-hcd uhci-hcd ohci-pci vfat nls_cp437 nls_iso8859-1 ext4; do
+    modprobe -q "$m" 2>/dev/null
+done
+mdev -s 2>/dev/null
+LABEL=LLMOS
+dev=""
+for i in $(seq 1 60); do
+    mdev -s 2>/dev/null
+    dev=$(findfs "LABEL=$LABEL" 2>/dev/null)
+    [ -z "$dev" ] && dev=$(blkid 2>/dev/null | grep "LABEL=\"$LABEL\"" | head -1 | cut -d: -f1)
+    [ -n "$dev" ] && break
+    [ "$i" = 10 ] && echo "LLM OS live: still waiting for a device labelled $LABEL (USB sticks can take a while)" > /dev/kmsg
+    sleep 1
+done
+fail() { echo "LLM OS live: $1" > /dev/kmsg; echo "LLM OS live: $1"; echo "Dropping to a shell."; exec /bin/sh; }
+[ -n "$dev" ] || fail "no medium labelled $LABEL found"
+mkdir -p /media/iso /media/sfs /media/ram /newroot
+mount -t iso9660 -o ro "$dev" /media/iso || mount -o ro "$dev" /media/iso || fail "could not mount $dev"
+[ -f /media/iso/llmos/root.sfs ] || fail "the medium has no llmos/root.sfs"
+mount -t squashfs -o ro,loop /media/iso/llmos/root.sfs /media/sfs || fail "could not mount the system image"
+mount -t tmpfs -o mode=0755 tmpfs /media/ram
+mkdir -p /media/ram/upper /media/ram/work
+mount -t overlay overlay -o lowerdir=/media/sfs,upperdir=/media/ram/upper,workdir=/media/ram/work /newroot || fail "overlay failed"
+# the stick stays mounted inside the new root: the model is read from it
+mkdir -p /newroot/run/live
+mount --move /media/iso /newroot/run/live
+mkdir -p /newroot/var/lib/llmos/models
+if [ -d /newroot/run/live/llmos/models ]; then
+    mount --bind /newroot/run/live/llmos/models /newroot/var/lib/llmos/models
+fi
+mount --move /media/sfs /newroot/run/live/sfs 2>/dev/null || true
+echo "LLM OS live: system mounted from $dev" > /dev/kmsg
+umount /dev/pts 2>/dev/null; umount /sys 2>/dev/null; umount /proc 2>/dev/null
+exec switch_root /newroot /sbin/init

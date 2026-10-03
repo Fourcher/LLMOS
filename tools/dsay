@@ -1,0 +1,9 @@
+#!/bin/bash
+# Ask the graphical desk in the test VM something (through its control
+# socket, from the serial console), then photograph the screen.
+#   usage: tools/dsay "request" [shot.png] [timeout] [settle_seconds]
+cd "/Volumes/Files/Claude Work Area/LLMOS"
+q=$1; shot=${2:-shot-desk.png}
+tools/tsh "llmos say \"$q\" | head -c 1800; echo" "${3:-300}"
+sleep "${4:-2}"
+python3 tools/screendump.py run/tmon.sock "run/$shot"

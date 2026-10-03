@@ -1,0 +1,69 @@
+#!/sbin/openrc-run
+# The on-device language model server (llama.cpp), bound to localhost only.
+#
+# Host-GPU mode: when the VM launcher serves the model itself (on the host
+# machine's GPU, reached over the VM's private link 10.0.2.2), it says so via
+# QEMU fw_cfg and this service only records where the model is instead of
+# starting a second, slower copy on the VM's CPUs.
+
+name="llmos-model"
+description="LLM OS on-device model server"
+command="/usr/bin/llmos-model-run"
+# supervised: if llama-server dies (out of memory on a huge prompt, a crash),
+# it is started again after a few seconds instead of leaving the OS mute
+supervisor=supervise-daemon
+respawn_delay=4
+respawn_max=0
+pidfile="/run/llmos-model.pid"
+output_log="/run/llmos/model.log"
+error_log="/run/llmos/model.log"
+# a server busy with a long prompt can take a long time to honour SIGTERM;
+# a restart must not leave it holding the port, so escalate to SIGKILL
+retry="SIGTERM/8/SIGKILL/5"
+
+FWCFG=/sys/firmware/qemu_fw_cfg/by_name/opt/llmos
+
+depend() {
+    need localmount
+    after llmos-hw modloop
+}
+
+fwcfg() {  # print a launcher-provided value, sanitised
+    [ -r "$FWCFG/$1/raw" ] && tr -cd 'A-Za-z0-9/_:.+-' < "$FWCFG/$1/raw"
+}
+
+start_pre() {
+    checkpath -d -m 0755 /run/llmos
+    checkpath -d -m 0755 /var/lib/llmos/models
+    # Time zone handed in by the launcher, applied until the owner picks one
+    # themselves (that choice lives in /etc/llmos/timezone). Done here rather
+    # than at sysinit because the root filesystem must be writable.
+    local tz
+    tz=$(fwcfg tz)
+    if [ ! -f /etc/llmos/timezone ] && [ -n "$tz" ] && [ -f "/usr/share/zoneinfo/$tz" ]; then
+        ln -sf "/usr/share/zoneinfo/$tz" /etc/localtime
+        echo "$tz" > /etc/timezone
+    fi
+}
+
+start() {
+    local url
+    url=$(fwcfg model_url)
+    case "$url" in
+        http://10.0.2.2:*)
+            echo "$url" > /run/llmos/model_url
+            fwcfg model_id > /run/llmos/model_id
+            einfo "model served by the host at $url (host-GPU mode)"
+            # the firewall allows the host's model port even with internet off;
+            # re-apply now that the port is known (the launcher picks a free one)
+            /usr/bin/python3 -c 'import sys; sys.path.insert(0, "/usr/lib/llmos"); from llmos import system; system.apply_firewall()' 2>/dev/null || true
+            return 0 ;;
+    esac
+    rm -f /run/llmos/model_url /run/llmos/model_id
+    default_start
+}
+
+stop() {
+    [ -f /run/llmos/model_url ] && return 0
+    default_stop
+}

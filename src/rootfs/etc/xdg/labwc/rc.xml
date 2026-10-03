@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!-- LLM OS window manager configuration (labwc). The desk itself is one
+     full-screen window; programs the owner opens (a browser, a terminal, a
+     video) get ordinary movable windows on top of it. -->
+<labwc_config>
+  <core>
+    <decoration>server</decoration>
+    <gap>0</gap>
+  </core>
+  <theme>
+    <name>llmos</name>
+    <cornerRadius>10</cornerRadius>
+    <dropShadows>yes</dropShadows>
+    <font place="ActiveWindow" name="Inter" size="10"/>
+    <font place="InactiveWindow" name="Inter" size="10"/>
+    <titlebar><layout>icon:iconify,max,close</layout></titlebar>
+  </theme>
+  <focus>
+    <followMouse>no</followMouse>
+    <raiseOnFocus>yes</raiseOnFocus>
+  </focus>
+  <placement><policy>center</policy></placement>
+  <windowSwitcher preview="no" outlines="yes"><osd show="yes"/></windowSwitcher>
+  <libinput>
+    <device category="touchpad"><naturalScroll>yes</naturalScroll><tap>yes</tap></device>
+  </libinput>
+  <windowRules>
+    <!-- the desk: no frame, no taskbar entry, cannot be closed by a key -->
+    <!-- (the desk makes itself full-screen; labwc 0.20 has no plain "Fullscreen" action) -->
+    <windowRule identifier="org.llmos.desk" serverDecoration="no" skipTaskbar="yes" skipWindowSwitcher="no" fixedPosition="yes"/>
+    <windowRule identifier="llmos-media"><action name="Raise"/></windowRule>
+  </windowRules>
+  <keyboard>
+    <keybind key="A-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="W-Tab"><action name="NextWindow"/></keybind>
+    <keybind key="W-q"><action name="Close"/></keybind>
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="W-Down"><action name="Iconify"/></keybind>
+    <keybind key="W-Escape"><action name="Iconify"/></keybind>
+    <keybind key="W-Up"><action name="ToggleMaximize"/></keybind>
+    <keybind key="W-Left"><action name="SnapToEdge" direction="left"/></keybind>
+    <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
+    <keybind key="W-f"><action name="ToggleFullscreen"/></keybind>
+    <keybind key="W-Return"><action name="Execute" command="foot"/></keybind>
+    <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="/usr/bin/llmos volume +5"/></keybind>
+    <keybind key="XF86AudioLowerVolume"><action name="Execute" command="/usr/bin/llmos volume -5"/></keybind>
+    <keybind key="XF86AudioMute"><action name="Execute" command="/usr/bin/llmos volume toggle"/></keybind>
+    <keybind key="XF86MonBrightnessUp"><action name="Execute" command="/usr/bin/llmos brightness +10"/></keybind>
+    <keybind key="XF86MonBrightnessDown"><action name="Execute" command="/usr/bin/llmos brightness -10"/></keybind>
+  </keyboard>
+  <mouse>
+    <default/>
+  </mouse>
+</labwc_config>

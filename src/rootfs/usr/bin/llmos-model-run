@@ -1,0 +1,16 @@
+#!/bin/sh
+# Launch the on-device model server with arguments chosen for the installed
+# model and this machine's RAM. If no model is present yet (first boot before
+# the catalog default is fetched), wait until one appears.
+set -eu
+
+while :; do
+    argv=$(/usr/bin/llmos serve-argv 2>/dev/null || true)
+    if [ -n "$argv" ]; then
+        break
+    fi
+    sleep 5
+done
+
+# no network needed to serve; bound to 127.0.0.1 inside serve-argv
+exec $argv

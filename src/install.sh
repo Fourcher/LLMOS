@@ -1,0 +1,243 @@
+#!/bin/sh
+# LLM OS installer. Runs INSIDE the official Alpine "virt" live ISO and turns
+# the target disk into a bootable LLM OS. Every package comes from the official,
+# signature-verified Alpine repositories; the model comes from the original
+# lab's Hugging Face repo and is checked against its published SHA-256.
+#
+#   wget -qO- http://10.0.2.2:8765/src/install.sh | sh
+#
+# Two targets:
+#   aarch64  a virtual-machine image (Apple Silicon Macs / arm64 hosts):
+#            Alpine's virt kernel, UEFI + GRUB, serial console preferred.
+#   x86_64   a real-computer image for ordinary (older) PCs and laptops:
+#            Alpine's full "lts" kernel, Wi-Fi/GPU/sound firmware, CPU
+#            microcode, NVMe-capable initramfs, GRUB for both BIOS and UEFI,
+#            iwd for Wi-Fi, screen console preferred. Also boots in QEMU.
+#
+# PAYLOAD (env) is where src/ and the model cache are served from.
+set -eu
+
+PAYLOAD=${PAYLOAD:-http://10.0.2.2:8765}
+DISK=${DISK:-/dev/vda}
+ARCH=$(apk --print-arch)
+ALPINE=v3.24
+TARGET=/mnt
+
+log() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+
+case "$ARCH" in
+  aarch64) SERIAL=ttyAMA0 ;;
+  x86_64)  SERIAL=ttyS0 ;;
+  *) echo "unsupported arch $ARCH"; exit 1 ;;
+esac
+
+log "network + official repositories"
+setup-interfaces -a -r >/dev/null 2>&1 || true
+cat > /etc/apk/repositories <<EOF
+https://dl-cdn.alpinelinux.org/alpine/$ALPINE/main
+https://dl-cdn.alpinelinux.org/alpine/$ALPINE/community
+EOF
+apk update -q
+apk add -q sfdisk e2fsprogs dosfstools blkid
+
+# ------------------------------------------------------------------ disk + base
+if [ "$ARCH" = aarch64 ]; then
+  log "partition + base system on $DISK (VM image: UEFI, virt kernel)"
+  export USE_EFI=1 BOOTLOADER=grub DISKLABEL=gpt BOOTFS=vfat BOOT_SIZE=128
+  export ROOTFS=ext4 SWAP_SIZE=0 ERASE_DISKS="$DISK"
+  # the screen (tty1) last = the kernel's preferred console: the graphical
+  # desk starts there; the serial line is a spare text console (llmos-login)
+  export KERNELOPTS="quiet loglevel=3 console=$SERIAL console=tty1"
+  setup-disk -m sys -s 0 "$DISK"
+  mount "${DISK}2" $TARGET
+  mount "${DISK}1" $TARGET/boot/efi
+  ROOTDEV=${DISK}2; ESPDEV=${DISK}1
+else
+  log "partition + base system on $DISK (real computer: BIOS + UEFI, lts kernel)"
+  # the live kernel loads filesystem drivers on demand only
+  modprobe ext4 2>/dev/null || true; modprobe vfat 2>/dev/null || true; modprobe nls_utf8 2>/dev/null || true
+  # GPT: BIOS boot partition (for GRUB's core image), EFI system partition, root
+  sfdisk --quiet --wipe always --label gpt "$DISK" <<'EOF'
+,2M,21686148-6449-6E6F-744E-656564454649
+,256M,C12A7328-F81F-11D2-BA4B-00A0C93EC93B
+,,L
+EOF
+  # make sure the kernel has re-read the table and the device nodes exist
+  blockdev --rereadpt "$DISK" 2>/dev/null || true
+  mdev -s 2>/dev/null || true
+  for i in 1 2 3 4 5 6 7 8 9 10; do [ -b "${DISK}3" ] && break; sleep 1; mdev -s 2>/dev/null || true; done
+  [ -b "${DISK}3" ] || { echo "partition devices did not appear"; exit 1; }
+  mkfs.vfat -F32 -n EFI "${DISK}2" >/dev/null
+  mkfs.ext4 -q -L llmos "${DISK}3"
+  mount -t ext4 "${DISK}3" $TARGET
+  mkdir -p $TARGET/boot/efi
+  mount -t vfat "${DISK}2" $TARGET/boot/efi
+  ROOTDEV=${DISK}3; ESPDEV=${DISK}2
+  mkdir -p $TARGET/etc/apk
+  cp -r /etc/apk/keys $TARGET/etc/apk/
+  cp /etc/apk/repositories $TARGET/etc/apk/repositories
+  apk add --root $TARGET --initdb --keys-dir /etc/apk/keys --repositories-file /etc/apk/repositories -q \
+      alpine-base openrc busybox-openrc mkinitfs
+  # initramfs: NVMe, SD/eMMC and the framebuffer console must work on a laptop
+  cat > $TARGET/etc/mkinitfs/mkinitfs.conf <<'EOF'
+features="ata base ide scsi usb virtio ext4 nvme mmc kms"
+EOF
+  # firmware for the usual laptop Wi-Fi (Intel iwlwifi is inside -intel),
+  # Bluetooth and graphics; ~250 MB in total
+  apk add --root $TARGET -q linux-lts intel-ucode amd-ucode grub-bios grub-efi \
+      linux-firmware-intel linux-firmware-i915 linux-firmware-amdgpu linux-firmware-radeon \
+      linux-firmware-ath9k_htc linux-firmware-ath10k linux-firmware-ath11k linux-firmware-ath12k \
+      linux-firmware-qca linux-firmware-rtlwifi linux-firmware-rtw88 linux-firmware-rtw89 \
+      linux-firmware-realtek linux-firmware-rtl_nic linux-firmware-rtl_bt linux-firmware-brcm \
+      linux-firmware-mediatek linux-firmware-other
+  # fstab by UUID (disks get different names on real machines)
+  cat > $TARGET/etc/fstab <<EOF
+UUID=$(blkid -s UUID -o value "$ROOTDEV")  /         ext4  rw,relatime  0 1
+UUID=$(blkid -s UUID -o value "$ESPDEV")   /boot/efi vfat  defaults     0 2
+EOF
+  cat > $TARGET/etc/network/interfaces <<'EOF'
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet dhcp
+EOF
+fi
+
+log "packages (official Alpine $ALPINE, signed)"
+cp /etc/apk/repositories $TARGET/etc/apk/repositories
+PKGS="
+  python3 e2fsprogs dosfstools curl ca-certificates tzdata nano less
+  llama-server llama.cpp-cpu
+  whisper.cpp
+  yt-dlp quickjs-ng mpv
+  alsa-utils espeak-ng chafa
+  tor cryptsetup nftables
+  kbd font-terminus
+  cage seatd seatd-launch foot w3m
+  eudev udev-init-scripts
+  iwd dbus wireless-regdb
+  sfdisk lsblk blkid wipefs partx efibootmgr rsync os-prober
+  labwc gtk4.0 webkit2gtk-6.0 py3-gobject3 grim
+  gst-plugins-good gst-plugins-bad gst-libav
+  mesa-dri-gallium mesa-egl mesa-gles mesa-gbm
+  font-inter font-jetbrains-mono font-noto font-noto-emoji font-noto-cjk
+  font-noto-arabic font-noto-hebrew font-noto-devanagari font-noto-thai
+"
+# shellcheck disable=SC2086
+apk add --root $TARGET --no-cache -q $PKGS
+
+log "LLM OS files"
+wget -qO- "$PAYLOAD/build/work/payload.tar" | tar -x -C $TARGET
+chmod 0755 $TARGET/usr/bin/llmos $TARGET/usr/bin/llmos-model-run $TARGET/usr/libexec/llmos-login $TARGET/usr/libexec/llmos-desk $TARGET/etc/init.d/llmos-*
+
+log "on-device model (verified)"
+mkdir -p $TARGET/var/lib/llmos/models $TARGET/usr/share/llmos/voice
+fetch_verify() {  # url dest sha256
+  wget -q -O "$2" "$1"
+  echo "$3  $2" | sha256sum -c -s || { echo "HASH MISMATCH: $2"; exit 1; }
+}
+. $TARGET/usr/share/llmos/preinstall.env   # MODEL_FILE MODEL_SHA256 WHISPER_FILE WHISPER_SHA256
+fetch_verify "$PAYLOAD/build/cache/$MODEL_FILE" "$TARGET/var/lib/llmos/models/$MODEL_FILE" "$MODEL_SHA256"
+fetch_verify "$PAYLOAD/build/cache/$WHISPER_FILE" "$TARGET/usr/share/llmos/voice/$WHISPER_FILE" "$WHISPER_SHA256"
+
+log "system configuration"
+echo llmos > $TARGET/etc/hostname
+printf '127.0.0.1\tllmos localhost\n::1\t\tllmos localhost\n' > $TARGET/etc/hosts
+
+# consoles: the OS runs on the screen (tty1) and on the serial line. Nothing
+# else to log in to. Which one starts first is decided by llmos-login from
+# the kernel's preferred console.
+cat > $TARGET/etc/inittab <<EOF
+::sysinit:/sbin/openrc sysinit
+::sysinit:/sbin/openrc boot
+::wait:/sbin/openrc default
+$SERIAL::respawn:/sbin/getty -n -l /usr/libexec/llmos-login -L 115200 $SERIAL vt100
+tty1::respawn:/sbin/getty -n -l /usr/libexec/llmos-login 38400 tty1
+::ctrlaltdel:/sbin/reboot
+::shutdown:/sbin/openrc shutdown
+EOF
+
+# nothing to log into with a password: root is locked, the console session
+# is started directly by init (see /usr/libexec/llmos-login)
+chroot $TARGET passwd -l root >/dev/null
+chroot $TARGET dbus-uuidgen --ensure=/etc/machine-id 2>/dev/null || true   # D-Bus needs a machine id
+: > $TARGET/etc/motd
+printf 'LLM OS\n\n' > $TARGET/etc/issue
+
+# /tmp in RAM; nothing sensitive survives a reboot there
+grep -q ' /tmp ' $TARGET/etc/fstab || echo 'tmpfs /tmp tmpfs nosuid,nodev,mode=1777,size=512m 0 0' >> $TARGET/etc/fstab
+
+# Wi-Fi (real hardware): iwd with its own DHCP client
+mkdir -p $TARGET/etc/iwd
+printf '[General]\nEnableNetworkConfiguration=true\n\n[Network]\nNameResolvingService=none\n' > $TARGET/etc/iwd/main.conf
+
+# services (explicit for both targets; harmless where setup-disk already did it)
+chroot $TARGET sh -eu <<'EOF' >/dev/null 2>&1
+# udev (eudev) instead of busybox mdev: graphical programs find keyboards,
+# mice and touchpads through it, and laptops get proper hotplug
+for s in devfs dmesg; do rc-update add $s sysinit; done
+rc-update del mdev sysinit 2>/dev/null || true
+rc-update del hwdrivers sysinit 2>/dev/null || true
+for s in udev udev-trigger udev-settle; do rc-update add $s sysinit; done
+rc-update add udev-postmount default
+for s in modules hwclock hostname sysctl bootmisc syslog loopback networking; do rc-update add $s boot; done
+for s in killprocs mount-ro savecache; do rc-update add $s shutdown; done
+rc-update add llmos-hw sysinit
+rc-update add llmos-model default
+rc-update add llmos-scheduler default
+rc-update add nftables default
+rc-update add acpid default
+rc-update add dbus default
+rc-update add iwd default
+rc-update add alsa default 2>/dev/null || true
+rc-update del crond default 2>/dev/null || true
+rc-update del sshd default 2>/dev/null || true
+rc-update del chronyd default 2>/dev/null || true
+echo 'SYSLOGD_OPTS="-C512"' > /etc/conf.d/syslog     # logs stay in RAM
+EOF
+
+log "bootloader"
+mount --bind /dev $TARGET/dev; mount --bind /proc $TARGET/proc; mount --bind /sys $TARGET/sys
+if [ "$ARCH" = aarch64 ]; then
+  sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' $TARGET/etc/default/grub
+  grep -q '^GRUB_TIMEOUT=' $TARGET/etc/default/grub || echo 'GRUB_TIMEOUT=0' >> $TARGET/etc/default/grub
+  # setup-disk writes "serial --unit=ttyAMA0", which GRUB rejects with an
+  # error at every boot; with a zero timeout GRUB never needs the serial
+  # terminal anyway (the firmware console already includes it), so drop it
+  sed -i '/^GRUB_SERIAL_COMMAND=/d; /^GRUB_TERMINAL_INPUT=/d; /^GRUB_TERMINAL_OUTPUT=/d' $TARGET/etc/default/grub
+  chroot $TARGET grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
+  mkdir -p $TARGET/boot/efi/EFI/BOOT
+  cp $TARGET/boot/efi/EFI/alpine/grubaa64.efi $TARGET/boot/efi/EFI/BOOT/BOOTAA64.EFI 2>/dev/null || true
+else
+  # screen (tty1) last = preferred console on a real computer; net.ifnames=0
+  # keeps wired = eth0 and Wi-Fi = wlan0 whatever the hardware
+  cat > $TARGET/etc/default/grub <<EOF
+GRUB_TIMEOUT=0
+GRUB_DISABLE_SUBMENU=y
+GRUB_DISABLE_RECOVERY=true
+GRUB_CMDLINE_LINUX_DEFAULT="modules=sd-mod,usb-storage,nvme,ext4 quiet loglevel=3 net.ifnames=0 console=$SERIAL console=tty1"
+EOF
+  KVER=$(ls $TARGET/lib/modules | head -1)
+  chroot $TARGET mkinitfs -c /etc/mkinitfs/mkinitfs.conf "$KVER" >/dev/null
+  chroot $TARGET grub-install --target=i386-pc --boot-directory=/boot "$DISK" >/dev/null 2>&1
+  chroot $TARGET grub-install --target=x86_64-efi --efi-directory=/boot/efi --boot-directory=/boot \
+      --removable --no-nvram >/dev/null 2>&1
+  chroot $TARGET grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
+  grep -q 'vmlinuz-lts' $TARGET/boot/grub/grub.cfg || { echo "GRUB config has no kernel entry"; exit 1; }
+fi
+umount $TARGET/dev $TARGET/proc $TARGET/sys
+
+log "scrub build traces"
+rm -rf $TARGET/var/cache/apk/* $TARGET/root/.ash_history $TARGET/root/.cache $TARGET/tmp/* 2>/dev/null || true
+find $TARGET/var/log -type f -exec truncate -s 0 {} + 2>/dev/null || true
+sync
+fstrim -v $TARGET >/dev/null 2>&1 || true
+
+log "done"
+df -h $TARGET | tail -1
+# unmount inner mounts first (busybox umount has no -R), then the root
+umount "$TARGET/boot/efi" 2>/dev/null || true
+umount "$TARGET/boot" 2>/dev/null || true
+umount "$TARGET" || umount -l "$TARGET"
+echo LLMOS_INSTALL_OK

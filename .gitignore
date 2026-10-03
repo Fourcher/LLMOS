@@ -1,0 +1,13 @@
+# built images, models, scratch and VM state are not source
+dist/*.qcow2
+dist/*.iso
+dist/*.raw
+dist/models/
+run/
+build/
+__pycache__/
+*.pyc
+.DS_Store
+models/
+delivered/
+*.gguf

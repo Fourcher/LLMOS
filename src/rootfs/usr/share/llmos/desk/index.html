@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LLM OS</title>
+<link rel="stylesheet" href="desk.css">
+</head>
+<body class="dark">
+
+<!-- boot: the computer waking up -->
+<section id="screen-boot" class="screen">
+  <div class="center"><div class="orb big thinking" id="boot-orb"></div><div class="brand">LLM OS</div></div>
+</section>
+
+<!-- vault unlock -->
+<section id="screen-lock" class="screen hidden">
+  <div class="center card lockcard" id="lock-card">
+    <div class="orb big" id="lock-orb"></div>
+    <div class="brand">LLM OS</div>
+    <div class="sub" data-s="locked"></div>
+    <input id="lock-pass" type="password" autocomplete="off" spellcheck="false" data-ph="passphrase">
+    <div class="row"><button id="lock-go" class="btn primary" data-s="d_unlock"></button></div>
+    <div id="lock-error" class="error"></div>
+    <div id="lock-busy" class="dim hidden" data-s="unlocking"></div>
+  </div>
+</section>
+
+<!-- first run -->
+<section id="screen-wizard" class="screen hidden">
+  <div class="center card wizard">
+    <div class="wizhead"><span class="brand small">LLM OS</span><span id="wiz-step" class="dim small"></span></div>
+    <div id="wiz-dots" class="dots"></div>
+    <div id="wiz-body"></div>
+    <div id="wiz-error" class="error"></div>
+    <div id="wiz-nav" class="row"></div>
+  </div>
+</section>
+
+<!-- shutting down -->
+<section id="screen-bye" class="screen hidden">
+  <div class="center"><div class="orb big off"></div><div class="brand">LLM OS</div><div id="bye-text" class="sub"></div></div>
+</section>
+
+<!-- the desk -->
+<section id="desk" class="hidden">
+  <header id="top">
+    <div class="left"><span class="brand small">LLM OS</span><span id="greet" class="dim"></span></div>
+    <div id="clock" class="clock"></div>
+    <div id="status" class="right"></div>
+  </header>
+
+  <div id="idle" class="hidden"></div>
+  <main id="stage"></main>
+
+  <div id="dock"></div>
+
+  <!-- the computer's own column: what it is doing and what it says, always above the windows -->
+  <div id="reply" class="hidden">
+    <div class="req"><span class="you" data-s="d_you"></span> <span id="reply-req"></span></div>
+    <div class="who"><i class="orb small" id="reply-orb"></i><span class="ai">LLM OS</span><span id="reply-state" class="state"></span></div>
+    <div id="reply-activity" class="activity"></div>
+    <div id="reply-text" class="text"></div>
+    <div id="reply-progress" class="progress hidden"><div class="bar"><i></i></div><span></span></div>
+    <div class="reply-tools">
+      <button id="reply-stop" class="btn small ghost hidden" data-s="d_stop"></button>
+      <button id="reply-hist" class="btn small ghost" data-s="d_history"></button>
+      <button id="reply-close" class="btn small ghost" data-s="d_close"></button>
+    </div>
+  </div>
+
+  <div id="cmd">
+    <div id="orb" class="orb" title="LLM OS"></div>
+    <button id="mic" class="mic" title="voice" aria-label="voice">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2z"/></svg>
+    </button>
+    <input id="in" type="text" autocomplete="off" spellcheck="false" autofocus>
+    <button id="send" class="send" aria-label="send">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 11.5 21 3l-8.5 18-2-8z"/></svg>
+    </button>
+  </div>
+
+  <div id="hint" class="hint"></div>
+  <div id="toasts"></div>
+  <div id="overlay" class="hidden"></div>
+</section>
+
+<script src="desk.js"></script>
+</body>
+</html>

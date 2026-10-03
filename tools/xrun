@@ -1,0 +1,5 @@
+#!/bin/bash
+# Like tools/trun, for the x86-64 test VM (tools/boot-x86.sh): type one
+# request on its serial console and print the reply.  usage: tools/xrun TEXT [TIMEOUT] [PROMPT_RE]
+cd "/Volumes/Files/Claude Work Area/LLMOS"
+python3 tools/vmctl.py run run/yser.sock run/x86-boot.log "$1" "${3:-[›>] \$}" "${2:-300}" --quiet 2.5 | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g' | grep -viE 'on-device model…' | grep -vE '^\s*$'

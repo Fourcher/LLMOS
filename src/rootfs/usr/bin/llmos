@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""LLM OS entry point."""
+import os
+import sys
+
+sys.path.insert(0, "/usr/lib/llmos")
+
+if __name__ == "__main__":
+    arg = sys.argv[1] if len(sys.argv) > 1 else "console"
+    if arg == "console":
+        from llmos import console
+        console.main()
+    elif arg == "desk":                       # the graphical interface on this screen
+        os.execv("/usr/libexec/llmos-desk", ["/usr/libexec/llmos-desk"])
+    elif arg == "desk-app":                   # (started by the compositor)
+        from llmos import desk
+        desk.main()
+    elif arg in ("say", "desk-state", "desk-ctl"):   # talk to the running desk
+        from llmos import desk
+        words = sys.argv[2:]
+        if arg == "say":
+            desk.control(["say", " ".join(words)])
+        elif arg == "desk-state":
+            desk.control(["state"])
+        else:
+            desk.control(words)
+    elif arg == "scheduler":
+        from llmos import scheduler
+        scheduler.main()
+    elif arg == "serve-argv":
+        from llmos import models
+        argv = models.serve_argv()
+        print(" ".join(argv) if argv else "", end="")
+    elif arg in ("brightness", "volume"):     # hardware keys (labwc keybinds): +10 / -10 / 60 / toggle
+        from llmos import devices
+        v = sys.argv[2] if len(sys.argv) > 2 else "+10"
+        try:
+            if arg == "brightness":
+                print(devices.brightness(delta=int(v)) if v[:1] in "+-" else devices.brightness(int(v)))
+            elif v == "toggle":
+                muted = "[off]" in devices._amixer("get", devices._control() or "Master").stdout
+                print(devices.volume(mute=not muted))
+            else:
+                print(devices.volume(delta=int(v)) if v[:1] in "+-" else devices.volume(int(v)))
+        except Exception as e:
+            print(e)
+    elif arg == "version":
+        from llmos import VERSION
+        print(f"LLM OS {VERSION}")
+    else:
+        sys.stderr.write("usage: llmos [console|desk|say TEXT|desk-state|scheduler|serve-argv|brightness|volume|version]\n")
+        sys.exit(2)

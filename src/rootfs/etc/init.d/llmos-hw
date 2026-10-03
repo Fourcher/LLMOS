@@ -1,0 +1,29 @@
+#!/sbin/openrc-run
+# One-shot hardware preparation at boot: load the virtio/HDA sound driver if a
+# device is present, load dm-crypt for the vault, and apply the firewall from
+# the saved settings before anything can touch the network.
+
+name="llmos-hw"
+description="LLM OS hardware and policy setup"
+
+depend() {
+    need sysfs
+    before net llmos-model
+}
+
+start() {
+    ebegin "Preparing hardware for LLM OS"
+    # sound: virtio_snd is what QEMU's virtio-sound device needs (the only
+    # sound driver in Alpine's virt kernel); the HDA ones exist on other kernels
+    for m in virtio_snd snd_hda_intel snd_hda_codec_generic snd_pcm; do
+        modprobe "$m" 2>/dev/null || true
+    done
+    modprobe dm-crypt 2>/dev/null || true
+    modprobe virtio_gpu 2>/dev/null || true
+    modprobe qemu_fw_cfg 2>/dev/null || true   # launcher-provided settings (time zone)
+    # apply the persisted internet policy immediately (default: allow)
+    /usr/sbin/nft -f /etc/nftables.nft 2>/dev/null || true
+    # console font sized for readability on the graphical screen
+    setfont /usr/share/consolefonts/ter-118n.psf.gz 2>/dev/null || true
+    eend 0
+}
