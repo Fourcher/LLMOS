@@ -1,0 +1,28 @@
+{
+  "default_for": {"Darwin": "intel-mac", "Windows": "pc", "Linux": "pc"},
+  "sections": [
+    {"id": "pc", "title": "PC or laptop (Windows or Linux today)", "steps": [
+      "Write the ISO to a USB stick with the button above (8 GB or more; the stick is erased).",
+      "If you want to keep Windows: in Windows, open Disk Management, right-click the Windows partition, choose <b>Shrink Volume</b> and free at least 32 GB. Leave the space unallocated. Then turn off BitLocker or note your recovery key.",
+      "Plug the stick in, restart, and open the boot menu (usually F12, F11, Esc or F8 while the logo shows; on some machines Del/F2 opens the firmware, where you pick the stick under <i>Boot</i>). If the stick is not offered, turn off <b>Secure Boot</b> in the firmware; UEFI and legacy/BIOS modes both work.",
+      "LLM OS starts from the stick and asks its six set-up questions. Try it as long as you like; nothing is written to the computer yet.",
+      "To install, say <b>\"install LLM OS alongside Windows\"</b> (uses the free space you made) or <b>\"erase the whole disk and install LLM OS\"</b>. It shows a plan with the exact partitions and asks once; then it copies itself (a few minutes) and offers a restart.",
+      "After the restart a boot menu lists LLM OS and Windows. Unplug the stick."
+    ], "note": "Minimum 4 GB RAM and 2 cores; 8 GB and 4 cores are comfortable. Wi-Fi is set up from the first-run questions or by saying \"connect to Wi-Fi <name> with password …\"."},
+    {"id": "intel-mac", "title": "Intel Mac (2010 onwards)", "steps": [
+      "Write the ISO to a USB stick with the button above.",
+      "To dual boot: in macOS open <b>Disk Utility</b>, select the internal disk, click <b>Partition</b>, add a partition of at least 32 GB in any format (LLM OS replaces it) and apply. On Macs with a T2 chip, also open <b>Startup Security Utility</b> (hold Cmd+R at start, Utilities menu) and allow booting from external media.",
+      "Plug the stick in, restart holding <b>Option (⌥)</b>, and choose the orange <i>EFI Boot</i> entry.",
+      "Try LLM OS from the stick. When ready, say <b>\"install LLM OS alongside macOS\"</b>; it uses the partition you added, keeps macOS and the EFI partition, and asks once before writing.",
+      "Restart holding Option to choose between macOS and LLM OS; LLM OS can also be made the default from its own settings."
+    ], "note": "Apple Silicon Macs (M1 and later) cannot boot this ISO natively; run LLM OS there as a virtual machine with run-llmos.sh (host-GPU mode uses the Mac's GPU)."},
+    {"id": "apple-silicon", "title": "Apple Silicon Mac (M1, M2, M3, M4)", "steps": [
+      "Use the virtual machine: double-click <b>run-llmos.sh</b> in this folder (QEMU via Homebrew). It opens LLM OS in a window and serves the model on the Mac's GPU.",
+      "Native booting needs Asahi Linux support for your Mac generation; it is tracked in BUILD.md and not part of this release."
+    ], "note": "The arm64 ISO in this folder boots on arm64 UEFI machines and in UTM/QEMU virtual machines on this Mac."},
+    {"id": "vm", "title": "Virtual machine (any platform)", "steps": [
+      "macOS: double-click run-llmos.sh. Linux: <code>qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cdrom llmos-x86_64.iso</code> (or boot the .qcow2 disk). Windows: VirtualBox or VMware with the ISO as the optical drive, 4 GB RAM, EFI on or off.",
+      "The first run asks the six set-up questions. Say \"install LLM OS\" inside the VM to put it on the virtual disk."
+    ]}
+  ]
+}
