@@ -11,6 +11,7 @@ Run it from the launcher next to it ("LLM OS Exporter.command" on macOS,
 ".bat" on Windows, ".sh" on Linux) or with `python3 exporter.py`.
 """
 import hashlib
+import hmac
 import http.server
 import json
 import os
@@ -307,34 +308,75 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    # Security headers sent on every response. frame-ancestors / X-Frame-Options stop another site from
+    # framing this app (clickjacking); nosniff and no-store keep the token-bearing page out of caches and
+    # content-type guessing; the CSP pins the self-contained page to its own origin.
+    SECURITY_HEADERS = {
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+        "X-Frame-Options": "DENY",
+        "Content-Security-Policy": ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+                                    "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
+    }
+
+    def _secure(self):
+        for k, v in self.SECURITY_HEADERS.items():
+            self.send_header(k, v)
+
     def send_json(self, obj, code=200):
         body = json.dumps(obj).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self._secure()
         self.end_headers()
         self.wfile.write(body)
 
-    def same_origin(self):
+    def authorized(self, need_token):
+        """CSRF / cross-origin gate. The Host must be our own loopback address (blocks DNS rebinding, where a
+        hostile domain resolves to 127.0.0.1). Any Origin/Referer that is present must be our own origin
+        (blocks a cross-site fetch, form or img). Every /api call must also carry the per-launch token in a
+        custom header: a cross-origin page cannot read the token (same-origin policy) and cannot set a custom
+        header without a CORS preflight this server never approves, so the token is the primary CSRF defense.
+        The compare is constant-time."""
+        port = self.server.server_address[1]
         host = self.headers.get("Host", "")
+        if host not in (f"127.0.0.1:{port}", f"localhost:{port}"):
+            return False
         origin = self.headers.get("Origin") or self.headers.get("Referer") or ""
-        ok_host = host in (f"127.0.0.1:{self.server.server_address[1]}", f"localhost:{self.server.server_address[1]}")
-        ok_origin = (not origin) or origin.startswith(f"http://{host}")
-        return ok_host and ok_origin
+        if origin and not (origin == f"http://{host}" or origin.startswith(f"http://{host}/")):
+            return False
+        if need_token:
+            sent = self.headers.get("X-LLMOS-Token", "")
+            if not TOKEN or not hmac.compare_digest(sent, TOKEN):
+                return False
+        return True
+
+    def do_OPTIONS(self):
+        # Refuse CORS preflight outright (no Access-Control-Allow-* headers), so any cross-origin call that
+        # would need one is blocked by the browser before it reaches an action.
+        self.send_json({"error": "forbidden"}, 403)
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
-        if not self.same_origin():
-            return self.send_json({"error": "forbidden"}, 403)
+        # the page itself carries no token yet (that is how it receives one), so it needs only same-origin;
+        # every /api endpoint, read-only ones included, requires the token like the POST actions do.
         if path in ("/", "/index.html"):
+            if not self.authorized(need_token=False):
+                return self.send_json({"error": "forbidden"}, 403)
             with open(os.path.join(HERE, "index.html"), "rb") as f:
                 body = f.read().replace(b"__TOKEN__", TOKEN.encode())
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
+            self._secure()
             self.end_headers()
             self.wfile.write(body)
-        elif path == "/api/status":
+            return
+        if not self.authorized(need_token=True):
+            return self.send_json({"error": "forbidden"}, 403)
+        if path == "/api/status":
             self.send_json(read_release())
         elif path == "/api/drives":
             self.send_json(list_drives())
@@ -351,7 +393,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
-        if not self.same_origin() or self.headers.get("X-LLMOS-Token", "") != TOKEN:
+        if not self.authorized(need_token=True):
             return self.send_json({"error": "forbidden"}, 403)
         n = int(self.headers.get("Content-Length", 0))
         try:

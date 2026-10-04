@@ -4,6 +4,20 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## Exporter CSRF hardening — 2026-10-04 (dist tooling; the OS disk images are unchanged)
+- The Exporter is a local web app on 127.0.0.1 that can write USB sticks and
+  run programs, so a web page the owner happens to have open must not be able to
+  drive it. Its HTTP API is now hardened against CSRF: the per-launch token is
+  required on **every** `/api` endpoint (the read-only ones — status, drives,
+  progress, instructions — too, not just save/write), and compared in constant
+  time; any request whose `Host` is not the loopback address (DNS rebinding) or
+  whose `Origin`/`Referer` is another site is refused; CORS preflights get a
+  bare 403 with no `Access-Control-Allow-*`, so a cross-origin call that needs
+  one is blocked by the browser; and every response carries anti-framing
+  (`X-Frame-Options: DENY` + CSP `frame-ancestors 'none'`), `nosniff` and
+  `no-store`. The Exporter is standalone tooling in `dist/`, not part of the OS
+  image, so no image or ISO changes. Covered by `tools/test-exporter-csrf.py`.
+
 ## 1.3.1 — 2026-10-03
 - "Under the hood": the owner can edit the conduct section of the assistant's
   own system prompt — the part that says how it treats the owner's requests and
