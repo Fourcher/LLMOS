@@ -98,6 +98,20 @@ def looks_hard(text):
     return len(text) >= 280 or text.count("\n") >= 4 or bool(_HARD_RE.search(text))
 
 
+# the same question as a one-pass decision on the on-device model (llm.decide); scored by tools/decide-eval.py
+# against looks_hard before route_for may use it
+ROUTE_QUESTION = ("[Routing question, answer with one letter: is this request (A) quick everyday help, or (B) big "
+                  "work (long writing, in-depth analysis, research, detailed planning or programming) that a "
+                  "stronger online model would do much better?]")
+
+
+def route_score(msgs):
+    """How likely this turn is 'a big one' for the online model, from one decision pass that shares the
+    turn's prompt cache; (None, timings) when the model cannot say."""
+    p, info = llm.decide(msgs, ("A", "B"), question=ROUTE_QUESTION, prefill="(", tools=tools.schemas())
+    return (p["B"] if p else None), info
+
+
 def route_for(ctx, user_text, forced=None):
     """'local' or 'cloud' for this request. The owner's brain setting decides; a missing account or the
     internet being off can only make it 'local'; under 'ask' a big request means one question first.

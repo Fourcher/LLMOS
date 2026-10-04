@@ -9,6 +9,7 @@ answers when the owner's "brain" setting sends a request there (see agent.route_
 is written to the audit log, and the account's key lives with the owner's data, inside the vault."""
 import http.client
 import json
+import math
 import os
 import re
 import shutil
@@ -144,6 +145,47 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
         # closing mid-stream (Ctrl+C) makes llama-server stop generating
         c.close()
     return {"content": content, "tool_calls": calls, "timings": timings}
+
+
+def decide(messages, labels, question=None, prefill="", tools=None, top=20):
+    """One-pass decision ("decide, don't write"): the model's probabilities for a fixed set of one-token answers,
+    read from a single forward step instead of a generated reply. Given the turn's own messages and tools, the
+    prompt cache already holds everything up to the owner's words, so only the question is new, and the reply
+    that follows reuses the cache. question is appended to the last user message; prefill starts the answer.
+    Returns ({label: probability, renormalised over the labels}, timings), or (None, {}) when it cannot say."""
+    msgs = [dict(m) for m in messages]
+    if question:
+        msgs[-1]["content"] = (msgs[-1].get("content") or "") + "\n\n" + question
+    if prefill:
+        msgs.append({"role": "assistant", "content": prefill})
+    body = {"messages": msgs, "max_tokens": 1, "temperature": 0, "cache_prompt": True, "logprobs": True,
+            "top_logprobs": top, "chat_template_kwargs": {"enable_thinking": False}}
+    if tools:
+        body["tools"] = tools
+    try:
+        c = _conn(120)
+        c.request("POST", "/v1/chat/completions", json.dumps(body), {"Content-Type": "application/json"})
+        r = c.getresponse()
+        raw = r.read()
+        c.close()
+        if r.status != 200:
+            return None, {}
+        d = json.loads(raw)
+        lp = (d["choices"][0].get("logprobs") or {}).get("content") or []
+        tops = (lp[0].get("top_logprobs") or []) if lp else []
+    except (OSError, ValueError, KeyError, IndexError, TypeError, AttributeError):
+        return None, {}
+    p = {}
+    for t in tops:
+        tok = str(t.get("token", "")).strip()
+        for lab in labels:
+            # one-letter labels must match exactly ("a" is a word); word labels ignore case
+            if tok == lab or (len(lab) > 1 and tok.lower() == lab.lower()):
+                p[lab] = p.get(lab, 0.0) + math.exp(t.get("logprob", -99.0))
+    total = sum(p.values())
+    if total <= 0:
+        return None, d.get("timings") or {}
+    return {lab: p.get(lab, 0.0) / total for lab in labels}, d.get("timings") or {}
 
 
 def complete_json(system, user, schema, max_tokens=3000):
