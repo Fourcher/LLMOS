@@ -7,6 +7,7 @@ It runs as root but only starts working once the vault (if any) is unlocked,
 because tasks and their results live inside it."""
 import json
 import re
+import sys
 import time
 
 from . import agent, config, llm, store, system, vault, i18n
@@ -53,9 +54,15 @@ class HeadlessCtx:
         return config.settings.get("internet") == "yes"
 
     def confirm_action(self, tool, args, risk):
-        # unattended: only auto-run what hands-off would; never destructive
-        from . import tools
-        return risk not in (tools.DESTRUCTIVE, tools.SECURITY)
+        # unattended: nobody can answer, so only what the owner's autonomy level runs without asking
+        return not agent.needs_confirm(risk)
+
+    def confirm_online(self, text, reason):
+        return False      # nobody to ask; a task goes to the online model only when the brain setting is 'cloud'
+
+    def brain(self, online, label):
+        if online:
+            self.log.append(f"answered by {label} (online)")
 
     def interactive(self, cmd):
         return 127
@@ -82,24 +89,19 @@ class HeadlessCtx:
         pass
 
 
-_REMIND = re.compile(r"^\s*remind me(?:\s*[:,]\s*|\s+(?:to|that|about)\s+)(?P<what>.+?)\s*$", re.I | re.S)
-_TIMER = re.compile(r"^\s*tell me that my (?P<what>.+?) timer is done\b", re.I)
-
-
-def direct_result(task):
-    """A reminder or a timer is delivered word for word (no model, no embellishment)."""
-    m = _TIMER.match(task)
-    if m:
-        return i18n.t("d_timer_up", what=m.group("what"))
-    m = _REMIND.match(task)
-    if m:
-        what = m.group("what").strip().rstrip(".")
-        return f"{i18n.t('d_reminder')}: {what}"
+def direct_result(t):
+    """Timers and reminders are delivered word for word (no model, no embellishment)."""
+    kind = t.get("kind") if isinstance(t, dict) else None
+    task = t["task"] if isinstance(t, dict) else str(t)
+    if kind == "timer":
+        return i18n.t("d_timer_up", what=task)
+    if kind == "reminder":
+        return f"{i18n.t('d_reminder')}: {task}"
     return None
 
 
 def run_task(t):
-    direct = direct_result(t["task"])
+    direct = direct_result(t)
     if direct:
         store.finished(t["id"], direct)
         store.notify(direct[:80], direct)
@@ -127,9 +129,16 @@ def tick():
     if system.focus_tick():
         store.notify("Focus mode ended", "Social media and feeds are reachable again.")
     for t in store.due():
-        if not llm.health():
-            break
-        run_task(t)
+        try:
+            if t.get("kind") in ("timer", "reminder"):
+                run_task(t)                       # needs no model: rings even while it loads
+                continue
+            if not llm.health():
+                break
+            run_task(t)
+        except Exception as e:                    # one bad task must not block the rest
+            sys.stderr.write(f"scheduler: task {t.get('id')} failed: {e}\n")
+            store.finished(t["id"], f"(failed: {e})")
 
 
 def main():

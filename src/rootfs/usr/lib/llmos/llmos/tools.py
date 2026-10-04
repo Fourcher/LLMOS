@@ -26,6 +26,14 @@ def show(ctx, spec):
         ctx.show_box(norm["title"], uispec.to_rows(norm))
 
 
+def _path(p):
+    """A path the owner or the model gave: ~ expanded, relative ones inside the home folder."""
+    p = os.path.expanduser(str(p or "").strip())
+    if p and not os.path.isabs(p):
+        p = os.path.join(config.home(), p)
+    return os.path.normpath(p) if p else p
+
+
 def clip(text, n=4000):
     text = str(text)
     if len(text) <= n:
@@ -112,7 +120,25 @@ def active_tools():
     return [t for t in REGISTRY.values() if t.available()]
 
 
+_connectors_synced = False
+
+
+def sync_connectors(log=None):
+    """(Re)register the owner's connector tools into the registry. Safe to call often; a broken connector is
+    skipped, never fatal."""
+    global _connectors_synced
+    _connectors_synced = True
+    try:
+        from . import mcp
+        return mcp.sync_tools(log=log)
+    except Exception:
+        return {}
+
+
 def schemas():
+    # bring in the owner's connectors (MCP servers) once at first use; manage_connectors re-syncs on change
+    if not _connectors_synced and config.load_json(config.data("connectors.json"), []):
+        sync_connectors()
     return [t.schema() for t in active_tools()]
 
 
@@ -148,7 +174,7 @@ def run_command(a, ctx):
 
 @tool("read_file", "Read a text file. (The owner's home folder is /root, i.e. ~.)", {"path": STR}, ["path"], risk=READ)
 def read_file(a, ctx):
-    path = os.path.expanduser(str(a.get("path", "")))
+    path = _path(a.get("path", ""))
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
             return clip(f.read(), 12000)
@@ -159,7 +185,7 @@ def read_file(a, ctx):
 @tool("write_file", "Create or overwrite a text file (or append to it). The owner's home folder is /root (~).",
       {"path": STR, "content": STR, "append": {"type": "boolean"}}, ["path", "content"], risk=CHANGE)
 def write_file(a, ctx):
-    path = os.path.expanduser(str(a.get("path", "")))
+    path = _path(a.get("path", ""))
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         with open(path, "a" if a.get("append") else "w", encoding="utf-8") as f:
@@ -203,6 +229,8 @@ def system_power(a, ctx):
        "corners": {"type": "string", "enum": ["rounded", "square", "double", "heavy", "none"]},
        "scale": {"type": "string", "description": "size of text and interface: 'bigger', 'smaller', 'default' or a percent like 130"},
        "motion": {"type": "string", "enum": ["full", "reduced", "off"], "description": "how much the interface animates"},
+       "layout": {"type": "string", "enum": ["clean", "windows", "mac"], "description": "the desk's arrangement: clean (LLM OS), "
+                  "windows (a taskbar with a start menu, like Windows 7), mac (a menu bar and a dock, like macOS)"},
        "language": {"type": "string", "description": "main language of the whole interface"},
        "settings_language": {"type": "string", "description": "language for the settings screens only, when it "
         "should differ from the rest (e.g. 'settings in Chinese, rest in English' -> language=English, "
@@ -244,6 +272,14 @@ def set_appearance(a, ctx):
             return f"error: '{a['motion']}' is not an animation level; say full, reduced or off"
         config.settings.set("appearance.motion", v)
         changed.append(f"animations {v}")
+    if a.get("layout"):
+        v = str(a["layout"]).lower().strip()
+        v = {"default": "clean", "normal": "clean", "llmos": "clean", "llm os": "clean", "classic": "windows", "traditional": "windows",
+             "win": "windows", "windows 7": "windows", "win7": "windows", "macos": "mac", "mac os": "mac", "apple": "mac", "mojave": "mac"}.get(v, v)
+        if v not in ("clean", "windows", "mac"):
+            return f"error: '{a['layout']}' is not a desk layout; say clean, windows or mac"
+        config.settings.set("appearance.layout", v)
+        changed.append(f"layout {v}")
     if a.get("prompt_symbol"):
         config.settings.set("appearance.prompt", str(a["prompt_symbol"])[:4])
         changed.append("prompt symbol")
@@ -264,7 +300,7 @@ def set_appearance(a, ctx):
 
 
 @tool("show_panel", "Show one of the system's screens to the user.",
-      {"panel": {"type": "string", "enum": ["settings", "models", "tasks", "memory", "audit", "help"]}},
+      {"panel": {"type": "string", "enum": ["settings", "models", "connectors", "tasks", "memory", "audit", "help"]}},
       ["panel"])
 def show_panel(a, ctx):
     ctx.show_panel(a.get("panel", "help"))
@@ -326,7 +362,7 @@ def show_image(a, ctx):
     except (web.WebError, OSError) as e:
         return f"no photo found: {e}"
     credit = ", ".join(x for x in (info["author"], info["license"]) if x)
-    if hasattr(ctx, "show_ui"):
+    if getattr(ctx, "is_desk", False):
         subject = str(a.get("subject", "")).strip()
         ctx.show_ui({"id": "image-" + re.sub(r"\W+", "-", subject.lower())[:40], "replace": True,
                      "title": subject[:60] or info["title"][:60], "kind": "image", "size": "l", "blocks": [
@@ -370,11 +406,12 @@ def set_wallpaper(a, ctx):
 @tool("schedule_task", "Do something later or on a repeating schedule; you carry out the task text then "
       "and the result is shown to the user. Not for messages that merely mention a time ('reply that Friday at 7 works' is a reply, now).",
       {"when": {"type": "string", "description": "the user's timing words, copied exactly, e.g. 'every weekday at 8am', 'in 2 hours', 'tomorrow 8am'"},
-       "task": {"type": "string", "description": "what to do then"}},
+       "task": {"type": "string", "description": "what to do then"},
+       "kind": {"type": "string", "enum": ["agent", "reminder", "timer"], "description": "reminder = just show these words then; timer = ring then (task is its length); agent (default) = carry the task out"}},
       ["when", "task"], risk=CHANGE)
 def schedule_task(a, ctx):
     try:
-        t = store.add_task(str(a.get("when", "")), str(a.get("task", "")))
+        t = store.add_task(str(a.get("when", "")), str(a.get("task", "")), str(a.get("kind") or "agent"))
     except store.WhenError as e:
         return f"error: {e}"
     return f"scheduled [{t['id']}] {t['desc']}: {t['task']}"
@@ -398,7 +435,7 @@ def manage_tasks(a, ctx):
 def calculate(a, ctx):
     expr = str(a.get("expression", ""))
     expr = re.sub(r"(\d+(?:\.\d+)?)\s*%\s*of\s*", r"(\1/100)*", expr)
-    expr = expr.replace("×", "*").replace("÷", "/").replace("^", "**").replace(",", "")
+    expr = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", expr.replace("×", "*").replace("÷", "/").replace("^", "**"))
     try:
         val = _safe_eval(ast.parse(expr, mode="eval").body)
     except Exception as e:
@@ -505,6 +542,252 @@ def _truthy(v):
 
 _AUTONOMY_RANK = {"hands-on": 0, "balanced": 1, "hands-off": 2}
 _INTERNET_RANK = {"no": 0, "ask": 1, "yes": 2}
+_BRAIN_RANK = {"local": 0, "ask": 1, "cloud": 2}
+
+
+def _norm_brain(v):
+    v = re.sub(r"[^a-z ]", "", str(v or "").lower()).strip()
+    if v in ("local", "here", "offline", "on device", "ondevice", "this computer", "only here", "this machine", "never"):
+        return "local"
+    if v in ("ask", "ask me", "ask first", "hybrid", "mixed", "sometimes", "big tasks", "when needed"):
+        return "ask"
+    if v in ("cloud", "online", "remote", "claude", "everything", "always", "all", "online model"):
+        return "cloud"
+    return None
+
+
+@tool("online_model", "Set up, switch or remove the optional online model (Claude, or any OpenAI-compatible service) that "
+      "can answer instead of the on-device one; the 'brain' setting decides when it is used (change_setting brain "
+      "local|ask|cloud). action 'set up': keep an account directly when the owner gives provider/model/url/key in chat "
+      "(provider 'claude' or 'openai'), otherwise opens a form on the desk; 'use' with model switches to another of the "
+      "account's models, keeping the key (e.g. model 'claude-opus-5-5'); 'forget' removes the account; 'status' says what "
+      "is set up. The owner's key is checked once and kept inside the vault.",
+      {"action": {"type": "string", "enum": ["set up", "use", "forget", "status"]}, "provider": STR, "model": STR, "url": STR, "key": STR},
+      ["action"])
+def online_model(a, ctx):
+    act = str(a.get("action", "status")).lower().replace("-", " ").strip()
+    c = config.cloud()
+    brain = config.settings.get("brain", "local")
+    if act == "forget":
+        if not c:
+            return "no online model is set up"
+        config.forget_cloud()
+        store.audit("online_model", {}, "account removed", who="owner")
+        if getattr(ctx, "is_desk", False):
+            ctx.redraw()
+        return "the online model's account is forgotten; everything is answered on this computer now"
+    if act in ("set up", "setup", "add", "configure", "change", "replace"):
+        if a.get("key"):
+            ok, note = llm.cloud_setup(a)
+            if ok:
+                store.audit("online_model", {"provider": a.get("provider"), "model": a.get("model"), "key": "…" + str(a["key"])[-4:]},
+                            "account added", who="owner")
+                if getattr(ctx, "is_desk", False):
+                    ctx.redraw()
+            return note
+        if hasattr(ctx, "setup_cloud"):
+            return ctx.setup_cloud(a.get("provider"))
+        return "no screen to put a form on; say: set up the online model: provider claude, model claude-sonnet-5, key …"
+    if act in ("use", "switch", "select"):
+        if not c:
+            return "no online model is set up yet; say 'set up the online model' first"
+        ok, note = llm.switch_cloud_model(a.get("model"))
+        if ok:
+            store.audit("online_model", {"model": a.get("model")}, "switched", who="owner")
+            if getattr(ctx, "is_desk", False):
+                ctx.redraw()
+        return note
+    if c:
+        return (f"online model: {llm.cloud_label(c)} ({c['provider']}, key ending {c['key'][-4:]}); where it thinks: {brain}"
+                + (" (the internet is off, so it can't be reached)" if config.settings.get("internet") == "no" else ""))
+    return f"no online model is set up; where it thinks: {brain}"
+
+
+@tool("manage_connectors",
+      "Connectors are the apps of this OS: external tool providers (MCP servers) the owner installs to give you new "
+      "abilities. action 'add': install one by name with EITHER command (a local program to run, stdio -- stays on this "
+      "machine) OR url (an http server, may be remote); it is started, its tools are listed, and they become available "
+      "to you to call directly. 'list': installed connectors and their tools. 'tools': one connector's tools. "
+      "'enable'/'disable': turn a connector on or off. 'remove': uninstall it. On the desk, 'add' with no command and no "
+      "url opens a form for the owner to fill in.",
+      {"action": {"type": "string", "enum": ["add", "list", "tools", "enable", "disable", "remove"]},
+       "name": STR, "transport": {"type": "string", "enum": ["stdio", "http"]},
+       "command": {"type": "string", "description": "for a stdio connector: the program and arguments to run"},
+       "url": {"type": "string", "description": "for an http connector: the server URL"}},
+      ["action"],
+      risk=lambda a: (SECURITY if (a.get("command") or a.get("url")) else SAFE) if a.get("action") == "add" else
+      (SECURITY if a.get("action") == "enable" else DESTRUCTIVE if a.get("action") == "remove"
+       else READ if a.get("action") in ("list", "tools") else SAFE))
+def manage_connectors(a, ctx):
+    from . import mcp
+    act = str(a.get("action", "list")).lower().strip()
+    name = a.get("name", "")
+    if act == "list":
+        regs = mcp.connectors()
+        if not regs:
+            ctx.show_panel("connectors") if getattr(ctx, "is_desk", False) else None
+            return ("No connectors are installed. A connector is an external tool provider (an MCP server) that adds "
+                    "abilities, like an app. Add one with a command (local) or a URL. Example: "
+                    "add a connector named files that runs 'npx -y @modelcontextprotocol/server-filesystem /root'.")
+        if getattr(ctx, "is_desk", False):
+            ctx.show_panel("connectors")
+        out = []
+        for c in regs:
+            ts = [t.get("name") for t in mcp.tools_of(c["name"])] if c.get("enabled", True) else []
+            state = "" if c.get("enabled", True) else " (off)"
+            where = c["command"] if c["transport"] == "stdio" else c["url"]
+            out.append(f"{c['name']}{state} [{c['transport']}: {where}] — " + (", ".join(ts) if ts else "no tools / not reachable"))
+        return "\n".join(out)
+    if act == "tools":
+        if not mcp.get(name):
+            return f"no connector named '{name}'"
+        ts = mcp.tools_of(name)
+        return (f"{name} offers: " + "; ".join(f"{t.get('name')}: {(t.get('description') or '')[:80]}" for t in ts)) if ts \
+            else f"{name} advertises no tools (or could not be reached)"
+    if act in ("enable", "disable"):
+        if not mcp.set_enabled(name, act == "enable"):
+            return f"no connector named '{name}'"
+        n = sync_connectors()
+        return f"connector '{mcp._slug(name)}' is {'on' if act == 'enable' else 'off'}" + \
+            (f" ({n.get(mcp._slug(name))} tools)" if act == "enable" and isinstance(n.get(mcp._slug(name)), int) else "")
+    if act == "remove":
+        return f"removed the connector '{mcp._slug(name)}'" if mcp.remove(name) else f"no connector named '{name}'"
+    if act == "add":
+        transport = (a.get("transport") or ("http" if a.get("url") and not a.get("command") else "stdio")).lower()
+        if not a.get("command") and not a.get("url"):
+            if hasattr(ctx, "setup_connector"):
+                return ctx.setup_connector()
+            return ("to add a connector say its name and either a command or a URL, e.g. "
+                    "add a connector named weather that runs 'uvx mcp-server-weather'")
+        try:
+            spec = mcp.add(name or ("connector"), transport, command=a.get("command", ""), url=a.get("url", ""))
+        except mcp.McpError as e:
+            return f"error: {e}"
+        ok, res = mcp.probe(spec)
+        if not ok:
+            mcp.remove(spec["name"])
+            return f"that connector did not start, so it was not kept: {res}"
+        sync_connectors()
+        store.audit("manage_connectors", {"name": spec["name"], "transport": transport,
+                                          "where": spec["command"] or spec["url"]}, "connector added", who="owner")
+        if getattr(ctx, "is_desk", False):
+            ctx.redraw()
+        names = ", ".join(t.get("name", "") for t in res) if isinstance(res, list) else ""
+        return f"added the connector '{spec['name']}' with {len(res)} tool(s): {names}. You can call them now."
+    return "error: unknown action"
+
+
+def _hf_json(url, timeout=20):
+    import json as _json
+    status, _ctype, _final, body = web.fetch(url, max_bytes=2_000_000, timeout=timeout)
+    if status != 200:
+        raise web.WebError(f"Hugging Face returned HTTP {status}")
+    return _json.loads(body.decode("utf-8", "replace"))
+
+
+def _catalog_authors():
+    # the makers already trusted in the built-in catalog, plus the well-known GGUF re-publishers
+    authors = {(m.get("repo", "").split("/")[0]) for m in models.catalog() if "/" in m.get("repo", "")}
+    authors.update({"ggml-org", "bartowski", "unsloth"})
+    return sorted(a for a in authors if a)
+
+
+@tool("check_new_models", "Search Hugging Face for newer or additional GGUF language models from the makers this OS "
+      "already trusts (and the well-known re-publishers), and list the ones not yet in the model list. Use it when the "
+      "owner wants to refresh the model list or find a newer model; then offer to add_model one they pick.",
+      {"query": {"type": "string", "description": "optional extra words to narrow the search, e.g. 'coding' or 'small'"}},
+      [], risk=READ, network=True)
+def check_new_models(a, ctx):
+    have = {m.get("repo", "").lower() for m in models.catalog()}
+    q = re.sub(r"[^a-z0-9 ]", "", str(a.get("query", "")).lower()).strip()
+    found, seen, errors = [], set(), 0
+    for author in _catalog_authors():
+        ctx.status(f"checking {author} on Hugging Face…")
+        url = (f"https://huggingface.co/api/models?author={author}"
+               f"&search={('gguf ' + q).strip().replace(' ', '%20')}&sort=lastModified&direction=-1&limit=8&full=true")
+        try:
+            rows = _hf_json(url)
+        except (web.WebError, ValueError, OSError):
+            errors += 1
+            continue
+        for r in rows if isinstance(rows, list) else []:
+            rid = (r.get("id") or r.get("modelId") or "").strip()
+            low = rid.lower()
+            if not rid or low in have or low in seen or "gguf" not in low:
+                continue
+            seen.add(low)
+            when = str(r.get("lastModified", ""))[:10]
+            dls = r.get("downloads") or 0
+            found.append((author, rid, when, dls))
+    if not found:
+        return ("No newer models turned up" + (" for that search" if q else "") +
+                (f" ({errors} source(s) could not be reached)" if errors else "") +
+                ". The built-in list is current. Say 'add the model <owner/repo>' if you know one you want.")
+    found.sort(key=lambda x: (x[2], x[3]), reverse=True)
+    lines = ["New GGUF models not in the list yet (newest first). To add one, say \"add the model <owner/repo>\":"]
+    for author, rid, when, dls in found[:20]:
+        lines.append(f"- {rid}" + (f"  (updated {when}" if when else "  (") + (f", {dls:,} downloads)" if dls else ")"))
+    if errors:
+        lines.append(f"({errors} source(s) could not be reached this time.)")
+    return "\n".join(lines)
+
+
+def _slug(repo, fname):
+    base = (repo.split("/")[-1] + "-" + re.sub(r"\.gguf$", "", fname, flags=re.I)).lower()
+    return re.sub(r"[^a-z0-9]+", "-", base).strip("-")[:60]
+
+
+@tool("add_model", "Add a GGUF model from a Hugging Face repo to the on-device model list so it can be downloaded and "
+      "used, pinned to the exact file's SHA-256 (read from Hugging Face). Give the repo as 'owner/name'; optionally the "
+      "exact .gguf file name, otherwise a Q4_K_M build is preferred. After it is added, download it with manage_models.",
+      {"repo": {"type": "string", "description": "Hugging Face repo, e.g. mistralai/Ministral-3-8B-Instruct-2512-GGUF"},
+       "file": {"type": "string", "description": "optional exact .gguf file name in that repo"},
+       "name": {"type": "string", "description": "optional friendly name to show"}},
+      ["repo"], risk=CHANGE, network=True)
+def add_model(a, ctx):
+    repo = str(a.get("repo", "")).strip().strip("/")
+    if not re.match(r"^[\w.\-]+/[\w.\-]+$", repo):
+        return "error: give the repo as 'owner/name', e.g. mistralai/Ministral-3-8B-Instruct-2512-GGUF"
+    ctx.status(f"reading {repo} on Hugging Face…")
+    try:
+        tree = _hf_json(f"https://huggingface.co/api/models/{repo}/tree/main?recursive=true")
+    except (web.WebError, ValueError, OSError) as e:
+        return f"error: could not read {repo} on Hugging Face ({e})"
+    ggufs = [f for f in (tree if isinstance(tree, list) else []) if str(f.get("path", "")).lower().endswith(".gguf")]
+    if not ggufs:
+        return f"error: no .gguf file found in {repo} (is it a GGUF repo?)"
+    want = str(a.get("file", "")).strip()
+    pick = None
+    if want:
+        pick = next((f for f in ggufs if f["path"].lower() == want.lower() or f["path"].lower().endswith("/" + want.lower())), None)
+        if not pick:
+            return f"error: '{want}' is not in {repo}; its GGUF files are: " + ", ".join(f["path"] for f in ggufs[:12])
+    if not pick:
+        pick = next((f for f in ggufs if "q4_k_m" in f["path"].lower()), None) or min(ggufs, key=lambda f: _fsize(f))
+    sha = ((pick.get("lfs") or {}).get("oid") or "").replace("sha256:", "").strip().lower()
+    size = _fsize(pick)
+    if not re.fullmatch(r"[0-9a-f]{64}", sha):
+        return (f"error: {repo} does not expose a SHA-256 for {pick['path']} (not stored as a verifiable LFS file); "
+                "not adding it, because every model must be hash-pinned")
+    if not size:
+        return f"error: could not read the size of {pick['path']} from {repo}"
+    fname = pick["path"].split("/")[-1]
+    entry = {"id": _slug(repo, fname), "name": str(a.get("name", "")).strip() or repo.split("/")[-1],
+             "maker": repo.split("/")[0], "origin": "", "license": "see the model's page", "repo": repo, "file": fname,
+             "size": size, "sha256": sha, "ram_gb": max(2, round(size / 1024 ** 3) + 1),
+             "note": "added by you from Hugging Face", "speed": "", "good_at": [], "limits": ["added by you, not reviewed by the OS"]}
+    try:
+        models.add_catalog_entry(entry)
+    except ValueError as e:
+        return f"error: {e}"
+    if getattr(ctx, "is_desk", False):
+        ctx.redraw()
+    return (f"added {entry['name']} ({entry['file']}, {size / 1e9:.1f} GB, needs about {entry['ram_gb']} GB RAM), "
+            f"pinned to its SHA-256. Say 'download the model {entry['id']}' then 'use {entry['id']}'.")
+
+
+def _fsize(f):
+    return int((f.get("lfs") or {}).get("size") or f.get("size") or 0)
 
 
 def _policy_risk(setting, value):
@@ -521,15 +804,20 @@ def _policy_risk(setting, value):
         return SECURITY if _INTERNET_RANK.get(v, 0) > _INTERNET_RANK.get(s.get("internet", "yes"), 2) else SAFE
     if setting == "tor":
         return SECURITY if (not _truthy(v)) and s.get("tor") else SAFE
+    if setting == "brain":      # sending more to the online model is the loosening direction
+        new = _norm_brain(v)
+        return SECURITY if new and _BRAIN_RANK.get(new, 0) > _BRAIN_RANK.get(s.get("brain", "local"), 2) else SAFE
     return SAFE
 
 
 @tool("change_setting", "Change a system setting. autonomy: hands-off | balanced (ask before destructive "
       "actions) | hands-on (ask before any change). internet: yes | ask | no. tor: on/off. speak_replies: "
       "on/off. focus_mode: on/off (+minutes), blocks feed sites. think: on/off. name: what to call the "
-      "user. timezone: a place or zone name. (Language changes go through set_appearance.)",
+      "user. brain: local (answered only on this computer) | ask (here; asks before a big request goes to "
+      "the online model) | cloud (the online model answers everything). guidance: owner | standard. "
+      "(Language changes go through set_appearance.)",
       {"setting": {"type": "string", "enum": ["autonomy", "internet", "tor", "speak_replies", "focus_mode",
-                                              "think", "name", "autolock"]},
+                                              "think", "name", "autolock", "guidance", "brain"]},
        "value": STR, "minutes": {"type": "integer"}}, ["setting", "value"],
       risk=lambda a: _policy_risk(a.get("setting"), a.get("value")))
 def change_setting(a, ctx):
@@ -568,6 +856,26 @@ def change_setting(a, ctx):
     if s == "name":
         config.Profile().set("name", str(v).strip())
         return f"I'll call the user {str(v).strip()}"
+    if s == "guidance":
+        v = str(v).lower().strip()
+        v = "standard" if v in ("standard", "cautious", "careful", "safe", "default assistant", "guardrails") else "owner" if v in ("owner", "mine", "obey", "follow", "me", "my instructions", "full") else v
+        if v not in ("owner", "standard"):
+            return "error: guidance must be 'owner' (does what you ask on your machine) or 'standard' (the model's own caution)"
+        config.settings.set("guidance", v)
+        return "guidance is now 'owner': it does what you ask on your own machine, no lectures" if v == "owner" else "guidance is now 'standard': the model keeps its own caution"
+    if s == "brain":
+        n = _norm_brain(v)
+        if not n:
+            return ("error: brain must be local (answered only on this computer), ask (here; asks before a big "
+                    "request goes to the online model) or cloud (the online model answers everything)")
+        config.settings.set("brain", n)
+        if getattr(ctx, "is_desk", False):
+            ctx.redraw()
+        if n != "local" and not config.cloud():
+            return f"where it thinks is now '{n}', but no online model is set up yet, so everything is still answered here; say 'set up the online model'"
+        return {"local": "everything is answered on this computer; nothing is sent to an online model",
+                "ask": "answered here; before a big request goes to the online model you are asked, and it gets the request and conversation, not your memory",
+                "cloud": f"the online model ({llm.cloud_label()}) answers everything, including with your memory; this computer answers when it can't be reached"}[n]
     if s == "autolock":
         v = str(v).lower().strip()
         if v in ("off", "never", "0", "no", "none", "false", "disable", "disabled"):
@@ -581,8 +889,11 @@ def change_setting(a, ctx):
         if not config.settings.get("vault") and mins:
             return "there is no passphrase vault on this computer, so there is nothing to lock; set one up first (settings)"
         config.settings.set("autolock", mins)
-        ctx.redraw()
-        return f"auto-lock after {mins} minute{'s' if mins != 1 else ''} of inactivity" if mins else "auto-lock is off"
+        if getattr(ctx, "is_desk", False):
+            ctx.redraw()
+            return f"auto-lock after {mins} minute{'s' if mins != 1 else ''} of inactivity" if mins else "auto-lock is off"
+        return (f"auto-lock after {mins} minute{'s' if mins != 1 else ''} of inactivity, on the screen (the text console has no idle timer)"
+                if mins else "auto-lock is off")
     if s == "timezone":
         try:
             zone = system.set_timezone(v)
@@ -948,14 +1259,16 @@ def _human_size(n):
       "/root (~). Use for 'show my files', 'open my documents folder', 'what's in ~/projects'.",
       {"path": {"type": "string", "description": "folder to show (default: the home folder)"}}, [], risk=READ)
 def show_files(a, ctx):
-    path = os.path.expanduser(str(a.get("path") or "~").strip() or "~")
+    path = _path(a.get("path") or "~")
     if not os.path.isdir(path):
         return f"error: {path} is not a folder"
     try:
         names = sorted(os.listdir(path), key=lambda n: (not os.path.isdir(os.path.join(path, n)), n.lower()))
     except OSError as e:
         return f"error: {e.strerror}: {path}"
-    names = [n for n in names if not n.startswith(".") and n != "lost+found"][:80]   # (the vault's ext4 housekeeping dir)
+    names = [n for n in names if not n.startswith(".") and n != "lost+found"]   # (the vault's ext4 housekeeping dir)
+    cut = len(names) > uispec.MAX_ITEMS
+    names = names[:uispec.MAX_ITEMS]
     is_trash = path.rstrip("/") == _trash()
     items = []
     for n in names:
@@ -966,7 +1279,7 @@ def show_files(a, ctx):
             continue
         isdir = os.path.isdir(p)
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
-        in_trash = path.rstrip("/") == _trash()
+        in_trash = is_trash or path.startswith(_trash() + "/")
         if in_trash:
             acts = [{"label": i18n.t("d_restore"), "say": f"restore {n} from the trash", "primary": True},
                     {"label": i18n.t("d_delete_forever"), "say": f"delete the file {p}", "danger": True}]
@@ -987,7 +1300,7 @@ def show_files(a, ctx):
     if is_trash and items:
         blocks.append({"type": "buttons", "items": [{"label": i18n.t("d_empty_trash"), "say": "empty the trash", "danger": True}]})
     show(ctx, {"id": "files", "replace": True, "title": title, "size": "l", "blocks": blocks})
-    return f"{len(items)} item(s) in {shown} are listed on the owner's screen; do not repeat them, say one sentence at most."
+    return f"{len(items)} item(s) in {shown} are listed on the owner's screen" + (f" (the first {uispec.MAX_ITEMS} of more)" if cut else "") + "; do not repeat them, say one sentence at most."
 
 
 _IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif")
@@ -1005,8 +1318,9 @@ def _looks_like_text(path):
         return False
     try:
         head.decode("utf-8")
-    except UnicodeDecodeError:
-        return False
+    except UnicodeDecodeError as e:
+        if e.start < len(head) - 4:      # a real decoding problem, not a character cut by the 4 KB window
+            return False
     return True
 
 
@@ -1019,7 +1333,7 @@ def _in_home(path):
       "music and video played, folders as a listing. Use for 'open the file X' / 'open ~/notes.txt'.",
       {"path": STR}, ["path"], risk=READ)
 def open_file(a, ctx):
-    path = os.path.expanduser(str(a.get("path", "")).strip())
+    path = _path(a.get("path", ""))
     if not path:
         return "error: which file?"
     if os.path.isdir(path):
@@ -1041,16 +1355,7 @@ def open_file(a, ctx):
         denv = media.desk_env()
         if denv is None and not media.has_audio():
             return "there is no screen or sound device to play it on"
-        media.stop()
-        info = {"url": path, "title": name}
-        if denv is not None:
-            media.play_windowed(info, ext in _AUDIO_EXT, dict(os.environ, **denv))
-        elif ext in _AUDIO_EXT or not media.has_display():
-            log = open(media.LOG, "w")
-            subprocess.Popen(["mpv", *media._common_args(), "--no-video", path], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                             start_new_session=True)
-        else:
-            media.kiosk_launch(["mpv", "--vo=wlshm", "--fs", *media._common_args(), path], media.LOG)
+        media.play_local(path, name, ext in _AUDIO_EXT)
         return f"now playing {name}. Say one sentence at most."
     if ext == ".pdf" or not _looks_like_text(path):
         viewer = next((v for v in ("mupdf", "zathura", "evince", "xdg-open") if shutil.which(v)), None) if ext == ".pdf" else None
@@ -1064,12 +1369,16 @@ def open_file(a, ctx):
         return f"{name} is {_human_size(size)} of text, too big to show whole; read_file can take part of it"
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
+    shown_all = len(text) <= uispec.MAX_TEXT
+    if not shown_all:
+        text = text[:uispec.MAX_TEXT]
     code_ext = ext in (".py", ".sh", ".js", ".json", ".yaml", ".yml", ".toml", ".ini", ".conf", ".cfg", ".c", ".h", ".rs", ".go",
                        ".css", ".html", ".xml", ".csv", ".log")
     show(ctx, {"id": "file:" + path, "replace": True, "title": name, "size": "l",
                "blocks": [{"type": "code" if code_ext else "text", "text": text, "lang": ext.lstrip(".") if code_ext else ""},
                           {"type": "buttons", "items": [{"label": i18n.t("d_delete"), "say": f"delete the file {path}", "danger": True}]}]})
-    return f"{name} ({_human_size(size)}) is shown on the owner's screen; do not repeat its contents, say one sentence at most."
+    return (f"{name} ({_human_size(size)}) is shown on the owner's screen" + ("" if shown_all else f" (the first {uispec.MAX_TEXT} characters; read_file can take the rest)") +
+            "; do not repeat its contents, say one sentence at most.")
 
 
 def _trash():
@@ -1077,18 +1386,18 @@ def _trash():
 
 
 def _origins():
-    return config.load_json(os.path.join(_trash(), ".origins.json"), {})
+    return config.load_json(config.data("trash-origins.json"), {})
 
 
 def _save_origins(o):
-    config.save_json(os.path.join(_trash(), ".origins.json"), o)
+    config.save_json(config.data("trash-origins.json"), o)
 
 
 @tool("delete_file", "Move one of the owner's files or folders (inside the home folder) to the trash (~/.Trash), "
       "where it can be put back later; a file that is already in the trash is deleted for good.",
       {"path": STR}, ["path"], risk=DESTRUCTIVE)
 def delete_file(a, ctx):
-    path = os.path.abspath(os.path.expanduser(str(a.get("path", "")).strip()))
+    path = os.path.abspath(_path(a.get("path", "")))
     if not os.path.lexists(path):
         return f"error: there is no file {path}"
     home = config.home().rstrip("/")
@@ -1158,7 +1467,7 @@ def empty_trash(a, ctx):
     trash = _trash()
     n = 0
     try:
-        names = [x for x in os.listdir(trash) if x != ".origins.json"]
+        names = os.listdir(trash)
     except OSError:
         names = []
     for x in names:
@@ -1261,17 +1570,8 @@ def note_remove(a, ctx):
 def set_passphrase(a, ctx):
     if config.settings.get("vault"):
         return "the vault already exists (say 'lock' to lock it); the passphrase cannot be changed from here"
-    if hasattr(ctx, "show_ui") and getattr(ctx, "is_desk", False):
-        show(ctx, {"id": "vault-form", "replace": True, "title": i18n.t("passphrase"), "size": "s", "blocks": [
-            {"type": "text", "text": i18n.t("ask_passphrase")},
-            {"type": "form", "fields": [{"name": "p1", "label": i18n.t("passphrase"), "kind": "password"},
-                                        {"name": "p2", "label": i18n.t("ask_passphrase_again"), "kind": "password"}],
-             "submit": {"label": i18n.t("d_set_passphrase"), "post": "vault.create"}},
-            {"type": "text", "text": i18n.t("w_pass_hint"), "dim": True}]})
-        return "a passphrase form is on the owner's screen; they type it there. Say one sentence at most."
     if hasattr(ctx, "setup_vault"):
-        ctx.setup_vault()
-        return "done" if config.settings.get("vault") else "no vault was created"
+        return ctx.setup_vault()
     return "a passphrase can only be set at the screen or the console"
 
 

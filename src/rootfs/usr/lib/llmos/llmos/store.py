@@ -91,6 +91,48 @@ def audit_tail(n=15):
         return []
 
 
+# ------------------------------------------------------------------ routines
+# What the model did for a short request it has seen before (agent._maybe_save_routine decides what is
+# safe to keep). Keyed by the request's words, punctuation and case aside; the 300 most recently used stay.
+
+def _routine_key(text):
+    return " ".join(re.sub(r"[^\w\s]", " ", str(text).lower()).split())[:160]
+
+
+def routines():
+    r = config.load_json(config.data("routines.json"), {})
+    return r if isinstance(r, dict) else {}
+
+
+def routine(text):
+    return routines().get(_routine_key(text))
+
+
+def save_routine(text, calls):
+    r = routines()
+    key = _routine_key(text)
+    if not key or not calls:
+        return
+    r[key] = {"request": str(text)[:160], "calls": calls, "ts": time.time(), "used": r.get(key, {}).get("used", 0)}
+    if len(r) > 300:
+        for k in sorted(r, key=lambda k: r[k].get("last") or r[k].get("ts") or 0)[:len(r) - 300]:
+            r.pop(k, None)
+    config.save_json(config.data("routines.json"), r)
+
+
+def routine_used(text, ok):
+    r = routines()
+    key = _routine_key(text)
+    if key not in r:
+        return
+    if ok:
+        r[key]["used"] = r[key].get("used", 0) + 1
+        r[key]["last"] = time.time()
+    else:
+        r.pop(key)            # it no longer works: next time the model decides afresh
+    config.save_json(config.data("routines.json"), r)
+
+
 # ------------------------------------------------------------------ inbox
 
 # ---- notes and lists (shopping, to-do, ideas…): plain items the owner adds in words
@@ -128,7 +170,8 @@ def find_note(ref, lst=None):
     ref = " ".join(str(ref).lower().split())
     ref = re.sub(r"^item\s+", "", ref)
     cur = notes()
-    pool = [n for n in cur if lst is None or n["list"] == lst]
+    # open items first: "tick off milk" means the milk still to buy, not last week's
+    pool = sorted([n for n in cur if lst is None or n["list"] == lst], key=lambda n: bool(n["done"]))
     hit = [n for n in pool if n["id"] == ref] or [n for n in pool if n["text"].lower() == ref] or \
           [n for n in pool if ref and ref in n["text"].lower()]
     return hit[0] if hit else None
@@ -359,9 +402,11 @@ def _save_tasks(ts):
     config.save_json(config.data("tasks.json"), ts)
 
 
-def add_task(when, task):
+def add_task(when, task, kind="agent"):
+    """kind: "agent" (the model carries the task out), "timer" (task = its length, e.g. "10 minutes"),
+    "reminder" (task = the words to show); timers and reminders are delivered as they are, no model."""
     first, spec = parse_when(when)
-    t = {"id": uuid.uuid4().hex[:6], "task": task.strip(), "when": when,
+    t = {"id": uuid.uuid4().hex[:6], "task": task.strip(), "when": when, "kind": kind if kind in ("timer", "reminder") else "agent",
          "spec": spec, "next": first.timestamp(), "created": time.time(),
          "desc": describe(spec, first)}
     cur = tasks()

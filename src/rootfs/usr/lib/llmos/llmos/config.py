@@ -77,8 +77,13 @@ PUBLIC_DEFAULTS = {
         "prompt": "›",
         "scale": 100,               # text/interface size on the desk, percent
         "motion": "full",           # animations on the desk: full | reduced | off
+        "layout": "clean",          # the desk's arrangement: clean (LLM OS) | windows (taskbar + start menu) | mac (menu bar + dock)
     },
     "speak_replies": False,
+    "guidance": "owner",            # owner: does what the owner asks on their machine, no lectures | standard: the model's own caution
+    "brain": "local",               # where requests are answered: local (this computer only) | ask (here; asks before a big one goes
+                                    # to the online model) | cloud (the online model for everything; here when it can't be reached)
+    "profile": {},                  # the first-run sliders (0-100 each), kept for reference
     "vault": False,
     "focus": {"on": False, "until": 0},
 }
@@ -125,8 +130,21 @@ class Settings:
 
     path = os.path.join(ETC, "settings.json")
 
+    _cache = (None, None)
+
     def all(self):
-        return _merge(PUBLIC_DEFAULTS, load_json(self.path, {}))
+        # re-read whenever the file changed (all consoles and the scheduler agree), parsed once otherwise
+        try:
+            st = os.stat(self.path)
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            key = None
+        cache_key, cached = Settings._cache
+        if key is not None and key == cache_key and cached is not None:
+            return cached
+        val = _merge(PUBLIC_DEFAULTS, load_json(self.path, {}))
+        Settings._cache = (key, val)
+        return val
 
     def get(self, key, default=None):
         cur = self.all()
@@ -162,6 +180,28 @@ class Profile:
         cur = load_json(self.path, {})
         cur[key] = value
         save_json(self.path, cur)
+
+
+# ---- the optional online model: an account the owner adds. Private (inside the vault with the rest
+# of the owner's data), so it is unreachable while the vault is locked, like everything else of theirs.
+
+def cloud():
+    """{"provider", "url", "model", "key"} or None when no account is set up."""
+    c = load_json(data("cloud.json"), None)
+    if not isinstance(c, dict) or not c.get("key") or not c.get("model"):
+        return None
+    return c
+
+
+def save_cloud(c):
+    save_json(data("cloud.json"), c)
+
+
+def forget_cloud():
+    try:
+        os.unlink(data("cloud.json"))
+    except OSError:
+        pass
 
 
 def llm_language(area=None):

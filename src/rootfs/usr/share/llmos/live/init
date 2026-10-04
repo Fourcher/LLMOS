@@ -5,6 +5,9 @@
 # Nothing is written to the stick; "install LLM OS" copies the running
 # system to the internal disk.
 export PATH=/usr/bin:/usr/sbin:/bin:/sbin
+# the initramfs ships one busybox binary; give it its applet names first (mount, mkdir, findfs, …)
+/bin/busybox mkdir -p /usr/bin /usr/sbin /proc /sys /dev /tmp /run /media /newroot
+/bin/busybox --install -s
 mount -t proc -o nodev,noexec,nosuid proc /proc
 mount -t sysfs -o nodev,noexec,nosuid sysfs /sys
 mount -t devtmpfs -o exec,nosuid,mode=0755,size=2M devtmpfs /dev 2>/dev/null || mount -t tmpfs -o exec,nosuid,mode=0755,size=2M tmpfs /dev
@@ -43,5 +46,9 @@ if [ -d /newroot/run/live/llmos/models ]; then
 fi
 mount --move /media/sfs /newroot/run/live/sfs 2>/dev/null || true
 echo "LLM OS live: system mounted from $dev" > /dev/kmsg
+# the device tree goes with us (OpenRC's udev expects /dev to be devtmpfs already); /proc and /sys it mounts itself
 umount /dev/pts 2>/dev/null; umount /sys 2>/dev/null; umount /proc 2>/dev/null
+mkdir -p /newroot/dev /newroot/proc /newroot/sys /newroot/run /newroot/tmp /newroot/mnt /newroot/media /newroot/boot/efi
+[ -f /newroot/run/live/llmos/etc/fstab ] && cp /newroot/run/live/llmos/etc/fstab /newroot/etc/fstab
+mount --move /dev /newroot/dev
 exec switch_root /newroot /sbin/init

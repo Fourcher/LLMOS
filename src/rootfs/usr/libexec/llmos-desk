@@ -6,8 +6,9 @@
 export HOME=/root LANG=C.UTF-8 PYTHONUNBUFFERED=1
 # caches (fontconfig, Mesa's shader cache, Python) live outside the passphrase vault: a cache file
 # mapped from inside it would keep the vault from closing when the owner locks
-export XDG_CACHE_HOME=/var/cache/llmos MESA_SHADER_CACHE_DIR=/var/cache/llmos/mesa
+export XDG_CACHE_HOME=/var/cache/llmos XDG_CONFIG_HOME=/var/cache/llmos MESA_SHADER_CACHE_DIR=/var/cache/llmos/mesa
 mkdir -p /var/cache/llmos/mesa
+rm -f /var/cache/llmos/labwc/rc.xml   # a lock-screen keybind profile left by a crash must not outlive the lock
 export XDG_RUNTIME_DIR=/run/llmos
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
 export XDG_CONFIG_DIRS=/etc/xdg XDG_DATA_DIRS=/usr/share:/usr/local/share

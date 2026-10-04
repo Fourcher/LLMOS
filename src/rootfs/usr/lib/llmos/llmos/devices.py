@@ -19,15 +19,19 @@ def brightness(percent=None, delta=None):
     with open(os.path.join(dev, "max_brightness")) as f:
         mx = int(f.read())
     with open(os.path.join(dev, "brightness")) as f:
-        cur = int(f.read()) * 100 // mx
+        raw = int(f.read())
     if delta is not None and percent is None:
-        percent = cur + int(delta)
-    if percent is None:
-        return f"Brightness is {cur}%."
-    pct = max(1, min(100, int(percent)))
+        # a step is at least one raw level: panels with a handful of levels still move
+        step = max(1, round(mx * abs(int(delta)) / 100))
+        new = raw + step if int(delta) > 0 else raw - step
+    elif percent is None:
+        return f"Brightness is {raw * 100 // mx}%."
+    else:
+        new = round(mx * max(1, min(100, int(percent))) / 100)
+    new = max(1, min(mx, int(new)))          # never 0: that is "off" on most backlights
     with open(os.path.join(dev, "brightness"), "w") as f:
-        f.write(str(mx * pct // 100))
-    return f"Brightness set to {pct}%."
+        f.write(str(new))
+    return f"Brightness set to {new * 100 // mx}%."
 
 
 def _amixer(*args):
@@ -51,14 +55,9 @@ def _control():
 
 def chime():
     """A short sound for timers and finished background work; silent without a sound card."""
-    wav = "/usr/share/llmos/chime.wav"
-    if not os.path.exists(wav):
-        return False
-    try:
-        with open("/proc/asound/cards") as f:
-            if "no soundcards" in f.read():
-                return False
-    except OSError:
+    from . import config, media
+    wav = os.path.join(config.SHARE, "chime.wav")
+    if not os.path.exists(wav) or not media.has_audio():
         return False
     for cmd in (["aplay", "-q", wav], ["mpv", "--no-video", "--really-quiet", wav]):
         if shutil.which(cmd[0]):
@@ -79,6 +78,8 @@ def volume(percent=None, mute=None, delta=None):
     ctl = _control()
     if not ctl:
         return "The sound card offers no volume control (it plays at a fixed level)."
+    if mute == "toggle":
+        mute = "[off]" not in _amixer("get", ctl).stdout
     if mute is not None:
         r = _amixer("set", ctl, "mute" if mute else "unmute")
         return ("Muted." if mute else "Unmuted.") if r.returncode == 0 else r.stderr.strip()

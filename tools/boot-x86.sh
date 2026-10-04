@@ -13,6 +13,9 @@ qemu-img create -f qcow2 -b "$(cd "$(dirname "$IMG")" && pwd)/$(basename "$IMG")
 # host-GPU mode test (same fw_cfg keys as the launcher): LLMOS_HOSTGPU_URL=http://10.0.2.2:8080
 HOST_ARGS=""
 [ -n "${LLMOS_HOSTGPU_URL:-}" ] && HOST_ARGS="-fw_cfg name=opt/llmos/model_url,string=$LLMOS_HOSTGPU_URL -fw_cfg name=opt/llmos/model_id,string=${LLMOS_HOSTGPU_ID:-ministral-3-3b}"
+# LLMOS_TESTSHELL=1: plain root shell on the serial line; LLMOS_EXTRA_DRIVE=file.qcow2: a second disk
+[ "${LLMOS_TESTSHELL:-0}" = 1 ] && HOST_ARGS="$HOST_ARGS -fw_cfg name=opt/llmos/testshell,string=1"
+[ -n "${LLMOS_EXTRA_DRIVE:-}" ] && HOST_ARGS="$HOST_ARGS -drive file=$LLMOS_EXTRA_DRIVE,format=qcow2,if=virtio"
 FWARGS=""
 if [ "$MODE" = uefi ]; then
     rm -f run/x86-vars.fd; cp $FW/edk2-i386-vars.fd run/x86-vars.fd

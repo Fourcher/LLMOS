@@ -236,7 +236,34 @@ def _motion(text):
     return ("set_appearance", {"motion": lvl})
 
 
+# "I want a Windows 7 clone desktop" / "make it look like a Mac" / "give me a clean desk": the desk's
+# arrangement, with colours to match. Plain "normal"/"clean"/"default" need a desk word to count.
+_LAYOUT = re.compile(r"^\s*(?:please\s+)?(?:i\s+want\s+|i'?d\s+like\s+|give\s+me\s+|make\s+(?:it|this|the\s+desk(?:top)?|everything)\s+(?:look\s+)?(?:like\s+)?|"
+                     r"(?:(?:switch|change|go|turn)\s+(?:it\s+|this\s+)?)?(?:back\s+)?(?:to|into)\s+|use\s+|build\s+(?:me\s+)?|construct\s+(?:me\s+)?)?(?:a\s+|an\s+|the\s+)?"
+                     r"(?P<which>windows(?:\s*(?:7|xp|10|11|vista))?|win\s*7|mac\s*os(?:\s+[a-z]+)?|macos(?:\s+[a-z]+)?|mojave|mac|classic|traditional|normal|clean|default|llm\s*os)"
+                     r"(?:[\s-]+(?:style|like|clone|look|looking))?(?:\s+(?P<desk>desk(?:top)?|layout|interface|ui|look|shell))?\s*[.!]?\s*$", re.I)
+_LAYOUT_PRESETS = {"windows": {"layout": "windows", "accent": "#4aa3ff", "background": "#143259", "color": "#f2f6fb"},
+                   "mac": {"layout": "mac", "accent": "#0a84ff", "background": "#1e1e22", "color": "#ececec"},
+                   "clean": {"layout": "clean", "accent": "default", "background": "default", "color": "default"}}
+
+
+def _layout(text):
+    m = _LAYOUT.match(text)
+    if not m or _QUESTION.search(text):
+        return None
+    w = m.group("which").lower()
+    if w in ("normal", "clean", "default") and not m.group("desk"):
+        return None
+    if w == "mac" and not m.group("desk") and not re.search(r"\b(?:like|style)\b", text, re.I):
+        return None
+    which = "mac" if ("mac" in w or "mojave" in w) else "clean" if w in ("normal", "clean", "default") or "llm" in w else "windows"
+    return ("set_appearance", dict(_LAYOUT_PRESETS[which]))
+
+
 def _look(text):
+    lay = _layout(text)
+    if lay:
+        return lay
     mo = _motion(text)
     if mo:
         return mo
@@ -314,12 +341,102 @@ _SPLIT_LANG = re.compile(r"^\s*(?:please\s+)?(?:put\s+|show\s+|make\s+)?(?:the\s
 _POWER = re.compile(r"^\s*(?:please\s+)?(?:(?P<off>shut\s*down|power\s+off|turn\s+off|switch\s+off|power\s+down)|(?P<re>restart|reboot))"
                     r"(?:\s+(?:the\s+|this\s+|my\s+)?(?:computer|machine|pc|system|laptop|it|yourself|llm\s*os))?(?:\s+now|\s+please)?\s*[.!]?\s*$", re.I)
 _NOT_A_LANGUAGE = {"purple", "green", "blue", "red", "black", "white", "dark", "light", "chinese food", "order", "half", "full", "focus"}
+# where it thinks (the settings panel's three phrases and their natural variants); checked before the
+# internet/"ask me before" rules, which would otherwise swallow "ask me before going online"
+_ONLINE = r"(?:the\s+)?(?:online\s+(?:model|ai|brain)|cloud(?:\s+model)?|claude)"
+_BRAIN = re.compile(r"^\s*(?:please\s+)?(?:(?P<local>(?:think|answer|do\s+everything|keep\s+(?:everything|it\s+all)|stay)\s+(?:only\s+)?(?:on|here\s+on)\s+this\s+(?:computer|machine)(?:\s+only)?"
+                    r"|(?:stop|don'?t|never)\s+(?:use|using)\s+" + _ONLINE + r"(?:\s+(?:any\s*more|again))?|(?:go|stay)\s+offline\s+for\s+(?:the\s+)?(?:thinking|answers|ai))"
+                    r"|(?P<ask>ask(?:\s+me)?(?:\s+first)?\s+before\s+(?:going\s+online|using\s+" + _ONLINE + r"|sending\s+(?:anything|a\s+request)\s+online)(?:\s+for\s+big\s+(?:tasks|requests|ones|things))?)"
+                    r"|(?P<cloud>(?:use|let)\s+" + _ONLINE + r"\s+(?:for|do|answer|handle)\s+everything|send\s+everything\s+(?:to\s+)?" + _ONLINE + r"|(?:always\s+)?use\s+" + _ONLINE + r"))\s*[.!]?\s*$", re.I)
+_CLOUD_SETUP = re.compile(r"^\s*(?:please\s+)?(?:(?P<setup>(?:set\s+up|add|connect|configure)\s+(?:the\s+|an\s+|my\s+)?(?:online\s+(?:model|ai)|cloud\s+model|claude(?:\s+account)?|openai|anthropic))"
+                          r"|(?P<forget>(?:forget|remove|disconnect|delete)\s+(?:the\s+|my\s+)?(?:online\s+(?:model|ai)|cloud\s+model|claude(?:\s+account)?|openai|anthropic)(?:\s+account)?))\s*[.!]?\s*$", re.I)
+# switching the online model: "use the online model claude-opus-5-5", "switch the online model to opus", "use opus online"
+_ONLINE_USE = re.compile(r"^\s*(?:please\s+)?(?:"
+                         r"(?:switch|change|set)\s+(?:the\s+)?online\s+(?:model|ai)\s+to\s+(?P<n1>[\w][\w .\-]{1,40}?)"
+                         r"|use\s+(?:the\s+)?online\s+(?:model|ai)\s+(?P<n2>[\w][\w .\-]{1,40}?)"
+                         r"|(?:use|switch\s+to)\s+(?P<n3>[\w][\w .\-]{1,40}?)\s+online)\s*[.!]?\s*$", re.I)
+
+
+# the agentic model refresh, and adding a specific Hugging Face repo
+_NEW_MODELS = re.compile(r"^\s*(?:please\s+)?(?:(?:check|look|search)\s+(?:for\s+)?|find\s+|see\s+if\s+there\s+are\s+(?:any\s+)?|are\s+there\s+(?:any\s+)?|is\s+there\s+(?:a\s+)?|refresh\s+(?:the\s+)?)"
+                         r"(?:new|newer|updated|the\s+latest|better)?\s*(?:and\s+(?:updated|newer))?\s*models?(?:\s+(?:list|available|out|i\s+can\s+use|to\s+use))?\s*[.!?]?\s*$"
+                         r"|^\s*(?:please\s+)?refresh\s+(?:the\s+)?models?(?:\s+list)?\s*[.!]?\s*$", re.I)
+_ADD_MODEL = re.compile(r"^\s*(?:please\s+)?(?:add|install|get)\s+(?:the\s+)?(?:model|gguf)\s+(?P<repo>[\w.\-]+/[\w.\-]+)(?:\s+(?P<file>[\w.\-]+\.gguf))?\s*[.!]?\s*$", re.I)
+
+
+# connectors (the apps of this OS): add / enable / disable / remove
+_CONN_TOGGLE = re.compile(r"^\s*(?:please\s+)?(?P<act>enable|disable|turn\s+on|turn\s+off|remove|delete|uninstall)\s+(?:the\s+)?connector\s+(?P<name>[\w.\-]{1,40})\s*[.!]?\s*$", re.I)
+_CONN_ADD = re.compile(r"^\s*(?:please\s+)?(?:add|install|set\s+up|create)\s+(?:a\s+|an\s+|the\s+)?(?:connector|app|plugin)"
+                       r"(?:\s+(?:named|called)\s+(?P<name>[\w.\-]{1,40}))?"
+                       r"(?:\s+(?:that\s+runs|running|with\s+(?:the\s+)?command)\s+(?P<cmd>.+?)|\s+(?:at|from|url)\s+(?P<url>https?://\S+))?\s*[.!]?\s*$", re.I)
+
+
+def _connector(text):
+    m = _CONN_TOGGLE.match(text)
+    if m:
+        act = m.group("act").lower()
+        action = "remove" if act in ("remove", "delete", "uninstall") else "disable" if act in ("disable", "turn off") else "enable"
+        return ("manage_connectors", {"action": action, "name": m.group("name").strip()})
+    m = _CONN_ADD.match(text)
+    if m:
+        args = {"action": "add"}
+        if m.group("name"):
+            args["name"] = m.group("name")
+        if m.group("cmd"):
+            args["command"] = m.group("cmd").strip().strip("'\"")
+            args["transport"] = "stdio"
+        elif m.group("url"):
+            args["url"] = m.group("url").strip()
+            args["transport"] = "http"
+        return ("manage_connectors", args)
+    return None
+
+
+def _models_discover(text):
+    if _NEW_MODELS.match(text):
+        return ("check_new_models", {})
+    m = _ADD_MODEL.match(text)
+    if m:
+        args = {"repo": m.group("repo")}
+        if m.group("file"):
+            args["file"] = m.group("file")
+        return ("add_model", args)
+    return None
+
+
+def _online_model(text):
+    if _BRAIN.match(text):
+        return None   # "use the online model for everything" is the brain setting, handled in _policy
+    m = _CLOUD_SETUP.match(text)
+    if m:
+        return ("online_model", {"action": "set up" if m.group("setup") else "forget"})
+    m = _ONLINE_USE.match(text)
+    if m:
+        name = (m.group("n1") or m.group("n2") or m.group("n3") or "").strip()
+        if not name:
+            return None
+        if not (m.group("n1") or m.group("n2")):
+            # bare "use X online": only when X is a known online model, so ordinary "use X" is not stolen
+            try:
+                from . import llm
+                low = name.lower().replace("-", " ")
+                known = any(low in (mm["id"].replace("-", " ") + " " + mm["name"].lower())
+                            for p in llm.CLOUD_PROVIDERS.values() for mm in p.get("models", []))
+            except Exception:
+                known = False
+            if not known:
+                return None
+        return ("online_model", {"action": "use", "model": name})
+    return None
 
 
 def _policy(text):
     m = _POWER.match(text)
     if m:
         return ("system_power", {"action": "shutdown" if m.group("off") else "restart"})
+    m = _BRAIN.match(text)
+    if m:
+        return ("change_setting", {"setting": "brain", "value": "local" if m.group("local") else "ask" if m.group("ask") else "cloud"})
     m = _INTERNET.match(text)
     if m:
         return ("change_setting", {"setting": "internet", "value": "ask" if m.group("ask") else "no" if m.group("off") else "yes"})
@@ -423,17 +540,17 @@ _DEL_FILE = re.compile(r"^\s*(?:please\s+)?(?:delete|remove|trash)\s+(?:the\s+)?
 
 
 _LIST_W = r"[\w' -]+?"
-_NOTE_ADD = re.compile(r"^\s*(?:please\s+)?(?:add|put)\s+(?P<item>.+?)\s+(?:to|on|onto)\s+(?:my\s+|the\s+)?(?P<list>" + _LIST_W + r")\s+list\s*[.!]?\s*$", re.I)
+_NOTE_ADD = re.compile(r"^\s*(?:please\s+)?(?:add|put)\s+(?P<item>.+)\s+(?:to|on|onto)\s+(?:my\s+|the\s+)?(?P<list>[\w'-]+(?:\s[\w'-]+)?)\s+list\s*[.!]?\s*$", re.I)
 _NOTE_PLAIN = re.compile(r"^\s*(?:please\s+)?(?:(?:take\s+a\s+|make\s+a\s+)?note(?:\s+that|\s+down|:)?\s+(?P<note>.+?)"
                          r"|remember\s+to\s+(?P<todo>.+?)|(?:add|new)\s+(?:a\s+)?(?:to-?do|task)(?:\s+item)?:?\s+(?P<todo2>.+?))\s*[.!]?\s*$", re.I)
 _NOTES_SHOW = re.compile(r"^\s*(?:please\s+)?(?:(?:show|open|read|list)\s+(?:me\s+)?(?:my\s+|the\s+)?(?P<list>" + _LIST_W + r")\s+list"
                          r"|what(?:'s|\s+is)\s+on\s+(?:my\s+|the\s+)?(?P<list2>" + _LIST_W + r")\s+list"
                          r"|(?:show|open|read)\s+(?:me\s+)?(?:my\s+)?(?P<all>notes|lists)|what(?:'s|\s+is)\s+on\s+my\s+(?P<all2>lists?))\s*[.!?]?\s*$", re.I)
-_NOTE_DONE = re.compile(r"^\s*(?:please\s+)?(?:(?:tick|check|cross)\s+(?:off\s+)?(?P<a>.+?)(?:\s+off)?|mark\s+(?P<b>.+?)\s+(?:as\s+)?done|(?P<c>.+?)\s+is\s+done|un-?tick\s+(?P<u>.+?))\s*[.!]?\s*$", re.I)
+_NOTE_DONE = re.compile(r"^\s*(?:please\s+)?(?:(?:tick|check|cross)\s+off\s+(?P<a>.+?)|mark\s+(?P<b>.+?)\s+(?:as\s+)?done|un-?tick\s+(?P<u>.+?))\s*[.!]?\s*$", re.I)
 _NOTE_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:(?:remove|delete|take)\s+(?P<item>.+?)\s+(?:from|off)\s+(?:my\s+|the\s+)?(?P<list>" + _LIST_W + r")\s+list"
                           r"|(?:clear|empty)\s+(?:my\s+|the\s+)?(?P<list2>" + _LIST_W + r")\s+list)\s*[.!]?\s*$", re.I)
 _TRASH = re.compile(r"^\s*(?:please\s+)?(?:(?P<empty>empty)\s+(?:my\s+|the\s+)?trash|(?:show|open)\s+(?:me\s+)?(?:my\s+|the\s+)?(?P<show>trash)"
-                    r"|(?:restore|put\s+back|undelete)\s+(?P<name>.+?)(?:\s+from\s+(?:my\s+|the\s+)?trash)?)\s*[.!]?\s*$", re.I)
+                    r"|(?:restore|put\s+back|undelete)\s+(?P<name>.+?)\s+from\s+(?:my\s+|the\s+)?trash|(?:restore|put\s+back|undelete)\s+(?P<file>\S+\.\w{1,5}))\s*[.!]?\s*$", re.I)
 
 
 def _notes(text):
@@ -443,7 +560,7 @@ def _notes(text):
             return ("empty_trash", {})
         if m.group("show"):
             return ("show_files", {"path": "~/.Trash"})
-        return ("restore_file", {"name": m.group("name").strip()})
+        return ("restore_file", {"name": (m.group("name") or m.group("file")).strip()})
     m = _NOTE_ADD.match(text)
     if m and not _QUESTION.search(text):
         return ("note_add", {"text": m.group("item").strip(), "list": m.group("list").strip()})
@@ -453,17 +570,34 @@ def _notes(text):
         return ("notes_show", {"list": lst.strip()} if lst else {})
     m = _NOTE_REMOVE.match(text)
     if m:
-        return ("note_remove", {"item": (m.group("item") or "all").strip(), "list": (m.group("list") or m.group("list2")).strip()})
+        item = (m.group("item") or "all").strip()
+        if item != "all" and not _note_exists(item):
+            return None               # not on any list: let the model work it out
+        return ("note_remove", {"item": item, "list": (m.group("list") or m.group("list2")).strip()})
     m = _NOTE_PLAIN.match(text)
     if m and not _QUESTION.search(text):
         if m.group("note"):
-            return ("note_add", {"text": m.group("note").strip(), "list": "notes"})
+            note = m.group("note").strip()
+            if re.match(r"(?i)^(?:i|i'm|i am|my|we|our)\b", note):
+                return None           # "note that I'm vegetarian" is a fact about the owner: memory, not a list
+            return ("note_add", {"text": note, "list": "notes"})
         return ("note_add", {"text": (m.group("todo") or m.group("todo2")).strip(), "list": "to-do"})
     m = _NOTE_DONE.match(text)
-    if m and (m.group("u") or re.match(r"(?i)^\s*(?:tick|check|cross|mark)\b", text) or m.group("c")) and not _QUESTION.search(text):
-        item = re.sub(r"(?i)^item\s+", "", (m.group("u") or m.group("a") or m.group("b") or m.group("c")).strip())
+    if m and not _QUESTION.search(text):
+        item = re.sub(r"(?i)^item\s+", "", (m.group("u") or m.group("a") or m.group("b")).strip())
+        if not _note_exists(item):
+            return None
         return ("note_done", {"item": item, "done": not m.group("u")})
     return None
+
+
+def _note_exists(ref):
+    """Only tick or remove things that are really on a list; anything else goes to the model."""
+    try:
+        from . import store
+        return store.find_note(ref) is not None
+    except Exception:
+        return False
 
 
 _UNIT = r"(?P<u>seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)"
@@ -479,10 +613,10 @@ def _timer(text):
     unit = "second" if u[0] == "s" else "hour" if u[0] == "h" else "minute"
     when = f"in {n} {unit}{'s' if n != 1 else ''}"
     what = (m.group("what") or "").strip()
+    length = f"{n} {unit}{'s' if n != 1 else ''}"
     if what:
-        conn = (m.groupdict().get("conn") or "").lower()
-        return ("schedule_task", {"when": when, "task": f"remind me {conn} {what}" if conn else f"remind me: {what}"})
-    return ("schedule_task", {"when": when, "task": f"tell me that my {n} {unit}{'s' if n != 1 else ''} timer is done (just that, one line)"})
+        return ("schedule_task", {"when": when, "task": what, "kind": "reminder"})
+    return ("schedule_task", {"when": when, "task": length, "kind": "timer"})
 
 
 _AUTOLOCK = re.compile(r"^\s*(?:please\s+)?(?:(?:auto-?lock|lock(?:\s+(?:the\s+)?(?:screen|computer|vault|itself))?)\s+after\s+(?P<n>\d+)\s*(?P<u>minutes?|mins?|hours?|hrs?)"
@@ -567,9 +701,10 @@ _PANEL_WORDS = {"disk", "storage", "space", "memory", "ram", "cpu", "processor",
 
 
 _PANEL_OPEN = re.compile(r"^\s*(?:please\s+)?(?:open|show|go\s+to|bring\s+up|display)\s+(?:me\s+)?(?:the\s+|my\s+)?(?P<p>settings|preferences|models|model\s+list|"
-                         r"scheduled\s+tasks|schedule|tasks|memory|what\s+you\s+remember|audit|recent\s+actions|activity\s+log|help)"
-                         r"(?:\s+(?:panel|window|screen|page))?(?:\s+please)?\s*[.!]?\s*$", re.I)
+                         r"connectors|apps|plugins|integrations|scheduled\s+tasks|schedule|tasks|memory|what\s+you\s+remember|audit|recent\s+actions|activity\s+log|help)"
+                         r"(?:\s+(?:panel|window|screen|page|list))?(?:\s+please)?\s*[.!]?\s*$", re.I)
 _PANEL_NAMES = {"settings": "settings", "preferences": "settings", "models": "models", "model list": "models", "scheduled tasks": "tasks",
+                "connectors": "connectors", "apps": "connectors", "plugins": "connectors", "integrations": "connectors",
                 "schedule": "tasks", "tasks": "tasks", "memory": "memory", "what you remember": "memory", "audit": "audit",
                 "recent actions": "audit", "activity log": "audit", "help": "help"}
 
@@ -683,6 +818,15 @@ def match(text):
         r = fn(t)
         if r:
             return r
+    cn = _connector(t)
+    if cn:
+        return cn
+    dm = _models_discover(t)
+    if dm:
+        return dm
+    om = _online_model(t)
+    if om:
+        return om
     md = _model(t)
     if md:
         return md

@@ -210,6 +210,26 @@ def play_windowed(info, audio_only, env):
     return p
 
 
+def play_local(path, title, audio_only=False):
+    """Play a file from the disk: a window on the desk, the kiosk without one, audio only when asked.
+    Writes the pid file like play() so stop/pause work the same way."""
+    stop()
+    denv = desk_env()
+    info = {"url": path, "title": title}
+    os.makedirs(config.RUN, exist_ok=True)
+    if denv is not None:
+        p = play_windowed(info, audio_only or not has_display(), dict(os.environ, **denv))
+    elif has_display() and not audio_only and shutil.which("cage"):
+        p = kiosk_launch(["mpv", "--vo=wlshm", "--fs", *_common_args(), path], LOG)
+    else:
+        log = open(LOG, "w")
+        p = subprocess.Popen(["mpv", *_common_args(), "--no-video", path], stdin=subprocess.DEVNULL,
+                             stdout=log, stderr=log, start_new_session=True)
+    with open(PIDFILE, "w") as f:
+        f.write(str(p.pid))
+    return p
+
+
 def play(query, audio_only=False):
     info = find(query)
     stop()

@@ -26,7 +26,7 @@ BLOCK_TYPES = ("text", "kv", "stat", "list", "table", "image", "buttons", "toggl
                "quote", "code", "progress", "choices", "media", "sources", "heading", "divider")
 MAX_BLOCKS = 40
 MAX_ITEMS = 60
-MAX_TEXT = 4000
+MAX_TEXT = 12000
 
 
 def _s(v, n=MAX_TEXT):
@@ -53,10 +53,14 @@ def _list(v):
     return []
 
 
-def _url(v, n=600):
-    """Only web addresses and local files may be linked or shown."""
+def _url(v, n=600, local_only=False):
+    """Only web addresses and local files may be linked or shown; local paths may contain spaces.
+    local_only: what the page loads by itself (images, thumbnails) must be a file the OS fetched,
+    never a remote address the model wrote (that would be a silent network request)."""
     u = _s(v, n)
-    if re.match(r"^(https?://|file:///|/)[^\s]+$", u):
+    if re.match(r"^(file:///|/)[^\n]+$", u):
+        return u
+    if not local_only and re.match(r"^https?://[^\s]+$", u):
         return u
     return ""
 
@@ -176,7 +180,7 @@ def _block(b):
                 rows.append([_s(r, 200)])
         return {"type": "table", "columns": cols, "rows": rows} if rows else None
     if t == "image":
-        src = _url(b.get("src") or b.get("path") or b.get("url"))
+        src = _url(b.get("src") or b.get("path") or b.get("url"), local_only=True)   # the page loads it: local files only
         if not src:
             return None
         return {"type": "image", "src": src, "caption": _s(b.get("caption"), 300), "credit": _s(b.get("credit"), 300),
@@ -212,7 +216,7 @@ def _block(b):
                            "options": [_s(o, 80) for o in _list(f.get("options"))[:40]]})
         submit = _action(b.get("submit") if isinstance(b.get("submit"), (dict, str)) else {"label": "OK", "say": "ok"})
         post = str(b.get("submit", {}).get("post", "")) if isinstance(b.get("submit"), dict) else ""
-        if submit is not None and post in ("vault.create",):
+        if submit is not None and post in ("vault.create", "cloud.setup", "connector.add"):
             submit["post"] = post
         if not fields or not submit:
             return None
@@ -225,7 +229,7 @@ def _block(b):
         return {"type": "code", "text": text, "lang": _s(b.get("lang"), 20)} if text else None
     if t == "media":
         return {"type": "media", "title": _s(b.get("title"), 200), "subtitle": _s(b.get("subtitle"), 200),
-                "thumbnail": _url(b.get("thumbnail")), "state": _s(b.get("state") or "playing", 20),
+                "thumbnail": _url(b.get("thumbnail"), local_only=True), "state": _s(b.get("state") or "playing", 20),
                 "link": _url(b.get("link"))}
     if t == "sources":
         items = []
@@ -260,7 +264,9 @@ def normalize(spec):
            "size": size if size in SIZES else "", "blocks": out_blocks}
     for k in ("id", "icon", "replace"):
         if spec.get(k):
-            out[k] = _s(spec[k], 60)
+            out[k] = _s(spec[k], 200)
+    if spec.get("slot") in ("side", "cascade"):
+        out["slot"] = spec["slot"]      # where the desk puts it; set by the OS, never by the model's text
     acts = _actions(spec.get("actions"))
     if acts:
         out["actions"] = acts

@@ -29,6 +29,7 @@ DIST = os.path.dirname(HERE)
 SYSTEM = platform.system()          # Darwin | Windows | Linux
 STATE = {"phase": "idle", "done": 0, "total": 0, "message": "", "error": "", "started": 0}
 LOCK = threading.Lock()
+TOKEN = ""     # per launch; the page sends it back with every request, so another site cannot drive this app
 
 # ----------------------------------------------------------------- release
 
@@ -141,6 +142,7 @@ def sha256_of(path, total, base_done=0, base_total=0):
 
 
 def job_save(name):
+    set_state(phase="copy", done=0, total=0, message="Starting…", error="", started=time.time())
     src = os.path.join(DIST, name)
     rel = read_release()
     img = next((i for i in rel["images"] if i["file"] == name), None)
@@ -168,6 +170,7 @@ def job_save(name):
 
 
 def job_write(name, drive_id):
+    set_state(phase="write", done=0, total=0, message="Checking the drive…", error="", started=time.time())
     src = os.path.join(DIST, name)
     drives = list_drives().get("drives", [])
     drive = next((d for d in drives if d["id"] == drive_id), None)
@@ -186,7 +189,7 @@ def job_write(name, drive_id):
             if r.returncode != 0:
                 raise RuntimeError(r.stderr.strip()[-300:] or "the write was cancelled")
         elif SYSTEM == "Linux":
-            cmd = f"for p in {drive['id']}?*; do umount $p 2>/dev/null; done; dd if={shlex_q(src)} of={drive['raw']} bs=4M conv=fsync status=progress"
+            cmd = f"for p in {drive['id']}?*; do umount $p 2>/dev/null; done; if grep -q '^{drive['id']}' /proc/mounts; then echo 'still mounted' >&2; exit 3; fi; dd if={shlex_q(src)} of={drive['raw']} bs=4M conv=fsync status=progress"
             runner = "pkexec" if shutil.which("pkexec") else "sudo"
             p = subprocess.Popen([runner, "sh", "-c", cmd], stderr=subprocess.PIPE, text=True)
             buf = ""
@@ -228,8 +231,12 @@ def write_windows(src, drive, size):
         if rc <= 32:
             raise RuntimeError("Windows did not allow the elevated write (needs an administrator account). "
                                "Alternative: write the ISO with Rufus or balenaEtcher.")
+        waited = 0
         while True:
             time.sleep(1)
+            waited += 1
+            if waited > 1800:
+                raise RuntimeError("the elevated writer did not report back (was the prompt cancelled?)")
             try:
                 with open(prog, encoding="utf-8") as f:
                     line = f.read().strip()
@@ -308,11 +315,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def same_origin(self):
+        host = self.headers.get("Host", "")
+        origin = self.headers.get("Origin") or self.headers.get("Referer") or ""
+        ok_host = host in (f"127.0.0.1:{self.server.server_address[1]}", f"localhost:{self.server.server_address[1]}")
+        ok_origin = (not origin) or origin.startswith(f"http://{host}")
+        return ok_host and ok_origin
+
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+        if not self.same_origin():
+            return self.send_json({"error": "forbidden"}, 403)
         if path in ("/", "/index.html"):
             with open(os.path.join(HERE, "index.html"), "rb") as f:
-                body = f.read()
+                body = f.read().replace(b"__TOKEN__", TOKEN.encode())
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -335,6 +351,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if not self.same_origin() or self.headers.get("X-LLMOS-Token", "") != TOKEN:
+            return self.send_json({"error": "forbidden"}, 403)
         n = int(self.headers.get("Content-Length", 0))
         try:
             data = json.loads(self.rfile.read(n) or b"{}")
@@ -366,7 +384,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def main():
-    global _PROGRESS_FILE
+    global _PROGRESS_FILE, TOKEN
+    import secrets
+    TOKEN = secrets.token_hex(16)
     if len(sys.argv) >= 5 and sys.argv[1] == "--write":      # the elevated Windows writer
         src, number, prog = sys.argv[2], sys.argv[3], sys.argv[4]
         _PROGRESS_FILE = prog

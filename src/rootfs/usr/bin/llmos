@@ -38,15 +38,21 @@ if __name__ == "__main__":
             if arg == "brightness":
                 print(devices.brightness(delta=int(v)) if v[:1] in "+-" else devices.brightness(int(v)))
             elif v == "toggle":
-                muted = "[off]" in devices._amixer("get", devices._control() or "Master").stdout
-                print(devices.volume(mute=not muted))
+                print(devices.volume(mute="toggle"))
             else:
                 print(devices.volume(delta=int(v)) if v[:1] in "+-" else devices.volume(int(v)))
         except Exception as e:
             print(e)
     elif arg == "version":
         from llmos import VERSION
-        print(f"LLM OS {VERSION}")
+        rel = {}
+        try:
+            for line in open("/etc/llmos-release"):
+                k, _, v = line.strip().partition("=")
+                rel[k] = v
+        except OSError:
+            pass
+        print(f"LLM OS {rel.get('VERSION', VERSION)}" + (f" (build {rel['BUILD']}, {rel.get('ARCH', '')}{', live' if rel.get('MEDIUM') == 'live' else ''})" if rel.get("BUILD") else ""))
     else:
         sys.stderr.write("usage: llmos [console|desk|say TEXT|desk-state|scheduler|serve-argv|brightness|volume|version]\n")
         sys.exit(2)

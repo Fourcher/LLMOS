@@ -56,5 +56,6 @@ with open(raw, "rb") as src, open(out, "wb") as dst:
 os.remove(raw)
 print(f"{out}: {n} bytes")
 PY
-(cd dist && shasum -a 256 "$(basename "$OUT")" >> SHA256SUMS && sort -u -k2 SHA256SUMS -o SHA256SUMS)
+(cd dist && grep -v " $(basename "$OUT")\$" SHA256SUMS > SHA256SUMS.new 2>/dev/null; shasum -a 256 "$(basename "$OUT")" >> SHA256SUMS.new && mv SHA256SUMS.new SHA256SUMS && chmod 0644 SHA256SUMS)
+python3 tools/release-json.py >/dev/null
 echo "==> done: $OUT"

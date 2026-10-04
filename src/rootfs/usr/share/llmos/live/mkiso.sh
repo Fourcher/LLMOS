@@ -33,10 +33,13 @@ printf 'VERSION=%s\nBUILD=%s\nARCH=%s\nMEDIUM=live\n' "$VER" "$(date +%Y-%m-%d)"
 echo "==> system squashfs (the model is stored beside it, uncompressed)"
 MODELS=/var/lib/llmos/models
 if [ -d "$MODELS" ]; then for f in "$MODELS"/*.gguf; do [ -f "$f" ] && { ln "$f" "$ISO/llmos/models/" 2>/dev/null || cp "$f" "$ISO/llmos/models/"; }; done; fi
+# the live root gets its own fstab (the installed one names the build disk's partitions) and no time zone
+printf 'proc /proc proc defaults 0 0\nsysfs /sys sysfs defaults 0 0\ntmpfs /tmp tmpfs nodev,nosuid,size=512M 0 0\n' > /tmp/live-fstab
 mksquashfs / "$ISO/llmos/root.sfs" -comp zstd -Xcompression-level 3 -b 256K -noappend -no-progress -quiet \
-    -wildcards -e proc sys dev run tmp mnt media 'var/cache/apk/*' 'var/log/*' 'var/lib/llmos/models/*' 'var/lib/llmos/vault.img' \
-       boot/efi 'root/.cache/*' 'home/*/.cache/*' 'var/cache/llmos/*' 'var/tmp/*' 'etc/llmos/settings.json' 'etc/llmos/timezone' \
+    -wildcards -e 'proc/*' 'sys/*' 'dev/*' 'run/*' 'tmp/*' 'mnt/*' 'media/*' 'var/cache/apk/*' 'var/log/*' 'var/lib/llmos/models/*' 'var/lib/llmos/vault.img' \
+       'boot/efi/*' 'root/.cache/*' 'home/*/.cache/*' 'var/cache/llmos/*' 'var/tmp/*' 'etc/llmos/settings.json' 'etc/llmos/timezone' 'etc/fstab' 'etc/localtime' \
        'var/lib/llmos/data/*' lost+found
+mkdir -p "$ISO/llmos/etc"; cp /tmp/live-fstab "$ISO/llmos/etc/fstab"
 echo "==> grub"
 sed -e "s|@@CMDLINE@@|llmos.live=1 quiet $EXTRA|" "$(dirname "$0")/grub.cfg" > "$ISO/boot/grub/grub.cfg"
 case "$ARCH" in

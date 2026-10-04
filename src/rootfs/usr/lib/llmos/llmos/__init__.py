@@ -1,2 +1,2 @@
 """LLM OS: an operating system you talk to."""
-VERSION = "1.0.0"
+VERSION = "1.3.0"

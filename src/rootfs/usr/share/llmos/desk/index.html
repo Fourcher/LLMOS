@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-eval'; connect-src 'none'; media-src 'none'; object-src 'none'">
 <title>LLM OS</title>
 <link rel="stylesheet" href="desk.css">
 </head>
@@ -9,15 +10,16 @@
 
 <!-- boot: the computer waking up -->
 <section id="screen-boot" class="screen">
-  <div class="center"><div class="orb big thinking" id="boot-orb"></div><div class="brand">LLM OS</div></div>
+  <div class="center"><div class="orb big thinking" id="boot-orb"><i class="halo"></i></div><div class="brand">LLM OS</div></div>
 </section>
 
 <!-- vault unlock -->
 <section id="screen-lock" class="screen hidden">
   <div class="center card lockcard" id="lock-card">
-    <div class="orb big" id="lock-orb"></div>
+    <div class="orb big" id="lock-orb"><i class="halo"></i></div>
     <div class="brand">LLM OS</div>
     <div class="sub" data-s="locked"></div>
+    <div id="lock-note" class="error"></div>
     <input id="lock-pass" type="password" autocomplete="off" spellcheck="false" data-ph="passphrase">
     <div class="row"><button id="lock-go" class="btn primary" data-s="d_unlock"></button></div>
     <div id="lock-error" class="error"></div>
@@ -38,7 +40,7 @@
 
 <!-- shutting down -->
 <section id="screen-bye" class="screen hidden">
-  <div class="center"><div class="orb big off"></div><div class="brand">LLM OS</div><div id="bye-text" class="sub"></div></div>
+  <div class="center"><div class="orb big off"><i class="halo"></i></div><div class="brand">LLM OS</div><div id="bye-text" class="sub"></div></div>
 </section>
 
 <!-- the desk -->
@@ -53,11 +55,14 @@
   <main id="stage"></main>
 
   <div id="dock"></div>
+  <!-- the traditional layouts' start menu (Windows style: this button; Mac style: the name in the top bar) -->
+  <button id="start" aria-label="start" title="Start"><i class="orb small"></i></button>
+  <div id="startmenu" class="hidden"></div>
 
   <!-- the computer's own column: what it is doing and what it says, always above the windows -->
   <div id="reply" class="hidden">
     <div class="req"><span class="you" data-s="d_you"></span> <span id="reply-req"></span></div>
-    <div class="who"><i class="orb small" id="reply-orb"></i><span class="ai">LLM OS</span><span id="reply-state" class="state"></span></div>
+    <div class="who"><i class="orb small" id="reply-orb"></i><span class="ai">LLM OS</span><span id="reply-state" class="state"></span><span id="reply-brain" class="brain hidden"></span></div>
     <div id="reply-activity" class="activity"></div>
     <div id="reply-text" class="text"></div>
     <div id="reply-progress" class="progress hidden"><div class="bar"><i></i></div><span></span></div>
@@ -69,7 +74,7 @@
   </div>
 
   <div id="cmd">
-    <div id="orb" class="orb" title="LLM OS"></div>
+    <div id="orb" class="orb" title="LLM OS"><i class="halo"></i></div>
     <button id="mic" class="mic" title="voice" aria-label="voice">
       <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2z"/></svg>
     </button>

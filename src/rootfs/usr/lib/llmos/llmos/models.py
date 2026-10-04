@@ -11,8 +11,39 @@ from . import config
 CATALOG_PATH = os.path.join(config.SHARE, "catalog.json")
 
 
+def _extra_path():
+    # models the owner added through the refresh/discovery flow; kept with their data (inside the vault)
+    return config.data("catalog-extra.json")
+
+
 def catalog():
-    return config.load_json(CATALOG_PATH, [])
+    """The built-in, hash-pinned models plus any the owner added. A built-in id always wins, so an added
+    entry can never shadow a pinned one."""
+    base = config.load_json(CATALOG_PATH, [])
+    extra = config.load_json(_extra_path(), [])
+    if not isinstance(extra, list) or not extra:
+        return base
+    ids = {m.get("id") for m in base}
+    return base + [m for m in extra if isinstance(m, dict) and m.get("id") and m["id"] not in ids]
+
+
+def added_ids():
+    extra = config.load_json(_extra_path(), [])
+    return {m.get("id") for m in extra if isinstance(m, dict)} if isinstance(extra, list) else set()
+
+
+def add_catalog_entry(entry):
+    """Add (or replace) an owner-added model in the extra catalog. Returns the stored entry.
+    A built-in id is refused so a pinned model can never be overridden."""
+    if entry.get("id") in {m.get("id") for m in config.load_json(CATALOG_PATH, [])}:
+        raise ValueError(f"'{entry['id']}' is a built-in model already in the list")
+    extra = config.load_json(_extra_path(), [])
+    if not isinstance(extra, list):
+        extra = []
+    extra = [m for m in extra if isinstance(m, dict) and m.get("id") != entry["id"]]
+    extra.append(entry)
+    config.save_json(_extra_path(), extra)
+    return entry
 
 
 def by_id(mid):

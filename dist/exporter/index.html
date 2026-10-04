@@ -56,7 +56,8 @@
   const $ = (id) => document.getElementById(id);
   const gb = (n) => (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + " GB";
   let rel = null;
-  async function api(path, body) { const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}); return r.json(); }
+  const TOKEN = "__TOKEN__";
+  async function api(path, body) { const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json", "X-LLMOS-Token": TOKEN }, body: JSON.stringify(body) } : {}); return r.json(); }
   async function act(what, body) { const r = await api("/api/" + what, body); if (r && r.error) alert(r.error); }
   async function load() {
     rel = await api("/api/status");

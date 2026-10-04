@@ -134,7 +134,8 @@ scales the whole interface (older eyes welcome).
 
 The computer itself is the orb at the left of the bar: it breathes when
 idle, turns a ring while it thinks, pulses while it listens or reads aloud,
-and goes amber when it needs your answer. Its reply always sits above the
+goes amber when it needs your answer, and turns blue while a request is out
+at an online model. Its reply always sits above the
 windows: a one‑line answer steps aside by itself after a few seconds, and a
 longer one folds to a single line above the bar the moment you click a window
 (click the line to unfold it). An empty desk greets you with three things to
@@ -165,12 +166,40 @@ off animations" / "turn animations on". Some things it does:
 | "lock after 10 minutes of inactivity" · "turn off auto-lock" (with a passphrase vault) | the vault closes by itself when you step away; *Settings → Auto-lock* has Never / 5 / 15 / 60 min |
 | "brightness 60" · "turn the screen down" · "volume 30" · "louder" · "mute" | handled by the OS directly, no model in the loop; the keyboard's brightness and volume keys do the same |
 | "turn off animations" · "fewer animations" | a calmer screen; *Full* is the default — measured on 2 cores, it costs no reply speed |
+| "I want a Windows 7 desktop" · "make it look like a Mac" · "give me a clean desk" | the same windows rearranged: a taskbar with a start menu and every open window listed, or a menu bar with a dock and traffic‑light buttons, or the clean LLM OS desk; colours follow (*Settings → Desk layout*) |
+| "ask claude: write me a cover letter" · "here: what time is it" | one request to the online model (if an account exists) or kept on this computer, whatever the *where it thinks* setting says |
+| "use the online model for everything" · "think only on this computer" · "set up the online model" | the *where it thinks* setting and the account form (loosening it asks once, like any policy) |
 | "open a terminal window" · "install a web browser and open example.com" · "open htop" | real windows on the desk (Alt‑Tab switches, Super+Q closes, Super+Esc minimizes) |
 | "connect to Wi‑Fi HomeNet with password …" (real computers) | iwd; remembered for next time |
 | "install htop" · "delete my old logs" · "turn off syslog" | root admin, done — it's your machine |
 | "ask before deleting things" · "use Tor" · "no internet" · "focus mode for 2 hours" | policies enforced by the OS (firewall, Tor routing, hosts file), not just promised |
 | "use ministral 8b" · "download gemma 12b" | switch or fetch models — official releases only, verified by SHA‑256 |
 | "lock" · "shutdown" | closes the programs you opened and then the vault (passphrase to reopen) · powers off |
+
+### The set‑up quiz
+
+The first run asks your language, name and time zone, then shows six
+sliders. Each one's meaning is written out as you move it, and the model it
+implies is named underneath:
+
+- **How much should it ask?** → hands‑off / balanced / hands‑on (below).
+- **Internet** → connected / asks each time / offline (the firewall then
+  blocks everything).
+- **Where it thinks** → only on this computer / here, but it asks before a
+  big request goes to an online model / an online model answers everything.
+- **On‑device model** → fast and light / in between / the most capable this
+  machine can run (downloaded after set‑up if it isn't installed).
+- **Guidance** → follows your instructions on your machine, no lectures (the
+  default) / keeps a standard assistant's caution.
+- **Screen** → calm / reduced / lively.
+
+If the "where it thinks" slider asks for an online model, the next page takes
+the account: Claude (Anthropic; keys come from console.anthropic.com) or any
+OpenAI‑compatible service (address + model name + key). The key is checked
+with one tiny request and kept with your data inside the vault; usage is
+billed to that account. Skip it and everything is answered on this computer
+until you add one in Settings. Every slider maps to a setting you can change
+later in words.
 
 ### Autonomy
 
@@ -181,9 +210,40 @@ Chosen at set‑up, changeable any time by asking (or in Settings):
 - **hands‑on**: asks before every change.
 
 Every tool action is written to an audit log (`audit`) in all modes. Changing
-the internet/Tor/autonomy policy itself always asks, so a background task
-can't loosen its own leash. Writing to the computer's disk (the installer)
-always shows its plan first.
+the internet/Tor/autonomy/online‑model policy itself always asks, so a
+background task can't loosen its own leash. Writing to the computer's disk
+(the installer) always shows its plan first. Scheduled tasks follow the same
+level: under hands‑off they do what you scheduled; under balanced or hands‑on
+anything that would have asked is left undone and reported.
+
+### Where it thinks
+
+- **Only on this computer** (default): nothing is ever sent to an online
+  model; the code path is never taken.
+- **Here; asks before going online for big tasks**: short requests are
+  answered here. A long or open‑ended one ("write me a cover letter…"), or one
+  this computer could not finish, brings one dialog: *Ask Claude Sonnet 5
+  (online)?* It says what goes — your request, the recent conversation and
+  what it does on this computer while working, never your memory or name.
+- **Online model for everything**: the online model answers, with your
+  memory; this computer answers when it can't be reached.
+
+"ask claude: …" sends one request online whatever the setting (if an account
+exists); "here: …" keeps one on this computer. While a request is out, the orb
+turns blue and the reply card says *online · Claude Sonnet 5*; the audit log
+has an `online_model` line for each one. With the internet off, nothing goes
+online. "forget the online model" removes the account. An online model
+follows its provider's rules as well as yours.
+
+### Time, and things it has done before
+
+The reply card shows how long it has been thinking and how long that usually
+takes on this machine (*thinking… 12 s / usually ~8 s*), from the model's own
+speed figures. Downloads show the time left. A short request the model
+handled before in one step ("what's the uptime", "open my downloads") is a
+*routine*: the next time, the same actions run straight away under the same
+confirmation rules and only the answer is written (*doing what I did last
+time for this* in the activity line); one that stops working is forgotten.
 
 ### What it will and won't do
 
@@ -201,6 +261,26 @@ catalog (`models`) also offers Gemma 4 E2B/E4B/12B, Granite 4.1 3B/8B,
 Ministral 3 8B/14B and LFM2.5 8B‑A1B — all fetched from the original labs'
 official Hugging Face repos and checked against the published SHA‑256 before
 they are ever loaded. Pick by what your machine can hold (`models` shows RAM).
+
+The **Models** screen is a manager for both on‑device and online models. Each
+one lists its maker, size, memory, licence, speed, what it is good at and its
+drawbacks, with one‑tap **Use**, **Download** or **Remove**; the online section
+lists your provider's models with **Use**, plus **Set up**, **Change** and
+**Forget**. Every button is just a spoken command, so you can also say "use
+Ministral 8B", "download Gemma 12B", or "use the online model Claude Opus".
+Because new models come out constantly, **Check for new models** (or "check for
+new models") searches Hugging Face for newer releases from the makers the OS
+trusts; "add the model owner/repo" adds one, pinned to its exact SHA‑256 so it
+stays verified like the built‑ins.
+
+**Connectors** (the `connectors` screen) are the apps of this OS. A connector
+is an external tool provider following the Model Context Protocol (MCP) — a
+local command that stays on this machine, or a URL. Its tools become abilities
+the assistant can use, under the same permission rules and audit log as
+everything else. Add one from the screen's form or in words: "add a connector
+named files that runs `npx -y @modelcontextprotocol/server-filesystem ~`". Turn
+them on or off, or remove them, the same way. A local connector keeps data
+here; an online one follows your internet setting.
 
 Speech‑to‑text is whisper.cpp (`base` model) on device; speech out is
 espeak‑ng (`"read your replies aloud"`).

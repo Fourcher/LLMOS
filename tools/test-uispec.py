@@ -66,5 +66,8 @@ common = {"title": "Dashboard", "blocks": [
 n = uispec.normalize(common)
 assert [b["type"] for b in n["blocks"]] == ["text", "text", "list", "stat", "table", "buttons"], n
 assert uispec.normalize({"title": "t", "blocks": [{"type": "image", "src": "javascript:alert(1)"}]}) is None
-assert uispec.normalize({"title": "t", "blocks": [{"type": "image", "src": "https://x/y.jpg", "link": "javascript:1"}]})["blocks"][0]["link"] == ""
+assert uispec.normalize({"title": "t", "blocks": [{"type": "image", "src": "/tmp/y.jpg", "link": "javascript:1"}]})["blocks"][0]["link"] == ""
+# an image the page would fetch by itself must be a local file: a remote address is dropped (no silent network request)
+assert uispec.normalize({"title": "t", "blocks": [{"type": "image", "src": "https://x/y.jpg"}]}) is None
+assert uispec.normalize({"title": "t", "blocks": [{"type": "image", "src": "/root/Pictures/My Photo.jpg"}]})["blocks"][0]["src"] == "/root/Pictures/My Photo.jpg"
 print(f"uispec: {N} random specs + the usual mistakes handled; no crash, sizes capped, only web/file URLs kept")

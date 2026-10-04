@@ -77,6 +77,11 @@ def root_disk():
         parts = ln.split()
         if len(parts) > 1 and parts[1] == "/":
             dev = parts[0]
+    if dev == "overlay":                      # running from the live medium: the medium is the one to protect
+        for ln in _read("/proc/mounts").splitlines():
+            parts = ln.split()
+            if len(parts) > 1 and parts[1] == "/run/live":
+                dev = parts[0]
     if not dev.startswith("/dev/"):
         return ""
     name = os.path.basename(os.path.realpath(dev))
@@ -265,11 +270,18 @@ def run(token, status=lambda s: None):
     _sh(["mount", root_node, TARGET])
     try:
         status("copying the system (a few minutes)")
-        excl = ["/proc", "/sys", "/dev", "/run", "/tmp", "/mnt", "/media", "/lost+found", "/var/cache/apk", TARGET, "/boot/efi"]
+        excl = ["/proc", "/sys", "/dev", "/run", "/tmp", "/mnt", "/media", "/lost+found", "/var/cache/apk", TARGET, "/boot/efi", "/run/live"]
         cmd = ["rsync", "-aHAX", "--one-file-system", "--numeric-ids", "/", TARGET + "/"] + [f"--exclude={e}" for e in excl]
         if not shutil.which("rsync"):
             raise InstallError("rsync is missing")
         _sh(cmd, timeout=7200)
+        # from the live medium the model directory is a bind mount that --one-file-system skipped
+        models = "/var/lib/llmos/models"
+        tgt_models = os.path.join(TARGET, models.lstrip("/"))
+        if os.path.isdir(models) and not (os.path.isdir(tgt_models) and os.listdir(tgt_models)):
+            status("copying the model")
+            os.makedirs(tgt_models, exist_ok=True)
+            _sh(["rsync", "-a", models + "/", tgt_models + "/"], timeout=3600)
         for d in ("proc", "sys", "dev", "run", "tmp", "mnt", "media", "boot/efi", "var/cache/apk"):
             os.makedirs(os.path.join(TARGET, d), exist_ok=True)
         os.chmod(os.path.join(TARGET, "tmp"), 0o1777)

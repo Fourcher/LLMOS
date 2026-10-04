@@ -39,6 +39,16 @@ Using tools:
 
 The one boundary: this is the owner's machine to do with as they like, but you will not help injure other people — no malware aimed at others' systems, no help defrauding, stalking, or harming specific third parties, no weapons of mass destruction. That is about protecting other people, never about second-guessing what the owner does on their own computer. Anything on this machine or about the owner's own life is theirs to command."""
 
+# The "standard" guidance profile (a first-run slider) keeps the model's own caution: the lines that tell it
+# to carry out anything about this machine without refusing or lecturing are replaced by a neutral one.
+_OWNER_LINES = re.compile(r"^- (?:Do what is asked\.|Never refuse a request about this machine)[^\n]*\n", re.M)
+STANDARD_PROMPT = _OWNER_LINES.sub("- Carry out the owner's requests on this computer with your own judgement; be direct and brief.\n", SYSTEM_PROMPT)
+
+
+def system_prompt():
+    return STANDARD_PROMPT if config.settings.get("guidance") == "standard" else SYSTEM_PROMPT
+
+
 MAX_STEPS = 8
 
 
@@ -46,14 +56,202 @@ class Cancelled(Exception):
     pass
 
 
-def context_block():
+# "ask Claude: …" / "online: …" sends this one request to the online model (when an account exists);
+# "here: …" / "offline: …" keeps it on this computer whatever the brain setting says
+_ROUTE_RE = re.compile(r"^\s*(?:(?P<cloud>(?:ask|use)\s+(?:claude|the\s+online\s+model|the\s+cloud)|online|cloud|claude)"
+                       r"|(?P<local>here|offline|locally|on\s+this\s+computer))\s*[:,]\s+(?P<rest>.+)$", re.I | re.S)
+
+# what counts as "a big one" under the 'ask' brain setting: long, multi-line, or clearly open-ended work
+_HARD_RE = re.compile(r"\b(write|draft|compose|rewrite|proofread|summari[sz]e|analy[sz]e|compare|research|investigate|"
+                      r"explain\s+(?:in\s+depth|in\s+detail|thoroughly)|in\s+detail|step\s+by\s+step|plan\s+(?:a|my|the|our)\b|"
+                      r"debug|refactor|translate\s+(?:this|the\s+following)|essay|article|report|program|script|"
+                      r"spreadsheet|presentation|cover\s+letter|resume|cv)\b", re.I)
+
+
+def looks_hard(text):
+    return len(text) >= 280 or text.count("\n") >= 4 or bool(_HARD_RE.search(text))
+
+
+def route_for(ctx, user_text, forced=None):
+    """'local' or 'cloud' for this request. The owner's brain setting decides; a missing account or the
+    internet being off can only make it 'local'; under 'ask' a big request means one question first.
+    Unattended tasks go online only when the setting is 'cloud'."""
+    brain = config.settings.get("brain", "local")
+    want = forced or brain
+    if want == "local":
+        return "local"
+    if config.settings.get("internet") == "no":
+        if want == "cloud":
+            ctx.status("the internet is off, so the online model can't be reached; answering here")
+        return "local"
+    if not config.cloud():
+        if want == "cloud":
+            ctx.status("no online model is set up (say 'set up the online model'); answering here")
+        return "local"
+    if want == "cloud":
+        return "cloud"
+    if getattr(ctx, "headless", False) or not looks_hard(user_text):
+        return "local"
+    return "cloud" if _ctx(ctx, "confirm_online", user_text, "big", default=False) else "local"
+
+
+def _ctx(ctx, method, *args, default=None):
+    """Optional ctx hooks (the console, desk and scheduler have them; a bare test harness may not)."""
+    fn = getattr(ctx, method, None)
+    return fn(*args) if fn else default
+
+
+def _going_online(ctx, private):
+    label = llm.cloud_label() or "the online model"
+    _ctx(ctx, "brain", True, label)
+    ctx.status(i18n.t("d_online_using", model=label))
+    store.audit("online_model", {"model": label, "shared": "request, recent conversation, tool results" +
+                                 ("" if private else ", memory and name")}, "sent", who="agent")
+
+
+def _can_escalate(ctx):
+    """Under 'ask', a request the on-device model could not finish may be offered to the online model."""
+    return (config.settings.get("brain", "local") == "ask" and config.cloud() is not None
+            and config.settings.get("internet") != "no" and not getattr(ctx, "headless", False))
+
+
+# ---- how long things take. The model's own timings (llama-server reports them with every answer) give
+# this machine's prompt and generation speeds; a running median of answer lengths and of online round
+# trips completes the picture. From these the owner is told, before each step, whether this is a
+# five-second thing or a five-minute one. Nothing is measured separately, so it costs nothing.
+_SPEED = {"prompt_tps": 0.0, "gen_tps": 0.0, "gen_n": [], "cloud_s": []}
+
+
+def _median(xs):
+    if not xs:
+        return None
+    s = sorted(xs)
+    return s[len(s) // 2]
+
+
+def _learn_speed(timings, took, where):
+    if where == "cloud":
+        _SPEED["cloud_s"] = (_SPEED["cloud_s"] + [took])[-20:]
+        return
+    try:
+        if timings.get("prompt_per_second"):
+            _SPEED["prompt_tps"] = float(timings["prompt_per_second"])
+        if timings.get("predicted_per_second"):
+            _SPEED["gen_tps"] = float(timings["predicted_per_second"])
+        if timings.get("predicted_n"):
+            _SPEED["gen_n"] = (_SPEED["gen_n"] + [int(timings["predicted_n"])])[-20:]
+    except (TypeError, ValueError):
+        pass
+
+
+def expect_seconds(where, fresh_chars):
+    """A rough guess for the next model step; None until this machine has been measured once."""
+    if where == "cloud":
+        return _median(_SPEED["cloud_s"])
+    if not _SPEED["gen_tps"]:
+        return None
+    prompt_s = (fresh_chars / 4.0) / _SPEED["prompt_tps"] if _SPEED["prompt_tps"] else 0.0
+    return round(prompt_s + (_median(_SPEED["gen_n"]) or 60) / _SPEED["gen_tps"], 1)
+
+
+def about_time(seconds, left=False):
+    s = max(1, int(round(seconds)))
+    if s < 45:
+        txt = f"{s} seconds"
+    elif s < 3600:
+        m = max(1, round(s / 60))
+        txt = f"{m} minute{'s' if m != 1 else ''}"
+    else:
+        txt = f"{s / 3600:.1f} hours"
+    return f"about {txt} left" if left else f"this usually takes about {txt}"
+
+
+# ---- routines. Most of what anyone does on a computer is repeated, and a small model should not have to
+# think a request through again when it already did once. After a turn that went well, the step-0 tool
+# calls are kept with the request's words (see _maybe_save_routine for what "safe to repeat" means); the next
+# time the same words come, the calls run straight away under the same confirmation policy and only the
+# answer is written. A routine that stops working is forgotten and the model decides afresh.
+_ROUTINE_SKIP = {"remember", "forget", "schedule_task", "mail_send", "mail_reply", "mail_delete", "system_power",
+                 "write_file", "set_passphrase", "online_model", "install_to_disk", "manage_models", "install_app"}
+# tools whose own plain output (via _shortcut_reply) is the answer, so a replay needs no model turn at all
+_PLAIN_REPLY = {"show_panel", "system_panel", "show_files", "set_appearance", "change_setting", "open_app", "play_media",
+                "screenshot", "set_brightness", "set_volume", "notes_show", "note_add", "open_file", "show_image", "set_wallpaper"}
+
+
+def _failed(out):
+    return str(out).lower().startswith(("error", "not done", "blocked", "the owner declined", "skipped", "no such tool"))
+
+
+def _maybe_save_routine(user_text, calls):
+    """Keep the step-0 tool calls of a short request when every one is repeatable as-is: the tool is not
+    in the skip list, the call did not fail, it is not destructive or a security change, and every long
+    string argument is quoted from the request (a value the model took from context might not hold next
+    time; a short one -- a path, a name, an enum -- is the request's own)."""
+    if not calls or len(user_text) > 120 or "\n" in user_text:
+        return
+    low = user_text.lower()
+    kept = []
+    for name, arguments, out in calls:
+        tool = tools.REGISTRY.get(name)
+        if not tool or name in _ROUTINE_SKIP or _failed(out):
+            return
+        try:
+            args = json.loads(arguments) if isinstance(arguments, str) else (arguments or {})
+        except ValueError:
+            return
+        if not isinstance(args, dict) or tool.risk_for(args) in (tools.DESTRUCTIVE, tools.SECURITY):
+            return
+        for v in args.values():
+            if isinstance(v, str) and len(v) > 24 and v.lower() not in low:
+                return
+        kept.append([name, args])
+    store.save_routine(user_text, kept)
+
+
+def _replay(ctx, user_text, rt):
+    """Run a remembered routine (under the usual policy) and write only the answer. None when a call fails:
+    the routine is forgotten and the model decides afresh."""
+    ctx.status(i18n.t("d_routine"))
+    outs = []
+    for name, args in rt.get("calls", []):
+        out = execute(ctx, name, json.dumps(args))
+        if _failed(out):
+            store.routine_used(user_text, False)
+            ctx.status("that didn't work this time; thinking it through again")
+            return None
+        outs.append((name, args, out))
+    store.routine_used(user_text, True)
+    store.audit("routine", {"request": user_text[:120]}, f"replayed {len(outs)} call(s) from last time", who="agent")
+    if len(outs) == 1 and outs[0][0] in _PLAIN_REPLY:
+        return _cap(_shortcut_reply(*outs[0]))
+    # the answer comes from the fresh results, in one short model turn with no tools
+    msgs = [{"role": "system", "content": system_prompt()}, {"role": "user", "content": user_text},
+            {"role": "assistant", "content": None,
+             "tool_calls": [{"id": f"call_r{i}", "type": "function", "function": {"name": n, "arguments": json.dumps(a)}}
+                            for i, (n, a, _) in enumerate(outs)]}]
+    msgs += [{"role": "tool", "tool_call_id": f"call_r{i}", "content": o} for i, (_, _, o) in enumerate(outs)]
+    msgs.append({"role": "user", "content": "Answer the request above from these results, in a sentence or two."})
+    online = config.settings.get("brain", "local") == "cloud" and config.cloud() is not None and config.settings.get("internet") != "no"
+    chat = llm.cloud_chat if online else llm.chat
+    stream = ctx.new_stream()
+    try:
+        text = chat(msgs, on_text=lambda t: ctx.on_text(stream, t), max_tokens=400).get("content", "").strip()
+    except (llm.ModelDown, llm.CloudError):
+        text = ""
+    ctx.end_stream(stream)
+    return text or "\n".join(o for _, _, o in outs)[:1500]
+
+
+def context_block(private=False):
     """Everything that changes between requests (time, memory, settings).
     It is prepended to the USER turn, not the system prompt, so that the
     system prompt + tool schemas form an identical prefix every time and
-    llama-server's prompt cache makes each request start almost instantly."""
+    llama-server's prompt cache makes each request start almost instantly.
+    private: the request goes to the online model under the 'ask' setting,
+    so the owner's name and memory stay home."""
     prof = config.Profile()
-    facts = store.facts()
-    name = prof.get("name")
+    facts = [] if private else store.facts()
+    name = None if private else prof.get("name")
     lines = []
     if name:
         lines.append(f"The owner's name is {name}.")
@@ -69,10 +267,10 @@ def context_block():
     return "\n".join(lines)
 
 
-def build_messages(ctx, user_text, history):
-    msgs = [{"role": "system", "content": SYSTEM_PROMPT}]
+def build_messages(ctx, user_text, history, private=False):
+    msgs = [{"role": "system", "content": system_prompt()}]
     msgs += trim_history(history)
-    msgs.append({"role": "user", "content": "[context]\n" + context_block() + "\n[/context]\n\n" + user_text})
+    msgs.append({"role": "user", "content": "[context]\n" + context_block(private) + "\n[/context]\n\n" + user_text})
     return msgs
 
 
@@ -80,7 +278,7 @@ def warm_up():
     """Process the static prefix (system prompt + tools) once so the first
     real request doesn't pay for it. Called in the background at startup."""
     try:
-        llm.chat([{"role": "system", "content": SYSTEM_PROMPT},
+        llm.chat([{"role": "system", "content": system_prompt()},
                   {"role": "user", "content": "[context]\n[/context]\n\nhi"}],
                  tools=tools.schemas(), max_tokens=1, think=False)
     except Exception:
@@ -113,7 +311,14 @@ def run(ctx, user_text, history):
     user_text, clipped = clip_input(user_text)
     if clipped:
         ctx.status("that was very long; I kept the beginning and the end")
+    forced = None
+    m = _ROUTE_RE.match(user_text)
+    if m:
+        forced = "cloud" if m.group("cloud") else "local"
+        user_text = m.group("rest").strip()
     ctx.current_request = user_text
+    if hasattr(ctx, "_net_ok"):
+        ctx._net_ok.clear()   # "ask each time" means each request, not once per boot
 
     # Email requests without an account: answer here. Left to the model, it
     # improvises (searching the web for the person named) instead of saying so.
@@ -144,82 +349,133 @@ def run(ctx, user_text, history):
         history.append({"role": "assistant", "content": reply})
         return reply
 
+    # The same short request as before, whose tool calls depended on nothing that may have changed: they
+    # run straight away and only the answer is written (see _replay). Not when the owner named a route.
+    rt = None if forced else store.routine(user_text)
+    if rt:
+        reply = _replay(ctx, user_text, rt)
+        if reply is not None:
+            history.append({"role": "user", "content": user_text})
+            history.append({"role": "assistant", "content": reply})
+            return reply
+
+    # Where this request is answered: on this computer, or (only if the owner's brain setting and an
+    # account allow it) by the online model. Under 'ask' the request goes but the memory stays home.
+    where = route_for(ctx, user_text, forced)
+    private = where == "cloud" and config.settings.get("brain", "local") != "cloud"
+    if where == "cloud":
+        _going_online(ctx, private)
+
     # The per-turn message list carries the tool-call/tool-result loop. It is
     # LOCAL to this turn -- those raw messages are never kept in `history`,
     # because replaying them between unrelated commands confuses small models
     # and violates strict chat templates (Mistral requires alternating roles).
     # Across turns we keep only clean user/assistant text (see the end).
-    msgs = build_messages(ctx, user_text, history)
+    msgs = build_messages(ctx, user_text, history, private=private)
     final = ""
     tools_ran = 0
     nudged = False
     shrunk = 0
-    for step in range(MAX_STEPS):
-        stream = ctx.new_stream()
-        try:
-            result = llm.chat(msgs, tools=tools.schemas(),
-                              on_text=lambda t: ctx.on_text(stream, t))
-        except llm.ModelError as e:
-            ctx.end_stream(stream)
-            # too long for the model's memory (small machines run a 6k context): retry with the
-            # history dropped and the request halved, twice, before giving up
-            if "too long" in str(e) and not tools_ran and not final and shrunk < 2:
-                shrunk += 1
-                keep = max(800, len(user_text) // 2)
-                user_text = user_text[:keep].rstrip() + "\n[… cut here: the request was too long …]"
-                ctx.status("too long for the model's memory; trying with a shorter version")
-                msgs = build_messages(ctx, user_text, [])
-                continue
-            raise
-        except llm.ModelDown:
-            ctx.end_stream(stream)
-            raise
-        ctx.end_stream(stream)
-        content = result["content"].strip()
-        calls = result["tool_calls"]
-        if content:
-            final = content
-        if not calls:
-            # honesty guard: the model narrated an action but ran no tool for it
-            if not tools_ran and not nudged and _CLAIM_RE.search(content):
-                nudged = True
-                msgs.append({"role": "assistant", "content": content})
-                msgs.append({"role": "user", "content":
-                             "You described that as done, but you did not call any tool, so nothing "
-                             "actually happened. If it needs a tool, call it now. If no tool fits, say "
-                             "plainly that you did not do it. Do not claim an action you did not perform."})
-                final = ""
-                continue
-            break
-        assistant_msg = {"role": "assistant", "content": content or None,
-                         "tool_calls": [{"id": c["id"] or f"call_{step}_{i}", "type": "function",
-                                         "function": {"name": c["name"], "arguments": c["arguments"]}}
-                                        for i, c in enumerate(calls)]}
-        msgs.append(assistant_msg)
-        for i, call in enumerate(calls):
-            cid = call["id"] or f"call_{step}_{i}"
-            out = execute(ctx, call["name"], call["arguments"])
-            tools_ran += 1
-            msgs.append({"role": "tool", "tool_call_id": cid, "content": out})
-        if ctx.after_turn:
-            break
-    else:
-        # ran out of steps without a plain answer: ask for one final summary
-        if not final:
+    escalated = False
+    first_calls = []           # the step-0 tool calls, kept as a routine when the turn goes well
+    tool_steps = 0
+    fresh = len(msgs[-1].get("content") or "")   # characters the model has not seen yet (its cache holds the rest)
+    while True:
+        chat = llm.cloud_chat if where == "cloud" else llm.chat
+        for step in range(MAX_STEPS):
+            stream = ctx.new_stream()
+            est = expect_seconds(where, fresh)
+            if est:
+                _ctx(ctx, "expect", est, step)
+            t0 = time.time()
             try:
-                msgs.append({"role": "user", "content":
-                             "Stop using tools now and give me a one or two sentence plain answer "
-                             "based on what you found, or say plainly if you could not do it."})
-                final = llm.chat(msgs, on_text=None).get("content", "").strip()
-                if final:
-                    st = ctx.new_stream()
-                    ctx.on_text(st, final)
-                    ctx.end_stream(st)
+                result = chat(msgs, tools=tools.schemas(),
+                              on_text=lambda t: ctx.on_text(stream, t))
+            except llm.CloudError as e:
+                # the online model did not answer: say so and carry on here with the same messages
+                ctx.end_stream(stream)
+                _ctx(ctx, "brain", False, "")
+                ctx.status(f"the online model did not answer ({e}); answering here")
+                where, chat, escalated = "local", llm.chat, True
+                continue
+            except llm.ModelError as e:
+                ctx.end_stream(stream)
+                # too long for the model's memory (small machines run a 6k context): retry with the
+                # history dropped and the request halved, twice, before giving up
+                if "too long" in str(e) and not tools_ran and not final and shrunk < 2:
+                    shrunk += 1
+                    keep = max(800, len(user_text) // 2)
+                    user_text = user_text[:keep].rstrip() + "\n[… cut here: the request was too long …]"
+                    ctx.status("too long for the model's memory; trying with a shorter version")
+                    msgs = build_messages(ctx, user_text, [], private=private)
+                    continue
+                raise
             except llm.ModelDown:
-                pass
-        if not final:
-            final = "I wasn't able to finish that. Try rephrasing, or check `audit` to see what I tried."
-            ctx.status(i18n.t("stopped"))
+                ctx.end_stream(stream)
+                raise
+            ctx.end_stream(stream)
+            _learn_speed(result.get("timings") or {}, time.time() - t0, where)
+            content = result["content"].strip()
+            calls = result["tool_calls"]
+            if content:
+                final = content
+            if not calls:
+                # honesty guard: the model narrated an action but ran no tool for it
+                if not tools_ran and not nudged and _CLAIM_RE.search(content):
+                    nudged = True
+                    msgs.append({"role": "assistant", "content": content})
+                    msgs.append({"role": "user", "content":
+                                 "You described that as done, but you did not call any tool, so nothing "
+                                 "actually happened. If it needs a tool, call it now. If no tool fits, say "
+                                 "plainly that you did not do it. Do not claim an action you did not perform."})
+                    final = ""
+                    continue
+                break
+            assistant_msg = {"role": "assistant", "content": content or None,
+                             "tool_calls": [{"id": c["id"] or f"call_{step}_{i}", "type": "function",
+                                             "function": {"name": c["name"], "arguments": c["arguments"]}}
+                                            for i, c in enumerate(calls)]}
+            msgs.append(assistant_msg)
+            fresh = 0
+            for i, call in enumerate(calls):
+                cid = call["id"] or f"call_{step}_{i}"
+                out = execute(ctx, call["name"], call["arguments"])
+                tools_ran += 1
+                fresh += len(out)
+                if tool_steps == 0:
+                    first_calls.append((call["name"], call["arguments"], out))
+                msgs.append({"role": "tool", "tool_call_id": cid, "content": out})
+            tool_steps += 1
+            if ctx.after_turn:
+                break
+        else:
+            # ran out of steps without a plain answer: ask for one final summary
+            if not final:
+                try:
+                    msgs.append({"role": "user", "content":
+                                 "Stop using tools now and give me a one or two sentence plain answer "
+                                 "based on what you found, or say plainly if you could not do it."})
+                    final = chat(msgs, on_text=None).get("content", "").strip()
+                    if final:
+                        st = ctx.new_stream()
+                        ctx.on_text(st, final)
+                        ctx.end_stream(st)
+                except (llm.ModelDown, llm.CloudError):
+                    pass
+            # under 'ask', a request this computer could not finish may go to the online model -- with a yes
+            if not final and not escalated and where == "local" and _can_escalate(ctx) and _ctx(ctx, "confirm_online", user_text, "failed", default=False):
+                escalated, where = True, "cloud"
+                _going_online(ctx, True)
+                msgs = build_messages(ctx, user_text, history, private=True)
+                tools_ran, nudged = 0, False
+                continue
+            if not final:
+                final = "I wasn't able to finish that. Try rephrasing, or check `audit` to see what I tried."
+                ctx.status(i18n.t("stopped"))
+        break
+    # a turn that went well in one tool step may be repeated without thinking next time
+    if tool_steps == 1 and final and not nudged and not shrunk and not forced and not getattr(ctx, "after_turn", None):
+        _maybe_save_routine(user_text, first_calls)
     # keep only the clean exchange in cross-turn history
     history.append({"role": "user", "content": user_text})
     history.append({"role": "assistant", "content": final or "(done)"})
@@ -247,15 +503,17 @@ def _shortcut_reply(name, args, out):
             return "I already had that noted."
         return out
     if name == "schedule_task":
-        task = str(args.get("task", ""))
-        if task.startswith(("tell me that my", "remind me")) and not low.startswith("error"):
+        task, kind = str(args.get("task", "")), args.get("kind")
+        if kind in ("timer", "reminder") and not low.startswith("error"):
             m = re.match(r"scheduled \[\w+\] (.+?): ", out, re.I)   # "scheduled [id] Thu 01 Oct 09:52: task"
-            when = m.group(1).split(" ")[-1] if m else ""
-            if task.startswith("tell me that my"):
-                length = re.sub(r"^tell me that my (.+?) timer is done.*$", r"\1", task)
-                return f"Timer set — {length}, it rings at {when}." if when else f"Timer set — {length}."
-            what = re.sub(r"^remind me(?:\s*:\s*|\s+(?:to|that|about)\s+)", "", task)
-            return f"Reminder set for {when}: {what}." if when else f"Reminder set: {what}."
+            desc = m.group(1) if m else ""
+            repeating = desc.lower().startswith("every")
+            when = desc.split(" ")[-1] if desc and not repeating else ""
+            if kind == "timer":
+                return f"Timer set — {task}, it rings at {when}." if when else f"Timer set — {task}."
+            if repeating:
+                return f"Reminder {desc}: {task}."
+            return f"Reminder set for {when}: {task}." if when else f"Reminder set: {task}."
         if low.startswith("scheduled ["):
             return "Scheduled — " + out.split("] ", 1)[1] + "."
         return out
@@ -375,7 +633,8 @@ def execute(ctx, name, arguments):
             store.audit(name, shown, "denied network", allowed=False)
             return "the owner declined internet access for this. Continue without it."
 
-    if needs_confirm(risk):
+    # unattended runs (the scheduler) never do anything irreversible on their own, whatever the autonomy level
+    if needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
         if not ctx.confirm_action(tool, shown, risk):
             store.audit(name, shown, "denied", allowed=False)
             return f"the owner declined this ({name}). Do not retry it; continue or stop."
@@ -383,6 +642,8 @@ def execute(ctx, name, arguments):
     ctx.begin_tool(tool, shown, risk)
     try:
         result = tool.fn(args, ctx)
+    except Cancelled:
+        raise
     except Exception as e:  # a tool must never crash the console
         store.audit(name, shown, f"error: {e}", allowed=True)
         ctx.end_tool(tool, f"error: {e}")

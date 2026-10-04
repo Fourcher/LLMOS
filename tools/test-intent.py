@@ -9,6 +9,7 @@ _ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src/root
 sys.path.insert(0, os.path.join(_ROOT, "usr/lib/llmos"))
 os.environ.setdefault("LLMOS_SHARE", os.path.join(_ROOT, "usr/share/llmos"))   # the model catalog
 from llmos import intent  # noqa: E402
+intent._note_exists = lambda ref: True      # the host has no lists; the VM checks the real store
 
 CASES = {
     # email account spelled out -> every field passed through
@@ -124,10 +125,16 @@ CASES = {
     "restore report.pdf from the trash": ("restore_file", {"name": "report.pdf"}),
     "put back notes.txt": ("restore_file", {"name": "notes.txt"}),
     # timers and reminders
-    "set a timer for 10 minutes": ("schedule_task", {"when": "in 10 minutes", "task": "tell me that my 10 minutes timer is done (just that, one line)"}),
-    "timer 90 seconds": ("schedule_task", {"when": "in 90 seconds", "task": "tell me that my 90 seconds timer is done (just that, one line)"}),
-    "remind me in 20 minutes to stretch": ("schedule_task", {"when": "in 20 minutes", "task": "remind me to stretch"}),
-    "remind me in 1 hour": ("schedule_task", {"when": "in 1 hour", "task": "tell me that my 1 hour timer is done (just that, one line)"}),
+    "set a timer for 10 minutes": ("schedule_task", {"when": "in 10 minutes", "task": "10 minutes", "kind": "timer"}),
+    "timer 90 seconds": ("schedule_task", {"when": "in 90 seconds", "task": "90 seconds", "kind": "timer"}),
+    "remind me in 20 minutes to stretch": ("schedule_task", {"when": "in 20 minutes", "task": "stretch", "kind": "reminder"}),
+    "remind me in 1 hour": ("schedule_task", {"when": "in 1 hour", "task": "1 hour", "kind": "timer"}),
+    "check my email": None,
+    "check the weather every morning at 7": ("schedule_task", {"when": "every morning at 7", "task": "check the weather"}),
+    "the build is done": None,
+    "restore the default colors": None,
+    "add go to the bank to my to-do list": ("note_add", {"text": "go to the bank", "list": "to-do"}),
+    "note that I am vegetarian": ("remember", {"fact": "User is vegetarian"}),
     # auto-lock
     "lock after 10 minutes of inactivity": ("change_setting", {"setting": "autolock", "value": "10"}),
     "auto-lock after 1 hour": ("change_setting", {"setting": "autolock", "value": "60"}),
@@ -165,6 +172,51 @@ CASES = {
     "stop using tor": ("change_setting", {"setting": "tor", "value": "off"}),
     "switch to hands-on mode": ("change_setting", {"setting": "autonomy", "value": "hands-on"}),
     "switch back to hands-off": ("change_setting", {"setting": "autonomy", "value": "hands-off"}),
+    # where it thinks (the settings panel's phrases and natural variants) -> the brain setting / the online model
+    "think only on this computer": ("change_setting", {"setting": "brain", "value": "local"}),
+    "stop using the online model": ("change_setting", {"setting": "brain", "value": "local"}),
+    "never use claude again": ("change_setting", {"setting": "brain", "value": "local"}),
+    "ask me before going online for big tasks": ("change_setting", {"setting": "brain", "value": "ask"}),
+    "ask me before using claude": ("change_setting", {"setting": "brain", "value": "ask"}),
+    "use the online model for everything": ("change_setting", {"setting": "brain", "value": "cloud"}),
+    "let claude do everything": ("change_setting", {"setting": "brain", "value": "cloud"}),
+    "set up the online model": ("online_model", {"action": "set up"}),
+    "connect my claude account": ("online_model", {"action": "set up"}),
+    "forget the online model": ("online_model", {"action": "forget"}),
+    "ask me before using the internet": ("change_setting", {"setting": "internet", "value": "ask"}),   # still the internet rule
+    # desk layouts (the settings panel's phrases and what the owner would say)
+    "give me a clean desk": ("set_appearance", dict(intent._LAYOUT_PRESETS["clean"])),
+    "give me a windows style desk": ("set_appearance", dict(intent._LAYOUT_PRESETS["windows"])),
+    "give me a mac style desk": ("set_appearance", dict(intent._LAYOUT_PRESETS["mac"])),
+    "I want a windows 7 clone desktop": ("set_appearance", dict(intent._LAYOUT_PRESETS["windows"])),
+    "I want Mac OS Mojave": ("set_appearance", dict(intent._LAYOUT_PRESETS["mac"])),
+    "make it look like a mac": ("set_appearance", dict(intent._LAYOUT_PRESETS["mac"])),
+    "give me a traditional desktop": ("set_appearance", dict(intent._LAYOUT_PRESETS["windows"])),
+    "back to the normal desk": ("set_appearance", dict(intent._LAYOUT_PRESETS["clean"])),
+    "make it clean": None,                      # tidy up? a colour? not a layout without a desk word
+    # online model: switch, set up, forget (do not collide with local "use <model>")
+    "use the online model claude-opus-5-5": ("online_model", {"action": "use", "model": "claude-opus-5-5"}),
+    "switch the online model to opus": ("online_model", {"action": "use", "model": "opus"}),
+    "use claude haiku online": ("online_model", {"action": "use", "model": "claude haiku"}),
+    "use gemma 4 e2b": ("manage_models", {"action": "use", "model": "gemma-4-e2b"}),   # still local
+    "use the browser online": None,                 # "online" but not a known online model -> model decides
+    # the agentic refresh + adding a Hugging Face repo
+    "check for new models": ("check_new_models", {}),
+    "check for new and updated models": ("check_new_models", {}),
+    "refresh the model list": ("check_new_models", {}),
+    "are there any newer models": ("check_new_models", {}),
+    "add the model mistralai/Ministral-3-8B-Instruct-2512-GGUF": ("add_model", {"repo": "mistralai/Ministral-3-8B-Instruct-2512-GGUF"}),
+    "add the model TheOrg/Some-Model-GGUF Some-Model-Q4_K_M.gguf": ("add_model", {"repo": "TheOrg/Some-Model-GGUF", "file": "Some-Model-Q4_K_M.gguf"}),
+    # connectors (the apps of this OS)
+    "show connectors": ("show_panel", {"panel": "connectors"}),
+    "open the apps": ("show_panel", {"panel": "connectors"}),
+    "open integrations": ("show_panel", {"panel": "connectors"}),
+    "add a connector": ("manage_connectors", {"action": "add"}),
+    "add a connector named weather that runs uvx mcp-server-weather": ("manage_connectors", {"action": "add", "name": "weather", "command": "uvx mcp-server-weather", "transport": "stdio"}),
+    "add a connector named api at https://example.com/mcp": ("manage_connectors", {"action": "add", "name": "api", "url": "https://example.com/mcp", "transport": "http"}),
+    "disable the connector weather": ("manage_connectors", {"action": "disable", "name": "weather"}),
+    "enable the connector files": ("manage_connectors", {"action": "enable", "name": "files"}),
+    "remove the connector weather": ("manage_connectors", {"action": "remove", "name": "weather"}),
     "balanced mode": ("change_setting", {"setting": "autonomy", "value": "balanced"}),
     "ask before deleting things": ("change_setting", {"setting": "autonomy", "value": "balanced"}),
     "ask me before every change": ("change_setting", {"setting": "autonomy", "value": "hands-on"}),

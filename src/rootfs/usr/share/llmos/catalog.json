@@ -10,7 +10,16 @@
   "size": 2147023008,
   "sha256": "9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8",
   "ram_gb": 3,
-  "note": "the default: coherent, follows instructions closely, few refusals"
+  "note": "the default: coherent, follows instructions closely, few refusals",
+  "speed": "fast",
+  "good_at": [
+   "everyday questions and help",
+   "follows instructions closely",
+   "rarely refuses"
+  ],
+  "limits": [
+   "small, so weaker at hard reasoning and long code"
+  ]
  },
  {
   "id": "gemma-4-e2b",
@@ -27,7 +36,16 @@
   "draft_repo": "ggml-org/gemma-4-E2B-it-GGUF",
   "draft_file": "mtp-gemma-4-E2B-it-Q4_0.gguf",
   "draft_size": 59235872,
-  "draft_sha256": "718d3a44057924d5840c65a0aeedf7929366adeeda92a2006955ccabaf645ef4"
+  "draft_sha256": "718d3a44057924d5840c65a0aeedf7929366adeeda92a2006955ccabaf645ef4",
+  "speed": "fastest",
+  "good_at": [
+   "the quickest here",
+   "140+ languages, best for non-European ones"
+  ],
+  "limits": [
+   "basic reasoning",
+   "shorter answers"
+  ]
  },
  {
   "id": "granite-4.1-3b",
@@ -40,7 +58,16 @@
   "size": 2099501664,
   "sha256": "662b0626cd58f443baea23559b469df6576a81d349649c59413b36a9fb32eb29",
   "ram_gb": 3,
-  "note": "conservative, business-oriented"
+  "note": "conservative, business-oriented",
+  "speed": "fast",
+  "good_at": [
+   "business and office tasks",
+   "concise, factual"
+  ],
+  "limits": [
+   "cautious: refuses more than the others",
+   "weaker at creative writing"
+  ]
  },
  {
   "id": "gemma-4-e4b",
@@ -57,7 +84,16 @@
   "draft_repo": "ggml-org/gemma-4-E4B-it-GGUF",
   "draft_file": "mtp-gemma-4-E4B-it-Q4_0.gguf",
   "draft_size": 59678240,
-  "draft_sha256": "d19a11e4fd5019967d9296f77f4d3e139c8903909f70c3a9cf009c9af4b9b88d"
+  "draft_sha256": "d19a11e4fd5019967d9296f77f4d3e139c8903909f70c3a9cf009c9af4b9b88d",
+  "speed": "fast",
+  "good_at": [
+   "smarter than E2B",
+   "many languages"
+  ],
+  "limits": [
+   "a little slower than E2B",
+   "needs 6 GB of memory"
+  ]
  },
  {
   "id": "ministral-3-8b",
@@ -70,7 +106,15 @@
   "size": 5198911904,
   "sha256": "33e7a72cf5e6e2cfc2f2847075acc013d68bba023e35310cef86b5cf8fdca761",
   "ram_gb": 7,
-  "note": "much smarter; needs a stronger machine"
+  "note": "much smarter; needs a stronger machine",
+  "speed": "medium",
+  "good_at": [
+   "stronger reasoning and coding",
+   "rarely refuses"
+  ],
+  "limits": [
+   "needs a capable machine (7 GB)"
+  ]
  },
  {
   "id": "granite-4.1-8b",
@@ -83,7 +127,16 @@
   "size": 5347914400,
   "sha256": "ed902ac9eb6adce5a90c6a08c8ea201b50e23fdc5976d1cd0362006afac5309e",
   "ram_gb": 7,
-  "note": "stronger reasoning, conservative"
+  "note": "stronger reasoning, conservative",
+  "speed": "medium",
+  "good_at": [
+   "solid reasoning",
+   "business and office tasks"
+  ],
+  "limits": [
+   "cautious: refuses more",
+   "needs 7 GB"
+  ]
  },
  {
   "id": "lfm2.5-8b-a1b",
@@ -96,7 +149,16 @@
   "size": 5155564768,
   "sha256": "4923ec14f06b968b74d663e5949867d2d9c3bf13a20b8be1a9f9af39989b2bb0",
   "ram_gb": 7,
-  "note": "mixture-of-experts: 8B knowledge at ~1B speed"
+  "note": "mixture-of-experts: 8B knowledge at ~1B speed",
+  "speed": "fast",
+  "good_at": [
+   "8B knowledge at roughly 1B speed (mixture-of-experts)",
+   "fast for how much it knows"
+  ],
+  "limits": [
+   "licence is not a standard open one (LFM Open License)",
+   "needs 7 GB"
+  ]
  },
  {
   "id": "gemma-4-12b",
@@ -113,7 +175,16 @@
   "draft_repo": "ggml-org/gemma-4-12B-it-GGUF",
   "draft_file": "mtp-gemma-4-12B-it-Q4_0.gguf",
   "draft_size": 253708960,
-  "draft_sha256": "b894e614824dfc2746b26d3c3ba78c50000a464382682502392b4325257b7602"
+  "draft_sha256": "b894e614824dfc2746b26d3c3ba78c50000a464382682502392b4325257b7602",
+  "speed": "medium",
+  "good_at": [
+   "best quality you can run locally here",
+   "many languages"
+  ],
+  "limits": [
+   "wants a 16 GB machine",
+   "slower on an old laptop"
+  ]
  },
  {
   "id": "ministral-3-14b",
@@ -126,6 +197,15 @@
   "size": 8239593024,
   "sha256": "824e0f3373e69b84f2cae46fdcb9bd1ebc6ab3bfc7acc125d818b7b8178cc613",
   "ram_gb": 11,
-  "note": "strongest here; needs a 16 GB+ machine"
+  "note": "strongest here; needs a 16 GB+ machine",
+  "speed": "slow",
+  "good_at": [
+   "the strongest on-device model here",
+   "best reasoning and coding"
+  ],
+  "limits": [
+   "wants 16 GB+ and is the slowest",
+   "heavy on an old laptop"
+  ]
  }
 ]

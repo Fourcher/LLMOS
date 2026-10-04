@@ -71,6 +71,29 @@ class ConsoleCtx:
     def confirm_action(self, tool, args, risk):
         return self.c.ask_yes_no(self.c.describe_tool(tool, args, confirm=True), danger=risk in ("destructive", "security"))
 
+    def confirm_online(self, text, reason):
+        """'ask' brain mode: one question before a request leaves this computer."""
+        label = llm.cloud_label()
+        why = T("d_online_failed") if reason == "failed" else T("d_online_big")
+        return self.c.ask_yes_no(f"{why} {T('d_online_title', model=label)} {T('d_online_shares')}")
+
+    def brain(self, online, label):
+        pass          # the activity line (agent.run) already says when an answer comes from the online model
+
+    def expect(self, seconds, step):
+        if seconds >= 20 and step == 0:
+            self.status(agent.about_time(seconds))
+
+    def setup_cloud(self, provider=None):
+        return ("From this console, say it in one line, for example: \"set up the online model: provider claude, "
+                "model claude-sonnet-5, key sk-ant-…\" or \"… provider openai, url https://…/v1, model NAME, key …\". "
+                "The key is checked with one tiny request and kept inside the vault. On the desk a form opens instead.")
+
+    def setup_connector(self):
+        return ("From this console, say it in one line, e.g.: \"add a connector named files that runs 'npx -y "
+                "@modelcontextprotocol/server-filesystem /root'\" or \"add a connector named api at https://…/mcp\". "
+                "On the desk a form opens instead.")
+
     def interactive(self, cmd):
         return self.c.run_interactive(cmd)
 
@@ -180,8 +203,18 @@ class Console:
         pct = int(done * 100 / total) if total else 0
         bar = "█" * (pct // 4) + "░" * (25 - pct // 4)
         label = {"download": "downloading", "verify": "verifying"}.get(phase, phase)
-        ui.write(f"\r{ui.theme.base()}  {ui.theme.dim()}{label} {bar} {pct}%  {done//1048576}/{total//1048576} MB{ui.theme.base()}\033[K")
+        # time left, from the average rate since this phase began (no extra measuring)
+        now = time.time()
+        p = getattr(self, "_prog", None)
+        if not p or p[0] != phase or done < p[2]:
+            self._prog = p = (phase, now, done)
+        left = ""
+        if now - p[1] >= 3 and done > p[2] and total > done:
+            rate = (done - p[2]) / (now - p[1])
+            left = "  " + agent.about_time((total - done) / rate, left=True)
+        ui.write(f"\r{ui.theme.base()}  {ui.theme.dim()}{label} {bar} {pct}%  {done//1048576}/{total//1048576} MB{left}{ui.theme.base()}\033[K")
         if done >= total:
+            self._prog = None
             ui.write("\n")
 
     def redraw(self):
@@ -421,7 +454,14 @@ class Console:
             self.redraw()
             return True
         if low in ("lock",) and config.settings.get("vault"):
-            vault.lock()
+            try:
+                media.stop()
+            except Exception:
+                pass
+            try:
+                vault.lock()
+            except Exception as e:
+                ui.line(f"{T('lock_failed')} ({e})", style="err")
             if not self.unlock_screen():
                 self.shutdown("poweroff")
             self.redraw()
