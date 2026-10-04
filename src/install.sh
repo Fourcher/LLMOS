@@ -118,7 +118,7 @@ PKGS="
   eudev udev-init-scripts
   iwd dbus wireless-regdb
   sfdisk lsblk blkid wipefs partx efibootmgr rsync os-prober
-  labwc gtk4.0 webkit2gtk-6.0 py3-gobject3 grim
+  labwc gtk4.0 webkit2gtk-6.0 py3-gobject3 grim wtype
   gst-plugins-good gst-plugins-bad gst-libav
   mesa-dri-gallium mesa-egl mesa-gles mesa-gbm
   font-inter font-jetbrains-mono font-noto font-noto-emoji font-noto-cjk
@@ -130,6 +130,9 @@ apk add --root $TARGET --no-cache -q $PKGS
 log "LLM OS files"
 wget -qO- "$PAYLOAD/build/work/payload.tar" | tar -x -C $TARGET
 chmod 0755 $TARGET/usr/bin/llmos $TARGET/usr/bin/llmos-model-run $TARGET/usr/libexec/llmos-login $TARGET/usr/libexec/llmos-desk $TARGET/etc/init.d/llmos-*
+# the build stamp (`llmos version`, Settings); the version is the payload's own. The ISO build rewrites it with MEDIUM=live.
+VER=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' $TARGET/usr/lib/llmos/llmos/__init__.py)
+printf 'VERSION=%s\nBUILD=%s\nARCH=%s\nMEDIUM=disk\n' "$VER" "$(date +%Y-%m-%d)" "$ARCH" > $TARGET/etc/llmos-release
 
 log "on-device model (verified)"
 mkdir -p $TARGET/var/lib/llmos/models $TARGET/usr/share/llmos/voice

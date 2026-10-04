@@ -9,7 +9,7 @@ import termios
 import threading
 import time
 
-from . import agent, config, i18n, llm, media, models, store, system, ui, vault, voice
+from . import agent, config, i18n, llm, media, models, store, system, ui, vault, voice, version_line
 
 try:
     import readline  # noqa: F401  (enables line editing + history in input())
@@ -382,6 +382,7 @@ class Console:
             f"{L('s_voice')}: {V('v_on') if s['speak_replies'] else V('v_off')}"
             f" · {L('s_vault')}: {V('v_on') if s['vault'] else V('v_off')}"
             f" · {L('s_focus')}: {V('v_on') if s.get('focus',{}).get('on') else V('v_off')}",
+            f"{L('s_version')}: {version_line()}",
         ]
         ui.box(L("settings"), rows)
         ui.line(L("s_change_hint"), style="dim")

@@ -4,6 +4,70 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.4.0 — 2026-10-04
+- System-wide dictation, free and on the machine: press **Super+D** anywhere,
+  speak, pause, and the words are typed where the cursor is — a field on the
+  desk, the command bar, a terminal, a browser, any program. It records with the
+  same push-to-talk path as the microphone button (the mic is open only while
+  you talk), transcribes with whisper.cpp, and types through the compositor's
+  virtual keyboard (`wtype`, now in the image). A chime marks start and end; the
+  desk shows "Dictating…" without taking focus. `llmos dictate` runs it too.
+- Choosable speech-to-text models, like the language models: Whisper Tiny,
+  Base (ships with the OS), Small, and **Whisper large-v3-turbo** — near
+  large-v3 accuracy at several times the speed, 99+ languages, about 0.6 GB —
+  the best free local dictation model for laptops. The Models screen has a Voice
+  section with each one's accuracy, speed, size, memory, strengths and
+  drawbacks, and Use / Download / Remove; or say "download the turbo voice
+  model", "use the turbo voice model". Base stays pinned by SHA-256; downloaded
+  models are verified against the SHA-256 Hugging Face publishes for the exact
+  file before they are ever used, and the shipped Base is the fallback.
+- Dictated text is cleaned of whisper's non-speech tags (`[BLANK_AUDIO]`,
+  `[MUSIC]`, `(silence)`…).
+- Tests: `tools/test-voice.py` (catalogue, names, fallback, cleanup); in the VM,
+  `tools/dictate-smoke.sh` speaks a sentence into the OS's own recording path
+  through `tools/fake-mic-bridge.py` and checks it is typed into a focused
+  terminal.
+- Fixed: `llmos desk-ctl launch` (and the new dictation indicator) referred to
+  a variable that did not exist, so the command failed; both use the
+  command's argument now.
+- Fixed: only the ISOs carried `/etc/llmos-release`; the disk images had none
+  (`llmos version` fell back to the bare version number) and Settings never
+  showed it. The image build now stamps every image (`MEDIUM=disk`), the
+  installer marks an installed system as running from a disk rather than the
+  live medium, and Settings (desk and console) shows the version line.
+
+### Getting started, before the OS (the folder you share)
+- **"1 - START HERE"** launchers for Mac, Windows and Linux sit at the top of
+  the folder and open **LLM OS Setup** (formerly "the Exporter", now in
+  `dist/setup/`). They find a working Python and, when there is none, say so
+  in plain words and offer the free fix: Apple's Command Line Tools on a Mac,
+  `winget` or python.org on Windows.
+- LLM OS Setup now opens with a **Welcome** card: it recognises the computer
+  (Mac with Apple Silicon or Intel, Windows, Linux; its memory) and recommends
+  the way in — try it in a window, make a USB stick, install, or save the ISO
+  — preselecting the ISO that computer needs. **Try it in a window** starts
+  the built-in launcher on an Apple Silicon Mac with QEMU, and otherwise guides
+  to the free app for this computer (UTM on a Mac, VirtualBox on Windows,
+  GNOME Boxes on Linux) with buttons to its download page, the right ISO, and
+  step-by-step settings.
+- **"2 - Set up with AI.md"**: a prompt to hand to any AI assistant (Claude,
+  ChatGPT, …) — "Read this and help me set up LLM OS". It walks a non-technical
+  person from an unzipped folder to their first conversation: recognising the
+  computer, choosing a path, opening Setup, UTM / VirtualBox / USB / install
+  steps, checking fingerprints, planning the first-start choices, and
+  troubleshooting. Its ground rules keep the assistant from writing disks by
+  hand (only Setup's **Write** button, which hides internal disks) and make it
+  ask before anything changes the computer.
+- The user guide (`dist/README.md`) and the project README now open with
+  **Start here**, including what to do about the first-run warnings (macOS
+  "cannot be opened", Windows SmartScreen, a missing Python).
+- Fixed: every Mac was sent to the Intel-Mac steps (write a USB stick, restart
+  holding Option), which cannot work on Apple Silicon; and the steps told Mac
+  users to double-click `run-llmos.sh`, which Finder opens in a text editor.
+- Tests: `tools/test-setup-csrf.py` (renamed) also checks the recognition and
+  recommendations for Apple Silicon, Intel Mac, Windows and Linux, and the
+  launchers.
+
 ## Exporter CSRF hardening — 2026-10-04 (dist tooling; the OS disk images are unchanged)
 - The Exporter is a local web app on 127.0.0.1 that can write USB sticks and
   run programs, so a web page the owner happens to have open must not be able to

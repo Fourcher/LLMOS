@@ -1,5 +1,16 @@
 # LLM OS
 
+> **Just want to use it?** Open the **`dist`** folder and double-click the
+> **"1 - START HERE"** file for your computer (Mac, Windows or Linux). It opens
+> **LLM OS Setup**, which recognises your computer and walks you through
+> trying LLM OS in a window, making a USB stick, or installing it.
+>
+> **Prefer an AI to guide you?** Give **`dist/2 - Set up with AI.md`** to Claude,
+> ChatGPT or another assistant and say *"Read this and help me set up LLM OS."*
+>
+> To share LLM OS with someone, give them the `dist` folder (zipped or not):
+> everything they need is in it, starting with those two files.
+
 An operating system whose only interface is a language model running on the
 machine itself. No apps, no menus: you say what you want, in words, and the
 computer does it, drawing whatever needs showing as a window. Private by
@@ -24,9 +35,12 @@ every request that leaves the computer is written to the audit log.
   the live‑ISO boot.
 - `tools/` — the build and test tooling (QEMU drivers, smoke tests, the
   installer and hardware‑matrix tests, the ISO builder).
-- `dist/` — what a user gets: the images, the ISO, the launcher for Macs, the
-  Exporter app (save the ISO, write a USB stick, install instructions), the
-  model catalog, `RELEASE.json` and `SHA256SUMS`.
+- `dist/` — what a user gets, and what to share: the **"1 - START HERE"**
+  launchers and **LLM OS Setup** (`dist/setup/`: recognises the computer, runs
+  LLM OS in a window, saves the ISO, writes a USB stick, shows install and
+  dual-boot steps), **"2 - Set up with AI.md"** (a prompt that lets any AI
+  assistant guide the setup), the images and ISOs, the model catalog,
+  `RELEASE.json` and `SHA256SUMS`.
 - `BUILD.md` — how it was built, every source and hash, the design in one
   page, the brief checked point by point, measured hardware requirements
   and the full test record. `CHANGELOG.md` — versions. `AUDIT.md` — how to
@@ -49,9 +63,11 @@ routines and the desk layouts inside the test VM against `tools/fake-cloud.py`.
 
 ## Run it
 
-See `dist/README.md`: on a Mac, `dist/run-llmos.sh`; on a PC or Intel Mac,
-write the ISO with the Exporter and boot from the stick; install from the
-running desk by saying so.
+Double-click `dist/1 - START HERE` for your computer: LLM OS Setup takes it
+from there (in a window with UTM, VirtualBox or Boxes; on a Mac with Homebrew
+QEMU, `dist/run-llmos.sh` with the model on the Mac's GPU; or from a USB stick
+it writes, then install from the running desk by saying so). The user guide is
+`dist/README.md`.
 
 ## License
 

@@ -23,7 +23,7 @@ import shutil
 import subprocess
 import time
 
-from . import config
+from . import config, release
 
 ESP_GUID = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
 LINUX_GUID = "0fc63daf-8483-4772-8e79-3d69d8477de4"
@@ -295,6 +295,11 @@ def run(token, status=lambda s: None):
         fstab += "tmpfs\t/tmp\ttmpfs\tnosuid,nodev,mode=1777\t0 0\n"
         with open(os.path.join(TARGET, "etc/fstab"), "w") as f:
             f.write(fstab)
+        # the copy carries this system's build stamp; the installed system runs from a disk, not the live medium
+        rel = release()
+        rel["MEDIUM"] = "disk"
+        with open(os.path.join(TARGET, "etc/llmos-release"), "w") as f:
+            f.write("".join(f"{k}={v}\n" for k, v in rel.items()))
 
         status("installing the bootloader")
         for src, dst, typ in (("/dev", "dev", None), ("proc", "proc", "proc"), ("sys", "sys", "sysfs")):

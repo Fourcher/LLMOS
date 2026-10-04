@@ -1,0 +1,59 @@
+[
+ {
+  "id": "tiny",
+  "name": "Whisper Tiny",
+  "file": "ggml-tiny.bin",
+  "repo": "ggml-org/whisper.cpp",
+  "size": 77691713,
+  "sha256": "",
+  "ram_gb": 1,
+  "speed": "fastest",
+  "accuracy": "basic",
+  "langs": "99+",
+  "good_at": ["the smallest and fastest", "fine on a very old laptop"],
+  "limits": ["least accurate; stumbles on accents, names and noise"]
+ },
+ {
+  "id": "base",
+  "name": "Whisper Base",
+  "file": "ggml-base.bin",
+  "repo": "ggml-org/whisper.cpp",
+  "size": 147951465,
+  "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+  "ram_gb": 1,
+  "speed": "fast",
+  "accuracy": "ok",
+  "langs": "99+",
+  "shipped": true,
+  "good_at": ["ships with the OS, ready at once", "quick, light, 99+ languages"],
+  "limits": ["makes more mistakes than the bigger models on hard audio"]
+ },
+ {
+  "id": "small",
+  "name": "Whisper Small",
+  "file": "ggml-small.bin",
+  "repo": "ggml-org/whisper.cpp",
+  "size": 487601967,
+  "sha256": "",
+  "ram_gb": 2,
+  "speed": "medium",
+  "accuracy": "good",
+  "langs": "99+",
+  "good_at": ["clearly better than base", "still light enough for most machines"],
+  "limits": ["about half a gigabyte to download"]
+ },
+ {
+  "id": "turbo",
+  "name": "Whisper Large v3 Turbo",
+  "file": "ggml-large-v3-turbo-q5_0.bin",
+  "repo": "ggml-org/whisper.cpp",
+  "size": 574041195,
+  "sha256": "",
+  "ram_gb": 3,
+  "speed": "medium",
+  "accuracy": "excellent",
+  "langs": "99+",
+  "good_at": ["the best dictation here: near large-v3 accuracy, much faster", "handles accents, names and noise well", "99+ languages"],
+  "limits": ["about 0.6 GB to download; wants a few GB of memory"]
+ }
+]

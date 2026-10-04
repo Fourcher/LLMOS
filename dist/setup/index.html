@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LLM OS Exporter</title>
+<title>LLM OS Setup</title>
 <style>
   :root { --bg: #0b0d14; --fg: #e8e9ef; --accent: #7c5cff; --card: #141722; --line: #262a3a; --dim: #9aa0b4; --danger: #ef5a6f; --ok: #3ecf8e; --warn: #f2b84b; }
   * { box-sizing: border-box; }
@@ -30,18 +30,38 @@
   details { margin-top: 10px; } summary { cursor: pointer; font-weight: 600; } .steps { color: var(--dim); font-size: 14.5px; } .steps li { margin: 4px 0; }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: #1f2335; padding: 1px 6px; border-radius: 6px; }
   footer { padding: 0 28px 24px; color: var(--dim); font-size: 13px; }
+  .welcome { grid-column: 1 / -1; border-color: #3a3363; }
+  .welcome h2 { font-size: 19px; } .welcome #whead { color: var(--fg); font-size: 15.5px; }
+  .goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 14px 0 6px; }
+  .goal { text-align: left; background: #1a1d2b; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; color: var(--fg); font: inherit; cursor: pointer; display: grid; gap: 4px; }
+  .goal:hover { border-color: var(--accent); } .goal b { font-size: 15.5px; } .goal span { color: var(--dim); font-size: 13.5px; line-height: 1.4; }
+  .goal.best { border-color: var(--accent); background: #211c3d; } .goal.best b::after { content: "  · recommended"; color: #b9a9ff; font-weight: 600; font-size: 12.5px; }
+  .small { font-size: 13.5px; color: var(--dim); margin: 10px 0 0; }
+  .flash { animation: flash 1.2s ease-out; } @keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
 </style>
 </head>
 <body>
-<header><div class="orb"></div><div><h1>LLM OS Exporter</h1><div class="ver" id="ver">reading this folder…</div></div></header>
+<header><div class="orb"></div><div><h1>LLM OS Setup</h1><div class="ver" id="ver">reading this folder…</div></div></header>
 <main>
-  <section class="card" id="images"><h2>In this folder</h2><p>Images and ISOs with their checksums. Everything stays on this machine.</p><div id="imglist"></div>
-    <div class="row"><button class="btn" onclick="act('open',{what:'folder'})">Show the folder</button><button class="btn" onclick="act('open',{what:'vm'})">Run in a virtual machine</button></div></section>
+  <section class="card welcome" id="welcome"><h2>Welcome — let's get LLM OS running</h2>
+    <p id="whead">Looking at this computer…</p>
+    <p id="wnote" class="warn" style="display:none"></p>
+    <div class="goals">
+      <button class="goal" id="g-vm" onclick="goVM()"><b>Try it in a window</b><span>Runs inside this computer, like an app. Nothing is changed. Best first step.</span></button>
+      <button class="goal" id="g-usb" onclick="go('usbcard')"><b>Make a USB stick</b><span>Start any PC from it to try LLM OS, and install it from there if you like.</span></button>
+      <button class="goal" id="g-install" onclick="go('howto', true)"><b>Install it on a computer</b><span>On its own or next to Windows / macOS, from the USB stick.</span></button>
+      <button class="goal" id="g-save" onclick="go('savecard')"><b>Just save the ISO</b><span>A copy in Downloads, checked against its fingerprint.</span></button>
+    </div>
+    <div id="wmsg" class="rec" style="display:none"></div>
+    <p class="small">Prefer to be guided step by step? Give the file <b>“2 - Set up with AI.md”</b> (next to the START HERE files) to an AI assistant such as Claude or ChatGPT and say: <i>“Read this and help me set up LLM OS.”</i></p></section>
 
-  <section class="card"><h2>Save the ISO</h2><p>Copies the bootable ISO into your Downloads folder and verifies it against its checksum, so you can share it, archive it, or write it with any tool.</p>
+  <section class="card" id="images"><h2>In this folder</h2><p>The LLM OS files and their fingerprints (SHA-256), so you can tell they are intact. Everything stays on this computer.</p><div id="imglist"></div>
+    <div class="row"><button class="btn" onclick="act('open',{what:'folder'})">Show the folder</button><button class="btn" onclick="act('open',{what:'iso'})">Show the ISO this computer needs</button></div></section>
+
+  <section class="card" id="savecard"><h2>Save the ISO</h2><p>Copies the bootable ISO into your Downloads folder and verifies it against its checksum, so you can share it, archive it, or write it with any tool.</p>
     <div class="row"><select id="saveSel"></select><button class="btn primary" onclick="save()">Save to Downloads</button></div></section>
 
-  <section class="card"><h2>Write to a USB stick</h2><p>Makes a stick that boots straight into LLM OS. From that desk, say <i>"install LLM OS alongside macOS"</i> (or Windows) to put it on the computer.</p>
+  <section class="card" id="usbcard"><h2>Write to a USB stick</h2><p>Makes a stick that boots straight into LLM OS. From that desk, say <i>"install LLM OS alongside macOS"</i> (or Windows) to put it on the computer.</p>
     <div class="rec"><b>Stick:</b> USB 3.0 or faster, <b>8 GB minimum, 16 GB recommended</b>. <b>Everything on it is erased.</b><br><b>Computer:</b> any 64‑bit PC or Intel Mac from the last ~10 years, 4 GB RAM (8 GB comfortable), 32 GB free on the internal disk for an install.</div>
     <div class="row"><select id="driveSel"><option value="">no removable drive found</option></select><button class="btn" onclick="drives()">Refresh</button></div>
     <div class="row"><select id="writeSel"></select><label><input type="checkbox" id="sure"> I understand the stick will be erased</label><button class="btn danger" id="writeBtn" onclick="write()" disabled>Write</button></div>
@@ -51,7 +71,7 @@
 
   <section class="card" id="progress"><h2 id="ptitle">Working…</h2><div class="bar"><i id="pbar"></i></div><div id="pmsg" class="steps"></div></section>
 </main>
-<footer>LLM OS Exporter · local only · <button class="btn" style="padding:4px 10px;font-size:13px" onclick="act('quit',{})">Quit</button></footer>
+<footer>LLM OS Setup · runs only on this computer · <button class="btn" style="padding:4px 10px;font-size:13px" onclick="act('quit',{})">Quit</button></footer>
 <script>
   const $ = (id) => document.getElementById(id);
   const gb = (n) => (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + " GB";
@@ -63,10 +83,32 @@
     const r = await fetch(path, opts);
     return r.json();
   }
-  async function act(what, body) { const r = await api("/api/" + what, body); if (r && r.error) alert(r.error); }
+  // a message in the welcome card (never an alert), with buttons for the next step when there is one
+  const GUIDE = { utm: ["Open the UTM download page", "utm"], virtualbox: ["Open the VirtualBox download page", "virtualbox"] };
+  function say(text, guide, ok) {
+    const box = $("wmsg"); box.style.display = "block"; box.innerHTML = "";
+    const p = document.createElement("div"); p.textContent = text; if (ok) p.className = "ok"; box.appendChild(p);
+    const row = document.createElement("div"); row.className = "row";
+    if (GUIDE[guide]) { const b = document.createElement("button"); b.className = "btn primary"; b.textContent = GUIDE[guide][0]; b.onclick = () => act("open", { what: GUIDE[guide][1] }); row.appendChild(b); }
+    if (guide) { const s = document.createElement("button"); s.className = "btn"; s.textContent = "Show the ISO to use"; s.onclick = () => act("open", { what: "iso" }); row.appendChild(s);
+                 const h = document.createElement("button"); h.className = "btn"; h.textContent = "Show the steps"; h.onclick = () => go("howto", true, "vm"); row.appendChild(h); }
+    if (row.children.length) box.appendChild(row);
+  }
+  async function act(what, body) { const r = await api("/api/" + what, body); if (r && (r.error || r.message)) say(r.error || r.message, r.guide, !r.error); return r; }
+  async function goVM() { await act("open", { what: "vm" }); }
+  function go(id, open, section) {
+    const el = $(id); el.scrollIntoView({ behavior: "smooth", block: "start" }); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+    if (open) { const want = section || (rel && rel.recommend && rel.recommend.section);
+      document.querySelectorAll("#howlist details").forEach(d => { d.open = d.dataset.id === want; }); }
+  }
   async function load() {
     rel = await api("/api/status");
-    $("ver").textContent = `Version ${rel.version || "?"}${rel.built ? " · built " + rel.built : ""} · ${rel.platform} · Python ${rel.python}`;
+    const h = rel.host || {}, rec = rel.recommend || {};
+    const kind = h.apple_silicon ? "Mac with Apple Silicon" : rel.platform === "Darwin" ? "Intel Mac" : rel.platform === "Windows" ? "Windows PC" : "Linux computer";
+    $("ver").textContent = `Version ${rel.version || "?"}${rel.built ? " · built " + rel.built : ""} · this computer: ${kind}${h.ram_gb ? ", " + Math.round(h.ram_gb) + " GB memory" : ""}`;
+    $("whead").textContent = rec.headline || "";
+    if (rec.note) { $("wnote").textContent = rec.note; $("wnote").style.display = "block"; }
+    const best = { vm: "g-vm", usb: "g-usb" }[rec.goal]; if (best) $(best).classList.add("best");
     const list = $("imglist"); list.innerHTML = "";
     const isos = rel.images.filter(i => i.kind === "iso");
     for (const i of rel.images) {
@@ -75,7 +117,7 @@
       list.appendChild(d);
     }
     for (const sel of [$("saveSel"), $("writeSel")]) {
-      sel.innerHTML = isos.length ? isos.map(i => `<option value="${i.file}">${i.file} (${gb(i.size)})</option>`).join("") : `<option value="">no ISO in this folder yet — build one with tools/build-iso.sh</option>`;
+      sel.innerHTML = isos.length ? isos.map(i => `<option value="${i.file}"${rec.iso === i.file ? " selected" : ""}>${i.file} (${gb(i.size)})${rec.iso === i.file ? " — for this computer" : ""}</option>`).join("") : `<option value="">no ISO in this folder — this copy of LLM OS is incomplete</option>`;
     }
     $("winnote").style.display = rel.platform === "Windows" ? "block" : "none";
     drives(); howto();
@@ -110,8 +152,9 @@
   }
   async function howto() {
     const h = await api("/api/instructions"); const box = $("howlist"); box.innerHTML = "";
+    const want = (rel.recommend && rel.recommend.section) || h.default_for[rel.platform];
     for (const sec of h.sections) {
-      const d = document.createElement("details"); if (sec.id === h.default_for[rel.platform]) d.open = true;
+      const d = document.createElement("details"); d.dataset.id = sec.id; if (sec.id === want) d.open = true;
       d.innerHTML = `<summary>${sec.title}</summary><ol class="steps">${sec.steps.map(s => `<li>${s}</li>`).join("")}</ol>${sec.note ? `<p class="steps warn">${sec.note}</p>` : ""}`;
       box.appendChild(d);
     }

@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 
-from . import agent, config, i18n, llm, media, models, store, system, ui, uispec, vault, voice, devices
+from . import agent, config, i18n, llm, media, models, store, system, ui, uispec, vault, voice, devices, version_line
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
@@ -824,6 +824,29 @@ class Desk:
             blocks.append({"type": "list", "items": tease})
             blocks.append({"type": "text", "text": llm.CLOUD_PROVIDERS["openai"].get("note", ""), "dim": True})
             blocks.append({"type": "buttons", "items": [{"label": L("d_set_up_online"), "say": "set up the online model"}]})
+
+        # speech to text: used by the microphone and by system-wide dictation (Super+D types at the cursor)
+        blocks.append({"type": "heading", "text": L("s_voice_models")})
+        blocks.append({"type": "text", "text": L("d_voice_intro"), "dim": True})
+        cur_v = voice.active_voice()
+        inst_v = {m["id"] for m in voice.installed_voice()}
+        vrows = []
+        for m in voice.voice_catalog():
+            on = bool(cur_v and m["id"] == cur_v["id"])
+            have = m["id"] in inst_v
+            acts = []
+            if have and not on:
+                acts.append({"label": T("d_use"), "say": f"use the {m['id']} voice model", "primary": True})
+            if not have:
+                acts.append({"label": T("d_download", size=f"{m['size'] / 1e9:.1f}"), "say": f"download the {m['id']} voice model"})
+            if have and not on and not m.get("shipped"):
+                acts.append({"label": T("d_remove"), "say": f"remove the {m['id']} voice model", "danger": True})
+            sub = " · ".join(x for x in [L("d_voice_accuracy", a=m.get("accuracy", "")), m.get("speed", ""),
+                                         f"{m['size'] / 1e6:.0f} MB", f"{m['ram_gb']} GB RAM",
+                                         f"{m.get('langs', '')} {L('d_languages')}"] if x.strip())
+            vrows.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
+                          "meta": L("d_in_use") if on else (T("installed") if have else ""), "actions": acts})
+        blocks.append({"type": "list", "items": vrows})
         return {"title": T("models"), "kind": "panel", "size": "l", "blocks": blocks}
 
     def connectors_panel(self):
@@ -891,7 +914,8 @@ class Desk:
                     [L("s_settings_language"), s["settings_language"] or L("v_default")],
                     [L("s_color"), s["appearance"]["color"] or L("v_default")],
                     [L("s_background"), s["appearance"]["background"] or L("v_default")],
-                    [L("s_accent"), s["appearance"]["accent"] or L("v_default")]]},
+                    [L("s_accent"), s["appearance"]["accent"] or L("v_default")],
+                    [L("s_version"), version_line()]]},
                 {"type": "heading", "text": L("s_language")},
                 {"type": "choices", "selected": i18n.display_name(s["language"]), "items": [
                     {"label": i18n.display_name(c), "say": f"put everything in {i18n.display_name(c)}"} for c in ("en", "zh", "es", "fr", "de", "ja")]},
@@ -1671,13 +1695,24 @@ class Desk:
                 self.unlock(arg)
                 out = {"ok": True, "screen": self.screen}
             elif cmd == "launch":          # llmos desk-ctl launch <command line>
-                r = self.launch_app(["/bin/sh", "-c", " ".join(words[1:])], name=os.path.basename(words[1]) if len(words) > 1 else "app")
+                first = arg.split()[0] if arg.split() else ""
+                r = self.launch_app(["/bin/sh", "-c", arg], name=os.path.basename(first) or "app")
                 out = {"ok": isinstance(r, int), "pid": r if isinstance(r, int) else None, "error": None if isinstance(r, int) else r}
             elif cmd == "lock":
                 self.lock()
                 out = {"ok": True}
             elif cmd == "js":
                 self.emit({"t": "eval", "js": arg})
+                out = {"ok": True}
+            elif cmd == "dictating":       # llmos dictate (Super+D): show what dictation is doing; never takes focus
+                state, _, note = arg.partition(" ")
+                if state in ("listening", "transcribing"):
+                    self.emit({"t": "toast", "text": T("d_dictate_" + state), "sticky": "dictate"})
+                else:
+                    self.emit({"t": "toast", "text": "", "sticky": "dictate"})
+                    note = note.strip()
+                    if note and note != "typed":
+                        self.emit({"t": "toast", "text": T("d_dictate_note", note=note)})
                 out = {"ok": True}
             else:
                 out = {"error": "unknown command"}

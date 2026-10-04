@@ -406,6 +406,24 @@ def _connector(text):
     return None
 
 
+# speech-to-text (voice) models: "use the turbo voice model", "download the best speech model"
+_VOICE_MODEL = re.compile(r"^\s*(?:please\s+)?(?P<verb>use|switch\s+to|download|get|fetch|install|remove|delete|uninstall)\s+(?:the\s+)?"
+                          r"(?P<name>[\w .\-]{1,30}?)\s+(?:voice|speech|dictation|transcription|whisper)(?:\s+to\s+text)?\s+model\s*[.!]?\s*$", re.I)
+_VOICE_LIST = re.compile(r"^\s*(?:please\s+)?(?:show|list|open|what\s+are)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:voice|speech|dictation|transcription)\s+models?\s*[.!?]?\s*$", re.I)
+
+
+def _voice_model(text):
+    m = _VOICE_MODEL.match(text)
+    if m:
+        verb = m.group("verb").lower()
+        action = "download" if verb in ("download", "get", "fetch", "install") else \
+            "remove" if verb in ("remove", "delete", "uninstall") else "use"
+        return ("manage_voice", {"action": action, "model": m.group("name").strip()})
+    if _VOICE_LIST.match(text):
+        return ("manage_voice", {"action": "list"})
+    return None
+
+
 def _models_discover(text):
     if _NEW_MODELS.match(text):
         return ("check_new_models", {})
@@ -838,6 +856,9 @@ def match(text):
     cn = _connector(t)
     if cn:
         return cn
+    vm = _voice_model(t)
+    if vm:
+        return vm
     dm = _models_discover(t)
     if dm:
         return dm

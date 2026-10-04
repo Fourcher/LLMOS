@@ -42,6 +42,8 @@
     <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
     <keybind key="W-f"><action name="ToggleFullscreen"/></keybind>
     <keybind key="W-Return"><action name="Execute" command="foot"/></keybind>
+    <!-- system-wide dictation: speak, pause, and the words are typed wherever the cursor is -->
+    <keybind key="W-d"><action name="Execute" command="/usr/bin/llmos dictate"/></keybind>
     <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="/usr/bin/llmos volume +5"/></keybind>
     <keybind key="XF86AudioLowerVolume"><action name="Execute" command="/usr/bin/llmos volume -5"/></keybind>
     <keybind key="XF86AudioMute"><action name="Execute" command="/usr/bin/llmos volume toggle"/></keybind>

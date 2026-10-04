@@ -34,6 +34,8 @@ for name in ("init", "grub.cfg", "mkiso.sh"):
         subprocess.run(["python3", "tools/vmctl.py", "run", ser, log, f"printf %s '{b[i:i+600]}' >> /tmp/live/{name}.b64; echo OK_{i}", f"^OK_{i}", "30", "--quiet", "1"], capture_output=True)
     subprocess.run(["python3", "tools/vmctl.py", "run", ser, log, f"base64 -d /tmp/live/{name}.b64 > /tmp/live/{name}; rm /tmp/live/{name}.b64; wc -c /tmp/live/{name}", "^[0-9]+ /tmp", "30", "--quiet", "1"], capture_output=True)
 PY
+STAMP=$(python3 tools/vmctl.py run "$SER" "$LOG" 'echo STAMP $(tr "\n" " " 2>/dev/null < /etc/llmos-release)' '^STAMP' 30 --quiet 1 | tr -d '\r' | grep -a '^STAMP' | tail -1 | cut -c7- || true)
+echo "==> source image: ${STAMP:-no /etc/llmos-release}"
 echo "==> building the ISO inside the VM (version $VER, $ARCH)"
 python3 tools/vmctl.py run "$SER" "$LOG" "sh /tmp/live/mkiso.sh $VER $ARCH 2>&1 | tail -40; echo DONE_\"\"ISO" "^DONE_ISO" 5400 --quiet 1 | grep -vE '^\s*$' | tail -30
 BYTES=$(tail -c 20000 "$LOG" | tr -d '\r' | grep -ao 'ISO_BYTES=[0-9]*' | tail -1 | cut -d= -f2)

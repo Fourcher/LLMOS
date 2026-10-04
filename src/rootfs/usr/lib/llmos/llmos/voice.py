@@ -8,8 +8,11 @@ Microphone sources, in order:
      cannot capture, so the macOS launcher streams raw mic audio in)
 """
 import array
+import hashlib
+import json
 import math
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -19,7 +22,12 @@ import wave
 
 from . import config, i18n
 
-MODEL = os.path.join(config.SHARE, "voice", "ggml-base.bin")
+# Speech-to-text models (whisper.cpp ggml files). The one in use is the `voice_model` setting; Whisper Base
+# ships with the OS, the others are downloaded on request and verified by SHA-256 before use (a catalogue
+# entry with no pinned hash is checked against the hash Hugging Face publishes for the exact file).
+VOICE_CATALOG = os.path.join(config.SHARE, "voice-catalog.json")
+VOICE_DIR_SHIPPED = os.path.join(config.SHARE, "voice")
+VOICE_DIR_DL = os.path.join(config.MODELS, "voice")
 BRIDGE = ("10.0.2.2", 8766)
 RATE = 16000
 CHUNK = 1600  # 0.1 s of 16-bit mono
@@ -101,8 +109,145 @@ def _record_bridge():
         s.close()
 
 
+# ------------------------------------------------------------------ voice models
+
+def voice_catalog():
+    cat = config.load_json(VOICE_CATALOG, [])
+    return cat if isinstance(cat, list) else []
+
+
+def voice_by_id(vid):
+    vid = re.sub(r"[^a-z0-9.\- ]", "", str(vid or "").lower()).strip()
+    if not vid:
+        return None
+    for m in voice_catalog():
+        if m["id"] == vid:
+            return m
+    # forgiving names: "large v3 turbo", "whisper small", "the best one"
+    hits = [m for m in voice_catalog() if vid in m["name"].lower() or vid in m["id"]]
+    if not hits and vid in ("best", "the best", "large", "large v3", "large-v3", "large v3 turbo", "accurate", "most accurate"):
+        hits = [m for m in voice_catalog() if m["id"] == "turbo"]
+    if not hits and vid in ("fastest", "smallest", "lightest"):
+        hits = [m for m in voice_catalog() if m["id"] == "tiny"]
+    return hits[0] if len(hits) == 1 else None
+
+
+def voice_path(m):
+    """Where a voice model's file lives: the shipped one under /usr/share, downloaded ones beside the
+    language models."""
+    shipped = os.path.join(VOICE_DIR_SHIPPED, m["file"])
+    if os.path.exists(shipped):
+        return shipped
+    return os.path.join(VOICE_DIR_DL, m["file"])
+
+
+def installed_voice():
+    return [m for m in voice_catalog() if os.path.exists(voice_path(m))]
+
+
+def active_voice():
+    """The voice model in use: the owner's choice if it is on disk, otherwise Base, otherwise any installed."""
+    want = config.settings.get("voice_model") or "base"
+    inst = installed_voice()
+    for m in inst:
+        if m["id"] == want:
+            return m
+    for m in inst:
+        if m["id"] == "base":
+            return m
+    return inst[0] if inst else None
+
+
+def model_path():
+    m = active_voice()
+    return voice_path(m) if m else os.path.join(VOICE_DIR_SHIPPED, "ggml-base.bin")
+
+
+def _hf_sha(repo, fname):
+    """The SHA-256 Hugging Face publishes for one file (its LFS object id); a file with none is refused."""
+    from . import web
+    st, _ctype, _final, body = web.fetch(f"https://huggingface.co/api/models/{repo}/tree/main?recursive=true",
+                                         max_bytes=3_000_000, timeout=25)
+    if st != 200:
+        raise RuntimeError(f"could not read {repo} on Hugging Face (HTTP {st})")
+    for f in json.loads(body.decode("utf-8", "replace")):
+        if str(f.get("path", "")).split("/")[-1] == fname:
+            oid = ((f.get("lfs") or {}).get("oid") or "").replace("sha256:", "").strip().lower()
+            if re.fullmatch(r"[0-9a-f]{64}", oid):
+                return oid
+    raise RuntimeError(f"Hugging Face publishes no SHA-256 for {fname}; not downloading an unverifiable file")
+
+
+def download_voice(vid, progress=None):
+    """Fetch a voice model and verify it before it is ever used."""
+    m = voice_by_id(vid)
+    if not m:
+        raise ValueError(f"unknown voice model '{vid}'")
+    if os.path.exists(voice_path(m)):
+        return m
+    sha = (m.get("sha256") or "").lower() or _hf_sha(m["repo"], m["file"])
+    need = m["size"] / 1024 ** 3 + 0.3
+    os.makedirs(VOICE_DIR_DL, exist_ok=True)
+    st = os.statvfs(VOICE_DIR_DL)
+    if st.f_bavail * st.f_frsize / 1024 ** 3 < need:
+        raise ValueError(f"not enough disk space: {m['name']} needs {need:.1f} GB free")
+    dest = os.path.join(VOICE_DIR_DL, m["file"])
+    part = dest + ".part"
+    url = f"https://huggingface.co/{m['repo']}/resolve/main/{m['file']}"
+    cmd = ["curl", "-sSL", "--fail", "-C", "-", "--retry", "3", "-o", part, url]
+    if config.settings.get("tor"):
+        cmd[1:1] = ["--socks5-hostname", "127.0.0.1:9050"]
+    p = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)
+    while p.poll() is None:
+        if progress:
+            try:
+                progress("download", os.path.getsize(part), m["size"])
+            except OSError:
+                pass
+        time.sleep(1)
+    if p.returncode != 0:
+        raise RuntimeError("download failed: " + (p.stderr.read().strip() or f"curl exit {p.returncode}")[:300])
+    h = hashlib.sha256()
+    total, done = os.path.getsize(part), 0
+    with open(part, "rb") as f:
+        for block in iter(lambda: f.read(1 << 22), b""):
+            h.update(block)
+            done += len(block)
+            if progress:
+                progress("verify", done, total)
+    if h.hexdigest() != sha:
+        os.unlink(part)
+        raise RuntimeError(f"checksum mismatch for {m['file']}: the file was deleted and nothing was used")
+    os.replace(part, dest)
+    return m
+
+
+def use_voice(vid):
+    m = voice_by_id(vid)
+    if not m:
+        raise ValueError(f"unknown voice model '{vid}'")
+    if not os.path.exists(voice_path(m)):
+        raise ValueError(f"{m['name']} is not downloaded yet; download it first")
+    config.settings.set("voice_model", m["id"])
+    return m
+
+
+def remove_voice(vid):
+    m = voice_by_id(vid)
+    if not m:
+        raise ValueError(f"unknown voice model '{vid}'")
+    if m.get("shipped"):
+        raise ValueError(f"{m['name']} ships with the OS and stays as the fallback")
+    path = os.path.join(VOICE_DIR_DL, m["file"])
+    if os.path.exists(path):
+        os.unlink(path)
+    if config.settings.get("voice_model") == m["id"]:
+        config.settings.set("voice_model", "base")
+    return m
+
+
 def available():
-    return os.path.exists(MODEL) and shutil.which("whisper-cli") is not None
+    return os.path.exists(model_path()) and shutil.which("whisper-cli") is not None
 
 
 def _bridge_available():
@@ -140,16 +285,65 @@ def listen():
     return path
 
 
-def transcribe(wav_path):
+def transcribe(wav_path, keep=False):
     lang = i18n.lang_code(config.llm_language())
     lang = lang if len(lang) == 2 else "auto"
-    p = subprocess.run(["whisper-cli", "-m", MODEL, "-f", wav_path, "-l", lang, "-nt", "-np",
+    p = subprocess.run(["whisper-cli", "-m", model_path(), "-f", wav_path, "-l", lang, "-nt", "-np",
                         "-t", str(os.cpu_count() or 2)], capture_output=True, text=True)
+    if not keep:
+        try:
+            os.unlink(wav_path)
+        except OSError:
+            pass
+    return clean_transcript(p.stdout)
+
+
+# whisper marks non-speech with bracketed tags; none of them belong in typed text
+_NONSPEECH = re.compile(r"\[(?:BLANK_AUDIO|MUSIC|NOISE|SILENCE|INAUDIBLE|APPLAUSE|LAUGHTER|[ _A-Z]{3,})\]|\((?:music|silence|noise|inaudible)\)", re.I)
+
+
+def clean_transcript(raw):
+    return " ".join(_NONSPEECH.sub(" ", raw or "").split()).strip()
+
+
+# ------------------------------------------------------------------ system-wide dictation
+
+def type_text(text):
+    """Type text at the cursor of whatever window has focus -- a field on the desk, a terminal, a browser --
+    through the compositor's virtual keyboard (wtype, wlroots). Returns True if it was typed."""
+    if not text or not shutil.which("wtype") or not os.environ.get("WAYLAND_DISPLAY"):
+        return False
     try:
-        os.unlink(wav_path)
-    except OSError:
-        pass
-    return " ".join(p.stdout.split()).strip()
+        return subprocess.run(["wtype", "--", text], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def chime():
+    wav = os.path.join(config.SHARE, "chime.wav")
+    if os.path.exists(wav) and shutil.which("aplay"):
+        subprocess.Popen(["aplay", "-q", wav], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+
+
+def dictate(notify=None):
+    """Record one utterance, transcribe it with the chosen voice model, and type it where the owner is.
+    Returns (text, note): text is what was heard ('' if nothing, None if it could not run)."""
+    if not available():
+        return None, "no speech model is installed"
+    if notify:
+        notify("listening")
+    wav = listen()
+    if wav is None:
+        return None, "no microphone was found"
+    if not wav:
+        return "", "nothing was heard"
+    if notify:
+        notify("transcribing")
+    text = transcribe(wav)
+    if not text:
+        return "", "nothing was heard"
+    return text, ("typed" if type_text(text) else "heard, but nothing could be typed (no focused field or no wtype)")
 
 
 def speak(text):

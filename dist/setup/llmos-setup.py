@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""LLM OS Exporter: one window, no dependencies beyond Python 3.
+"""LLM OS Setup: the first thing to open, on whatever computer you have. One window, no dependencies
+beyond Python 3.
 
-Shows the current LLM OS version, lets the owner save the bootable ISO, write
-it to a USB stick (with size and type recommendations), read the install /
-dual-boot steps for their machine, or start the VM launcher. It is a tiny
-local web app: this file serves ./index.html on 127.0.0.1 and opens it in
-the default browser. Nothing leaves the machine.
+It recognises the computer (Mac with Apple Silicon or Intel, Windows, Linux; its memory) and recommends
+the right way in: try LLM OS in a window (a virtual machine), make a bootable USB stick (with size and type
+recommendations), install or dual boot, or just save the ISO. It is a tiny local web app: this file serves
+./index.html on 127.0.0.1 and opens it in the default browser. Nothing leaves the machine.
 
-Run it from the launcher next to it ("LLM OS Exporter.command" on macOS,
-".bat" on Windows, ".sh" on Linux) or with `python3 exporter.py`.
+Open it with the "1 - START HERE" file for your computer in the folder above, or `python3 llmos-setup.py`.
 """
 import hashlib
 import hmac
@@ -28,9 +27,79 @@ import webbrowser
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.dirname(HERE)
 SYSTEM = platform.system()          # Darwin | Windows | Linux
+MACHINE = platform.machine().lower()  # arm64 / aarch64 on Apple Silicon and ARM PCs, x86_64 / amd64 otherwise
+ARM = MACHINE in ("arm64", "aarch64")
+UTM_PAGE = "https://mac.getutm.app/"   # UTM: free, open-source virtual machines for the Mac
 STATE = {"phase": "idle", "done": 0, "total": 0, "message": "", "error": "", "started": 0}
 LOCK = threading.Lock()
 TOKEN = ""     # per launch; the page sends it back with every request, so another site cannot drive this app
+
+# ----------------------------------------------------------------- this computer
+
+def host_ram_gb():
+    try:
+        if SYSTEM == "Darwin":
+            out = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=5).stdout
+            return int(out.strip()) / 1024 ** 3
+        if SYSTEM == "Linux":
+            with open("/proc/meminfo") as f:
+                for ln in f:
+                    if ln.startswith("MemTotal:"):
+                        return int(ln.split()[1]) / 1024 ** 2
+        if SYSTEM == "Windows":
+            import ctypes
+
+            class MemStatus(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + \
+                           [(n, ctypes.c_ulonglong) for n in ("total", "avail", "tpage", "apage", "tvirt", "avirt", "aext")]
+            m = MemStatus()
+            m.dwLength = ctypes.sizeof(MemStatus)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+            return m.total / 1024 ** 3
+    except Exception:
+        pass
+    return 0
+
+
+def _have(names, paths=()):
+    return any(shutil.which(n) for n in names) or any(os.path.exists(p) for p in paths)
+
+
+def host():
+    """What this computer is, and what is already installed that the setup can use."""
+    return {
+        "system": SYSTEM, "machine": MACHINE, "arm": ARM, "apple_silicon": SYSTEM == "Darwin" and ARM,
+        "ram_gb": round(host_ram_gb(), 1),
+        "qemu": _have(["qemu-system-aarch64"], ["/opt/homebrew/bin/qemu-system-aarch64", "/usr/local/bin/qemu-system-aarch64"])
+        if SYSTEM == "Darwin" else _have(["qemu-system-x86_64", "qemu-system-aarch64"]),
+        "utm": SYSTEM == "Darwin" and os.path.isdir("/Applications/UTM.app"),
+        "virtualbox": _have(["VBoxManage"], [r"C:\Program Files\Oracle\VirtualBox\VBoxManage.exe", "/Applications/VirtualBox.app"]),
+    }
+
+
+def recommend(h):
+    """The right way in for this computer: which instructions come first, which ISO it needs, and why."""
+    rec = {"iso": "llmos-arm64.iso" if h["arm"] else "llmos-x86_64.iso"}
+    if h["apple_silicon"]:
+        rec.update(section="apple-silicon", goal="vm", headline=(
+            "This is a Mac with Apple Silicon. Run LLM OS in a window on this Mac: these Macs can't start it "
+            "directly yet. The easiest way is the free app UTM."))
+    elif SYSTEM == "Darwin":
+        rec.update(section="intel-mac", goal="vm", headline=(
+            "This is an Intel Mac. Try LLM OS in a window first (the free app UTM). It can also start from a USB "
+            "stick and install next to macOS."))
+    elif SYSTEM == "Windows":
+        rec.update(section="pc", goal="usb", headline=(
+            "This is a Windows PC. Make a USB stick and start the PC from it to try LLM OS — nothing on this PC "
+            "changes. Or run it in a window with the free VirtualBox."))
+    else:
+        rec.update(section="pc", goal="vm", headline=(
+            "This is a Linux computer. Run LLM OS in a window (QEMU or virt-manager), or make a USB stick for any PC."))
+    if h["ram_gb"] and h["ram_gb"] < 8 and rec["goal"] == "vm":
+        rec["note"] = (f"This computer has {h['ram_gb']:.0f} GB of memory and LLM OS in a window needs 4 GB of it, "
+                       "so close other programs first; a USB stick on another PC avoids sharing memory.")
+    return rec
+
 
 # ----------------------------------------------------------------- release
 
@@ -69,6 +138,8 @@ def read_release():
     rel["platform"] = SYSTEM
     rel["downloads"] = downloads_dir()
     rel["python"] = platform.python_version()
+    rel["host"] = host()
+    rel["recommend"] = recommend(rel["host"])
     return rel
 
 
@@ -283,7 +354,21 @@ def yield_progress(n):
 
 # ----------------------------------------------------------------- other actions
 
+def _reveal(path):
+    """Show a file selected in Finder / Explorer / the file manager."""
+    if SYSTEM == "Darwin":
+        subprocess.Popen(["open", "-R", path])
+    elif SYSTEM == "Windows":
+        subprocess.Popen(f'explorer /select,"{path}"')
+    else:
+        subprocess.Popen(["xdg-open", os.path.dirname(path)])
+
+
 def open_target(what):
+    """The page's buttons. Only fixed targets: this folder, the ISO this computer needs, the launcher in this
+    folder, or the free virtual-machine apps' own download pages."""
+    h = host()
+    rec = recommend(h)
     try:
         if what == "folder":
             if SYSTEM == "Darwin":
@@ -292,12 +377,34 @@ def open_target(what):
                 os.startfile(DIST)  # noqa
             else:
                 subprocess.Popen(["xdg-open", DIST])
+        elif what == "iso":
+            path = os.path.join(DIST, rec["iso"])
+            if not os.path.exists(path):
+                return {"ok": False, "error": f"{rec['iso']} is not in this folder"}
+            _reveal(path)
+        elif what == "utm":
+            webbrowser.open(UTM_PAGE)
+        elif what == "virtualbox":
+            webbrowser.open("https://www.virtualbox.org/wiki/Downloads")
         elif what == "vm":
+            # The launcher in this folder is for Apple Silicon and needs QEMU; otherwise guide to a free app.
+            # (A .sh file double-clicked in Finder opens in a text editor, so it is started in Terminal here.)
+            if h["apple_silicon"] and h["qemu"]:
+                subprocess.Popen(["open", "-a", "Terminal", os.path.join(DIST, "run-llmos.sh")])
+                return {"ok": True, "message": "LLM OS is starting from a new Terminal window; its own window opens in a moment."}
             if SYSTEM == "Darwin":
-                launcher = os.path.join(DIST, "run-llmos.sh")
-                subprocess.Popen(["open", "-a", "Terminal", launcher])
-            else:
-                return {"ok": False, "error": "the VM launcher is for macOS; on Linux run: qemu-system-x86_64 -m 4096 -enable-kvm -cdrom llmos-x86_64.iso"}
+                return {"ok": False, "guide": "utm", "error": (
+                    f"The easiest way: install the free app UTM (button below), then follow “Try it in a window” "
+                    f"with {rec['iso']}." + (" If you use Homebrew, `brew install qemu` and press this button again "
+                                             "to use the built-in launcher instead." if h["apple_silicon"] else ""))}
+            if SYSTEM == "Windows":
+                return {"ok": False, "guide": "virtualbox", "error": (
+                    f"Install the free VirtualBox (button below), then follow “Try it in a window” with {rec['iso']}.")}
+            return {"ok": False, "guide": "qemu", "error": (
+                f"Open {rec['iso']} in GNOME Boxes or virt-manager, or run: "
+                f"qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cdrom {rec['iso']}")}
+        else:
+            return {"ok": False, "error": "unknown action"}
         return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -443,7 +550,9 @@ def main():
         return
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     url = f"http://127.0.0.1:{srv.server_address[1]}/"
-    print(f"LLM OS Exporter: {url}  (close this window or press Ctrl+C to quit)")
+    print("LLM OS Setup is open in your web browser.")
+    print(f"  If it did not open, paste this into the browser: {url}")
+    print("  Keep this window open while you use it; close it (or press Ctrl+C) when you are done.")
     threading.Timer(0.4, lambda: webbrowser.open(url)).start()
     try:
         srv.serve_forever()

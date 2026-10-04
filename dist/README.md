@@ -1,20 +1,70 @@
 # LLM OS
 
-An operating system you talk to. It boots to a desk with one bar at the
-bottom; you type (or say) what you want — *"what's using my disk?"*, *"make
-everything purple"*, *"every morning at 8, give me the weather"*, *"play some
-lofi"*, *"get me to inbox zero"* — and the computer does it, using a language
-model that runs entirely on the machine. The interface is generated: what you
-ask for appears as windows the OS composes on the spot (a settings panel, your
-inbox, a photo, a research result with its sources), in the colours, corners
-and language you chose. No apps to find, no menus, no accounts, nothing
-leaves the computer unless a request needs the internet and you allowed it.
+An operating system you talk to. You type or say what you want, and a
+language model running on your own computer does it. Free, private, open
+source.
 
-**Images:** `llmos-arm64.qcow2` (Apple Silicon Macs, arm64 VMs) and
-`llmos-x86_64.qcow2` (ordinary PCs and laptops, BIOS or UEFI, installable next
-to macOS on Intel Macs or next to Windows). Checksums in `SHA256SUMS`.
+## Start here
 
-## Run it (macOS, Apple Silicon)
+**Double-click the "1 - START HERE" file for your computer.** It's at the top
+of this folder:
+
+| Your computer | Double-click |
+|---|---|
+| Mac | **1 - START HERE (Mac).command** |
+| Windows | **1 - START HERE (Windows).bat** |
+| Linux | **1 - START HERE (Linux).sh** |
+
+That opens **LLM OS Setup** in your web browser. It recognises your computer
+and recommends the easiest way in:
+
+- **Try it in a window** — runs inside the computer you have, like an app.
+  Nothing changes. The best first step. (On a Mac with Apple Silicon, this is
+  the only way for now.)
+- **Make a USB stick** — start any PC from it to try LLM OS.
+- **Install it** — on its own or next to Windows or macOS.
+- **Just save the ISO** — to keep or share.
+
+**Want to be guided?** Give the file **"2 - Set up with AI.md"** to an AI
+assistant (Claude, ChatGPT, …) and say *"Read this and help me set up LLM
+OS."* It walks you through everything and asks before changing anything.
+
+If the folder is a .zip, unzip it first (Windows: right-click → **Extract
+All**).
+
+**The first time you open START HERE**, your computer may be cautious:
+
+| You see | Do this |
+|---|---|
+| Mac: "cannot be opened" or "Apple could not verify…" | Right-click (Control-click) the file → **Open** → **Open**. |
+| Mac: "install the command line developer tools?" | Click **Install** (Apple's free Python), wait, then open START HERE again. |
+| Windows: "Windows protected your PC" | Click **More info** → **Run anyway**. |
+| Windows: Python isn't installed | START HERE offers to install it; then open START HERE again. |
+| The browser didn't open | Copy the `http://127.0.0.1:…` address from the small text window into your browser. |
+
+---
+
+## What it is
+
+LLM OS boots to a desk with one bar at the bottom; you type (or say) what you
+want — *"what's using my disk?"*, *"make everything purple"*, *"every morning
+at 8, give me the weather"*, *"play some lofi"*, *"get me to inbox zero"* — and
+the computer does it, using a language model that runs entirely on the
+machine. The interface is generated: what you ask for appears as windows the
+OS composes on the spot (a settings panel, your inbox, a photo, a research
+result with its sources), in the colours, corners and language you chose. No
+apps to find, no menus, no accounts, nothing leaves the computer unless a
+request needs the internet and you allowed it.
+
+**Files:** `llmos-arm64.iso` and `llmos-x86_64.iso` are the bootable ISOs
+(Apple Silicon Macs and ARM PCs / ordinary PCs and Intel Macs).
+`llmos-arm64.qcow2` and `llmos-x86_64.qcow2` are ready-made virtual-machine
+disks. Fingerprints are in `SHA256SUMS`.
+
+## Advanced: start it from a terminal (Mac with Apple Silicon)
+
+This is what **Try it in a window** in LLM OS Setup does when QEMU is
+installed; it runs the language model on the Mac's graphics chip.
 
 ```bash
 brew install qemu llama.cpp     # llama.cpp is optional: it enables host-GPU mode
@@ -295,8 +345,31 @@ named files that runs `npx -y @modelcontextprotocol/server-filesystem ~`". Turn
 them on or off, or remove them, the same way. A local connector keeps data
 here; an online one follows your internet setting.
 
-Speech‑to‑text is whisper.cpp (`base` model) on device; speech out is
-espeak‑ng (`"read your replies aloud"`).
+### Dictation anywhere (Super+D)
+
+Typing isn't always best. Press **Super+D** anywhere — in a field on the desk,
+the command bar, a terminal, a browser, any program — speak, then pause, and
+your words are typed where the cursor is. It's free and runs entirely on this
+computer: the microphone is open only while you talk, whisper.cpp transcribes,
+and the compositor's virtual keyboard types the result. A chime marks the start
+and the end; the desk shows *Dictating…* without stealing focus from where
+you're typing. (`llmos dictate` does the same from a terminal.)
+
+The speech model is yours to choose, in the **Voice** section of the Models
+screen, each with its accuracy, speed, size, memory, strengths and drawbacks:
+
+| Model | Size | Best for |
+|---|---|---|
+| Whisper Tiny | ~78 MB | very old machines; fastest, least accurate |
+| Whisper Base | ~148 MB | ships with the OS; quick and light |
+| Whisper Small | ~0.5 GB | clearly better than Base, still light |
+| **Whisper large‑v3‑turbo** | ~0.6 GB | the best dictation: near large‑v3 accuracy, several times faster, 99+ languages |
+
+Say "download the turbo voice model" then "use the turbo voice model", or tap
+**Download** and **Use**. Base is pinned by SHA‑256 and stays as the fallback;
+every downloaded model is checked against the SHA‑256 Hugging Face publishes for
+that exact file before it is ever used. The same model also powers the
+microphone button. Speech out is espeak‑ng (`"read your replies aloud"`).
 
 ## Requirements
 

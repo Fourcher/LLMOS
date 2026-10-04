@@ -225,6 +225,14 @@ CASES = {
     "show me the conduct": ("edit_conduct", {"action": "open"}),
     "reset the conduct to default": ("edit_conduct", {"action": "reset"}),
     "reset the conduct": ("edit_conduct", {"action": "reset"}),
+    # speech-to-text (voice) models
+    "use the turbo voice model": ("manage_voice", {"action": "use", "model": "turbo"}),
+    "download the turbo voice model": ("manage_voice", {"action": "download", "model": "turbo"}),
+    "download the best speech model": ("manage_voice", {"action": "download", "model": "best"}),
+    "switch to the small dictation model": ("manage_voice", {"action": "use", "model": "small"}),
+    "remove the small voice model": ("manage_voice", {"action": "remove", "model": "small"}),
+    "show the voice models": ("manage_voice", {"action": "list"}),
+    "use gemma 4 e2b": ("manage_models", {"action": "use", "model": "gemma-4-e2b"}),   # still the language model
     "balanced mode": ("change_setting", {"setting": "autonomy", "value": "balanced"}),
     "ask before deleting things": ("change_setting", {"setting": "autonomy", "value": "balanced"}),
     "ask me before every change": ("change_setting", {"setting": "autonomy", "value": "hands-on"}),

@@ -974,6 +974,48 @@ def manage_models(a, ctx):
     return "error: unknown action"
 
 
+@tool("manage_voice", "Speech-to-text models, used by the microphone and by system-wide dictation (the owner presses "
+      "Super+D anywhere, speaks, pauses, and the words are typed at the cursor). action 'list' shows them; 'download' "
+      "fetches one (verified by SHA-256); 'use' switches to an installed one; 'remove' deletes a downloaded one. Models: "
+      "tiny (fastest), base (ships with the OS), small (better), turbo (Whisper large-v3-turbo: the most accurate, best "
+      "for dictation).",
+      {"action": {"type": "string", "enum": ["list", "download", "use", "remove"]},
+       "model": {"type": "string", "description": "tiny, base, small or turbo"}}, ["action"],
+      risk=lambda a: {"list": SAFE, "download": CHANGE, "use": CHANGE, "remove": DESTRUCTIVE}.get(a.get("action"), SAFE),
+      network=lambda a: a.get("action") == "download")
+def manage_voice(a, ctx):
+    from . import voice
+    act, vid = a.get("action", "list"), a.get("model", "")
+    try:
+        if act == "list":
+            if getattr(ctx, "is_desk", False):
+                ctx.show_panel("models")
+            cur = voice.active_voice()
+            inst = {m["id"] for m in voice.installed_voice()}
+            rows = [f"{m['id']}: {m['name']} — {m['accuracy']} accuracy, {m['speed']}, {m['size'] / 1e6:.0f} MB "
+                    f"[{'in use' if cur and m['id'] == cur['id'] else 'installed' if m['id'] in inst else 'not downloaded'}]"
+                    for m in voice.voice_catalog()]
+            return "\n".join(rows) + "\nDictate anywhere with Super+D."
+        if act == "download":
+            m = voice.voice_by_id(vid)
+            if not m:
+                return f"unknown voice model '{vid}' (tiny, base, small or turbo)"
+            ctx.status(f"downloading {m['name']} ({m['size'] / 1e6:.0f} MB) from huggingface.co/{m['repo']}")
+            voice.download_voice(vid, ctx.progress)
+            return f"downloaded and verified {m['name']}; say 'use the {m['id']} voice model' to switch to it"
+        if act == "use":
+            m = voice.use_voice(vid)
+            if getattr(ctx, "is_desk", False):
+                ctx.redraw()
+            return f"speech is now transcribed with {m['name']}, for the microphone and for Super+D dictation"
+        if act == "remove":
+            m = voice.remove_voice(vid)
+            return f"removed {m['name']}"
+    except (ValueError, RuntimeError, OSError) as e:
+        return f"error: {e}"
+    return "error: unknown action"
+
+
 # ------------------------------------------------------------ email
 
 @tool("mail_setup", "Set up the owner's email account (IMAP + SMTP). Address and password are usually enough: "

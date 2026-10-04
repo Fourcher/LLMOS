@@ -43,16 +43,22 @@ if __name__ == "__main__":
                 print(devices.volume(delta=int(v)) if v[:1] in "+-" else devices.volume(int(v)))
         except Exception as e:
             print(e)
+    elif arg == "dictate":                    # system-wide dictation (the labwc keybind Super+D)
+        from llmos import desk, voice
+
+        def tell(*parts):
+            try:
+                desk.control(["dictating", *[str(p) for p in parts]])
+            except OSError:
+                pass                          # no desk running (console): the chime is the feedback
+        voice.chime()
+        text, note = voice.dictate(lambda state: tell(state))
+        voice.chime()
+        tell("done", note)
+        print(text or note)
     elif arg == "version":
-        from llmos import VERSION
-        rel = {}
-        try:
-            for line in open("/etc/llmos-release"):
-                k, _, v = line.strip().partition("=")
-                rel[k] = v
-        except OSError:
-            pass
-        print(f"LLM OS {rel.get('VERSION', VERSION)}" + (f" (build {rel['BUILD']}, {rel.get('ARCH', '')}{', live' if rel.get('MEDIUM') == 'live' else ''})" if rel.get("BUILD") else ""))
+        from llmos import version_line
+        print(version_line())
     else:
-        sys.stderr.write("usage: llmos [console|desk|say TEXT|desk-state|scheduler|serve-argv|brightness|volume|version]\n")
+        sys.stderr.write("usage: llmos [console|desk|say TEXT|desk-state|scheduler|serve-argv|brightness|volume|dictate|version]\n")
         sys.exit(2)

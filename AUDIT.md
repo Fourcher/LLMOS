@@ -54,6 +54,14 @@ timestamps vary between runs.
 ## Trust boundaries
 
 - The owner's own requests are trusted; the OS runs as root for them.
+- Dictation (Super+D, from 1.4) is started only by the owner's own keypress
+  (a compositor keybind running `llmos dictate`), records only until the speaker
+  pauses, transcribes on the machine, and types the result into the focused
+  window through the compositor's virtual keyboard (`wtype`). It types the words
+  without pressing Enter, so text dictated into a terminal is never run by
+  itself. Nothing leaves the computer. Speech models other than the shipped
+  Base are downloaded only on request and verified against the SHA-256 that
+  Hugging Face publishes for the exact file; Base is pinned in the image.
 - The system prompt is in two parts: a fixed operational part, and a conduct
   section the owner controls (`/etc/llmos/conduct.txt`, from 1.3.1). The OS
   ships a safe default (two built-in variants, picked by the guidance setting,

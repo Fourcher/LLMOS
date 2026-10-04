@@ -1,0 +1,34 @@
+{
+  "default_for": {"Darwin": "apple-silicon", "Windows": "pc", "Linux": "vm"},
+  "sections": [
+    {"id": "vm", "title": "Try it in a window (a virtual machine) — the easiest start", "steps": [
+      "Use <b>llmos-arm64.iso</b> on a Mac with Apple Silicon (M1–M4) or an ARM PC, and <b>llmos-x86_64.iso</b> on everything else (Intel Macs and ordinary PCs). The button “Show the ISO this computer needs” points at the right one.",
+      "<b>Mac:</b> install the free app <b>UTM</b> from <a href=\"https://mac.getutm.app/\" style=\"color:#b9a9ff\">mac.getutm.app</a> (open the download and drag UTM into Applications). In UTM choose <b>Create a New Virtual Machine → Virtualize → Linux</b>; under <i>Boot ISO Image</i> click <b>Browse</b> and pick the ISO; memory <b>4096 MB</b> (6144 if the Mac has 16 GB or more), <b>4</b> CPU cores, storage <b>32 GB</b>; skip the shared folder, <b>Save</b>, then press the big <b>▶ Play</b> button.",
+      "<b>Windows:</b> install the free <b>VirtualBox</b> from <a href=\"https://www.virtualbox.org/wiki/Downloads\" style=\"color:#b9a9ff\">virtualbox.org</a>. Click <b>New</b>, name it LLM OS, choose the ISO, Type <b>Linux</b>, Version <b>Other Linux (64-bit)</b>, and tick <b>Skip Unattended Installation</b>; give it <b>4096 MB</b> memory, <b>4</b> processors and a <b>32 GB</b> disk; <b>Finish</b>, then <b>Start</b>.",
+      "<b>Linux:</b> open the ISO in <b>GNOME Boxes</b> (+ → choose the ISO → Create) or <b>virt-manager</b>, with 4 GB memory, or run <code>qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cdrom llmos-x86_64.iso</code>.",
+      "LLM OS starts in the window and runs its set-up: your language, name and time zone, then six sliders. Nothing on your computer changes; LLM OS lives only inside the window.",
+      "To keep it there between restarts, say <b>“install LLM OS”</b> inside the window: it installs onto the virtual machine's own disk, never onto your computer. Then remove the ISO from the virtual machine's CD drive (in its settings) so it starts from that disk."
+    ], "note": "If the window stays black, change the virtual machine's display: in UTM pick <i>virtio-ramfb</i> (Display settings); in VirtualBox pick <i>VMSVGA</i> with 128 MB video memory. Give it at least 4 GB of memory; with less, close other programs first."},
+    {"id": "apple-silicon", "title": "Mac with Apple Silicon (M1, M2, M3, M4)", "steps": [
+      "These Macs can't start LLM OS directly yet (that needs Asahi Linux support for your Mac; it is tracked in BUILD.md). Run it <b>in a window</b> on this Mac instead — see <i>Try it in a window</i> above: the free app <b>UTM</b> with <b>llmos-arm64.iso</b> is the easiest way.",
+      "Faster option for people comfortable with Homebrew: <code>brew install qemu llama.cpp</code>, then press <b>Try it in a window</b> at the top of this page. It starts LLM OS with the language model running on the Mac's own graphics chip — several times faster at reading your requests — still entirely on this Mac.",
+      "To put LLM OS on a <i>different</i> computer (a PC or an Intel Mac), make a USB stick here with <b>llmos-x86_64.iso</b> and see <i>PC or laptop</i> below."
+    ], "note": "Nothing leaves your Mac in either way: the virtual machine has no access to your files unless you share a folder, and the language model runs on this computer."},
+    {"id": "pc", "title": "PC or laptop (start from a USB stick, install next to Windows)", "steps": [
+      "Write the ISO to a USB stick with <i>Write to a USB stick</i> on this page (8 GB or more; <b>the stick is erased</b>).",
+      "If you want to keep Windows: in Windows, open Disk Management, right-click the Windows partition, choose <b>Shrink Volume</b> and free at least 32 GB. Leave the space unallocated. Then turn off BitLocker or write down your recovery key.",
+      "Plug the stick in, restart, and open the boot menu (usually F12, F11, Esc or F8 while the logo shows; on some machines Del/F2 opens the firmware, where you pick the stick under <i>Boot</i>). If the stick is not offered, turn off <b>Secure Boot</b> in the firmware; UEFI and legacy/BIOS modes both work.",
+      "LLM OS starts from the stick and runs its set-up: your language, name and time zone, then six sliders (how much it asks, internet, where it thinks, model size, guidance, screen). Try it as long as you like; nothing is written to the computer yet.",
+      "To install, say <b>“install LLM OS alongside Windows”</b> (uses the free space you made) or <b>“erase the whole disk and install LLM OS”</b>. It shows a plan with the exact partitions and asks once; then it copies itself (a few minutes) and offers a restart.",
+      "After the restart a boot menu lists LLM OS and Windows. Unplug the stick."
+    ], "note": "Minimum 4 GB RAM and 2 cores; 8 GB and 4 cores are comfortable. Wi-Fi is set up during the first run (when the sliders leave the internet on) or by saying “connect to Wi-Fi &lt;name&gt; with password …”."},
+    {"id": "intel-mac", "title": "Intel Mac (2010 onwards)", "steps": [
+      "Easiest first: try it <b>in a window</b> with the free app UTM and <b>llmos-x86_64.iso</b> — see <i>Try it in a window</i> above.",
+      "To start it directly: write <b>llmos-x86_64.iso</b> to a USB stick with this page.",
+      "To dual boot: in macOS open <b>Disk Utility</b>, select the internal disk, click <b>Partition</b>, add a partition of at least 32 GB and apply; then select that new partition and click <b>–</b> (remove) so the space stays <i>free</i> (unallocated): LLM OS installs into free space, never into an existing partition. On Macs with a T2 chip, also open <b>Startup Security Utility</b> (hold Cmd+R at start, Utilities menu) and allow booting from external media.",
+      "Plug the stick in, restart holding <b>Option (⌥)</b>, and choose the orange <i>EFI Boot</i> entry.",
+      "Try LLM OS from the stick. When ready, say <b>“install LLM OS alongside macOS”</b>; it uses the free space you made, keeps macOS and the EFI partition, and asks once before writing.",
+      "Restart holding Option to choose between macOS and LLM OS."
+    ], "note": "Back up your Mac (Time Machine) before changing its disk."}
+  ]
+}
