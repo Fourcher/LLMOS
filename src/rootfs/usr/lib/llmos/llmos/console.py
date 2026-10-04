@@ -94,6 +94,13 @@ class ConsoleCtx:
                 "@modelcontextprotocol/server-filesystem /root'\" or \"add a connector named api at https://…/mcp\". "
                 "On the desk a form opens instead.")
 
+    def edit_conduct(self):
+        return ("The conduct section of the assistant's own instructions is the plain-text file "
+                "/etc/llmos/conduct.txt. Open it in an editor (say 'open a terminal', then `nano "
+                "/etc/llmos/conduct.txt`); whatever it holds replaces the built-in conduct. Delete the file to "
+                "return to the default. This is the one part of the system prompt you control. On the desk an "
+                "editor opens instead.")
+
     def interactive(self, cmd):
         return self.c.run_interactive(cmd)
 

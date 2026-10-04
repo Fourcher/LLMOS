@@ -210,13 +210,14 @@ def _block(b):
             name = re.sub(r"[^a-z0-9_]", "", str(f.get("name", "")).lower())
             if not name:
                 continue
-            fields.append({"name": name, "label": _s(f.get("label") or name, 80),
-                           "kind": _s(f.get("kind") or f.get("type") or "text", 20),
-                           "value": _s(f.get("value"), 300), "placeholder": _s(f.get("placeholder"), 120),
+            kind = _s(f.get("kind") or f.get("type") or "text", 20)
+            fields.append({"name": name, "label": _s(f.get("label") or name, 80), "kind": kind,
+                           "value": _s(f.get("value"), 8000 if kind == "textarea" else 300),
+                           "placeholder": _s(f.get("placeholder"), 120),
                            "options": [_s(o, 80) for o in _list(f.get("options"))[:40]]})
         submit = _action(b.get("submit") if isinstance(b.get("submit"), (dict, str)) else {"label": "OK", "say": "ok"})
         post = str(b.get("submit", {}).get("post", "")) if isinstance(b.get("submit"), dict) else ""
-        if submit is not None and post in ("vault.create", "cloud.setup", "connector.add"):
+        if submit is not None and post in ("vault.create", "cloud.setup", "connector.add", "conduct.save"):
             submit["post"] = post
         if not fields or not submit:
             return None

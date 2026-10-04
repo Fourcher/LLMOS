@@ -371,6 +371,20 @@ _CONN_ADD = re.compile(r"^\s*(?:please\s+)?(?:add|install|set\s+up|create)\s+(?:
                        r"(?:\s+(?:that\s+runs|running|with\s+(?:the\s+)?command)\s+(?P<cmd>.+?)|\s+(?:at|from|url)\s+(?P<url>https?://\S+))?\s*[.!]?\s*$", re.I)
 
 
+# "pop the hood": edit the conduct section of the system prompt (the owner's, not the model's, to change)
+_CONDUCT = re.compile(r"^\s*(?:please\s+)?(?:"
+                      r"(?P<open>(?:edit|change|customi[sz]e|open|view|show|see|tweak)\s+(?:me\s+)?(?:the\s+|my\s+|its\s+)?(?:conduct|safety(?:\s+(?:rules|settings|section|part))?|system\s+prompt|rules|guidelines|instructions)(?:\s+(?:section|editor|rules|settings|text))?"
+                      r"|pop\s+the\s+hood(?:\s+on\s+(?:the\s+)?(?:conduct|safety|rules))?)"
+                      r"|(?P<reset>(?:reset|restore|revert)\s+(?:the\s+)?(?:conduct|safety\s+rules|rules)(?:\s+(?:to\s+)?(?:the\s+)?default)?))\s*[.!]?\s*$", re.I)
+
+
+def _conduct(text):
+    m = _CONDUCT.match(text)
+    if m:
+        return ("edit_conduct", {"action": "reset" if m.group("reset") else "open"})
+    return None
+
+
 def _connector(text):
     m = _CONN_TOGGLE.match(text)
     if m:
@@ -818,6 +832,9 @@ def match(text):
         r = fn(t)
         if r:
             return r
+    cd = _conduct(t)
+    if cd:
+        return cd
     cn = _connector(t)
     if cn:
         return cn

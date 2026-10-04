@@ -790,6 +790,35 @@ def _fsize(f):
     return int((f.get("lfs") or {}).get("size") or f.get("size") or 0)
 
 
+@tool("edit_conduct",
+      "Open the owner's editor for the assistant's conduct — the 'under the hood' part of your own system prompt "
+      "that says how you treat the owner's requests and the one boundary (never help harm other people). action "
+      "'open' puts the current text on screen for the OWNER to edit (only they can change it, not you); 'show' "
+      "returns the current text; 'reset' restores the built-in default. You cannot set the text yourself.",
+      {"action": {"type": "string", "enum": ["open", "show", "reset"]}}, [],
+      risk=lambda a: SECURITY if a.get("action") == "reset" else SAFE)
+def edit_conduct(a, ctx):
+    from . import agent
+    act = str(a.get("action", "open")).lower().strip()
+    if act == "show":
+        return "The conduct section in force:\n\n" + agent.conduct_text() + \
+            ("\n\n(this is the owner's own text)" if agent.custom_conduct() else "\n\n(this is the built-in default)")
+    if act == "reset":
+        try:
+            os.unlink(config.conduct_path())
+        except OSError:
+            pass
+        store.audit("edit_conduct", {}, "conduct reset to default", who="owner")
+        if getattr(ctx, "is_desk", False):
+            ctx.redraw()
+        return "the conduct section is back to the built-in default"
+    if hasattr(ctx, "edit_conduct"):
+        return ctx.edit_conduct()
+    return ("to change the conduct, edit the plain-text file /etc/llmos/conduct.txt — whatever is in it replaces the "
+            "built-in conduct section; delete it to go back to the default. (This is the one part of the system "
+            "prompt the owner controls.)")
+
+
 def _policy_risk(setting, value):
     """Only LOOSENING a security policy, relative to what is set now, needs
     the owner's confirmation (more autonomy, more internet, Tor off).

@@ -46,6 +46,13 @@ def host_model_id():
         return ""
 
 
+def conduct_path():
+    """The owner-editable conduct section of the assistant's system prompt (plain text). Public, like
+    settings.json, so it can be edited from a terminal too. Absent by default (the OS uses a built-in
+    default); present only when the owner has written their own. The OS never writes it on its own."""
+    return os.path.join(ETC, "conduct.txt")
+
+
 def home():
     return os.environ.get("LLMOS_HOME") or os.path.expanduser("~")
 

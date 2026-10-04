@@ -54,6 +54,14 @@ timestamps vary between runs.
 ## Trust boundaries
 
 - The owner's own requests are trusted; the OS runs as root for them.
+- The system prompt is in two parts: a fixed operational part, and a conduct
+  section the owner controls (`/etc/llmos/conduct.txt`, from 1.3.1). The OS
+  ships a safe default (two built-in variants, picked by the guidance setting,
+  both keeping the no-harm-to-others boundary) and never writes that file
+  itself. The owner edits it deliberately, from Settings or a terminal; the
+  assistant can open or display it through the `edit_conduct` tool but cannot
+  set its text, so the model can never rewrite its own rules. A model-initiated
+  reset to the default is a SECURITY-level action (it confirms).
 - The model's output is not trusted: every tool call passes the autonomy
   policy (`needs_confirm`), network use passes the internet setting, window
   specs pass `uispec.normalize` (only `http(s)`, `file` and absolute paths;

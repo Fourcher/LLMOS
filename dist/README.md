@@ -254,6 +254,19 @@ never claims an action it didn't perform, never invents facts, quotes or
 sources, and says plainly when it can't do something (for example, no
 backlight to dim in a VM).
 
+**Under the hood: you set the conduct.** That paragraph above is not fixed. The
+"conduct" section of the assistant's own instructions — how it treats your
+requests, and the one boundary — is yours to edit. *Settings → Conduct* has
+**Edit** (a text box with the current wording) and **Reset to default**, or say
+"edit the conduct" / "pop the hood"; it is the plain‑text file
+`/etc/llmos/conduct.txt`, so you can edit it from a terminal too. Change it
+however you like — it is your machine. The OS ships a sensible default (the
+default keeps the no‑harm‑to‑others line) and never rewrites this itself; the
+assistant can show it to you but only you can change it, so it can't loosen its
+own rules behind your back. The *Guidance* setting picks between two built‑in
+defaults ("follows my instructions" or "standard caution") if you'd rather not
+write your own.
+
 ## Models
 
 Ships with **Ministral 3 3B** (Mistral AI, Apache‑2.0, ~2.1 GB, Q4_K_M). The

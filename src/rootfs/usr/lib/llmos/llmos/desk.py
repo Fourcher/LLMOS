@@ -247,6 +247,20 @@ class DeskCtx:
             {"type": "text", "text": T("d_connector_form_hint", area="settings"), "dim": True}]})
         return "a connector form is on the owner's screen; they fill it in there. Say one sentence at most."
 
+    def edit_conduct(self):
+        """"pop the hood": the owner edits the conduct section of the system prompt. The text is theirs — it
+        comes from their form submission (nonced) and the OS never writes it on its own."""
+        import secrets
+        from . import agent
+        self.d.conduct_nonce = secrets.token_hex(12)
+        self.d.open_window({"id": "conduct-form", "replace": True, "title": T("d_conduct_title", area="settings"), "size": "m", "slot": "cascade", "blocks": [
+            {"type": "text", "text": T("d_conduct_intro", area="settings")},
+            {"type": "form", "fields": [{"name": "text", "label": T("d_conduct_label", area="settings"), "kind": "textarea", "value": agent.conduct_text()},
+                                        {"name": "nonce", "kind": "hidden", "value": self.d.conduct_nonce}],
+             "submit": {"label": T("d_conduct_save", area="settings"), "post": "conduct.save"}},
+            {"type": "text", "text": T("d_conduct_hint", area="settings"), "dim": True}]})
+        return "the conduct editor is on the owner's screen; they edit it there. Say one sentence at most."
+
     def interactive(self, cmd):
         return self.d.run_in_terminal(cmd)
 
@@ -547,6 +561,30 @@ class Desk:
                     self.emit({"t": "toast", "text": "", "sticky": "conn"})
                     self.emit({"t": "toast", "text": note, "long": True})
                 threading.Thread(target=go, daemon=True).start()
+        elif t == "conduct.save":
+            if not getattr(self, "conduct_nonce", None) or msg.get("nonce") != self.conduct_nonce:
+                sys.stderr.write("desk: ignored a conduct.save that did not come from the conduct editor\n")
+            else:
+                self.conduct_nonce = None
+                self.close_window("conduct-form")
+                text = str(msg.get("text", "")).strip()
+                try:
+                    if text:
+                        with open(config.conduct_path(), "w", encoding="utf-8") as f:
+                            f.write(text + "\n")
+                        note = T("d_conduct_saved")
+                    else:
+                        try:
+                            os.unlink(config.conduct_path())
+                        except OSError:
+                            pass
+                        note = T("d_conduct_reset")
+                    store.audit("edit_conduct", {"chars": len(text)}, "conduct edited by owner" if text else "conduct reset", who="owner")
+                    if "panel-settings" in self.windows:
+                        self.open_panel("settings")
+                except OSError as e:
+                    note = f"{T('error')}: {e}"
+                self.emit({"t": "toast", "text": note, "long": True})
         elif t == "dialog":
             d = self.dialogs.get(str(msg.get("id")))
             if d:
@@ -841,6 +879,10 @@ class Desk:
                 {"type": "choices", "selected": L("v_guidance_standard") if s.get("guidance") == "standard" else L("v_guidance_owner"),
                  "items": [{"label": L("v_guidance_owner"), "say": "follow my instructions on my machine"},
                            {"label": L("v_guidance_standard"), "say": "keep standard assistant caution"}]},
+                {"type": "heading", "text": L("s_conduct")},
+                {"type": "text", "text": L("s_conduct_desc") + " " + (L("v_conduct_custom") if agent.custom_conduct() else L("v_conduct_default")), "dim": True},
+                {"type": "buttons", "items": [{"label": L("d_conduct_edit"), "say": "edit the conduct"}] +
+                 ([{"label": L("d_conduct_reset_btn"), "say": "reset the conduct to the default", "danger": True}] if agent.custom_conduct() else [])},
                 {"type": "divider"},
                 {"type": "kv", "rows": [
                     [L("s_model"), (models.active() or {}).get("name", "—") + (" · host GPU" if models.host_mode() else "")],

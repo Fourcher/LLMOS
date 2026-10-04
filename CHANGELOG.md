@@ -4,6 +4,20 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.3.1 — 2026-10-03
+- "Under the hood": the owner can edit the conduct section of the assistant's
+  own system prompt — the part that says how it treats the owner's requests and
+  the one boundary (never help harm other people). Settings → Conduct has Edit
+  (a text editor on screen) and Reset to default; "edit the conduct" or "pop
+  the hood" open it in words; the file is `/etc/llmos/conduct.txt`, plain text,
+  editable from a terminal too. The OS ships two built-in defaults (picked by
+  the guidance setting) and never edits this text itself — only the owner does,
+  deliberately. The assistant can open or show the conduct but cannot rewrite
+  its own rules; the default keeps the no-harm-to-others boundary. This is the
+  owner-controlled answer to tuning the obedience behaviour: the end user makes
+  the choice, on their own machine.
+- Form fields can be multi-line (textarea), used by the conduct editor.
+
 ## 1.3.0 — 2026-10-03
 - Set-up is a quiz: six sliders (how much it asks, internet, where it thinks,
   on-device model size, guidance, screen) choose the autonomy level, the

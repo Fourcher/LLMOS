@@ -590,7 +590,8 @@
           let inp;
           if (f.name === "t") continue;                                    // reserved: the message type
           if (f.kind === "hidden") { inp = el("input"); inp.type = "hidden"; inp.value = f.value || ""; inputs[f.name] = inp; e.append(inp); continue; }
-          if (f.options && f.options.length) { inp = el("select", "", f.options.map(o => `<option${o === f.value ? " selected" : ""}>${esc(o)}</option>`).join("")); }
+          if (f.kind === "textarea") { inp = el("textarea", "mono"); inp.value = f.value || ""; inp.placeholder = f.placeholder || ""; inp.rows = 13; inp.spellcheck = false; }
+          else if (f.options && f.options.length) { inp = el("select", "", f.options.map(o => `<option${o === f.value ? " selected" : ""}>${esc(o)}</option>`).join("")); }
           else { inp = el("input"); inp.type = f.kind === "password" ? "password" : f.kind === "email" ? "email" : "text"; inp.value = f.value || ""; inp.placeholder = f.placeholder || ""; inp.autocomplete = "off"; }
           inputs[f.name] = inp; lab.append(inp); e.append(lab);
         }
