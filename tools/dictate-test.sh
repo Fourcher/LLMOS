@@ -11,9 +11,9 @@ python3 -c "import sys; sys.path.insert(0,'/usr/lib/llmos'); from llmos import v
 echo "--- dictation into a focused terminal"
 rm -f /tmp/typed.txt
 foot -a dictate-target sh -c 'read -r line; printf "%s\n" "$line" > /tmp/typed.txt' &
-sleep 4
+sleep $((4 * ${SLOW:-1}))
 llmos dictate
-sleep 1
+sleep ${SLOW:-1}
 wtype -k Return
-sleep 2
+sleep $((2 * ${SLOW:-1}))
 echo "TYPED_INTO_TERMINAL: $(cat /tmp/typed.txt 2>/dev/null || echo NOTHING)"
