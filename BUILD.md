@@ -32,7 +32,9 @@ they were last built from the OS source (`src/`). Two rules keep that honest:
   and both ISOs, then writes `dist/SHA256SUMS` and `dist/RELEASE.json` as the
   single authoritative step, and finishes by printing the freshness result.
   `tools/release.sh --smoke` also runs the dictation and live‑ISO smokes on
-  the fresh artifacts. Run it whenever `src/` changes.
+  the fresh artifacts. Run it whenever `src/` changes. It can build one
+  architecture only — `tools/release.sh arm64` (or `x86`) — when you don't need
+  the other pair.
 - **Staleness is detectable:** every build records, in `dist/RELEASE.json`, the
   commit and a content digest of `src/` it was built from (`tools/buildstamp.py`).
   `tools/check-fresh.py` recomputes the current digest and prints **FRESH** or
@@ -43,6 +45,12 @@ they were last built from the OS source (`src/`). Two rules keep that honest:
 Only `src/` goes into an image, so only changes there require a rebuild.
 Changes under `dist/setup/` (the setup tool) and `tools/` (tests) ship or run
 as‑is and do **not** make the images stale — `check-fresh.py` ignores them.
+
+Building an image or ISO runs a full Linux VM under QEMU (it `mksquashfs`es a
+booted system and lays down GRUB), so it happens here on the build machine, not
+on an end user's computer. The setup tool (`dist/setup/`) only *uses* an
+already‑built artifact — writing the ISO to a stick, or booting the qcow2 — it
+does not compile one.
 
 ## Build procedure
 
@@ -102,7 +110,9 @@ keeps the git remote (`run/origin.git`) and the shipped `dist/` images.
 `tools/cleanup.sh --models` additionally removes model files kept only for
 evaluation (large and re‑downloadable), keeping the default model the build and
 smokes need; `--cache` empties `build/cache` (the Alpine ISOs and model fetch
-cache, re‑downloaded on the next build); `--all` does both.
+cache, re‑downloaded on the next build); `--dist` drops the built images/ISOs
+themselves (they are reproducible outputs — `tools/release.sh` rebuilds them,
+so they need not sit on disk between releases); `--all` does all three.
 
 ## Design in one page
 

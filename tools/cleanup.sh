@@ -6,12 +6,14 @@
 #                               keeping the default model the build and smokes need.
 #   tools/cleanup.sh --cache    also empty build/cache (the Alpine ISOs + model fetch cache); the next build
 #                               re-downloads them.
-#   tools/cleanup.sh --all      --models and --cache together.
+#   tools/cleanup.sh --dist     also drop the built images/ISOs in dist/ (reclaimable; tools/release.sh
+#                               rebuilds them). The small tracked files (RELEASE.json, catalog, setup) stay.
+#   tools/cleanup.sh --all      --models, --cache and --dist together.
 set -u
 cd "/Volumes/Files/Claude Work Area/LLMOS"
-MODELS=0; CACHE=0
+MODELS=0; CACHE=0; DIST=0
 for a in "$@"; do case "$a" in
-  --models) MODELS=1 ;; --cache) CACHE=1 ;; --all) MODELS=1; CACHE=1 ;;
+  --models) MODELS=1 ;; --cache) CACHE=1 ;; --dist) DIST=1 ;; --all) MODELS=1; CACHE=1; DIST=1 ;;
   *) echo "unknown option: $a"; exit 2 ;;
 esac; done
 
@@ -39,6 +41,10 @@ if [ "$MODELS" = 1 ]; then
   for f in models/*.gguf; do [ -f "$f" ] && [ "$(basename "$f")" != "$keep_model" ] && rm -f "$f" && echo "  removed $f"; done
   rm -f models/server-*.log models/fetch.log models/fetch.txt
   for f in build/cache/*.gguf; do [ -f "$f" ] && [ "$(basename "$f")" != "$keep_model" ] && rm -f "$f" && echo "  removed $f"; done
+fi
+if [ "$DIST" = 1 ]; then
+  rm -f dist/*.qcow2 dist/*.iso
+  echo "dropped the built images/ISOs from dist/ (rebuild with tools/release.sh)"
 fi
 if [ "$CACHE" = 1 ]; then
   rm -f build/cache/*.iso build/cache/*.gguf build/cache/*.bin build/cache/x86iso build/cache/*.sha256

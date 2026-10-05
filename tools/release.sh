@@ -1,22 +1,31 @@
 #!/bin/bash
 # Build a complete, current release into dist/ — the one way to make dist/ match the OS source.
-#   tools/release.sh            build both images, both ISOs, checksums, RELEASE.json
-#   tools/release.sh --smoke    also run the dictation + live-ISO smokes on the fresh artifacts
+#   tools/release.sh                 build both images, both ISOs, checksums, RELEASE.json
+#   tools/release.sh arm64|x86       build just that architecture's image + ISO (skip the other)
+#   tools/release.sh [arch] --smoke  also run the dictation + live-ISO smokes on the fresh artifacts
 #
 # After this, `tools/check-fresh.py` reports FRESH. Run it whenever the OS source (src/) changes; changes under
 # dist/setup/ or tools/ do not need it. The images/ISOs are build outputs, not source (they are gitignored).
 set -euo pipefail
 cd "/Volumes/Files/Claude Work Area/LLMOS"
-SMOKE=0; [ "${1:-}" = "--smoke" ] && SMOKE=1
+SMOKE=0; ARCH=all
+for a in "$@"; do case "$a" in
+  --smoke) SMOKE=1 ;; arm64|x86|all) ARCH="$a" ;;
+  *) echo "usage: tools/release.sh [all|arm64|x86] [--smoke]"; exit 2 ;;
+esac; done
 step() { printf '\n==== %s (%s) ====\n' "$1" "$(date +%H:%M:%S)"; }
 
-step "arm64 image";  tools/build-image.sh
-step "x86-64 image"; tools/build-image-x86.sh
-step "arm64 ISO";    tools/build-iso.sh arm64
-step "x86-64 ISO";   tools/build-iso.sh x86
+if [ "$ARCH" = all ] || [ "$ARCH" = arm64 ]; then
+    step "arm64 image"; tools/build-image.sh
+    step "arm64 ISO";   tools/build-iso.sh arm64
+fi
+if [ "$ARCH" = all ] || [ "$ARCH" = x86 ]; then
+    step "x86-64 image"; tools/build-image-x86.sh
+    step "x86-64 ISO";   tools/build-iso.sh x86
+fi
 
-step "checksums + manifest (authoritative, after all four are built)"
-( cd dist && shasum -a 256 llmos-arm64.qcow2 llmos-x86_64.qcow2 llmos-arm64.iso llmos-x86_64.iso models/*.gguf > SHA256SUMS )
+step "checksums + manifest (authoritative, over whatever is in dist/)"
+( cd dist && shasum -a 256 *.qcow2 *.iso models/*.gguf 2>/dev/null > SHA256SUMS )
 python3 tools/release-json.py
 ( cd dist && shasum -a 256 -c SHA256SUMS )
 
