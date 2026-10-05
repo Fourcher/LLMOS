@@ -791,7 +791,8 @@ _ONLY_IF_ASKED = {
     "change_setting": r"\b(internet|online|offline|network|tor|autonom\w*|hands|ask|asks|asking|confirm\w*|permission|brain|claude|"
                       r"cloud|online model|speak\w*|voice|aloud|think\w*|name|call me|focus|guidance|lectures?|caution\w*|"
                       r"settings?|turn|switch|enable|disable|allow|block|stop using|start using|use|lock\w*|time ?zone|clock|time|screen|display|sleep\w*|lid|minutes?|hours?|never|disturb|dnd|notifications?|"
-                      r"night|warm\w*|blue light|quiet|presentation|awake|mute)\b",
+                      r"night|warm\w*|blue light|quiet|presentation|awake|mute|trust|rein|reign|control|freedom|risky|"
+                      r"instructions|web ?pages?|websites?|e-?mails?|files?|check\w*)\b",
     "set_appearance": lambda req: bool(re.search(r"\b(colou?rs?|theme|dark|light|font|text|bigger|smaller|larger|size|zoom|corners?|round\w*|"
                                                  r"square|look\w*|style|wallpaper|background|backdrop|animation\w*|motion|layout|language|"
                                                  r"desk|mode|contrast|everything|screen|accent|appearance|prettier|nicer|ugly|font|see|read|eyes?|vision|small|tiny|big|huge)\b", req, re.I)
@@ -836,8 +837,13 @@ def execute(ctx, name, arguments):
     # some things are always shown first, whatever the autonomy: mail that leaves, deleting for good, removing programs.
     # And once this turn has read text the owner did not write (a web page, a file, an email), anything that changes
     # the computer is shown first too: that text may carry instructions meant to trick the model.
-    always = name in ALWAYS_CONFIRM
-    tainted = getattr(ctx, "tainted", False) and risk in (tools.CHANGE, tools.DESTRUCTIVE) and name not in TAINT_EXEMPT
+    # Full trust (hands-off) is the owner's own, explicit choice: from then on nothing is asked, these included.
+    full_trust = config.settings.get("autonomy") == "hands-off"
+    always = name in ALWAYS_CONFIRM and not full_trust
+    # text the owner did not write (a web page, a file, an email) is not the owner's command: what it leads to is shown
+    # first unless the owner turned that check off too ("guard_untrusted": on by default, in every mode)
+    tainted = getattr(ctx, "tainted", False) and risk in (tools.CHANGE, tools.DESTRUCTIVE, tools.SECURITY) and name not in TAINT_EXEMPT \
+        and config.settings.get("guard_untrusted", True)
     if always or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
         if not ctx.confirm_action(tool, shown, risk):
             store.audit(name, shown, "denied", allowed=False)
@@ -871,7 +877,7 @@ TAINT_EXEMPT = {"show_screen", "show_files", "open_file", "note_add", "remember"
 def needs_confirm(risk):
     auto = config.settings.get("autonomy")
     if auto == "hands-off":
-        return risk == tools.SECURITY  # even hands-off confirms security-policy flips
+        return False                   # full trust: the owner chose this, knowing it asks nothing
     if auto == "balanced":
         return risk in (tools.DESTRUCTIVE, tools.SECURITY)
     return risk in (tools.CHANGE, tools.DESTRUCTIVE, tools.SECURITY)  # hands-on

@@ -4,6 +4,22 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.1 — in progress
+The owner decides how much it asks, and is never second-guessed.
+
+- **Full trust is truly full.** Choosing it (at set-up, or saying "full
+  trust") shows once, in plain words, everything it will then do without
+  asking — email, deleting, emptying the trash, installing and removing
+  programs, settings, commands — and from then on nothing is asked: no
+  confirmations, no "Sure?" on delete buttons, no questions before ending a
+  program or installing updates. "Ask me before risky things" goes back.
+- **Instructions inside web pages, emails and files** are still shown first
+  in every mode (they don't come from you); "follow instructions in web pages
+  too" turns that off as well.
+- **No refusals.** Files outside the home folder can be deleted and folders
+  made anywhere; system packages can be removed — you're told what that
+  affects instead of being stopped.
+
 ## 1.7.0 — 2026-10-05
 Useful, not just pretty: real apps, programs that behave, a conversation that
 never needs clearing, a living background, and what a stock Linux desktop

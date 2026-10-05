@@ -374,22 +374,29 @@ class DeskCtx:
         if name in self._net_ok:
             return True
         host = str(args.get("url", "") or args.get("query", ""))[:80]
-        ok = self.d.ask({"title": T("s_internet", area="settings"), "text": f"{name} → {host}", "danger": False})
+        ok = self.d.ask({"title": T("s_internet", area="settings"), "text": f"{name} → {host}", "danger": False}, consent=True)
         if ok:
             self._net_ok.add(name)
         return ok
 
     def confirm_action(self, tool, args, risk):
+        a = args if isinstance(args, dict) else {}
+        if tool.name == "change_setting" and a.get("setting") == "autonomy" and "off" in str(a.get("value", "")).lower():
+            # the one question full trust asks: this is the owner's consent, given once, for everything after it
+            return self.d.ask({"title": T("d_full_trust_title"), "text": T("d_full_trust_text"), "danger": True,
+                               "yes": T("d_full_trust_yes"), "no": T("d_full_trust_no")}, consent=True)
+        # (the agent asks only when a setting the owner chose says to: their autonomy level, or the check on
+        # instructions from web pages, files and emails)
         return self.d.ask({"title": self.d.describe_tool(tool, args, confirm=True),
                            "text": self.d.describe_args(tool, args), "danger": risk in ("destructive", "security"),
-                           "mono": tool.name in ("run_command", "install_app", "write_file")})
+                           "mono": tool.name in ("run_command", "install_app", "write_file")}, consent=True)
 
     def confirm_online(self, text, reason):
         """'ask' brain mode: one dialog before a request leaves this computer, saying what goes."""
         label = llm.cloud_label()
         why = T("d_online_failed") if reason == "failed" else T("d_online_big")
         return self.d.ask({"title": T("d_online_title", model=label), "text": why + "\n\n" + T("d_online_shares"),
-                           "danger": False, "yes": T("d_online_yes", model=label), "no": T("d_online_no")})
+                           "danger": False, "yes": T("d_online_yes", model=label), "no": T("d_online_no")}, consent=True)
 
     def brain(self, online, label):
         self.d.emit({"t": "reply.brain", "online": bool(online), "label": label})
@@ -1871,9 +1878,11 @@ class Desk:
 
     DIALOG_TIMEOUT = 600   # an unanswered confirmation counts as "no" after 10 minutes
 
-    def ask(self, spec):
+    def ask(self, spec, consent=False):
         if self.ctx.cancel.is_set():      # the owner pressed Stop: nothing more is allowed this turn
             return False
+        if config.settings.get("autonomy") == "hands-off" and not consent:
+            return True                   # full trust: the owner agreed to everything in advance; nothing is asked
         self.dialog_seq += 1
         did = f"d{self.dialog_seq}"
         ev = threading.Event()
@@ -3420,7 +3429,7 @@ class Desk:
                 self.decline_dialogs()
                 for wid in list(self.windows):
                     self.close_window(wid)
-                for k, v in (("autonomy", "hands-off"), ("internet", "yes"), ("brain", "local"), ("guidance", "owner"), ("tor", False),
+                for k, v in (("autonomy", "balanced"), ("internet", "yes"), ("brain", "local"), ("guidance", "owner"), ("tor", False),
                              ("screen_off", 0), ("do_not_disturb", False)):
                     config.settings.set(k, v)
                 self.start_idle()             # tests drive the desk without touching the keyboard: the screen must stay on

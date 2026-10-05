@@ -1216,14 +1216,15 @@ def _policy_risk(setting, value):
     return SAFE
 
 
-_SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission|approv|without asking|careful|cautious|balanced|mode",
+_SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission|approv|without asking|careful|cautious|balanced|mode|trust|rein|reign|control|freedom|risky",
                   "internet": r"internet|online|offline|network|\bweb\b|wifi|wi-fi", "tor": r"\btor\b|anonym",
                   "brain": r"online model|claude|cloud|chatgpt|on this computer|locally|think only|brain|offline model",
                   "speak_replies": r"speak|read (?:aloud|out)|voice|talk|out loud", "think": r"\bthink|reason",
                   "name": r"\bname\b|call me", "focus_mode": r"focus|distract", "guidance": r"guidance|lectur|caution|careful|warn|preach|instructions|my machine",
                   "timezone": r"time ?zone|\btime\b|clock|\bhour", "autolock": r"\block",
                   "screen_off": r"screen|display|monitor|blank|dim|presentation|awake", "sleep_after": r"sleep|suspend|idle|nap", "lid": r"\blid\b|close|clos",
-                  "do_not_disturb": r"disturb|notification|quiet|silen|focus", "night_light": r"night|warm|blue light|eye|evening|yellow"}
+                  "do_not_disturb": r"disturb|notification|quiet|silen|focus",
+                  "guard_untrusted": r"web pages?|e-?mails?|files?|instructions|hidden|trick|inject|untrusted|check", "night_light": r"night|warm|blue light|eye|evening|yellow"}
 
 
 @tool("change_setting", "Change a system setting. autonomy: hands-off | balanced (ask before destructive "
@@ -1233,11 +1234,12 @@ _SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission
       "the online model) | cloud (the online model answers everything). guidance: owner | standard. "
       "autolock: minutes (0 = off). screen_off: minutes idle before the screen turns off (0 = never). "
       "sleep_after: minutes idle before the computer sleeps (0 = never). lid: sleep | nothing. "
+      "guard_untrusted: on/off (show me first what instructions inside web pages, files or emails would make you do). "
       "do_not_disturb: on/off (programs' notifications hidden). night_light: on/off (warmer screen in the evening). timezone: a city, country or zone name ('Paris', 'Pacific', 'Asia/Tokyo'). "
       "(Language changes go through set_appearance.)",
       {"setting": {"type": "string", "enum": ["autonomy", "internet", "tor", "speak_replies", "focus_mode",
                                               "think", "name", "autolock", "guidance", "brain", "timezone",
-                                              "screen_off", "sleep_after", "lid", "do_not_disturb", "night_light"]},
+                                              "screen_off", "sleep_after", "lid", "do_not_disturb", "night_light", "guard_untrusted"]},
        "value": STR, "minutes": {"type": "integer"}}, ["setting", "value"],
       risk=lambda a: _policy_risk(a.get("setting"), a.get("value")))
 def change_setting(a, ctx):
@@ -1337,6 +1339,11 @@ def change_setting(a, ctx):
         what = "the screen turns off" if s == "screen_off" else "the computer sleeps"
         return f"{what} after {mins} minute{'s' if mins != 1 else ''} without use" if mins else \
             ("the screen stays on" if s == "screen_off" else "the computer never sleeps by itself")
+    if s == "guard_untrusted":
+        on = not re.search(r"\b(off|no|disable|stop|false|0|never|don'?t)\b", str(v), re.I)
+        config.settings.set("guard_untrusted", on)
+        return ("anything a web page, file or email tells me to do is shown to you first" if on else
+                "instructions found in web pages, files and emails are followed like yours, without showing you first")
     if s in ("do_not_disturb", "night_light"):
         on = not re.search(r"\b(off|no|disable|stop|false|0)\b", str(v), re.I)
         config.settings.set(s, on)
@@ -2008,12 +2015,16 @@ def remove_software(a, ctx):
             base = set(f.read().split())
     except OSError:
         pass
-    if named in base or named in ("python3", "labwc", "llama-server", "webkit2gtk-6.0", "gtk4.0", "alpine-base", "linux-lts", "musl"):
-        return f"{named} is part of the system itself and cannot be removed"
-    if world and named not in world:
+    # the owner may remove anything, the system's own parts included; they are told what that does, not stopped
+    core = named in base or named in ("python3", "labwc", "llama-server", "webkit2gtk-6.0", "gtk4.0", "alpine-base", "linux-lts", "musl")
+    if world and named not in world and not core:
         return f"{named} is not installed (or it is part of something else)"
-    p = subprocess.run(["apk", "del", "--no-progress", named], capture_output=True, text=True, timeout=600)
-    return f"removed {named}" if p.returncode == 0 else f"could not remove it: {(p.stderr or p.stdout).strip()[:200]}"
+    p = subprocess.run(["apk", "del", "--no-progress"] + (["--force-broken-world"] if core else []) + [named],
+                       capture_output=True, text=True, timeout=600)
+    if p.returncode != 0:
+        return f"could not remove it: {(p.stderr or p.stdout).strip()[:200]}"
+    return f"removed {named}" + (" -- it was part of LLM OS itself, so parts of the system may stop working until it is "
+                                 "installed again ('install " + named + "')" if core else "")
 
 
 @tool("print_file", "Print one of the owner's files (PDF, picture, text, document) on the default printer, or a named one.",
@@ -2034,7 +2045,7 @@ def print_file(a, ctx):
     return f"sent {os.path.basename(path)} to the printer. Done: tell the owner in one sentence."
 
 
-@tool("delete_file", "Move one of the owner's files or folders (inside the home folder) to the trash (~/.Trash), "
+@tool("delete_file", "Move one of the owner's files or folders (anywhere; system files too when the owner asks) to the trash (~/.Trash), "
       "where it can be put back later; a file that is already in the trash is deleted for good.",
       {"path": STR}, ["path"], risk=DESTRUCTIVE)
 def delete_file(a, ctx):
@@ -2054,8 +2065,8 @@ def delete_file(a, ctx):
         if hasattr(ctx, "close_ui"):
             ctx.close_ui("file:" + path)
         return f"deleted {os.path.basename(path)} for good (it was in the trash). Say one sentence at most."
-    if not _in_home(path) or path == home or path == trash:
-        return "only files and folders inside the home folder can be trashed from here (the trash itself and system files are left alone)"
+    if path.rstrip("/") in ("", home, trash):
+        return "that is the whole disk, the home folder or the trash itself: name what inside it to delete"
     os.makedirs(trash, exist_ok=True)
     dest = os.path.join(trash, os.path.basename(path))
     if os.path.lexists(dest):
@@ -2661,8 +2672,8 @@ def find_files(a, ctx):
 def make_folder(a, ctx):
     name = re.sub(r"[/\\\0]", "-", str(a.get("name", "")).strip().strip("'\"")) or "New folder"
     base = folder(a.get("where") or "documents") or _path(a.get("where"))
-    if not base or not _in_home(base):
-        return "error: folders are made inside the home folder"
+    if not base:
+        return "error: where should the folder go?"
     p = os.path.join(base, name)
     if os.path.exists(p):
         return f"error: {p.replace(config.home(), '~')} already exists"

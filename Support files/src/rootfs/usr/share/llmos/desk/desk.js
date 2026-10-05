@@ -173,7 +173,8 @@
     const box = $("status"); box.innerHTML = "";
     const dot = m.model_ok ? (busy ? "busy" : "ok") : "";
     box.append(chip(`<i class="dot ${dot}"></i>${esc(m.model || t("loading_model"))}`, "models", (m.host_gpu ? t("d_host_gpu") + " · " : "") + t("models")));
-    box.append(chip(esc({ "hands-off": "Acts on its own", "balanced": "Asks if risky", "hands-on": "Asks first" }[m.autonomy] || m.autonomy), "settings", t("settings")));
+    fullTrust = m.autonomy === "hands-off";
+    box.append(chip(esc({ "hands-off": "Full trust", "balanced": "Asks if risky", "hands-on": "Asks first" }[m.autonomy] || m.autonomy), "settings", t("settings")));
     if (m.internet !== "yes") box.append(chip(esc(m.internet === "no" ? "offline" : "internet: ask"), "settings"));
     if (m.brain && m.brain !== "local") { const c = chip(`<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M6.5 20a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 17.7 9.1 4 4 0 0 1 18 17h-.5v3h-11z"/></svg> ${esc(m.brain === "cloud" ? (m.cloud || t("v_not_set_up")) : t("d_brain_chip_ask"))}`, "settings", t("s_brain")); c.classList.add("online"); box.append(c); }
     if (m.tor) box.append(chip("Tor", "settings"));
@@ -653,9 +654,10 @@
     for (const b of spec.blocks || []) { const e = renderBlock(b); if (e) body.appendChild(e); }
     if (spec.actions && spec.actions.length) body.appendChild(renderBlock({ type: "buttons", items: spec.actions }));
   }
+  let fullTrust = false;   // the owner chose full trust: a delete button deletes, no "Sure?" first
   function actionBtn(a) {
     const b = el("button", "btn small" + (a.primary ? " primary" : "") + (a.danger ? " danger" : ""), esc(a.label));
-    if (!a.danger) { b.onclick = () => act(a.say); return b; }
+    if (!a.danger || fullTrust) { b.onclick = () => act(a.say); return b; }
     // a button that deletes or ends something asks once more, right where it is: first press "Sure?", second does it
     let armed = null;
     b.onclick = () => {

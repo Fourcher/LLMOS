@@ -250,19 +250,25 @@ screens ("make everything bigger" adds to that).
 
 Chosen at set‑up, changeable any time by asking (or in Settings):
 
-- **hands‑off**: does everything without asking.
-- **balanced** (default): asks before destructive or irreversible actions.
+- **full trust** (hands‑off): does everything you say without asking first —
+  sending and deleting email, deleting files, emptying the trash, installing
+  and removing programs (system parts too), changing settings, running
+  commands. You agree to that once, when you choose it (at set‑up, or by
+  saying "full trust", which shows exactly this and asks you once).
+- **balanced** (default): asks before destructive or irreversible actions,
+  and always before email is sent or the trash is emptied.
 - **hands‑on**: asks before every change.
 
-Every tool action is written to an audit log (`audit`) in all modes. Changing
-the internet/Tor/autonomy/online‑model policy itself always asks, so a
-background task can't loosen its own leash. In every mode, email that leaves,
-emptying the trash and removing programs ask first, and once a request has
-read a web page, a file or an email, any change it makes is shown first (such
-text can carry instructions meant to trick the model). Writing to the computer's disk
-(the installer) always shows its plan first. Scheduled tasks follow the same
-level: under hands‑off they do what you scheduled; under balanced or hands‑on
-anything that would have asked is left undone and reported.
+In every mode, what an instruction *inside* a web page, an email or a file
+would make it do is shown to you first, because it doesn't come from you; say
+"follow instructions in web pages too" to switch that off as well. Your own
+choices about the internet ("ask first") and the online model ("ask first")
+are kept in every mode. LLM OS never refuses or lectures you; if something
+you ask for has a consequence (removing a part of the system), it says so and
+does it. Every action is written to an audit log (`audit`). Writing to the
+computer's disk (the installer) shows its plan first. Scheduled tasks follow
+the same level: under full trust they do what you scheduled; under balanced or
+hands‑on anything that would have asked is left undone and reported.
 
 ### Where it thinks
 

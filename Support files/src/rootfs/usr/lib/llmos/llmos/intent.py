@@ -394,7 +394,24 @@ def _dnd(text):
     return ("change_setting", {"setting": which, "value": "off" if off else "on"})
 
 
+_GUARD = re.compile(r"^\s*(?:please\s+)?(?:(?P<off>follow|obey|do\s+what)\s+(?:the\s+)?instructions\s+(?:in|from|inside)\s+(?:web\s*pages|websites|emails?|files?)(?:(?:,|\s+and|\s+or)\s+(?:web\s*pages|websites|emails?|files?))*(?:\s+too|\s+as\s+well)?|"
+                    r"(?P<off2>stop|don'?t|do\s+not)\s+(?:showing\s+me|checking|asking\s+about)\s+(?:what\s+)?(?:web\s*pages|websites|emails?|files?|instructions)(?:\s+(?:tell\s+you|say|want))?(?:\s+(?:to\s+do|first))?|"
+                    r"turn\s+(?P<onoff>on|off)\s+the\s+(?:web\s*page|untrusted|instructions?|injection)\s+check|"
+                    r"(?:show|ask)\s+me\s+(?:first\s+)?(?:before\s+(?:you\s+)?(?:follow|do)\s+)?(?:what\s+)?(?:instructions\s+in\s+)?(?:web\s*pages|websites|emails?|files?)\s+(?:tell\s+you\s+to\s+do|say|want)(?:\s+first)?)\s*[.!]?\s*$", re.I)
+
+
+def _guard(text):
+    m = _GUARD.match(text)
+    if not m:
+        return None
+    off = bool(m.group("off") or m.group("off2") or (m.group("onoff") or "").lower() == "off")
+    return ("change_setting", {"setting": "guard_untrusted", "value": "off" if off else "on"})
+
+
 def _screen_power(text):
+    g = _guard(text)
+    if g:
+        return g
     d = _dnd(text)
     if d:
         return d
@@ -642,14 +659,15 @@ def _policy(text):
     m = _ASK_BEFORE.match(text)
     if m:
         what = m.group("what").lower()
-        if re.search(r"\b(delet|destroy|remov|irreversible|destructive|danger|erasing|wiping)", what):
+        if re.search(r"\b(delet|destroy|remov|irreversible|destructive|danger|erasing|wiping|risky|big|important|serious)", what):
             return ("change_setting", {"setting": "autonomy", "value": "balanced"})
         if re.search(r"\b(every|any|each|all)\b.*\b(change|action|thing)|\b(changing|doing)\s+(anything|things)|\beverything\b", what):
             return ("change_setting", {"setting": "autonomy", "value": "hands-on"})
         if re.search(r"internet|web|online|network", what):
             return ("change_setting", {"setting": "internet", "value": "ask"})
         return None
-    if _NEVER_ASK.match(text):
+    if _NEVER_ASK.match(text) or re.match(r"^\s*(?:please\s+)?(?:(?:turn\s+on|switch\s+to|use|give\s+(?:it|yourself|you)|i\s+give\s+you|go)\s+)?"
+                                          r"(?:full|total|complete)\s+(?:trust|control|rein|reign|freedom|access)(?:\s+mode)?(?:\s+on)?\s*[.!]?\s*$", text, re.I):
         return ("change_setting", {"setting": "autonomy", "value": "hands-off"})
     m = _SPEAK.match(text)
     if m:
