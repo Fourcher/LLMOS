@@ -493,6 +493,7 @@ class Desk:
                 sys.stderr.write(f"desk: no ephemeral session ({e}); using the default one\n")
             self.webview = WebKit.WebView(settings=settings, user_content_manager=ucm, **kw)
             self.webview.connect("context-menu", lambda *a: True)
+            self.webview.connect("web-process-terminated", self._page_ended)
             th = ui.Theme()
             bg = th.bg or (11, 13, 20)
             self.webview.set_background_color(Gdk.RGBA(red=bg[0] / 255, green=bg[1] / 255, blue=bg[2] / 255, alpha=1))
@@ -521,6 +522,13 @@ class Desk:
             self.app.run(None)
         finally:
             self._cleanup()
+
+    def _page_ended(self, view, reason):
+        """The page's process ended (out of memory, a crash): the screen would stay frozen on its last picture, so
+        the page is loaded again; on "ready" it gets the current screen and the open windows back."""
+        sys.stderr.write(f"desk: the page's process ended ({reason}); loading it again\n")
+        self.ready, self._reloaded = False, True
+        self.GLib.timeout_add(300, lambda: (view.load_uri("file://" + PAGE), False)[1])
 
     def _cleanup(self):
         for p in list(self.apps.values()):
@@ -728,6 +736,10 @@ class Desk:
                 self.emit(m)
             self._pending = []
             self.boot_screen()
+            if getattr(self, "_reloaded", False) and self.screen == "desk":
+                self._reloaded = False
+                for wid, spec in list(self.windows.items()):    # the windows that were open before the page ended
+                    self.emit({"t": "window", "id": wid, "spec": spec})
         elif t == "say":
             self.last_active = time.time()
             self.say(str(msg.get("text", "")))
@@ -1555,9 +1567,15 @@ class Desk:
 
     # ---- lock / unlock / power
 
+    _KEEP = ("labwc", "python3", "WebKitWebProcess", "WebKitNetworkProcess", "WebKitGPUProcess", "seatd", "dbus-daemon",
+             "at-spi2-registryd", "at-spi-bus-launcher", "xdg-dbus-proxy")
+
     def _session_pids(self):
-        """Every process of this desk session except the compositor, the desk itself and its WebKit helpers."""
-        mine, keep = os.getpid(), set()
+        """Every process of this desk session except the compositor, the desk itself and its WebKit helpers.
+        A process's name in /proc is cut at 15 characters ("WebKitWebProces"), so names are compared both whole
+        (the program file) and cut: killing the desk's own page at lock would freeze the screen on the desk."""
+        mine = os.getpid()
+        keep_cut = {k[:15] for k in self._KEEP}
         try:
             display = self._child_env().get("WAYLAND_DISPLAY", "")
         except Exception:
@@ -1573,9 +1591,12 @@ class Desk:
                     comm = f.read().strip()
             except OSError:
                 continue
+            try:
+                exe = os.path.basename(os.readlink(f"/proc/{d}/exe"))
+            except OSError:
+                exe = ""
             if display and (b"WAYLAND_DISPLAY=" + display.encode()) in env.split(b"\0") and \
-                    comm not in ("labwc", "python3", "WebKitWebProcess", "WebKitNetworkProcess", "seatd", "dbus-daemon", "at-spi2-registryd", "at-spi-bus-launcher", "xdg-dbus-proxy") \
-                    and not comm.startswith("llmos"):
+                    exe not in self._KEEP and comm not in keep_cut and not comm.startswith("llmos"):
                 out.append(int(d))
         return out
 

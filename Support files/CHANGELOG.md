@@ -34,6 +34,13 @@ computer, and connecting Claude or ChatGPT without typing a key.
   monitor, 200 % above): text was tiny on such screens. Text size now uses
   the page's own zoom, so layouts stay intact at any size.
 - The last page recaps the choices in the same words as the settings page.
+- **Locking no longer freezes the screen.** Locking ends the session's
+  programs but spares the desk's own page process; Linux cuts process names
+  at 15 characters ("WebKitWebProces"), so that exception never matched and
+  the page was killed: the screen stayed on the desk (not the lock screen) and
+  could not be unlocked without restarting. Names are now compared whole and
+  cut, and if the page's process ever ends for another reason the desk loads
+  it again with its windows. `desk-smoke.sh` checks the page survives a lock.
 - Build: the OS files in the images were owned by the building Mac's user
   (uid 501); they are now root's (the payload is archived as root and
   unpacked without owners).

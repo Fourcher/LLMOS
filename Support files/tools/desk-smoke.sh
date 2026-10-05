@@ -50,6 +50,8 @@ echo "--- lock / unlock"
 ctl "lock"; shot lock 2; state
 # the vault must really be unmounted and closed after locking, and the wrong passphrase must not get in
 sh 'm=$(mount | grep -c " /root "); c=$(cryptsetup status llmos-vault >/dev/null 2>&1 && echo active || echo inactive); echo "LOCKCHECK mounted=$m crypt=$c"' 30 | grep -q "LOCKCHECK mounted=0 crypt=inactive" || { echo "### FAIL: the vault is still open after lock"; RC=1; }
+# the desk's own page must survive the lock (it once killed its WebKit process: the screen froze on the desk)
+sh 'pgrep -f WebKitWebProcess >/dev/null && echo "PAGECHECK alive" || echo "PAGECHECK gone"' 30 | grep -q "PAGECHECK alive" || { echo "### FAIL: locking ended the desk's page (the screen would freeze)"; RC=1; }
 ctl "unlock wrong one"; shot lock-wrong 2
 sh 'llmos desk-state | python3 -c "import json,sys; print(\"SCREEN\", json.load(sys.stdin)[\"screen\"])"' 30 | grep -q "SCREEN lock" || { echo "### FAIL: a wrong passphrase did not stay on the lock screen"; RC=1; }
 ctl "unlock correct horse battery"; sleep 3; state; shot unlocked 1
