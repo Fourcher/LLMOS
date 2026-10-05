@@ -457,6 +457,14 @@ def set_appearance(a, ctx):
              "win": "windows", "windows 7": "windows", "win7": "windows", "macos": "mac", "mac os": "mac", "apple": "mac", "mojave": "mac"}.get(v, v)
         if v not in ("clean", "windows", "mac"):
             return f"error: '{a['layout']}' is not a desk layout; say clean, windows or mac"
+        # a layout brings its own look, but only fills in what the owner has not chosen themselves -- a colour
+        # they set ("make everything purple") is kept across layout changes
+        app = config.settings.get("appearance", {})
+        theme = {"windows": {"color": "#4aa3ff", "background": "#143259", "accent": "#4aa3ff"},
+                 "mac": {"color": "#0a84ff", "background": "#1e1e22", "accent": "#0a84ff"}}.get(v, {})
+        for key, val in theme.items():
+            if not app.get(key):
+                config.settings.set(f"appearance.{key}", val)
         config.settings.set("appearance.layout", v)
         changed.append(f"layout {v}")
     if a.get("prompt_symbol"):

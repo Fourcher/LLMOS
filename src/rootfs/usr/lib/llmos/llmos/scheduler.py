@@ -107,6 +107,11 @@ def run_task(t):
         store.notify(direct[:80], direct)
         return direct
     ctx = HeadlessCtx()
+    try:
+        from . import tools
+        tools.sync_connectors()        # pick up connectors added since this process last synced
+    except Exception:
+        pass
     instruction = (f"This is a scheduled task running in the background with no one watching. "
                    f"Task: {t['task']}\n\nComplete it now and give a short result the owner can read later. "
                    f"Use web_search for anything current or numeric rather than inventing it; if the task "

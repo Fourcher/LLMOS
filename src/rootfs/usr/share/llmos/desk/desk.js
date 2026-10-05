@@ -147,7 +147,9 @@
   // ---------------------------------------------------------------- status bar
   function chip(html, sayText, title) {
     const c = el("button", "chip", html);
-    if (sayText) { c.onclick = () => say(sayText); c.title = title || sayText; }
+    c.type = "button";
+    if (sayText) { c.onclick = () => say(sayText); c.title = title || sayText; c.setAttribute("aria-label", title || sayText); }
+    else { c.disabled = true; }
     return c;
   }
   function status(m) {
@@ -266,7 +268,7 @@
           $("wz-pick").textContent = fmt("w_quiz_model", { model: x.name + (x.installed ? "" : ` (${x.size_gb} GB, ${t("w_quiz_download")})`) }) + " · " + fmt("w_quiz_ram", { ram });
         };
         for (const q of Q) {
-          const row = el("div", "q", `<div class="qh"><b>${esc(t("q_" + q.k))}</b><span class="qm"></span></div><input type="range" min="0" max="100" step="1" value="${P[q.k]}"><div class="qends"><span>${esc(t(`q_${q.k}_0`))}</span><span>${esc(t(`q_${q.k}_${q.n - 1}`))}</span></div>`);
+          const row = el("div", "q", `<div class="qh"><b id="ql-${q.k}">${esc(t("q_" + q.k))}</b><span class="qm"></span></div><input type="range" min="0" max="100" step="1" value="${P[q.k]}" aria-labelledby="ql-${q.k}"><div class="qends"><span>${esc(t(`q_${q.k}_0`))}</span><span>${esc(t(`q_${q.k}_${q.n - 1}`))}</span></div>`);
           const inp = row.querySelector("input"), m = row.querySelector(".qm");
           rows[q.k] = { inp, m, q };
           inp.addEventListener("input", () => { P[q.k] = +inp.value; m.textContent = meaning(q, P[q.k]); if (q.k === "internet") rows.brain.m.textContent = meaning(rows.brain.q, P.brain); if (q.k === "capability") pick(); });
@@ -496,21 +498,23 @@
     for (const [k, s] of START_ITEMS) { const b = el("button", "item", esc(t(k))); b.onclick = () => { startMenu(false); if (s) say(s); else $("reply-hist").click(); }; sm.append(b); }
   }
   $("start").onclick = () => startMenu();
-  document.querySelector("#top .brand").onclick = () => { if (document.documentElement.dataset.layout === "mac") startMenu(); };
+  { const brand = document.querySelector("#top .brand"); brand.setAttribute("role", "button"); brand.tabIndex = 0;
+    brand.onclick = () => { if (document.documentElement.dataset.layout === "mac") startMenu(); };
+    brand.onkeydown = (e) => { if ((e.key === "Enter" || e.key === " ") && document.documentElement.dataset.layout === "mac") { e.preventDefault(); startMenu(); } }; }
   document.addEventListener("click", (e) => { if (!e.target.closest("#startmenu, #start, #top .brand")) startMenu(false); });
   function dock() {
     const d = $("dock"); d.innerHTML = "";
     const layout = document.documentElement.dataset.layout || "clean";
-    if (layout === "windows") for (const [, w] of wins) { if (w.min) continue; const c = el("span", "chip open", esc(w.spec.title || "…")); c.onclick = () => raise(w.el); d.appendChild(c); }
-    if (layout === "mac") for (const [k, s] of [["settings", "open the settings"], ["d_start_files", "show my files"], ["d_lists", "show my lists"]]) { const c = el("span", "chip launch", esc(t(k))); c.onclick = () => say(s); d.appendChild(c); }
+    if (layout === "windows") for (const [, w] of wins) { if (w.min) continue; const c = el("button", "chip open", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || "window")); c.onclick = () => raise(w.el); d.appendChild(c); }
+    if (layout === "mac") for (const [k, s] of [["settings", "open the settings"], ["d_start_files", "show my files"], ["d_lists", "show my lists"]]) { const c = el("button", "chip launch", esc(t(k))); c.type = "button"; c.onclick = () => say(s); d.appendChild(c); }
     for (const [id, w] of wins) {
       if (!w.min) continue;
-      const c = el("span", "chip", esc(w.spec.title || "…"));
+      const c = el("button", "chip", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || "window"));
       c.onclick = () => { w.min = false; w.el.classList.remove("hidden"); w.el.style.animation = "none"; void w.el.offsetWidth; w.el.style.animation = ""; raise(w.el); dock(); idle(); overlaps(); };
       d.appendChild(c);
     }
     for (const a of apps) {
-      const c = el("span", "chip", `${esc(a.name)} <span class="x" title="${esc(t("d_close_app"))}">✕</span>`);
+      const c = el("button", "chip", `${esc(a.name)} <span class="x" title="${esc(t("d_close_app"))}" aria-hidden="true">✕</span>`); c.type = "button"; c.setAttribute("aria-label", a.name);
       c.querySelector(".x").onclick = (e) => { e.stopPropagation(); post({ t: "app.close", pid: a.pid }); };
       d.appendChild(c);
     }
@@ -580,7 +584,9 @@
       case "toggle": {
         const e = el("div", "toggle", `<span>${esc(b.label)}</span>`);
         const sw = el("button", "sw" + (b.on ? " on" : "")); let on = !!b.on;
-        sw.onclick = () => { on = !on; sw.classList.toggle("on", on); say(on ? b.say_on : b.say_off); };
+        sw.type = "button"; sw.setAttribute("role", "switch"); sw.setAttribute("aria-checked", String(on));
+        if (b.label) sw.setAttribute("aria-label", b.label);
+        sw.onclick = () => { on = !on; sw.classList.toggle("on", on); sw.setAttribute("aria-checked", String(on)); say(on ? b.say_on : b.say_off); };
         e.append(sw); return e;
       }
       case "form": {

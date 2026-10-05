@@ -48,7 +48,7 @@ class ConsoleCtx:
         ui.status(text)
 
     def begin_tool(self, tool, args, risk):
-        ui.status(self.c.describe_tool(tool, args))
+        ui.status(ui.safe(self.c.describe_tool(tool, args)))
 
     def end_tool(self, tool, result):
         pass
@@ -69,7 +69,7 @@ class ConsoleCtx:
         return ok
 
     def confirm_action(self, tool, args, risk):
-        return self.c.ask_yes_no(self.c.describe_tool(tool, args, confirm=True), danger=risk in ("destructive", "security"))
+        return self.c.ask_yes_no(ui.safe(self.c.describe_tool(tool, args, confirm=True)), danger=risk in ("destructive", "security"))
 
     def confirm_online(self, text, reason):
         """'ask' brain mode: one question before a request leaves this computer."""

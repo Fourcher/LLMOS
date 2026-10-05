@@ -241,6 +241,15 @@ def strip(s):
     return _ANSI.sub("", s)
 
 
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\x80-\x9f]")
+
+
+def safe(s):
+    """Untrusted text (model output, tool arguments, file names, mail) with control and escape characters made
+    visible, so a terminal cannot be driven by them. Newlines and tabs are kept; ESC and the rest are shown."""
+    return _CONTROL.sub(lambda m: {"\t": "\t"}.get(m.group(), "\ufffd"), str(s).replace("\x1b", "\u241b"))
+
+
 def wrap(text, w):
     out = []
     for para in str(text).split("\n"):
@@ -345,7 +354,7 @@ class Stream:
 
     def feed(self, text):
         self._start()
-        self.buf += text
+        self.buf += safe(text)
         while True:
             m = re.search(r"[ \n]", self.buf)
             if not m:

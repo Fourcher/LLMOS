@@ -116,7 +116,7 @@ a:hover { text-decoration: underline; }
 :root[data-layout="windows"] #top .left .brand { display: none; }
 :root[data-layout="windows"] #dock { left: 52px; bottom: 7px; right: 440px; gap: 4px; overflow: hidden; z-index: 8; }
 :root[data-layout="windows"] #dock .chip { border-radius: 4px; }
-:root[data-layout="windows"] #dock .chip.open { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--card)); }
+:root[data-layout="windows"] #dock .chip.open { box-shadow: inset 0 0 0 1px var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--card)); }
 :root[data-layout="windows"] #cmd { bottom: 64px; }
 :root[data-layout="windows"] #reply { bottom: 134px; }
 :root[data-layout="windows"] #idle { inset: 20px 0 160px; }
@@ -233,7 +233,8 @@ body.light #desk.wall::before { background: linear-gradient(180deg, rgba(255,255
   padding: 0 20px; font-size: 14px; color: var(--dim); z-index: 5; }
 #top .left, #top .right { display: flex; gap: 14px; align-items: center; }
 #top .clock { font-variant-numeric: tabular-nums; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--fg) 8%, transparent); font-size: 13px;
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 0; background: color-mix(in srgb, var(--fg) 8%, transparent); font-size: 13px;
+.chip:disabled { cursor: default; opacity: 1; }
   transition: background-color calc(.15s * var(--dur)), border-color calc(.15s * var(--dur)), transform calc(.1s * var(--dur)); }
 .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim2); transition: background-color calc(.3s * var(--dur)); }
 .chip .dot.ok { background: var(--ok); }

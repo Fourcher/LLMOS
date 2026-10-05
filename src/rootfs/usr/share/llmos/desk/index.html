@@ -64,7 +64,7 @@
     <div class="req"><span class="you" data-s="d_you"></span> <span id="reply-req"></span></div>
     <div class="who"><i class="orb small" id="reply-orb"></i><span class="ai">LLM OS</span><span id="reply-state" class="state"></span><span id="reply-brain" class="brain hidden"></span></div>
     <div id="reply-activity" class="activity"></div>
-    <div id="reply-text" class="text"></div>
+    <div id="reply-text" class="text" role="status" aria-live="polite"></div>
     <div id="reply-progress" class="progress hidden"><div class="bar"><i></i></div><span></span></div>
     <div class="reply-tools">
       <button id="reply-stop" class="btn small ghost hidden" data-s="d_stop"></button>
@@ -85,7 +85,7 @@
   </div>
 
   <div id="hint" class="hint"></div>
-  <div id="toasts"></div>
+  <div id="toasts" role="status" aria-live="polite"></div>
   <div id="overlay" class="hidden"></div>
 </section>
 
