@@ -39,6 +39,15 @@ class Fake(BaseHTTPRequestHandler):
             self.wfile.write(ln.encode())
             self.wfile.flush()
 
+    def do_GET(self):
+        SEEN.append((self.path, {k.lower(): v for k, v in self.headers.items()}, {}))
+        if self.path == "/v1/models":     # what an OpenAI account offers (the ChatGPT sign-in picks from it)
+            if self.headers.get("Authorization") != "Bearer sk-test":
+                return self._json(401, {"error": {"message": "Incorrect API key provided", "type": "invalid_request_error"}})
+            return self._json(200, {"object": "list", "data": [{"id": i, "object": "model"} for i in
+                                    ("gpt-4o", "gpt-5.1-mini", "gpt-5.1-2026-03-01", "gpt-5.1", "gpt-5.1-pro", "gpt-realtime", "o3", "text-embedding-3-large")]})
+        self._json(404, {"error": {"message": "no such path"}})
+
     def do_POST(self):
         n = int(self.headers.get("Content-Length") or 0)
         body = json.loads(self.rfile.read(n) or b"{}")
@@ -184,6 +193,30 @@ check(not ok and "no API key" in note, f"missing key: {note}")
 ok, note = llm.cloud_setup({"provider": "claude", "model": "m", "url": "ftp://x", "key": "k"})
 check(not ok and "http" in note, f"bad address: {note}")
 check(not any("sk-ant-test" in a for a in sys.argv), "the key is not on this process's command line")
+
+print("ChatGPT: the model is not asked for; the newest general one the account offers is picked")
+P = llm._pick_openai_model
+check(P(["gpt-4o", "gpt-5", "gpt-5-mini", "gpt-5.1", "gpt-5.1-2026-03-01", "gpt-5.1-codex", "gpt-realtime", "o3", "gpt-image-1"]) == "gpt-5.1",
+      "the newest gpt-<version>, not a mini, codex, realtime, image or dated snapshot")
+check(P(["gpt-5.5-pro", "gpt-5.5", "gpt-5"]) == "gpt-5.5" and P(["gpt-5.5-pro", "gpt-5"]) == "gpt-5", "never a -pro model (another API)")
+check(P(["gpt-5-2025-08-07"]) == "gpt-5-2025-08-07", "a dated snapshot when it is all there is")
+check(P(["gpt-4.1", "gpt-4.1-mini", "gpt-4o"]) == "gpt-4.1", "4.1 over 4o")
+check(P([]) == "" and P(["o3", "o4-mini", "dall-e-3"]) == "", "nothing usable: ''")
+ok, note = llm.cloud_setup({"provider": "chatgpt", "url": base + "/v1", "key": "sk-wrong"}, adopt=False)
+check(not ok and "Incorrect API key" in note, f"a wrong ChatGPT key is refused when the models are listed: {note}")
+ok, note = llm.cloud_setup({"provider": "chatgpt", "url": base + "/v1", "key": "sk-test"}, adopt=False)
+check(ok and config.cloud()["model"] == "gpt-5.1" and config.cloud()["provider"] == "chatgpt", f"a ChatGPT key alone sets up gpt-5.1: {note}")
+path, hdr, _ = [x for x in SEEN if x[0] == "/v1/models"][-1]
+check(hdr.get("authorization") == "Bearer sk-test", "the models list is asked for with the key")
+check(not any("sk-test" in a for a in sys.argv), "the key is not on this process's command line")
+import re  # noqa: E402
+for pid, good, bad in (("anthropic", "sk-ant-api03-" + "A" * 80 + "-xyzAA", "sk-proj-" + "B" * 60),
+                       ("chatgpt", "sk-proj-" + "B" * 60, "hello world")):
+    pat = llm.CLOUD_PROVIDERS[pid]["key_re"]
+    check(re.search(pat, "copied: " + good + "\n") and re.search(pat, "copied: " + good + "\n").group(0) == good and not re.search(pat, bad),
+          f"{pid}: a copied key is recognised in the clipboard text, other text is not")
+check(llm.CLOUD_PROVIDERS["anthropic"]["signin"].startswith("https://platform.claude.com/") and
+      llm.CLOUD_PROVIDERS["chatgpt"]["signin"].startswith("https://platform.openai.com/"), "sign-in pages are the services' own key pages")
 
 print("forgetting")
 config.forget_cloud()

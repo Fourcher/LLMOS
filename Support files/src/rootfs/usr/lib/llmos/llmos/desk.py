@@ -40,7 +40,7 @@ SCREEN_MESSAGES = {
     "boot": {"ready", "active"},
     "bye": {"ready", "active"},
     "lock": {"ready", "active", "unlock", "cancel"},
-    "wizard": {"ready", "active", "wizard", "tz.search", "wifi.scan", "dialog", "cancel"},
+    "wizard": {"ready", "active", "wizard", "tz.search", "wifi.scan", "dialog", "cancel", "signin"},
 }
 SOCK = os.path.join(config.RUN, "desk.sock")
 DISPLAY_ENV = os.path.join(config.RUN, "display.env")
@@ -72,6 +72,12 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "q_internet_1", "q_internet_2", "q_brain", "q_brain_0", "q_brain_1", "q_brain_2", "q_brain_offline", "q_capability",
               "q_capability_0", "q_capability_1", "q_capability_2", "q_guidance", "q_guidance_0", "q_guidance_1", "q_motion", "q_motion_0",
               "q_motion_1", "q_motion_2", "w_quiz_model", "w_quiz_download", "w_quiz_ram", "w_cloud_title", "w_cloud_text", "w_cloud_skip",
+              "q_autonomy_0_s", "q_autonomy_1_s", "q_autonomy_2_s", "q_internet_0_s", "q_internet_1_s", "q_internet_2_s",
+              "q_brain_0_s", "q_brain_1_s", "q_brain_2_s", "q_capability_0_s", "q_capability_1_s", "q_capability_2_s",
+              "q_guidance_0_s", "q_guidance_1_s", "q_motion_0_s", "q_motion_1_s", "q_motion_2_s",
+              "w_sys", "w_sys_mem", "w_sys_cores", "w_sys_gpu", "w_sys_gpu_basic", "w_model_need", "w_model_ready", "w_model_dl",
+              "w_rec_this", "w_rec_other", "w_model_none", "w_model_tight", "w_cloud_signin", "w_cloud_signin_how", "w_cloud_waiting", "w_cloud_none",
+              "w_cloud_ok", "w_cloud_paste", "w_cloud_done", "w_cloud_other",
               "w_cloud_check", "w_cloud_checking", "w_cloud_key", "w_cloud_model", "w_cloud_url", "w_cloud_key_where", "w_cloud_none_note",
               "w_done_choices", "v_brain_local", "v_brain_ask", "v_brain_cloud", "v_guidance_owner", "v_guidance_standard", "v_not_set_up",
               "d_brain_chip_ask", "d_online_tag", "v_yes", "v_ask", "v_no", "v_hands-off", "v_balanced", "v_hands-on",
@@ -152,6 +158,81 @@ def _software_gpu():
     return drv in ("virtio_gpu", "virtio-pci", "bochs-drm", "cirrus", "vmwgfx", "simple-framebuffer", "")
 
 
+def _display_scale(monitor):
+    """How much to enlarge everything on this screen, the way PCs pick their default: from its pixels per inch,
+    100% up to 120, 125% up to 144, 150% up to 192, then 200%. 100% when the screen does not report a believable
+    size (virtual machines, many projectors and TVs). Sizes in the compositor's pixels, so a compositor that already
+    scales is not scaled twice."""
+    try:
+        mm, px = monitor.get_width_mm(), monitor.get_geometry().width
+    except Exception:
+        return 1.0
+    if not (150 <= mm <= 1000) or px <= 0:
+        return 1.0
+    ppi = px / (mm / 25.4)
+    return 2.0 if ppi >= 192 else 1.5 if ppi >= 144 else 1.25 if ppi >= 120 else 1.0
+
+
+def _system_check():
+    """What this computer has, for the set-up's recommendations: memory, processor cores, graphics."""
+    cpu = ""
+    try:
+        with open("/proc/cpuinfo") as f:
+            for ln in f:
+                if ln.startswith("model name"):
+                    cpu = ln.split(":", 1)[1].strip()
+                    break
+    except OSError:
+        pass
+    vendor = ""
+    for card in ("card0", "card1"):
+        try:
+            with open(f"/sys/class/drm/{card}/device/vendor") as f:
+                vendor = {"0x8086": "Intel", "0x1002": "AMD", "0x10de": "NVIDIA"}.get(f.read().strip(), "")
+        except OSError:
+            continue
+        if vendor:
+            break
+    accel = not _software_gpu()
+    ram = models.ram_gb()
+    import math
+    return {"ram_gb": math.ceil(ram) if ram else 0, "ram_real": round(ram, 1), "cores": os.cpu_count() or 0,
+            "cpu": cpu, "gpu": vendor if accel else "", "accel": accel}
+
+
+def _model_tiers(allow_download):
+    """The on-device models behind Fast / Balanced / Most capable on this computer: those that fit its memory
+    (1 GB left for the system); offline, only those already here. Fast is the smallest (the installed one first),
+    Balanced the largest of the quick ones, Most capable the largest. A tier that would repeat a model is dropped."""
+    ram = models.ram_gb()
+    inst = {m["id"] for m in models.installed()}
+    fits = [m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (allow_download or m["id"] in inst)]
+    fits.sort(key=lambda m: (round(m["size"] / 1e9, 1), m["id"] not in inst))
+    if not fits:
+        # too little memory for any of them: the installed one is what runs anyway (slowly), so it is the choice
+        here = sorted((m for m in models.catalog() if m["id"] in inst), key=lambda m: m["size"])
+        return [{"tier": "fast", "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"], "size_gb": round(m["size"] / 1e9, 1),
+                 "installed": True, "tight": True} for m in here[:1]]
+    quick = [m for m in fits if m.get("speed") in ("fast", "fastest")]
+    out, seen = [], set()
+    for tier, m in (("fast", fits[0]), ("balanced", (quick or fits)[-1]), ("capable", fits[-1])):
+        if m["id"] in seen:
+            continue
+        seen.add(m["id"])
+        out.append({"tier": tier, "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"],
+                    "size_gb": round(m["size"] / 1e9, 1), "installed": m["id"] in inst})
+    return out
+
+
+def _recommend(sysinfo, tiers):
+    """The choices this computer's specs suggest: models run on the processor, so Balanced only with 8+ cores and
+    16 GB; the most capable is slow on a processor and is never the default. Lively motion only with hardware
+    graphics (software rendering stutters)."""
+    have = {t["tier"] for t in tiers}
+    cap = "balanced" if sysinfo["cores"] >= 8 and sysinfo["ram_real"] >= 15 and "balanced" in have else "fast"
+    return {"capability": cap if cap in have else (tiers[0]["tier"] if tiers else ""), "motion": 2 if sysinfo["accel"] else 1}
+
+
 # --------------------------------------------------------------- ctx
 
 class DeskCtx:
@@ -222,17 +303,39 @@ class DeskCtx:
     def expect(self, seconds, step):
         self.d.emit({"t": "reply.eta", "seconds": float(seconds), "step": int(step)})
 
+    @staticmethod
+    def _provider(name):
+        n = str(name or "").strip().lower()
+        if n in ("claude", "anthropic"):
+            return "anthropic"
+        if n in ("chatgpt", "openai", "gpt"):
+            return "chatgpt"
+        return n if n in llm.CLOUD_PROVIDERS else ""
+
+    def signin(self, provider=None):
+        """"sign in to Claude / ChatGPT": the service's key page in a window; the copied key comes in by itself."""
+        pid = self._provider(provider) or "anthropic"
+        if not (llm.CLOUD_PROVIDERS.get(pid) or {}).get("signin"):
+            return self.setup_cloud(pid)
+        self.d.GLib.idle_add(self.d._signin_open, pid)
+        return (f"a sign-in window for {llm.CLOUD_PROVIDERS[pid]['name']} is open: the owner signs in, creates a key and "
+                "presses Copy; the window then closes by itself and the key is checked automatically. Say one sentence at most.")
+
     def setup_cloud(self, provider=None):
-        """"set up the online model": a form whose submit posts straight to the OS (the key never passes
-        through a model)."""
+        """"set up the online model": the connect panel (sign in to a service, nothing to type); for another
+        service ("connect another online service") a form whose submit posts straight to the OS (the key never
+        passes through a model)."""
+        if str(provider or "").strip().lower() not in ("other", "other service", "openai-compatible", "openai compatible"):
+            self.d.open_connect_panel()
+            return "the connect panel is on the owner's screen: they sign in to a service there. Say one sentence at most."
         import secrets
         self.d.cloud_nonce = secrets.token_hex(12)
         prov = llm.CLOUD_PROVIDERS
-        pid = next((k for k, p in prov.items() if str(provider or "").lower() in (k, p["name"].lower())), "anthropic")
+        pid = "openai"
         self.d.open_window({"id": "cloud-form", "replace": True, "title": T("s_online_model", area="settings"), "size": "s", "slot": "cascade", "blocks": [
             {"type": "text", "text": T("d_cloud_intro")},
             {"type": "form", "fields": [{"name": "provider", "label": T("d_cloud_provider"), "options": [p["name"] for p in prov.values()], "value": prov[pid]["name"]},
-                                        {"name": "model", "label": T("d_cloud_model"), "value": prov[pid]["models"][0]["id"] if prov[pid]["models"] else "", "placeholder": "claude-sonnet-5"},
+                                        {"name": "model", "label": T("d_cloud_model"), "value": prov[pid]["models"][0]["id"] if prov[pid]["models"] else ""},
                                         {"name": "url", "label": T("d_cloud_url"), "placeholder": T("d_cloud_url_hint")},
                                         {"name": "key", "label": T("d_cloud_key"), "kind": "password", "placeholder": prov[pid]["key_hint"]},
                                         {"name": "nonce", "kind": "hidden", "value": self.d.cloud_nonce}],
@@ -357,13 +460,14 @@ class Desk:
         gi.require_version("Gdk", "4.0")
         gi.require_version("WebKit", "6.0")
         from gi.repository import Gtk, Gdk, GLib, WebKit
-        self.GLib, self.WebKit = GLib, WebKit
+        self.GLib, self.WebKit, self.Gtk, self.Gdk = GLib, WebKit, Gtk, Gdk
         system.apply_timezone_env()
         ui.reload_theme()
 
         def activate(app):
             os.chdir("/")   # children (WebKit, programs the owner opens) must not sit inside the vault
             win = Gtk.ApplicationWindow(application=app)
+            self.gtkwin = win
             win.connect("close-request", lambda *a: True)   # the desk is the screen: it cannot be closed
             win.set_title("LLM OS")
             win.set_decorated(False)
@@ -397,6 +501,11 @@ class Desk:
             win.set_child(self.webview)
             win.fullscreen()
             win.present()
+            GLib.timeout_add(400, self._apply_zoom)
+            try:
+                Gdk.Display.get_default().get_monitors().connect("items-changed", lambda *a: GLib.timeout_add(600, self._apply_zoom))
+            except Exception:
+                pass
             self._write_display_env()
             threading.Thread(target=self._control_socket, daemon=True).start()
             threading.Thread(target=self._worker, daemon=True).start()
@@ -444,6 +553,131 @@ class Desk:
                 sess.set_proxy_settings(WebKit.NetworkProxyMode.DEFAULT, None)
         except Exception:
             pass
+
+    # ---- connecting an online model without typing a key
+
+    def _signin_open(self, pid):
+        """A window on the service's own key page, in a private session (nothing of the sign-in is kept). The owner
+        signs in, creates a key and presses Copy; when the window closes, the key is taken from the clipboard and
+        checked (_signin_closed). Main thread."""
+        Gtk, WebKit = self.Gtk, self.WebKit
+        prov = llm.CLOUD_PROVIDERS.get(pid) or {}
+        if not prov.get("signin") or getattr(self, "_signin_win", None) is not None:
+            return False
+        win = Gtk.Window(title=T("w_cloud_signin", name=prov["name"]))
+        win.set_default_size(1100, 800)
+        win.maximize()   # a whole web site: as big as the screen allows, whatever the screen
+        if getattr(self, "gtkwin", None) is not None:
+            win.set_transient_for(self.gtkwin)
+            win.set_modal(True)
+        kw = {}
+        try:
+            kw["network_session"] = WebKit.NetworkSession.new_ephemeral()
+        except Exception:
+            pass
+        view = WebKit.WebView(**kw)
+        try:
+            view.set_zoom_level(self._zoom())
+        except Exception:
+            pass
+
+        def popup(parent, _action):
+            # "Continue with Google / Apple / Microsoft" may open its own small window and close it when done;
+            # without this the button would do nothing
+            child = WebKit.WebView(related_view=parent)
+            pw = Gtk.Window(title=win.get_title())
+            pw.set_default_size(620, 760)
+            pw.set_transient_for(win)
+            pw.set_modal(True)
+            pw.set_destroy_with_parent(True)
+            pw.set_child(child)
+            try:
+                child.set_zoom_level(self._zoom())
+            except Exception:
+                pass
+            child.connect("ready-to-show", lambda *_: pw.present())
+            child.connect("close", lambda *_: pw.destroy())
+            return child
+        view.connect("create", popup)
+        bar = Gtk.HeaderBar()
+        done = Gtk.Button(label=T("w_cloud_done"))
+        done.add_css_class("suggested-action")
+        done.connect("clicked", lambda *_: win.close())
+        bar.pack_end(done)
+        win.set_titlebar(bar)
+        win.set_child(view)
+
+        # the moment something shaped like this service's key is copied, the window closes itself and the key is checked
+        clip, pat = self.Gdk.Display.get_default().get_clipboard(), prov.get("key_re")
+
+        def copied(cb):
+            def got(c, res):
+                try:
+                    text = c.read_text_finish(res) or ""
+                except Exception:
+                    text = ""
+                if pat and re.search(pat, text) and self._signin_win is win:
+                    win.close()
+            if self._signin_win is win:
+                cb.read_text_async(None, got)
+        watch = clip.connect("changed", copied)
+
+        def closed(*_):
+            clip.disconnect(watch)
+            self._signin_win = None
+            self._signin_closed(pid)
+            return False
+        win.connect("close-request", closed)
+        view.load_uri(prov["signin"])
+        self._signin_win = win
+        win.present()
+        self.emit({"t": "signin.result", "waiting": True, "note": T("w_cloud_waiting")})
+        return False
+
+    def _signin_closed(self, pid):
+        """The sign-in window closed: read the clipboard once, keep only text shaped like this service's key."""
+        pat = (llm.CLOUD_PROVIDERS.get(pid) or {}).get("key_re")
+        clip = self.Gdk.Display.get_default().get_clipboard()
+
+        def got(cb, res):
+            try:
+                text = cb.read_text_finish(res) or ""
+            except Exception:
+                text = ""
+            m = re.search(pat, text) if pat else None
+            if not m:
+                self.emit({"t": "signin.result", "ok": False, "none": True, "note": T("w_cloud_none")})
+                return
+            threading.Thread(target=self._signin_check, args=(pid, m.group(0)), daemon=True).start()
+        clip.read_text_async(None, got)
+
+    def _signin_check(self, pid, key):
+        """Check the copied key with one tiny request and keep the account (the key never reaches the page)."""
+        wizard = self.screen == "wizard"
+        self.emit({"t": "signin.result", "waiting": True, "note": T("w_cloud_checking")})
+        ok, note = llm.cloud_setup({"provider": pid, "key": key}, adopt=not wizard)
+        label = ""
+        if ok:
+            c = config.cloud() or {}
+            label = llm.cloud_label(c)
+            store.audit("online_model", {"provider": pid, "model": c.get("model"), "key": "…" + key[-4:]}, "account added (signed in)", who="owner")
+            self.push_status()
+        self.emit({"t": "signin.result", "ok": ok, "note": T("w_cloud_ok", model=label) if ok else note})
+        if not wizard:
+            self.emit({"t": "toast", "text": T("w_cloud_ok", model=label) if ok else note, "long": True})
+            if ok:
+                self.close_window("cloud-connect")
+                if "panel-settings" in self.windows:
+                    self.open_panel("settings")
+
+    def open_connect_panel(self):
+        """Connect an online model: one sign-in per service, nothing to type; another service takes a pasted key."""
+        items = [{"label": T("w_cloud_signin", name=p["name"]), "say": f"sign in to {p['name']}", "primary": True}
+                 for p in llm.CLOUD_PROVIDERS.values() if p.get("signin")]
+        self.open_window({"id": "cloud-connect", "replace": True, "title": T("d_connect_title"), "size": "s", "slot": "cascade", "blocks": [
+            {"type": "text", "text": T("d_connect_text")},
+            {"type": "buttons", "items": items},
+            {"type": "buttons", "items": [{"label": T("d_connect_other"), "say": "connect another online service"}]}]})
 
     def emit(self, msg):
         """Send a message to the page (from any thread)."""
@@ -497,6 +731,10 @@ class Desk:
         elif t == "say":
             self.last_active = time.time()
             self.say(str(msg.get("text", "")))
+        elif t == "signin":
+            pid = str(msg.get("provider", ""))
+            if (llm.CLOUD_PROVIDERS.get(pid) or {}).get("signin"):
+                self.GLib.idle_add(self._signin_open, pid)
         elif t == "active":
             self.last_active = time.time()
         elif t == "vault.create":
@@ -655,13 +893,16 @@ class Desk:
     def _wizard_data(self):
         hint = _fwcfg("lang")
         inst = {m["id"] for m in models.installed()}
+        sysinfo, tiers_on, tiers_off = _system_check(), _model_tiers(True), _model_tiers(False)
         return {"timezone": system.timezone(), "tz_label": system.timezone_search("", 1)[0] if system.timezone() else None,
                 "languages": self._language_choices(), "lang_hint": hint if hint in i18n.BUILTIN else "",
                 "wifi": _wifi_device() is not None, "online": _online(), "ram_gb": round(models.ram_gb(), 1),
                 "models": [{"id": m["id"], "name": m["name"], "ram_gb": m["ram_gb"], "size_gb": round(m["size"] / 1e9, 1), "installed": m["id"] in inst}
                            for m in models.catalog()],
-                "cloud_providers": [{"id": k, "name": p["name"], "key_hint": p["key_hint"], "console": p["console"], "models": p["models"]}
-                                    for k, p in llm.CLOUD_PROVIDERS.items()]}
+                "system": sysinfo, "tiers": {"on": tiers_on, "off": tiers_off},
+                "recommend": {"on": _recommend(sysinfo, tiers_on), "off": _recommend(sysinfo, tiers_off)},
+                "cloud_providers": [{"id": k, "name": p["name"], "key_hint": p["key_hint"], "console": p["console"], "models": p["models"],
+                                     "signin": bool(p.get("signin"))} for k, p in llm.CLOUD_PROVIDERS.items()]}
 
     def set_screen(self, name, data=None):
         self.screen = name
@@ -706,7 +947,6 @@ class Desk:
         css["--radius-sm"] = {"rounded": "9px", "square": "0px", "none": "16px", "double": "4px", "heavy": "5px"}[corners]
         css["--border-w"] = {"double": "3px", "heavy": "2px"}.get(corners, "1px")
         css["--border-style"] = "double" if corners == "double" else "solid"
-        css["--zoom"] = str(getattr(th, "scale", 100) / 100)
         motion = getattr(th, "motion", "full")
         lang = i18n.lang_code(config.llm_language())
         strings = {k: T(k) for k in _PAGE_KEYS}
@@ -718,9 +958,35 @@ class Desk:
                 "dir": "rtl" if lang in ("ar", "he", "fa", "ur") else "ltr", "strings": strings,
                 "wallpaper": ("file://" + _wallpaper() + "?" + str(int(os.path.getmtime(_wallpaper())))) if (config.settings.get("onboarded") and (not config.settings.get("vault") or vault.unlocked()) and os.path.exists(_wallpaper())) else ""}
 
+    def _zoom(self):
+        return getattr(self, "display_scale", 1.0) * ui.Theme().scale / 100
+
+    def _apply_zoom(self):
+        """The page's zoom: the scale of the screen the desk is on times the owner's text size (main thread)."""
+        if self.webview is None:
+            return False
+        try:
+            disp = self.Gdk.Display.get_default()
+            surf = self.gtkwin.get_surface() if getattr(self, "gtkwin", None) is not None else None
+            mon = disp.get_monitor_at_surface(surf) if surf is not None else None
+            mons = disp.get_monitors()
+            if mon is None and mons.get_n_items():
+                mon = mons.get_item(0)
+            self.display_scale = _display_scale(mon) if mon is not None else 1.0
+        except Exception as e:
+            sys.stderr.write(f"desk: screen size unknown ({e}); 100%\n")
+            self.display_scale = 1.0
+        try:
+            self.webview.set_zoom_level(self._zoom())
+        except Exception as e:
+            sys.stderr.write(f"desk: zoom not applied: {e}\n")
+        return False
+
     def apply_theme(self):
         ui.reload_theme()
         self.emit(self.theme_payload())
+        if getattr(self, "GLib", None) and self.webview is not None:
+            self.GLib.idle_add(self._apply_zoom)
         if getattr(self, "GLib", None):
             self.GLib.idle_add(lambda: (self._safe_proxy(), False)[1])
         else:
@@ -1495,11 +1761,15 @@ class Desk:
                 # (offline, only what is already installed can be chosen: nothing could be downloaded)
                 ram = models.ram_gb()
                 inst = {m["id"] for m in models.installed()}
-                fits = sorted([m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (net_pol != "no" or m["id"] in inst)],
-                              key=lambda m: round(m["size"] / 1e9, 1))
+                want = str(p.get("model") or "")
                 pick = None
-                if fits:
-                    pick = fits[0] if cap < 34 else fits[len(fits) // 2] if cap < 67 else fits[-1]
+                if want and any(x["id"] == want for x in _model_tiers(net_pol != "no")):
+                    pick = next((m for m in models.catalog() if m["id"] == want), None)
+                else:
+                    fits = sorted([m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (net_pol != "no" or m["id"] in inst)],
+                                  key=lambda m: round(m["size"] / 1e9, 1))
+                    if fits:
+                        pick = fits[0] if cap < 34 else fits[len(fits) // 2] if cap < 67 else fits[-1]
                 cur = models.active()
                 self.wizard_model = pick["id"] if pick and (not cur or pick["id"] != cur["id"]) else None
                 self.apply_theme()
@@ -1512,6 +1782,9 @@ class Desk:
                 # the online-model account (only shown when the brain slider asked for one); skipping keeps the
                 # brain setting, and everything is answered here until an account is added in settings
                 v = value if isinstance(value, dict) else {}
+                if v.get("connected") and config.cloud():
+                    ok()
+                    return
                 if not v.get("key"):
                     ok(skipped=True)
                     return
@@ -1568,7 +1841,10 @@ class Desk:
                 store.remember(f"set up LLM OS on {time.strftime('%Y-%m-%d')}")
                 ok()
                 self.enter_desk()
-                self.open_panel("help")
+                if config.settings.get("brain", "local") != "local" and not config.cloud():
+                    self.open_connect_panel()
+                else:
+                    self.open_panel("help")
             else:
                 err("unknown step")
         except (ValueError, vault.VaultError) as e:
@@ -1727,6 +2003,18 @@ class Desk:
             elif cmd == "wizard":
                 step, _, value = arg.partition(" ")
                 self.wizard_step(step, value)
+                out = {"ok": True}
+            elif cmd == "signin-test" and _fwcfg("testshell"):   # tests: "signin-test <provider> <clipboard text>"
+                pid, _, text = arg.partition(" ")
+
+                def fake(pid=pid, text=text):
+                    # as if Copy were pressed on the service's page: with the sign-in window open, its clipboard
+                    # watch does the rest (closes the window on a key); without one, as if it had just closed
+                    self.Gdk.Display.get_default().get_clipboard().set(text)
+                    if getattr(self, "_signin_win", None) is None:
+                        self._signin_closed(pid)
+                    return False
+                self.GLib.idle_add(fake)
                 out = {"ok": True}
             elif cmd == "unlock":
                 self.unlock(arg)

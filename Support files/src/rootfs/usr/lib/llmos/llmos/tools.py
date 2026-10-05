@@ -743,13 +743,16 @@ def _norm_brain(v):
     return None
 
 
-@tool("online_model", "Set up, switch or remove the optional online model (Claude, or any OpenAI-compatible service) that "
-      "can answer instead of the on-device one; the 'brain' setting decides when it is used (change_setting brain "
-      "local|ask|cloud). action 'set up': keep an account directly when the owner gives provider/model/url/key in chat "
-      "(provider 'claude' or 'openai'), otherwise opens a form on the desk; 'use' with model switches to another of the "
+@tool("online_model", "Set up, switch or remove the optional online model (Claude, ChatGPT, or any OpenAI-compatible "
+      "service) that can answer instead of the on-device one; the 'brain' setting decides when it is used (change_setting brain "
+      "local|ask|cloud). action 'sign in' with provider 'claude' or 'chatgpt': opens that service's key page in a window on the "
+      "desk; the key the owner copies there is taken in and checked automatically (nothing to type). 'set up': keep an "
+      "account directly when the owner gives provider/model/url/key in chat (provider 'claude', 'chatgpt' or 'openai' for "
+      "another compatible service), otherwise opens the connect panel on the desk (provider 'other': the form for another "
+      "compatible service); 'use' with model switches to another of the "
       "account's models, keeping the key (e.g. model 'claude-opus-5-5'); 'forget' removes the account; 'status' says what "
       "is set up. The owner's key is checked once and kept inside the vault.",
-      {"action": {"type": "string", "enum": ["set up", "use", "forget", "status"]}, "provider": STR, "model": STR, "url": STR, "key": STR},
+      {"action": {"type": "string", "enum": ["sign in", "set up", "use", "forget", "status"]}, "provider": STR, "model": STR, "url": STR, "key": STR},
       ["action"])
 def online_model(a, ctx):
     act = str(a.get("action", "status")).lower().replace("-", " ").strip()
@@ -763,6 +766,10 @@ def online_model(a, ctx):
         if getattr(ctx, "is_desk", False):
             ctx.redraw()
         return "the online model's account is forgotten; everything is answered on this computer now"
+    if act in ("sign in", "signin", "log in", "login"):
+        if hasattr(ctx, "signin"):
+            return ctx.signin(a.get("provider"))
+        return "signing in needs the desk; here say: set up the online model: provider claude, key …"
     if act in ("set up", "setup", "add", "configure", "change", "replace"):
         if a.get("key"):
             ok, note = llm.cloud_setup(a)

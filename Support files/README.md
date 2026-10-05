@@ -17,14 +17,18 @@ the internet), simple, and built to be the opposite of attention‑harvesting
 software.
 
 Private by construction is the default, not the only way to run it. The
-first-run set-up is six sliders, and one of them, *where it thinks*, chooses
+first-run set-up is one page of six settings, each two or three plain choices
+with a recommendation from the computer's own specs, and one of them, *where
+it thinks*, chooses
 between answering only on this computer, asking before a big request goes to
 an online model such as Claude, or letting that online model answer
 everything (with this computer answering when it can't be reached). The
 others set how much it asks before acting, the internet policy, the size of
 the on-device model, whether it follows your instructions on your own machine
 without lectures or keeps a standard assistant's caution, and how lively the
-screen is. Each slider maps to a setting you can change later in words, and
+screen is. Connecting Claude or ChatGPT is a sign-in (the copied key comes
+in by itself; nothing to type). Each choice maps to a setting you can change
+later in words, and
 every request that leaves the computer is written to the audit log.
 
 - `src/` — the OS: an Alpine Linux base plus `src/rootfs/` (the Python OS,
@@ -54,7 +58,7 @@ repository and checks its SHA‑256, and writes `dist/SHA256SUMS` and
 `tools/isosmoke.sh` boot the results and exercise them; `tools/test-intent.py`,
 `tools/test-uispec.py`, `tools/test-cloud.py` (the online-model client
 against fake services, no network) and `tools/test-routines.py` run on the
-host without a VM; `tools/brain-smoke.sh` drives the quiz, the online route,
+host without a VM; `tools/brain-smoke.sh` drives the set-up, the online route,
 routines and the desk layouts inside the test VM against `tools/fake-cloud.py`.
 
 ## Run it

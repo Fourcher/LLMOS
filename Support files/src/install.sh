@@ -130,7 +130,7 @@ PKGS="
 apk add --root $TARGET --no-cache -q $PKGS
 
 log "LLM OS files"
-wget -qO- "$PAYLOAD/build/work/payload.tar" | tar -x -C $TARGET
+wget -qO- "$PAYLOAD/build/work/payload.tar" | tar -x -o -C $TARGET     # -o: owned by root here, whoever made the archive
 chmod 0755 $TARGET/usr/bin/llmos $TARGET/usr/bin/llmos-model-run $TARGET/usr/libexec/llmos-login $TARGET/usr/libexec/llmos-desk $TARGET/etc/init.d/llmos-*
 # the build stamp (`llmos version`, Settings); the version is the payload's own. The ISO build rewrites it with MEDIUM=live.
 VER=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' $TARGET/usr/lib/llmos/llmos/__init__.py)

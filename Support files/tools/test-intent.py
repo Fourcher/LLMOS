@@ -181,7 +181,15 @@ CASES = {
     "use the online model for everything": ("change_setting", {"setting": "brain", "value": "cloud"}),
     "let claude do everything": ("change_setting", {"setting": "brain", "value": "cloud"}),
     "set up the online model": ("online_model", {"action": "set up"}),
-    "connect my claude account": ("online_model", {"action": "set up"}),
+    "connect my claude account": ("online_model", {"action": "sign in", "provider": "claude"}),
+    # signing in (the connect panel's buttons say these): the service's key page opens, nothing to type
+    "sign in to Claude": ("online_model", {"action": "sign in", "provider": "claude"}),
+    "sign in to ChatGPT": ("online_model", {"action": "sign in", "provider": "chatgpt"}),
+    "please log into my OpenAI account": ("online_model", {"action": "sign in", "provider": "chatgpt"}),
+    "Log in with Anthropic.": ("online_model", {"action": "sign in", "provider": "claude"}),
+    "connect to chat gpt": ("online_model", {"action": "sign in", "provider": "chatgpt"}),
+    "connect another online service": ("online_model", {"action": "set up", "provider": "other"}),
+    "sign in to my bank": None, "log into gmail": None, "connect to the wifi": None,
     "forget the online model": ("online_model", {"action": "forget"}),
     "ask me before using the internet": ("change_setting", {"setting": "internet", "value": "ask"}),   # still the internet rule
     # desk layouts (the settings panel's phrases and what the owner would say)

@@ -196,16 +196,17 @@
   const wizard = {
     active: false, i: 0, data: {}, answers: {}, tz: null, wifiSel: null, nets: null, wifiNeeded: false, cloudNeeded: false, summary: null,
     steps: ["welcome", "language", "name", "timezone", "profile", "passphrase", "wifi", "cloud", "done"],
-    start(data) { this.active = true; this.i = 0; this.data = data; this.answers = {}; this.tz = data.tz_label || null; this.wifiNeeded = false; this.cloudNeeded = false; this.summary = null; this.nets = null; if (data.lang_hint) this.answers.language = data.lang_hint; this.render(); },
+    start(data) { this.active = true; this.i = 0; this.data = data; this.answers = {}; this.capTier = null; this.tz = data.tz_label || null; this.wifiNeeded = false; this.cloudNeeded = false; this.summary = null; this.nets = null; this.answers.language = data.lang_hint || "en"; this.render(); },
     step() { return this.steps[this.i]; },
     hidden(s) { return (s === "wifi" && !this.wifiNeeded) || (s === "cloud" && !this.cloudNeeded); },
     visible() { return this.steps.filter(s => s !== "welcome" && s !== "done" && !this.hidden(s)); },
     render() {
       const body = $("wiz-body"), nav = $("wiz-nav"), st = this.step();
       $("wiz-error").textContent = "";
+      document.querySelector(".wizard").classList.toggle("wide", st === "profile");
       body.classList.remove("swap", "backwards"); void body.offsetWidth; body.classList.add("swap"); if (this.back) body.classList.add("backwards"); this.back = false;
       const vis = this.visible(), n = vis.indexOf(st);
-      $("wiz-dots").innerHTML = vis.map((s, k) => `<i class="${k <= n ? "on" : ""}"></i>`).join("");
+      $("wiz-dots").innerHTML = vis.map((s, k) => `<i class="${k <= n || st === "done" ? "on" : ""}"></i>`).join("");
       $("wiz-step").textContent = "";   // the dots already say where we are
       nav.innerHTML = "";
       const next = el("button", "btn primary", esc(t("d_next")));
@@ -254,56 +255,109 @@
         setTimeout(() => inp.focus(), 30);
         next.onclick = () => submit(this.tz ? this.tz.zone : "");
       } else if (st === "profile") {
-        // six sliders; each one's meaning is written out as it moves, and the model it implies is shown below
-        const P = this.answers.profile || (this.answers.profile = { autonomy: 0, internet: 0, brain: 0, capability: 30, guidance: 0, motion: 100 });
+        // one card per setting: its two or three choices as buttons and, under them, what the chosen one means.
+        // The on-device model's choices are this computer's real models (worked out by the OS from its memory),
+        // with what each needs; the model and the screen get a recommendation from the computer's specs.
+        const D = this.data, sys = D.system || {}, tiersAll = D.tiers || { on: [], off: [] }, recAll = D.recommend || { on: {}, off: {} };
         const Q = [{ k: "autonomy", n: 3 }, { k: "internet", n: 3 }, { k: "brain", n: 3 }, { k: "capability", n: 3 }, { k: "guidance", n: 2 }, { k: "motion", n: 3 }];
-        body.innerHTML = `<h2>${esc(t("w_quiz_title"))}</h2><p>${esc(t("w_quiz_text"))}</p><div class="quiz" id="wz-quiz"></div><p id="wz-pick" class="dim small"></p>`;
-        const box = $("wz-quiz"), rows = {};
-        const meaning = (q, v) => { if (q.k === "brain" && P.internet >= 67) return t("q_brain_offline"); const i = q.n === 2 ? (v < 50 ? 0 : 1) : (v < 34 ? 0 : v < 67 ? 1 : 2); return t(`q_${q.k}_${i}`); };
-        const models = this.data.models || [], ram = this.data.ram_gb || 0;
-        const pick = () => {
-          const fits = models.filter(x => x.ram_gb <= ram - 1 && (P.internet < 67 || x.installed)).sort((a, b) => a.size_gb - b.size_gb);
-          if (!fits.length) { $("wz-pick").textContent = ""; return; }
-          const c = P.capability, x = c < 34 ? fits[0] : c < 67 ? fits[Math.floor(fits.length / 2)] : fits[fits.length - 1];
-          $("wz-pick").textContent = fmt("w_quiz_model", { model: x.name + (x.installed ? "" : ` (${x.size_gb} GB, ${t("w_quiz_download")})`) }) + " · " + fmt("w_quiz_ram", { ram });
+        const TIER = ["fast", "balanced", "capable"];
+        const val = (q, i) => q.n === 2 ? i * 100 : i * 50;                                    // what the OS reads
+        const idx = (q, v) => q.n === 2 ? (v < 50 ? 0 : 1) : (v < 34 ? 0 : v < 67 ? 1 : 2);
+        const online = () => !this.answers.profile || idx(Q[1], this.answers.profile.internet) !== 2;
+        const tiers = () => (online() ? tiersAll.on : tiersAll.off) || [];
+        const rec = () => (online() ? recAll.on : recAll.off) || {};
+        if (!this.answers.profile) {
+          const r = rec();
+          this.answers.profile = { autonomy: 0, internet: 0, brain: 0, capability: val(Q[3], Math.max(0, TIER.indexOf(r.capability))),
+                                   guidance: 0, motion: val(Q[5], r.motion == null ? 2 : r.motion), model: "" };
+        }
+        const P = this.answers.profile;
+        const specs = [sys.ram_gb ? fmt("w_sys_mem", { n: sys.ram_gb }) : "", sys.cores ? fmt("w_sys_cores", { n: sys.cores }) : "",
+                       sys.accel ? (sys.gpu ? fmt("w_sys_gpu", { name: sys.gpu }) : "") : t("w_sys_gpu_basic")].filter(Boolean);
+        body.innerHTML = `<h2>${esc(t("w_quiz_title"))}</h2>
+          <div class="intro"><p class="lead2">${esc(t("w_quiz_text"))}</p>${specs.length ? `<div class="syscheck">${esc(fmt("w_sys", { parts: specs.join(" · ") }))}</div>` : ""}</div>
+          <div class="quiz" id="wz-quiz"></div>`;
+        const box = $("wz-quiz"), cards = {};
+        const recNote = (el2, same, choice) => { el2.className = "qx" + (same ? " rec" : ""); el2.textContent = same ? "✓ " + t("w_rec_this") : fmt("w_rec_other", { choice }); };   // in the card's title row
+        const fill = (q) => {
+          const card = cards[q.k], seg = card.querySelector(".seg"), qd = card.querySelector(".qd"), qx = card.querySelector(".qx");
+          seg.innerHTML = ""; qx.textContent = ""; qx.className = "qx";
+          let opts = [], desc = "";
+          if (q.k === "capability") {
+            const ts = tiers();
+            if (!ts.length) { seg.classList.add("hidden"); qd.textContent = t("w_model_none"); P.model = ""; return; }
+            seg.classList.remove("hidden");
+            // the owner's pick (or the recommendation) where it exists; offline only installed models can be chosen, and
+            // going back online returns to the pick
+            const sel = ts.find(x => x.tier === (this.capTier || rec().capability)) || ts.find(x => x.tier === rec().capability) || ts[0];
+            P.model = sel.id; P.capability = val(q, TIER.indexOf(sel.tier));
+            opts = ts.map(x => ({ label: t(`q_capability_${TIER.indexOf(x.tier)}_s`), on: x === sel, pick: () => { this.capTier = x.tier; fill(q); } }));
+            desc = fmt("w_model_need", { model: sel.name, need: sel.need_gb, ram: sys.ram_gb || "?" }) + " " +
+                   (sel.tight ? t("w_model_tight") : sel.installed ? t("w_model_ready") : fmt("w_model_dl", { size: sel.size_gb }));
+            const r = ts.find(x => x.tier === rec().capability);
+            if (r && ts.length > 1) recNote(qx, r === sel, t(`q_capability_${TIER.indexOf(r.tier)}_s`));
+          } else {
+            const lock = q.k === "brain" && !online(), cur = lock ? 0 : idx(q, P[q.k]);
+            opts = Array.from({ length: q.n }, (_, i) => ({ label: t(`q_${q.k}_${i}_s`), on: i === cur, off: lock && i > 0,
+              pick: () => { P[q.k] = val(q, i); fill(q); if (q.k === "internet") { fill(Q[2]); fill(Q[3]); } } }));
+            desc = lock ? t("q_brain_offline") : t(`q_${q.k}_${cur}`);
+            if (q.k === "motion" && rec().motion != null) recNote(qx, rec().motion === cur, t(`q_motion_${rec().motion}_s`));
+          }
+          for (const o of opts) {
+            const b = el("button", "", esc(o.label));
+            b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", String(!!o.on));
+            if (o.off) b.disabled = true;
+            b.onclick = () => { o.pick(); const back = [...cards[q.k].querySelectorAll(".seg button")].find(x => x.textContent === o.label); if (back) back.focus(); };
+            seg.appendChild(b);
+          }
+          qd.textContent = desc;
         };
         for (const q of Q) {
-          const row = el("div", "q", `<div class="qh"><b id="ql-${q.k}">${esc(t("q_" + q.k))}</b><span class="qm"></span></div><input type="range" min="0" max="100" step="1" value="${P[q.k]}" aria-labelledby="ql-${q.k}"><div class="qends"><span>${esc(t(`q_${q.k}_0`))}</span><span>${esc(t(`q_${q.k}_${q.n - 1}`))}</span></div>`);
-          const inp = row.querySelector("input"), m = row.querySelector(".qm");
-          rows[q.k] = { inp, m, q };
-          inp.addEventListener("input", () => { P[q.k] = +inp.value; m.textContent = meaning(q, P[q.k]); if (q.k === "internet") rows.brain.m.textContent = meaning(rows.brain.q, P.brain); if (q.k === "capability") pick(); });
-          box.appendChild(row);
+          const card = el("section", "q");
+          card.innerHTML = `<div class="qh"><span class="qt" id="ql-${q.k}">${esc(t("q_" + q.k))}</span><span class="qx"></span></div><div class="seg" role="radiogroup" aria-labelledby="ql-${q.k}"></div><div class="qd"></div>`;
+          cards[q.k] = card; box.appendChild(card);
         }
-        for (const r of Object.values(rows)) r.m.textContent = meaning(r.q, P[r.q.k]);
-        pick();
+        Q.forEach(fill);
         next.onclick = () => submit({ ...P });
       } else if (st === "cloud") {
-        // the online-model account: service, model, key. The key goes straight to the OS, never through a model.
-        const provs = this.data.cloud_providers || [];
-        const C = this.answers.cloud || (this.answers.cloud = { provider: provs[0] ? provs[0].id : "anthropic", model: "" });
-        body.innerHTML = `<h2>${esc(t("w_cloud_title"))}</h2><p>${esc(t("w_cloud_text"))}</p><div class="opts grid" id="wz-prov"></div><div class="opts" id="wz-cmodels" style="margin-top:10px"></div>
-          <input id="wz-curl" type="text" autocomplete="off" placeholder="${esc(t("w_cloud_url"))}" class="hidden" style="margin-top:10px"><input id="wz-cmodel" type="text" autocomplete="off" placeholder="${esc(t("w_cloud_model"))}" class="hidden" style="margin-top:10px">
-          <input id="wz-ckey" type="password" autocomplete="off" placeholder="${esc(t("w_cloud_key"))}" style="margin-top:10px"><p class="dim small" id="wz-cwhere"></p><p class="dim small">${esc(t("w_cloud_none_note"))}</p>`;
-        const prov = () => provs.find(p => p.id === C.provider) || provs[0] || { models: [] };
-        const drawModels = () => {
-          const p = prov(), mb = $("wz-cmodels"), generic = !p.models.length; mb.innerHTML = "";
-          $("wz-curl").classList.toggle("hidden", !generic); $("wz-cmodel").classList.toggle("hidden", !generic);
-          $("wz-cwhere").textContent = p.console ? fmt("w_cloud_key_where", { where: p.console }) : "";
-          $("wz-ckey").placeholder = p.key_hint || t("w_cloud_key");
-          if (generic) return;
-          if (!p.models.some(m => m.id === C.model)) C.model = p.models[0].id;
-          for (const m of p.models) { const b = el("button", "opt" + (C.model === m.id ? " sel" : ""), `<b>${esc(m.name)}</b><span>${esc(m.note)}</span>`); b.onclick = () => { C.model = m.id; mb.querySelectorAll(".opt").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); }; mb.appendChild(b); }
+        // connect an online model by signing in: the service's own key page opens in a window; the key the owner
+        // copies there comes in by itself (the OS reads it from the clipboard and checks it; it never reaches this page)
+        const provs = (this.data.cloud_providers || []).filter(p => p.signin);
+        const C = this.answers.cloud || (this.answers.cloud = { provider: provs[0] ? provs[0].id : "anthropic", connected: false });
+        body.innerHTML = `<h2>${esc(t("w_cloud_title"))}</h2><p class="lead2">${esc(t("w_cloud_text"))}</p>
+          <div class="seg big" id="wz-prov" role="radiogroup" aria-label="${esc(t("w_cloud_title"))}"></div>
+          <button class="btn primary big" id="wz-signin" type="button"></button>
+          <p class="how">${esc(t("w_cloud_signin_how"))}</p>
+          <div class="note" id="wz-cnote" role="status"></div>
+          <details class="paste"><summary>${esc(t("w_cloud_paste"))}</summary>
+            <div class="pwrow"><input id="wz-ckey" type="password" autocomplete="off"><button class="btn" id="wz-ccheck" type="button">${esc(t("w_cloud_check"))}</button></div></details>`;
+        const prov = () => provs.find(p => p.id === C.provider) || provs[0] || { name: "", key_hint: "" };
+        const note = (text, cls) => { const n = $("wz-cnote"); text = String(text || ""); n.textContent = text.charAt(0).toUpperCase() + text.slice(1); n.className = "note" + (cls ? " " + cls : ""); };
+        const drawProv = () => {
+          const box = $("wz-prov"); box.innerHTML = "";
+          for (const p of provs) {
+            const b = el("button", "", esc(p.name)); b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", String(p.id === C.provider));
+            b.onclick = () => { C.provider = p.id; drawProv(); };
+            box.appendChild(b);
+          }
+          $("wz-signin").textContent = fmt("w_cloud_signin", { name: prov().name });
+          $("wz-ckey").placeholder = prov().key_hint || t("w_cloud_key");
         };
-        for (const p of provs) { const b = el("button", "opt" + (C.provider === p.id ? " sel" : ""), `<b>${esc(p.name)}</b>`); b.onclick = () => { C.provider = p.id; $("wz-prov").querySelectorAll(".opt").forEach(x => x.classList.remove("sel")); b.classList.add("sel"); drawModels(); }; $("wz-prov").appendChild(b); }
-        drawModels();
+        drawProv();
+        $("wz-signin").onclick = () => { note(t("w_cloud_waiting")); post({ t: "signin", provider: C.provider }); };
+        $("wz-ccheck").onclick = () => { const key = $("wz-ckey").value.trim(); if (!key) return; note(t("w_cloud_checking")); submit({ provider: C.provider, model: "", url: "", key }); };
+        $("wz-ckey").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.stopImmediatePropagation(); e.preventDefault(); $("wz-ccheck").click(); } });
+        this.onCloudError = (m) => { note(m.text || t("error"), "bad"); next.disabled = !C.connected; };   // a pasted key that did not work
+        this.onSignin = (m) => {
+          if (m.waiting) return note(m.note);
+          if (m.ok) { C.connected = true; note(m.note, "ok"); next.disabled = false; next.focus(); return; }
+          note(m.note, "bad");
+          if (m.none) { const d = body.querySelector("details.paste"); if (d) d.open = true; }
+        };
+        if (C.connected) note(fmt("w_cloud_ok", { model: prov().name }), "ok");
         const skip = el("button", "btn ghost", esc(t("w_cloud_skip"))); skip.onclick = () => submit({}); nav.appendChild(skip);
-        next.textContent = t("w_cloud_check");
-        next.onclick = () => {
-          const key = $("wz-ckey").value.trim(); if (!key) return submit({});
-          const generic = !prov().models.length;
-          $("wiz-error").textContent = t("w_cloud_checking");
-          submit({ provider: C.provider, model: generic ? $("wz-cmodel").value.trim() : C.model, url: generic ? $("wz-curl").value.trim() : "", key });
-        };
+        next.disabled = !C.connected;
+        next.onclick = () => submit(C.connected ? { connected: true } : {});
       } else if (st === "wifi") {
         body.innerHTML = `<h2>${esc(t("w_wifi_title"))}</h2><div id="wz-wifi" class="wifilist"><span class="dim">${esc(t("w_wifi_none"))}</span></div>
           <div id="wz-wifipw" class="hidden"><input id="wz-pw" type="password" autocomplete="off" placeholder="${esc(t("w_wifi_pass"))}" style="margin-top:10px"></div>`;
@@ -338,12 +392,18 @@
           submit(a);
         };
       } else if (st === "done") {
-        const s = this.summary, parts = [];
+        // what was chosen, in the words of the settings step (what the OS actually set, e.g. offline forces "this computer")
+        const s = this.summary, rows = [];
         if (s) {
-          parts.push(t("v_" + s.autonomy).split(":")[0], t("v_" + s.internet), t("v_brain_" + s.brain), t("v_guidance_" + s.guidance));
-          if (s.model) parts.push(s.model + (s.download ? ` (${t("w_quiz_download")})` : ""));
+          const pick = (k, order) => { const i = order.indexOf(s[k]); return i < 0 ? "" : t(`q_${k}_${i}_s`); };
+          rows.push([t("q_autonomy"), pick("autonomy", ["hands-off", "balanced", "hands-on"])], [t("q_internet"), pick("internet", ["yes", "ask", "no"])],
+                    [t("q_brain"), pick("brain", ["local", "ask", "cloud"])],
+                    [t("q_capability"), s.model ? s.model + (s.download ? ` (${t("w_quiz_download")})` : "") : ""],
+                    [t("q_guidance"), pick("guidance", ["owner", "standard"])], [t("q_motion"), pick("motion", ["off", "reduced", "full"])]);
         }
-        body.innerHTML = `<h2>${esc(t("w_done_title"))}</h2><p>${esc(t("w_done_text"))}</p>${parts.length ? `<p class="dim small">${esc(t("w_done_choices"))} ${esc(parts.join(" · "))}</p>` : ""}<div class="opts" id="wz-try"></div>`;
+        const recap = rows.filter(r => r[1]).map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("");
+        body.innerHTML = `<h2>${esc(t("w_done_title"))}</h2>${recap ? `<p class="dim small">${esc(t("w_done_choices"))}</p><dl class="recap">${recap}</dl>` : ""}
+          <p>${esc(t("w_done_text"))}</p><div class="opts" id="wz-try"></div>`;
         for (const k of ["g_ex1", "g_ex2", "g_ex3"]) {
           const b = el("button", "opt", `<b>“${esc(t(k))}”</b>`);
           b.onclick = () => { this.pending = t(k); next.click(); };
@@ -354,6 +414,9 @@
       }
       if (n > 0 && st !== "done") nav.appendChild(back);
       nav.appendChild(next);
+      body.onscroll = () => this.fade(); requestAnimationFrame(() => this.fade());
+      // nothing to type on this step: Enter (or Next) goes on, with the preselected answers
+      if (["welcome", "language", "profile", "done"].includes(st)) setTimeout(() => { if (!document.activeElement || document.activeElement === document.body) next.focus({ preventScroll: true }); }, 40);
       const inp = body.querySelector("input[type=text], input[type=password]");
       if (inp && st !== "timezone") inp.addEventListener("keydown", (e) => { if (e.key === "Enter") next.click(); });
       if (st === "timezone") $("wz-tz").addEventListener("keydown", (e) => { if (e.key === "Enter") { const f = $("wz-tzlist").querySelector(".tzitem"); if (f) f.click(); else next.click(); } });
@@ -371,8 +434,14 @@
       while (this.i < this.steps.length - 1 && this.hidden(this.step())) this.i++;
       this.render();
     },
-    error(m) { $("wiz-error").textContent = m.text || t("error"); const b = $("wiz-nav").querySelector(".primary"); if (b) b.disabled = false; }
+    error(m) {
+      if (this.step() === "cloud" && this.onCloudError) return this.onCloudError(m);
+      $("wiz-error").textContent = m.text || t("error"); const b = $("wiz-nav").querySelector(".primary"); if (b) b.disabled = false;
+    },
+    // a step taller than the screen scrolls; the fade at the bottom says more follows, until the end is reached
+    fade() { const b = $("wiz-body"); b.classList.toggle("more", b.scrollTop + b.clientHeight < b.scrollHeight - 4); }
   };
+  window.addEventListener("resize", () => { if (wizard.active) wizard.fade(); });
 
   // ---------------------------------------------------------------- windows
   const SIZES = { s: 380, m: 560, l: 780, xl: 980 };
@@ -780,6 +849,7 @@
         case "wizard.ok": return wizard.ok(m);
         case "wizard.error": return wizard.error(m);
         case "tz.results": if (wizard.active && wizard.onTz) wizard.onTz(m.items || []); return;
+        case "signin.result": if (wizard.active && wizard.onSignin) wizard.onSignin(m); return;
         case "wifi.list": wizard.nets = m.items || []; if (wizard.active && wizard.onWifi) wizard.onWifi(wizard.nets); return;
         case "unlock.error": { $("lock-go").disabled = false; $("lock-busy").classList.add("hidden"); $("lock-error").textContent = m.text; $("lock-pass").value = ""; $("lock-pass").focus();
           const c = $("lock-card"); c.classList.remove("shake"); void c.offsetWidth; c.classList.add("shake"); return; }

@@ -4,6 +4,40 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.6.1 — 2026-10-05
+The first run, after booting a real PC: clearer, bigger, fitted to the
+computer, and connecting Claude or ChatGPT without typing a key.
+
+- **Language:** English is already picked; Next (or Enter) goes on.
+- **One page of six settings, as plain choices.** The sliders looked
+  continuous but meant two or three things; each setting is now a card with
+  its two or three choices as buttons (On its own / If it's risky / Every
+  time, On / Ask first / Off, …) and what the chosen one means under it.
+  Three cards across on a laptop screen, all six visible at once; text
+  15–17 px; on small screens the list scrolls with a visible bar.
+- **A system check.** The page says what it found ("This computer: 16 GB
+  memory · 8 processor cores · Intel graphics") and uses it: the on-device
+  model's choices are this computer's real models that fit its memory, each
+  as "needs about 7 GB of this computer's 16 GB of memory" plus ready /
+  downloads after set-up (5.2 GB); Balanced is recommended with 8+ cores and
+  16 GB, gentle animation without graphics acceleration. A computer too small
+  for any model is told the installed one will be slow, instead of nothing.
+- **Sign in instead of a key.** "Sign in to Claude" / "Sign in to ChatGPT"
+  opens the service's own key page in a private window (Google / Apple /
+  Microsoft sign-in pop-ups work); press Copy next to the new key and the
+  window closes by itself, the key is checked and kept. For ChatGPT the
+  newest general GPT model the account offers is chosen. Pasting a key stays
+  as a fallback; *Later* leaves it for the desk, which offers the same
+  sign-in buttons. Saying "sign in to ChatGPT" works any time.
+- **The screen is scaled to the display**, the way PCs pick their default
+  (125 % on a 15-inch 1080p laptop, 150 % on a 14-inch one or a 27-inch 4K
+  monitor, 200 % above): text was tiny on such screens. Text size now uses
+  the page's own zoom, so layouts stay intact at any size.
+- The last page recaps the choices in the same words as the settings page.
+- Build: the OS files in the images were owned by the building Mac's user
+  (uid 501); they are now root's (the payload is archived as root and
+  unpacked without owners).
+
 ## 1.6.0 — 2026-10-05
 Hand someone the LLM OS folder and it just works: they open Start Here on
 their Mac, Windows PC or Linux computer, make a USB stick, and that stick

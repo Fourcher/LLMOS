@@ -207,30 +207,44 @@ off animations" / "turn animations on". Some things it does:
 | "use ministral 8b" · "download gemma 12b" | switch or fetch models — official releases only, verified by SHA‑256 |
 | "lock" · "shutdown" | closes the programs you opened and then the vault (passphrase to reopen) · powers off |
 
-### The set‑up quiz
+### The set‑up
 
-The first run asks your language, name and time zone, then shows six
-sliders. Each one's meaning is written out as you move it, and the model it
-implies is named underneath:
+The first run asks your language (English is already picked: just press
+Next), your name and time zone, then shows one page with six settings, each
+a card with two or three plain choices and what the chosen one means under
+it. The page starts with what it found on this computer (memory, processor
+cores, graphics) and uses it:
 
-- **How much should it ask?** → hands‑off / balanced / hands‑on (below).
-- **Internet** → connected / asks each time / offline (the firewall then
-  blocks everything).
-- **Where it thinks** → only on this computer / here, but it asks before a
-  big request goes to an online model / an online model answers everything.
-- **On‑device model** → fast and light / in between / the most capable this
-  machine can run (downloaded after set‑up if it isn't installed).
-- **Guidance** → follows your instructions on your machine, no lectures (the
-  default) / keeps a standard assistant's caution.
-- **Screen** → calm / reduced / lively.
+- **How much should it ask?** → on its own / if it's risky / every time
+  (hands‑off / balanced / hands‑on, below).
+- **Internet** → on / ask first / off (the firewall then blocks everything).
+- **Where it thinks** → this computer / ask first (here, but it asks before a
+  big request goes to an online model) / online (an online model answers
+  everything).
+- **On‑device model** → Fast / Balanced / Most capable, which are this
+  computer's real models: those that fit its memory, each shown as "needs
+  about 7 GB of this computer's 16 GB of memory", already installed or
+  downloaded after set‑up. Balanced is recommended with 8+ processor cores and
+  16 GB; Most capable is never the default (slow on a processor).
+- **Guidance** → as I say (follows your instructions on your machine, no
+  lectures; the default) / cautious (a standard assistant's caution).
+- **Animation** → none / gentle / full (full is recommended only with real
+  graphics acceleration).
 
-If the "where it thinks" slider asks for an online model, the next page takes
-the account: Claude (Anthropic; keys come from console.anthropic.com) or any
-OpenAI‑compatible service (address + model name + key). The key is checked
-with one tiny request and kept with your data inside the vault; usage is
-billed to that account. Skip it and everything is answered on this computer
-until you add one in Settings. Every slider maps to a setting you can change
-later in words.
+If *where it thinks* asks for an online model, the next page connects one
+without typing a key: pick Claude or ChatGPT and press *Sign in*. The
+service's own key page opens in a window (a private session; nothing of the
+sign‑in is kept); sign in, create a key and press Copy, and the window closes
+by itself while the OS checks the key with one tiny request. It needs an API
+account with that service, billed by use and separate from a chat
+subscription. A key can also be pasted, and any OpenAI‑compatible service
+can be added later ("connect another online service"). Press *Later* and
+everything is answered on this computer; the desk then offers the sign‑in
+buttons again. Every choice maps to a setting you can change later in words.
+
+The screen is scaled the way a PC picks its default: 125 % on a 15‑inch 1080p
+laptop, 150 % on a 14‑inch one or a 27‑inch 4K monitor, 200 % on sharper
+screens ("make everything bigger" adds to that).
 
 ### Autonomy
 

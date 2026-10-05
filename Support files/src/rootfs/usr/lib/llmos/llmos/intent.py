@@ -443,9 +443,22 @@ def _models_discover(text):
     return None
 
 
+# connecting an account without typing a key: "sign in to Claude", "log in to ChatGPT", "connect claude"
+_SIGNIN = re.compile(r"^\s*(?:please\s+)?(?:(?:sign|log)\s*(?:in\s+(?:to|with)|into)|connect(?:\s+to)?)\s+(?:my\s+)?"
+                     r"(?P<p>claude|anthropic|chatgpt|chat\s*gpt|openai)(?:\s+account)?\s*[.!]?\s*$", re.I)
+_OTHER_ONLINE = re.compile(r"^\s*(?:please\s+)?connect\s+(?:another|a\s+different|some\s+other|an?\s+other)\s+online\s+"
+                           r"(?:service|model|account)\s*[.!]?\s*$", re.I)
+
+
 def _online_model(text):
     if _BRAIN.match(text):
         return None   # "use the online model for everything" is the brain setting, handled in _policy
+    m = _SIGNIN.match(text)
+    if m:
+        p = m.group("p").lower().replace(" ", "")
+        return ("online_model", {"action": "sign in", "provider": "claude" if p in ("claude", "anthropic") else "chatgpt"})
+    if _OTHER_ONLINE.match(text):
+        return ("online_model", {"action": "set up", "provider": "other"})     # the form for any OpenAI-compatible service
     m = _CLOUD_SETUP.match(text)
     if m:
         return ("online_model", {"action": "set up" if m.group("setup") else "forget"})

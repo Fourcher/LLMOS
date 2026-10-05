@@ -240,7 +240,8 @@ def translate_strings(strings, language):
 CLOUD_PROVIDERS = {
     "anthropic": {
         "name": "Claude", "url": "https://api.anthropic.com", "key_hint": "sk-ant-…",
-        "console": "console.anthropic.com",
+        "console": "platform.claude.com", "signin": "https://platform.claude.com/settings/keys",
+        "key_re": r"sk-ant-[A-Za-z0-9_\-]{20,}",
         "models": [{"id": "claude-opus-5-5", "name": "Claude Opus 5.5", "note": "strong and thorough; the usual choice",
                     "speed": "moderate", "cost": "moderate", "good_at": ["hard reasoning, long code and writing", "the everyday online choice"],
                     "limits": ["thinks before answering, so a reply takes a little longer"]},
@@ -252,11 +253,64 @@ CLOUD_PROVIDERS = {
                     "limits": ["the most expensive; long requests can take minutes"]},
                    {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5", "note": "fastest and cheapest",
                     "speed": "fastest", "cost": "low", "good_at": ["quick answers", "cheapest per use"], "limits": ["least capable of the four"]}]},
-    # any service speaking the chat-completions API: OpenAI, Mistral, Groq, OpenRouter, a bigger computer at home…
-    "openai": {"name": "OpenAI-compatible", "url": "https://api.openai.com/v1", "key_hint": "sk-…", "console": "",
+    # OpenAI's API (the models behind ChatGPT). The model is not asked for: after the key, the newest general model
+    # the account offers is chosen (_pick_openai_model), since OpenAI's line-up changes often.
+    "chatgpt": {"name": "ChatGPT", "url": "https://api.openai.com/v1", "key_hint": "sk-…",
+                "console": "platform.openai.com", "signin": "https://platform.openai.com/api-keys",
+                "key_re": r"sk-(?:proj-|svcacct-)?[A-Za-z0-9_\-]{20,}", "auto_model": True,
+                "note": "OpenAI's models through its API (billed by OpenAI, separately from a ChatGPT subscription)",
+                "models": []},
+    # any service speaking the chat-completions API: Mistral, Groq, OpenRouter, a bigger computer at home…
+    "openai": {"name": "Other (OpenAI-compatible)", "url": "https://api.openai.com/v1", "key_hint": "sk-…", "console": "",
                "note": "OpenAI, Mistral, Groq, OpenRouter, or your own server — anything speaking the OpenAI API",
                "models": []},
 }
+
+
+def _get_json(url, headers, timeout=30):
+    """GET a JSON document through curl with the headers (the key) in a 0600 file, Tor when that is on.
+    Returns the parsed document; raises CloudError with the service's own message on failure."""
+    d = tempfile.mkdtemp(prefix="llmos-cloud-")
+    cfg = os.path.join(d, "h")
+    try:
+        with os.fdopen(os.open(cfg, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+            for k, v in headers.items():
+                f.write('header = "%s: %s"\n' % (k, str(v).replace('"', "").replace("\n", "")))
+        cmd = ["curl", "-sS", "--fail-with-body", "--max-time", str(timeout), "--connect-timeout", "20",
+               "--proto", "=http,https", "-K", cfg, url]
+        if config.settings.get("tor"):
+            cmd[1:1] = ["--socks5-hostname", TOR_PROXY]
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout + 10)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise CloudError(f"couldn't reach the service: {e}")
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    try:
+        doc = json.loads(r.stdout or b"{}")
+    except ValueError:
+        doc = {}
+    if r.returncode != 0:
+        msg = (doc.get("error") or {}).get("message") if isinstance(doc.get("error"), dict) else doc.get("error")
+        raise CloudError(msg or r.stderr.decode("utf-8", "replace").strip() or "the service refused the request")
+    return doc
+
+
+def _pick_openai_model(ids):
+    """The newest general chat model in an OpenAI account's list: gpt-<version>, not a mini/nano or a special-purpose
+    variant (audio, realtime, search, image, codex, pro…), the base name before a dated snapshot. ("pro" models are
+    answered only through another API than the one used here.)"""
+    skip = ("audio", "realtime", "search", "transcribe", "tts", "image", "codex", "instruct", "embedding",
+            "moderation", "preview", "chat-latest", "mini", "nano", "oss", "-pro", "deep-research")
+    best = None
+    for mid in ids:
+        m = re.match(r"^gpt-(\d+(?:\.\d+)?)(.*)$", mid)
+        if not m or any(x in mid for x in skip):
+            continue
+        dated = bool(re.search(r"-\d{4}-\d{2}-\d{2}$", m.group(2)))
+        rank = (float(m.group(1)), not dated, -len(mid))
+        if best is None or rank > best[0]:
+            best = (rank, mid)
+    return best[1] if best else ""
 
 
 def cloud_models(provider=None):
@@ -547,6 +601,14 @@ def cloud_setup(fields, adopt=True):
          "key": str(fields.get("key") or "").strip()}
     if not c["key"]:
         return False, "no API key was given"
+    if not c["model"] and prov.get("auto_model"):
+        try:
+            doc = _get_json(c["url"].rstrip("/") + "/models", {"Authorization": "Bearer " + c["key"]})
+        except CloudError as e:
+            return False, f"the account did not work: {e}"
+        c["model"] = _pick_openai_model([str(m.get("id", "")) for m in doc.get("data", []) if isinstance(m, dict)])
+        if not c["model"]:
+            return False, "the account offers no chat model this can use"
     if not c["model"]:
         return False, "no model name was given"
     if not re.match(r"^https?://[^\s/]+", c["url"]):
