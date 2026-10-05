@@ -1,0 +1,36 @@
+<!-- llmos-app: id=calculator; title=Calculator; size=s; words=calculator calc calculate calculating arithmetic -->
+<style>
+.calc{display:flex;flex-direction:column;height:100%;gap:10px}
+.screen{background:var(--card);border-radius:var(--r);padding:14px 16px;text-align:right;min-height:84px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+.screen .hist{color:var(--dim);font-size:15px;min-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen .cur{font-size:40px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex:1}
+.keys button{font-size:22px;min-height:54px}
+.keys .op{background:color-mix(in srgb,var(--accent) 22%,var(--card));color:var(--fg)}
+.keys .eq{background:var(--accent);color:var(--on-accent)}
+.keys .wide{grid-column:span 2}
+</style>
+<div class="calc">
+  <div class="screen"><div class="hist" id="hist"></div><div class="cur" id="cur">0</div></div>
+  <div class="keys" id="keys"></div>
+</div>
+<script>
+const K=[["C","fn"],["±","fn"],["%","fn"],["÷","op"],["7"],["8"],["9"],["×","op"],["4"],["5"],["6"],["−","op"],["1"],["2"],["3"],["+","op"],["0","wide"],["."],["=","eq"]];
+let cur="0",acc=null,op=null,fresh=true,hist="";
+const $=id=>document.getElementById(id);
+function fmt(n){if(!isFinite(n))return"Error";const s=String(+n.toPrecision(12));return s.length>14?n.toExponential(8):s}
+function show(){$("cur").textContent=cur;$("hist").textContent=hist}
+function apply(a,b,o){return o==="+"?a+b:o==="−"?a-b:o==="×"?a*b:o==="÷"?a/b:b}
+function press(k){
+ if(/[0-9]/.test(k)){cur=fresh||cur==="0"?k:cur+k;fresh=false}
+ else if(k==="."){if(fresh){cur="0.";fresh=false}else if(!cur.includes("."))cur+="."}
+ else if(k==="C"){cur="0";acc=null;op=null;hist="";fresh=true}
+ else if(k==="±"){cur=fmt(-parseFloat(cur))}
+ else if(k==="%"){cur=fmt(parseFloat(cur)/100)}
+ else if("+−×÷".includes(k)){if(op&&!fresh){acc=apply(acc,parseFloat(cur),op);cur=fmt(acc)}else acc=parseFloat(cur);op=k;hist=fmt(acc)+" "+k;fresh=true}
+ else if(k==="="){if(op){const b=parseFloat(cur);hist=fmt(acc)+" "+op+" "+fmt(b)+" =";cur=fmt(apply(acc,b,op));acc=null;op=null;fresh=true}}
+ show()}
+for(const [k,c] of K){const b=document.createElement("button");b.textContent=k;if(c)b.className=c;b.onclick=()=>press(k);$("keys").append(b)}
+document.addEventListener("keydown",e=>{const m={"*":"×","/":"÷","-":"−","+":"+","Enter":"=","=":"=","Escape":"C","Backspace":"BS",".":".",",":".","%":"%"};let k=/[0-9]/.test(e.key)?e.key:m[e.key];if(!k)return;e.preventDefault();if(k==="BS"){cur=cur.length>1&&!fresh?cur.slice(0,-1):"0";show();return}press(k)});
+show();
+</script>

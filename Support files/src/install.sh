@@ -125,6 +125,11 @@ PKGS="
   mesa-dri-gallium mesa-egl mesa-gles mesa-gbm
   font-inter font-jetbrains-mono font-noto font-noto-emoji font-noto-cjk
   font-noto-arabic font-noto-hebrew font-noto-devanagari font-noto-thai
+  firefox thunar gvfs udisks2 tumbler ntfs-3g exfatprogs dosfstools
+  mousepad ristretto abiword gnumeric xarchiver 7zip
+  cups cups-filters avahi bluez
+  pipewire wireplumber pipewire-pulse pipewire-alsa pavucontrol
+  wlr-randr wlrctl lswt wl-clipboard flatpak mako libnotify swayidle wlopm wlsunset slurp playerctl xdg-desktop-portal xdg-desktop-portal-wlr poppler-utils adwaita-icon-theme
 "
 # shellcheck disable=SC2086
 apk add --root $TARGET --no-cache -q $PKGS
@@ -195,6 +200,10 @@ rc-update add nftables default
 rc-update add acpid default
 rc-update add dbus default
 rc-update add iwd default
+# printing (driverless: modern printers need no driver), finding printers on the network, Bluetooth
+for s in cupsd avahi-daemon bluetooth; do rc-update add $s default 2>/dev/null || true; done
+# programs that are not Alpine packages (Spotify, VS Code, Zoom…) come from Flathub when asked for
+flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
 rc-update add alsa default 2>/dev/null || true
 rc-update del crond default 2>/dev/null || true
 rc-update del sshd default 2>/dev/null || true

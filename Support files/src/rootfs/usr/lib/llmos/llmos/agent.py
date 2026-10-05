@@ -4,7 +4,7 @@ import json
 import re
 import time
 
-from . import config, i18n, intent, llm, mail, store, tools
+from . import ui, config, i18n, intent, llm, mail, store, tools
 
 # Small models sometimes *narrate* an action ("remembered that…", "done, I've
 # set…") without calling the tool. That is exactly the "never fake a result"
@@ -15,6 +15,12 @@ _CLAIM_RE = re.compile(
     r"turned (?:on|off|up|down)|changed|updated|installed|created|wrote|deleted|removed|enabled|disabled|"
     r"switched|applied|renamed|moved|i(?:'ve| have) (?:remembered|noted|saved|stored|set|scheduled|changed|done|created)|"
     r"done[.!])\b", re.I)
+
+# Requests whose answer IS the text (a story, a poem, an explanation, a question): their words are not claims of
+# having done something, so the honesty check above never applies to them.
+_WRITING_RE = re.compile(r"\b(?:write|draft|compose|tell me|story|stories|poem|poetry|joke|essay|letter|email to|song|lyrics|"
+                         r"explain|summari[sz]e|translate|describe|define|list|ideas?|brainstorm|recipe|plan|outline|rewrite|"
+                         r"what|why|how|who|when|where|which|is it|are there|can you tell|do you know)\b", re.I)
 
 # The system prompt is in two parts. The OPERATIONAL part (below) is how the OS functions -- it is fixed.
 # The CONDUCT part (how the OS treats the owner's requests, and the one boundary) is kept separate so the
@@ -249,13 +255,27 @@ def _maybe_save_routine(user_text, calls):
             args = json.loads(arguments) if isinstance(arguments, str) else (arguments or {})
         except ValueError:
             return
-        if not isinstance(args, dict) or tool.risk_for(args) in (tools.DESTRUCTIVE, tools.SECURITY):
+        # only things that look and show are remembered: a change the model guessed (a time zone, a setting)
+        # must not be repeated without thinking every time the same words come back
+        if not isinstance(args, dict) or tool.risk_for(args) not in (tools.SAFE, tools.READ):
             return
         for v in args.values():
             if isinstance(v, str) and len(v) > 24 and v.lower() not in low:
                 return
         kept.append([name, args])
     store.save_routine(user_text, kept)
+
+
+_CORRECTION = re.compile(r"^\s*(?:no\b|nope\b|wrong\b|that'?s (?:wrong|not (?:it|right|what i (?:asked|wanted|meant)))|not what i (?:asked|wanted|meant)|"
+                         r"undo\b|that'?s not|you misunderstood|i (?:said|meant)\b)", re.I)
+
+
+def forget_last_routine(user_text):
+    """A correction ("no, that's wrong", "undo") means what was done for the last request was not it: the next time
+    those words come, the model decides afresh."""
+    last = getattr(forget_last_routine, "last", None)
+    if last and _CORRECTION.match(user_text or ""):
+        store.routine_used(last, False)
 
 
 def _replay(ctx, user_text, rt):
@@ -322,7 +342,11 @@ def context_block(private=False):
 def build_messages(ctx, user_text, history, private=False):
     msgs = [{"role": "system", "content": system_prompt()}]
     msgs += trim_history(history)
-    msgs.append({"role": "user", "content": "[context]\n" + context_block(private) + "\n[/context]\n\n" + user_text})
+    note = "" if private else str(getattr(ctx, "topic_note", "") or "")
+    block = context_block(private) + ("\n" + note if note else "")
+    if not history:
+        block += "\nThis request starts a new topic: do only what it asks, nothing from earlier requests."
+    msgs.append({"role": "user", "content": "[context]\n" + block + "\n[/context]\n\n" + user_text})
     return msgs
 
 
@@ -360,6 +384,12 @@ def clip_input(text):
 def run(ctx, user_text, history):
     """Run one user turn. Streams text through ctx, executes tools under the
     autonomy policy, appends to history, returns the final text."""
+    try:
+        ctx.tainted = False        # nothing outside the owner's own words has been read yet this turn
+    except AttributeError:
+        pass
+    forget_last_routine(user_text)
+    forget_last_routine.last = user_text
     user_text, clipped = clip_input(user_text)
     if clipped:
         ctx.status("that was very long; I kept the beginning and the end")
@@ -377,15 +407,30 @@ def run(ctx, user_text, history):
     if re.search(r"\b(e-?mails?|inbox|mailbox|unread mail|my mail)\b|^\s*(?:reply|respond|answer)\s+(?:back\s+)?to\b",
                  user_text, re.I) and mail.account() is None \
             and not re.search(r"\b(set ?up|configure|add|connect|log ?in)\b", user_text, re.I):
-        reply = ("No email account is set up on this computer yet. Say something like: "
-                 "\"set up my email: address you@example.com, password …\" (Gmail, Outlook, Yahoo and "
-                 "iCloud need an app password).")
-        st = ctx.new_stream()
-        ctx.on_text(st, reply)
-        ctx.end_stream(st)
-        history.append({"role": "user", "content": _for_history(user_text)})
-        history.append({"role": "assistant", "content": reply})
-        return reply
+        web = config.settings.get("mail_web")
+        writing = re.search(r"\b(write|draft|compose|send|reply|respond|answer|tell)\b", user_text, re.I)
+        if writing:
+            # no account to send from: write it for the owner to copy into their webmail; never pretend to send it
+            ctx.topic_note = ((getattr(ctx, "topic_note", "") or "") + "\nNo email account is set up here, so nothing can be sent "
+                              "from this computer. Write the email itself (subject line, then the text) in your reply so the owner "
+                              "can copy it, call no mail tool, and end with one short line: it can be pasted into their webmail.").strip()
+        else:
+            if web:
+                out = execute(ctx, "browse", {"site": web})
+                reply = f"Opened your email ({config.settings.get('mail_web_name') or web})." if not out.startswith("error") else out
+            else:
+                _ctx(ctx, "show_ui", {"id": "mail-pick", "replace": True, "title": "Your email", "size": "s", "blocks": [
+                    {"type": "text", "text": "Which email do you use? I'll open it in the browser and remember it for next time."},
+                    {"type": "buttons", "items": [{"label": n, "say": f"my email is {k}", "primary": i == 0} for i, (n, k) in enumerate(
+                        (("Gmail", "gmail"), ("Outlook / Hotmail", "outlook"), ("Yahoo", "yahoo"), ("iCloud", "icloud"), ("AOL", "aol")))]},
+                    {"type": "text", "text": "To read and answer email right here instead, say: \u201cset up my email\u201d.", "dim": True}]})
+                reply = "Which email do you use? Pick it in the window; I'll open it and remember."
+            st = ctx.new_stream()
+            ctx.on_text(st, reply)
+            ctx.end_stream(st)
+            history.append({"role": "user", "content": _for_history(user_text)})
+            history.append({"role": "assistant", "content": reply})
+            return reply
 
     # Deterministic shortcut for a few unambiguous intents small models fumble
     # (explicit "remember X"). Runs the same tool through the same policy path.
@@ -473,7 +518,8 @@ def run(ctx, user_text, history):
                 final = content
             if not calls:
                 # honesty guard: the model narrated an action but ran no tool for it
-                if not tools_ran and not nudged and _CLAIM_RE.search(content):
+                if not tools_ran and not nudged and _CLAIM_RE.search(content[:400]) and not _WRITING_RE.search(user_text) \
+                        and len(content) < 600:
                     nudged = True
                     msgs.append({"role": "assistant", "content": content, **({"_anthropic": result["raw"]} if result.get("raw") else {})})
                     msgs.append({"role": "user", "content":
@@ -524,13 +570,14 @@ def run(ctx, user_text, history):
                 tools_ran, nudged = 0, False
                 continue
             if not final:
-                final = "I wasn't able to finish that. Try rephrasing, or check `audit` to see what I tried."
+                final = "I couldn't finish that. Try saying it another way, or say \u201cwhat did you do\u201d to see what I tried."
                 ctx.status(i18n.t("stopped"))
         break
     # a turn that went well in one tool step may be repeated without thinking next time
     if tool_steps == 1 and final and not nudged and not shrunk and not forced and not getattr(ctx, "after_turn", None):
         _maybe_save_routine(user_text, first_calls)
     # keep only the clean exchange in cross-turn history
+    final = scrub(final) if final else final
     history.append({"role": "user", "content": _for_history(user_text)})
     history.append({"role": "assistant", "content": final or "(done)"})
     return final
@@ -542,12 +589,32 @@ def _cap(s):
 
 # a tool's result ends with a note for the model ("Say one sentence at most.", "do not repeat them, ..."); when the
 # OS answers a shortcut itself, that note must not reach the owner
-_MODEL_NOTE = re.compile(r"(?:[.;]\s*|\s+)(?:do not (?:repeat|describe)[^.;]*[.;,]\s*)?say one sentence at most(?:[;,][^.]*)?\.?\s*$", re.I)
+_MODEL_NOTE = re.compile(r"(?:[.;]\s*|\s+)(?:(?:do not (?:repeat|describe)[^.;]*[.;,]\s*)?say one sentence at most(?:[;,][^.]*)?|"
+                         r"done: tell the owner[^.]*(?:\.[^.]*call no other tool)?|tell the owner exactly this[^.]*)\.?\s*$", re.I)
+# words meant for the model that must never reach the owner's screen, wherever they come from
+_INTERNAL = re.compile(r"[^.!?\n]*(?:tell the owner exactly this|the owner did not ask for|do only what was asked|call no other tool|"
+                       r"say one sentence at most|do not repeat (?:them|it|its contents))[^.!?\n]*[.!?]?\s*", re.I)
+
+
+def scrub(text):
+    """The final words, without notes addressed to the model ('Tell the owner exactly this:' keeps what follows it)."""
+    t = re.sub(r"(?i)\s*tell the owner exactly this:?\s*(\w)?", lambda m: " " + (m.group(1) or "").upper(), str(text or ""))
+    t = _INTERNAL.sub("", t).strip()
+    if not t and str(text or "").strip():
+        return "I left that as it was. Tell me exactly what to change."
+    return t
+
+
+def _guard_words(out):
+    """A guard's note to the model ("not done: the owner did not ask…") is never shown to the owner as it is."""
+    if str(out).lower().startswith("not done:"):
+        return "I left that as it was. Tell me exactly what to change, for example \u201cturn on do not disturb\u201d."
+    return None
 
 
 def _shortcut_reply(name, args, out):
     """What the owner reads when the OS ran a shortcut itself: the tool's result, in words for a person."""
-    return _MODEL_NOTE.sub(".", str(_shortcut_words(name, args, out))).strip()
+    return _guard_words(out) or scrub(_MODEL_NOTE.sub(".", str(_shortcut_words(name, args, out))).strip())
 
 
 def _shortcut_words(name, args, out):
@@ -598,9 +665,25 @@ def _shortcut_words(name, args, out):
         return "Here it is." if " is now shown" in low else out
     if name == "show_files":
         m = re.match(r"(\d+) item\(s\) in (.+?) are listed", out)
+        if m and m.group(2) == "~/.Trash":
+            return "The trash is empty: nothing has been deleted." if m.group(1) == "0" else \
+                f"Here's the trash ({m.group(1)} item{'' if m.group(1) == '1' else 's'}). Press Restore to put one back."
+        if m and m.group(1) == "0":
+            where = m.group(2).rstrip("/")
+            return ("Your home folder is empty." if where == "~" else
+                    f"Your {where.rsplit('/', 1)[-1]} folder is empty." if where.count("/") == 1 else f"{where} is empty.")
         return (f"{m.group(1)} item{'' if m.group(1) == '1' else 's'} in {m.group(2)}." if m else out.split(";")[0])
+    if name == "find_files":
+        m = re.match(r"(\d+) file", out)
+        if m:
+            n = int(m.group(1))
+            return f"Found {n} match{'' if n == 1 else 'es'}: press Open on the one you want."
+        return out
     if name == "screenshot":
-        return _cap(out.split(". Say")[0]) + "." if low.startswith("screenshot saved") else out
+        m = re.match(r"screenshot saved as \S*/([^/\s]+\.png)( and copied to the clipboard)?", out)
+        if m:
+            return f"Saved in Pictures as {m.group(1)}" + (" and copied: paste it anywhere with Ctrl+V." if m.group(2) else ".")
+        return out
     if name == "open_file":
         if " is shown on the owner's screen" in out:
             return "Here it is."
@@ -634,6 +717,17 @@ def _shortcut_words(name, args, out):
             return (f"Here is {m.group(2)} — {m.group(3)}." if name == "show_image"
                     else f"Wallpaper set: {m.group(2)} ({m.group(3)}).")
         return out
+    if name in ("make_app", "open_app") and ("app '" in low):
+        m = re.search(r"app '([^']+)'", out)
+        title = m.group(1) if m else "app"
+        return (f"Here's your {title}. It's kept in your apps; say \"open {title.split(' · ')[0].lower()}\" any time."
+                if name == "make_app" else f"Here's {title}.")
+    if name == "manage_apps":
+        if low.startswith("removed"):
+            return out.split(". Say")[0] + "."
+        return "Here they are." if "listed" in low else out
+    if name == "which_file":
+        return out[0].upper() + out[1:]
     if name == "online_model":
         if "sign-in window" in low:
             return "Sign in there, create a key and press Copy next to it; the window closes by itself."
@@ -693,6 +787,15 @@ _ONLY_IF_ASKED = {
     "mail_reply": r"\b(send|reply|respond|answer|write|e-?mail|mail|tell|let .{0,30} know|forward|notify|message)\b",
     "mail_delete": r"\b(delete|trash|remove|get rid|bin|clean|clear|zero)\b",
     "system_power": r"\b(shut|power|restart|reboot|turn (it )?off|switch off)\b",
+    # a setting or the look changes only when the request is about it ("open the internet" must not turn it off)
+    "change_setting": r"\b(internet|online|offline|network|tor|autonom\w*|hands|ask|asks|asking|confirm\w*|permission|brain|claude|"
+                      r"cloud|online model|speak\w*|voice|aloud|think\w*|name|call me|focus|guidance|lectures?|caution\w*|"
+                      r"settings?|turn|switch|enable|disable|allow|block|stop using|start using|use|lock\w*|time ?zone|clock|time|screen|display|sleep\w*|lid|minutes?|hours?|never|disturb|dnd|notifications?|"
+                      r"night|warm\w*|blue light|quiet|presentation|awake|mute)\b",
+    "set_appearance": lambda req: bool(re.search(r"\b(colou?rs?|theme|dark|light|font|text|bigger|smaller|larger|size|zoom|corners?|round\w*|"
+                                                 r"square|look\w*|style|wallpaper|background|backdrop|animation\w*|motion|layout|language|"
+                                                 r"desk|mode|contrast|everything|screen|accent|appearance|prettier|nicer|ugly|font|see|read|eyes?|vision|small|tiny|big|huge)\b", req, re.I)
+                                       or any(ui.parse_color(w) for w in re.findall(r"[a-z]+", req.lower()))),
 }
 
 
@@ -702,7 +805,7 @@ def execute(ctx, name, arguments):
         return f"error: no such tool '{name}'"
     need = _ONLY_IF_ASKED.get(name)
     current = getattr(ctx, "current_request", "") or ""
-    if need and current and not re.search(need, current, re.I):
+    if need and current and not (need(current) if callable(need) else re.search(need, current, re.I)):
         store.audit(name, arguments, "blocked: not asked for in this request", allowed=False)
         return (f"not done: the owner did not ask for '{name}' in this request. Do only what was asked; "
                 f"if this seems needed, say so and let the owner decide.")
@@ -730,7 +833,12 @@ def execute(ctx, name, arguments):
 
     # unattended runs (the scheduler) go through ctx.confirm_action for anything irreversible: it follows the owner's
     # autonomy level (hands-off runs what was scheduled; balanced/hands-on leave it undone), and never a security change
-    if needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
+    # some things are always shown first, whatever the autonomy: mail that leaves, deleting for good, removing programs.
+    # And once this turn has read text the owner did not write (a web page, a file, an email), anything that changes
+    # the computer is shown first too: that text may carry instructions meant to trick the model.
+    always = name in ALWAYS_CONFIRM
+    tainted = getattr(ctx, "tainted", False) and risk in (tools.CHANGE, tools.DESTRUCTIVE) and name not in TAINT_EXEMPT
+    if always or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
         if not ctx.confirm_action(tool, shown, risk):
             store.audit(name, shown, "denied", allowed=False)
             return f"the owner declined this ({name}). Do not retry it; continue or stop."
@@ -746,7 +854,18 @@ def execute(ctx, name, arguments):
         return f"error while running {name}: {e}"
     store.audit(name, shown, result, allowed=True)
     ctx.end_tool(tool, result)
+    if name in UNTRUSTED_READS or name.startswith("mcp_"):
+        try:
+            ctx.tainted = True
+        except AttributeError:
+            pass
     return result
+
+
+ALWAYS_CONFIRM = {"mail_send", "mail_reply", "mail_delete", "empty_trash", "remove_software"}
+UNTRUSTED_READS = {"read_webpage", "web_search", "read_file", "mail_read", "mail_inbox", "mail_triage", "real_quote"}
+TAINT_EXEMPT = {"show_screen", "show_files", "open_file", "note_add", "remember", "browse", "play_media", "media_control",
+                "set_volume", "screenshot", "show_image", "which_file", "show_panel", "system_panel"}
 
 
 def needs_confirm(risk):

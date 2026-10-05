@@ -1,0 +1,91 @@
+{
+  "policies": {
+    "DisableTelemetry": true,
+    "DisableFirefoxStudies": true,
+    "DisablePocket": true,
+    "DontCheckDefaultBrowser": true,
+    "OverrideFirstRunPage": "",
+    "OverridePostUpdatePage": "",
+    "NoDefaultBookmarks": true,
+    "Homepage": {
+      "URL": "https://duckduckgo.com",
+      "StartPage": "homepage",
+      "Locked": false
+    },
+    "SearchEngines": {
+      "Default": "DuckDuckGo"
+    },
+    "UserMessaging": {
+      "WhatsNew": false,
+      "ExtensionRecommendations": false,
+      "FeatureRecommendations": false,
+      "UrlbarInterventions": false,
+      "SkipOnboarding": true,
+      "MoreFromMozilla": false,
+      "FirefoxLabs": false
+    },
+    "FirefoxHome": {
+      "Search": true,
+      "TopSites": true,
+      "SponsoredTopSites": false,
+      "Highlights": false,
+      "Pocket": false,
+      "SponsoredPocket": false,
+      "Snippets": false,
+      "Locked": false
+    },
+    "Preferences": {
+      "browser.sessionstore.resume_from_crash": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.sessionstore.max_resumed_crashes": {
+        "Value": 0,
+        "Status": "default"
+      },
+      "browser.tabs.warnOnClose": {
+        "Value": false,
+        "Status": "default"
+      },
+      "media.autoplay.default": {
+        "Value": 0,
+        "Status": "default"
+      },
+      "widget.use-xdg-desktop-portal.file-picker": {
+        "Value": 0,
+        "Status": "default"
+      },
+      "datareporting.policy.firstRunURL": {
+        "Value": "",
+        "Status": "default"
+      },
+      "browser.vpn_promo.enabled": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.promo.focus.enabled": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.preferences.moreFromMozilla": {
+        "Value": false,
+        "Status": "default"
+      },
+      "extensions.pocket.enabled": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.aboutwelcome.enabled": {
+        "Value": false,
+        "Status": "default"
+      }
+    },
+    "DisableProfileRefresh": true,
+    "ExtensionSettings": {
+      "uBlock0@raymondhill.net": {
+        "installation_mode": "normal_installed",
+        "install_url": "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi"
+      }
+    }
+  }
+}

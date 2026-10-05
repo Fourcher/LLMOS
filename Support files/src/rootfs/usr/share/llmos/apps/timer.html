@@ -1,0 +1,40 @@
+<!-- llmos-app: id=timer; title=Timer; size=s; words=timer stopwatch countdown pomodoro -->
+<style>
+.tabs{display:flex;gap:6px;margin-bottom:12px}.tabs button{flex:1}.tabs .on{background:var(--accent);color:var(--on-accent)}
+.big{font-size:56px;font-weight:600;text-align:center;font-variant-numeric:tabular-nums;margin:18px 0}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.row button{min-width:90px}
+.presets button{min-width:0;flex:1}
+.laps{max-height:140px;overflow:auto;color:var(--dim);font-variant-numeric:tabular-nums;margin-top:10px}
+input{width:70px;text-align:center}
+</style>
+<div class="tabs"><button id="t1" class="on">Timer</button><button id="t2">Stopwatch</button></div>
+<div id="timer">
+  <div class="row presets"><button data-m="1">1 min</button><button data-m="5">5 min</button><button data-m="10">10 min</button><button data-m="25">25 min</button></div>
+  <div class="row" style="margin-top:10px"><input id="mm" type="number" min="0" value="5"> : <input id="ss" type="number" min="0" max="59" value="00"></div>
+  <div class="big" id="tv">05:00</div>
+  <div class="row"><button id="ts" class="primary">Start</button><button id="tr">Reset</button></div>
+</div>
+<div id="watch" hidden>
+  <div class="big" id="wv">00:00.0</div>
+  <div class="row"><button id="ws" class="primary">Start</button><button id="wl">Lap</button><button id="wr">Reset</button></div>
+  <div class="laps" id="laps"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);let left=300,end=0,tick=null,ws=0,wel=0,wt=null,laps=[];
+const f2=n=>String(Math.floor(n)).padStart(2,"0");
+function tshow(){$("tv").textContent=f2(left/60)+":"+f2(left%60)}
+function set(){left=(+$("mm").value||0)*60+(+$("ss").value||0);tshow()}
+$("mm").oninput=$("ss").oninput=()=>{if(!tick)set()};
+document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{$("mm").value=b.dataset.m;$("ss").value="00";stop();set()});
+function stop(){clearInterval(tick);tick=null;$("ts").textContent="Start"}
+function beep(){try{const a=new AudioContext();for(let i=0;i<3;i++){const o=a.createOscillator(),g=a.createGain();o.frequency.value=880;o.connect(g);g.connect(a.destination);g.gain.setValueAtTime(.2,a.currentTime+i*.4);o.start(a.currentTime+i*.4);o.stop(a.currentTime+i*.4+.25)}}catch(e){} document.body.animate([{background:"var(--accent)"},{background:"var(--bg)"}],{duration:900,iterations:3})}
+$("ts").onclick=()=>{if(tick){stop();return}if(left<=0)set();end=Date.now()+left*1000;$("ts").textContent="Pause";tick=setInterval(()=>{left=Math.max(0,Math.round((end-Date.now())/1000));tshow();if(left<=0){stop();beep();$("tv").textContent="Done"}},250)};
+$("tr").onclick=()=>{stop();set()};
+function wshow(){const t=wel+(wt?Date.now()-ws:0);$("wv").textContent=f2(t/60000)+":"+f2(t/1000%60)+"."+Math.floor(t/100%10)}
+$("ws").onclick=()=>{if(wt){wel+=Date.now()-ws;clearInterval(wt);wt=null;$("ws").textContent="Start"}else{ws=Date.now();wt=setInterval(wshow,100);$("ws").textContent="Stop"}};
+$("wl").onclick=()=>{laps.unshift($("wv").textContent);$("laps").innerHTML=laps.map((l,i)=>"Lap "+(laps.length-i)+" · "+l).join("<br>")};
+$("wr").onclick=()=>{clearInterval(wt);wt=null;wel=0;laps=[];$("laps").innerHTML="";$("ws").textContent="Start";wshow()};
+$("t1").onclick=()=>{$("timer").hidden=false;$("watch").hidden=true;$("t1").className="on";$("t2").className=""};
+$("t2").onclick=()=>{$("timer").hidden=true;$("watch").hidden=false;$("t2").className="on";$("t1").className=""};
+tshow();
+</script>

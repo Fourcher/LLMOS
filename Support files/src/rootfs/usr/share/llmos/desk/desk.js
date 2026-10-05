@@ -45,6 +45,17 @@
     flush();
     return html;
   }
+  // the owner's apps talk to the OS only through these messages: load their saved state, save it, hand over a file
+  window.addEventListener("message", (e) => {
+    const f = [...document.querySelectorAll("iframe.app")].find(x => x.contentWindow === e.source);
+    if (!f || !e.data || typeof e.data !== "object") return;
+    const m = e.data, id = f.dataset.app;
+    if (m.llmos === "load") e.source.postMessage({ llmos: "state", state: f.llmosState == null ? null : f.llmosState }, "*");
+    else if (m.llmos === "save") { f.llmosState = m.state; post({ t: "app.save", id, state: m.state }); }
+    else if (m.llmos === "export" && typeof m.data === "string") post({ t: "app.export", id, name: String(m.name || "picture.png"), data: m.data });
+  });
+  // a button: the OS does it at once (never behind a request the model is still working on)
+  function act(text) { if (text && text.trim()) post({ t: "act", text: text.trim() }); }
   function say(text) { if (!text || !text.trim()) return; if (text.trim().toLowerCase() === "lock") { post({ t: "lock" }); return; } post({ t: "say", text: text.trim() }); }
   document.addEventListener("click", (e) => {
     const a = e.target.closest("a[data-url]");
@@ -61,6 +72,7 @@
     const layout = ["windows", "mac"].includes(m.layout) ? m.layout : "clean";
     if (document.documentElement.dataset.layout !== layout) { document.documentElement.dataset.layout = layout; startMenu(false); dock(); }
     software = !!m.software;
+    if (software) document.documentElement.dataset.software = "1"; else delete document.documentElement.dataset.software;
     document.documentElement.lang = m.lang || "en";
     document.documentElement.dir = m.dir || "ltr";
     lang = m.lang || "en";
@@ -77,6 +89,7 @@
     wallpaper = m.wallpaper || "";
     if (m.wallpaper) { desk.style.backgroundImage = `url("${m.wallpaper}")`; desk.classList.add("wall"); }
     else { desk.style.backgroundImage = ""; desk.classList.remove("wall"); }
+    try { LLMBG.theme({ mode: m.mode, style: m.backdrop || (m.wallpaper ? "photo" : "living"), motion: document.documentElement.dataset.motion, software: !!m.software }); } catch (e) { console.log(e); }
     if (wizard.active) wizard.render();
   }
 
@@ -84,6 +97,7 @@
   // idle | thinking | speaking | listening | attention | off -- shown by the orb in the bar and on the reply card
   let online = false;        // the current reply comes from the online model
   function orb(state, label) {
+    try { LLMBG.mood(state, online); } catch (e) {}
     for (const id of ["orb", "reply-orb"]) {
       const e = $(id); if (!e) continue;
       e.className = (id === "reply-orb" ? "orb small " : "orb ") + (state === "idle" ? "" : state) + (online && state !== "idle" ? " online" : "");
@@ -97,7 +111,9 @@
   function stateText() {
     if (!cur || !cur.t0 || !lastLabel) return lastLabel;
     const e = (Date.now() - cur.t0) / 1000;
-    return lastLabel + (e >= 2 ? " · " + hms(e) + (cur.eta ? " / " + fmt("d_usually", { s: hms(cur.eta) }) : "") : "");
+    // past twice the usual time the estimate means nothing: say so plainly and point at Stop
+    const late = cur.eta && e > 2 * cur.eta + 10;
+    return lastLabel + (e >= 2 ? " · " + hms(e) + (cur.eta && !late ? " / " + fmt("d_usually", { s: hms(cur.eta) }) : late ? " · " + t("d_slow_turn", "this is taking long; Stop ends it") : "") : "");
   }
   setInterval(() => { if (cur && cur.t0 && lastLabel) { const st = $("reply-state"); if (st) st.textContent = stateText(); } }, 1000);
   function replyBrain(m) {
@@ -148,7 +164,7 @@
   function chip(html, sayText, title) {
     const c = el("button", "chip", html);
     c.type = "button";
-    if (sayText) { c.onclick = () => say(sayText); c.title = title || sayText; c.setAttribute("aria-label", title || sayText); }
+    if (sayText) { c.onclick = () => act(sayText); c.title = title || sayText; c.setAttribute("aria-label", title || sayText); }
     else { c.disabled = true; }
     return c;
   }
@@ -157,12 +173,23 @@
     const box = $("status"); box.innerHTML = "";
     const dot = m.model_ok ? (busy ? "busy" : "ok") : "";
     box.append(chip(`<i class="dot ${dot}"></i>${esc(m.model || t("loading_model"))}`, "models", (m.host_gpu ? t("d_host_gpu") + " · " : "") + t("models")));
-    box.append(chip(esc(m.autonomy), "settings", t("settings")));
+    box.append(chip(esc({ "hands-off": "Acts on its own", "balanced": "Asks if risky", "hands-on": "Asks first" }[m.autonomy] || m.autonomy), "settings", t("settings")));
     if (m.internet !== "yes") box.append(chip(esc(m.internet === "no" ? "offline" : "internet: ask"), "settings"));
     if (m.brain && m.brain !== "local") { const c = chip(`<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M6.5 20a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 17.7 9.1 4 4 0 0 1 18 17h-.5v3h-11z"/></svg> ${esc(m.brain === "cloud" ? (m.cloud || t("v_not_set_up")) : t("d_brain_chip_ask"))}`, "settings", t("s_brain")); c.classList.add("online"); box.append(c); }
     if (m.tor) box.append(chip("Tor", "settings"));
     if (m.focus) box.append(chip("focus", "turn off focus mode"));
     if (m.vault !== "off") box.append(chip(`<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M17 9V7a5 5 0 0 0-10 0v2H5v12h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7z"/></svg>${m.vault === "on" ? "" : " " + esc(t("locked_short"))}`, m.vault === "on" ? "lock" : null, t("d_lock_tip")));
+    // the everyday controls every computer shows: apps, network, sound, battery, power -- each opens its panel at once
+    const ic = (d) => `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>`;
+    box.prepend(chip(ic("M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z"), "show my apps", t("d_myapps")));
+    if (m.live) { const c = chip(esc(t("d_live_chip")), "install llm os on this computer", t("d_live_title")); c.classList.add("warn"); box.prepend(c); }
+    box.append(chip(m.net === "offline" ? ic("M2 4.3 3.3 3 21 20.7 19.7 22l-3.4-3.4L12 21 .6 9.6a17 17 0 0 1 4.2-2.9zM12 3c4.4 0 8.4 1.7 11.4 4.6l-6.5 6.5L8.6 5.8A16 16 0 0 1 12 3z")
+                        : m.net === "wired" ? ic("M7 3h10v6h-3v4h5v4h2v4h-6v-4h2v-2H7v2h2v4H3v-4h2v-4h5V9H7z")
+                        : ic("M12 21 .6 9.6A16.5 16.5 0 0 1 12 5c4.4 0 8.4 1.7 11.4 4.6z"), "network", t("d_network")));
+    if (m.volume != null) box.append(chip(ic(m.volume === 0 ? "M3 9v6h4l5 5V4L7 9zm13.6 3 2.7-2.7-1.4-1.4L15.2 10.6 12.5 7.9l-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"
+                        : "M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"), "sound", t("d_sound") + " " + m.volume + "%"));
+    if (m.battery) box.append(chip(ic("M16 4h-2V2h-4v2H8a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z") + ` ${m.battery.pct}%${m.battery.charging ? "⚡" : ""}`, "power", t("d_battery")));
+    box.append(chip(ic("M13 3h-2v10h2zm4.8 2.2-1.4 1.4A6.96 6.96 0 0 1 19 12a7 7 0 1 1-11.4-5.4L6.2 5.2A9 9 0 1 0 21 12c0-2.7-1.2-5.2-3.2-6.8z"), "power", t("d_power")));
     $("greet").textContent = m.name ? "· " + m.name : "";
     if (m.name !== ownerName) { ownerName = m.name || ""; const h = $("idle").querySelector("h1"); if (h) { const g = h.textContent.split(",")[0]; h.textContent = ownerName ? g + ", " + ownerName : g; } }
     $("mic").classList.toggle("off", !m.mic);
@@ -178,18 +205,21 @@
     catch (e) { $("clock").textContent = now.toLocaleTimeString(); }
   }
   setInterval(clock, 1000);
+  $("clock").style.cursor = "pointer"; $("clock").title = "Clock & calendar";
+  $("clock").addEventListener("click", () => act("open the clock"));
 
   // ---------------------------------------------------------------- screens
   function screen(m) {
     ["screen-boot", "screen-lock", "screen-wizard", "screen-bye", "desk"].forEach(id => $(id).classList.add("hidden"));
     $("boot-orb").classList.remove("thinking");
-    if (m.name === "lock") { $("lock-go").disabled = false; $("screen-lock").classList.remove("hidden"); $("lock-error").textContent = ""; $("lock-note").textContent = (m.data || {}).note || ""; $("lock-pass").value = ""; setTimeout(() => $("lock-pass").focus(), 50); }
+    if (m.name === "lock") { lockOpen = !!(m.data || {}).open; $("lock-pass").classList.toggle("hidden", lockOpen); $("lock-go").disabled = false; $("screen-lock").classList.remove("hidden"); $("lock-error").textContent = ""; $("lock-note").textContent = (m.data || {}).note || ""; $("lock-pass").value = ""; setTimeout(() => (lockOpen ? $("lock-go") : $("lock-pass")).focus(), 50); }
     else if (m.name === "wizard") { $("screen-wizard").classList.remove("hidden"); wizard.start(m.data || {}); }
     else if (m.name === "bye") { $("screen-bye").classList.remove("hidden"); $("bye-text").textContent = (m.data || {}).text || ""; }
-    else if (m.name === "desk") { $("desk").classList.remove("hidden"); wizard.active = false; if (!conv.length) $("hint").textContent = t("d_shortcuts"); setTimeout(() => $("in").focus(), 50); idle(); }
+    else if (m.name === "desk") { $("desk").classList.remove("hidden"); try { LLMBG.show(); } catch (e) {} wizard.active = false; if (!conv.length) $("hint").textContent = t("d_shortcuts"); setTimeout(() => $("in").focus(), 50); idle(); }
     else $("screen-boot").classList.remove("hidden");
   }
-  $("lock-go").onclick = () => { const p = $("lock-pass").value; if (p && !$("lock-go").disabled) { $("lock-go").disabled = true; $("lock-busy").classList.remove("hidden"); post({ t: "unlock", passphrase: p }); } };
+  let lockOpen = false;   // locked without a passphrase: the button alone unlocks
+  $("lock-go").onclick = () => { const p = $("lock-pass").value; if (lockOpen) { post({ t: "unlock", passphrase: "" }); return; } if (p && !$("lock-go").disabled) { $("lock-go").disabled = true; $("lock-busy").classList.remove("hidden"); post({ t: "unlock", passphrase: p }); } };
   $("lock-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("lock-go").click(); });
 
   // ---------------------------------------------------------------- first-run set-up
@@ -268,7 +298,7 @@
         const rec = () => (online() ? recAll.on : recAll.off) || {};
         if (!this.answers.profile) {
           const r = rec();
-          this.answers.profile = { autonomy: 0, internet: 0, brain: 0, capability: val(Q[3], Math.max(0, TIER.indexOf(r.capability))),
+          this.answers.profile = { autonomy: 50, internet: 0, brain: 0, capability: val(Q[3], Math.max(0, TIER.indexOf(r.capability))),
                                    guidance: 0, motion: val(Q[5], r.motion == null ? 2 : r.motion), model: "" };
         }
         const P = this.answers.profile;
@@ -485,6 +515,7 @@
     }
     win.style.left = x + "px"; win.style.top = y + "px";
     win.style.maxHeight = Math.max(160, stage.clientHeight - y - 12) + "px";   // never under the bar
+    if (spec.kind === "app" || spec.kind === "chat") win.style.height = Math.min(stage.clientHeight - y - 12, { s: 600, m: 640, l: 700, xl: 760 }[spec.size] || 640) + "px";
     stage.appendChild(win);
     wins.set(id, { el: win, spec, min: false, max: false });
     if (cur) cur.opened = true;
@@ -564,7 +595,7 @@
     if (show === undefined) show = sm.classList.contains("hidden");
     sm.classList.toggle("hidden", !show); if (!show) return;
     sm.innerHTML = "";
-    for (const [k, s] of START_ITEMS) { const b = el("button", "item", esc(t(k))); b.onclick = () => { startMenu(false); if (s) say(s); else $("reply-hist").click(); }; sm.append(b); }
+    for (const [k, s] of START_ITEMS) { const b = el("button", "item", esc(t(k))); b.onclick = () => { startMenu(false); if (s) act(s); else $("reply-hist").click(); }; sm.append(b); }
   }
   $("start").onclick = () => startMenu();
   { const brand = document.querySelector("#top .brand"); brand.setAttribute("role", "button"); brand.tabIndex = 0;
@@ -575,7 +606,7 @@
     const d = $("dock"); d.innerHTML = "";
     const layout = document.documentElement.dataset.layout || "clean";
     if (layout === "windows") for (const [, w] of wins) { if (w.min) continue; const c = el("button", "chip open", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || "window")); c.onclick = () => raise(w.el); d.appendChild(c); }
-    if (layout === "mac") for (const [k, s] of [["settings", "open the settings"], ["d_start_files", "show my files"], ["d_lists", "show my lists"]]) { const c = el("button", "chip launch", esc(t(k))); c.type = "button"; c.onclick = () => say(s); d.appendChild(c); }
+    if (layout === "mac") for (const [k, s] of [["settings", "open the settings"], ["d_start_files", "show my files"], ["d_lists", "show my lists"]]) { const c = el("button", "chip launch", esc(t(k))); c.type = "button"; c.onclick = () => act(s); d.appendChild(c); }
     for (const [id, w] of wins) {
       if (!w.min) continue;
       const c = el("button", "chip", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || "window"));
@@ -585,6 +616,7 @@
     for (const a of apps) {
       const c = el("button", "chip", `${esc(a.name)} <span class="x" title="${esc(t("d_close_app"))}" aria-hidden="true">✕</span>`); c.type = "button"; c.setAttribute("aria-label", a.name);
       c.querySelector(".x").onclick = (e) => { e.stopPropagation(); post({ t: "app.close", pid: a.pid }); };
+      c.onclick = () => post({ t: "app.focus", pid: a.pid });
       d.appendChild(c);
     }
   }
@@ -592,13 +624,45 @@
 
   // ---------------------------------------------------------------- blocks
   function renderBody(body, spec) {
+    if (spec.kind === "chat") {
+      if (body.querySelector(".chatlog")) return;            // already open: keep what is in it
+      body.innerHTML = "";
+      const log = el("div", "chatlog");
+      for (const m of spec.transcript || []) log.append(el("div", "msg " + (m.role === "user" ? "me" : "ai"), m.role === "user" ? esc(m.content) : md(m.content)));
+      if (!(spec.transcript || []).length) log.append(el("div", "hint2", esc(t("d_chat_ph"))));
+      const f = el("form", "chatin"), i = el("input"); i.type = "text"; i.placeholder = t("d_chat_ph"); i.autocomplete = "off";
+      const b = el("button", "btn primary", "➤"); b.type = "submit"; f.append(i, b);
+      f.onsubmit = (ev) => { ev.preventDefault(); const v = i.value.trim(); if (!v) return; const h = log.querySelector(".hint2"); if (h) h.remove();
+        log.append(el("div", "msg me", esc(v))); i.value = ""; log.scrollTop = 1e6; post({ t: "chat.say", chat: spec.chat, text: v }); };
+      body.append(log, f); setTimeout(() => { log.scrollTop = 1e6; i.focus(); }, 200);
+      return;
+    }
+    if (spec.kind === "app") {
+      // the owner's app: its own page in a sandbox (scripts yes; no network, no access to this page or to files)
+      let f = body.querySelector("iframe.app");
+      if (f && f.dataset.src === spec.src) { f.llmosState = spec.state; return; }
+      body.innerHTML = "";
+      f = el("iframe", "app"); f.dataset.src = spec.src; f.dataset.app = spec.app; f.llmosState = spec.state;
+      f.setAttribute("sandbox", "allow-scripts allow-modals allow-forms"); f.setAttribute("referrerpolicy", "no-referrer");
+      f.src = spec.src; f.title = spec.title || "app";
+      body.appendChild(f);
+      setTimeout(() => { try { f.focus(); } catch (e) {} }, 300);
+      return;
+    }
     body.innerHTML = "";
     for (const b of spec.blocks || []) { const e = renderBlock(b); if (e) body.appendChild(e); }
     if (spec.actions && spec.actions.length) body.appendChild(renderBlock({ type: "buttons", items: spec.actions }));
   }
   function actionBtn(a) {
     const b = el("button", "btn small" + (a.primary ? " primary" : "") + (a.danger ? " danger" : ""), esc(a.label));
-    b.onclick = () => say(a.say);
+    if (!a.danger) { b.onclick = () => act(a.say); return b; }
+    // a button that deletes or ends something asks once more, right where it is: first press "Sure?", second does it
+    let armed = null;
+    b.onclick = () => {
+      if (armed) { clearTimeout(armed); armed = null; b.innerHTML = esc(a.label); act(a.say); return; }
+      b.innerHTML = esc(t("d_sure") === "d_sure" ? "Sure? Press again" : t("d_sure"));
+      armed = setTimeout(() => { armed = null; b.innerHTML = esc(a.label); }, 4000);
+    };
     return b;
   }
   function renderBlock(b) {
@@ -640,12 +704,21 @@
         img.onload = shown; img.onerror = shown; if (img.complete) shown();
         return e;
       }
+      case "gallery": {
+        const e = el("div", "b-gallery");
+        for (const it of b.items) {
+          const c = el("button", "ph", `<img loading="lazy" src="${esc(it.src.startsWith("/") ? "file://" + it.src : it.src)}" alt="${esc(it.title)}"><span>${esc(it.title)}</span>`);
+          c.type = "button"; c.title = it.title; if (it.say) c.onclick = () => act(it.say);
+          e.append(c);
+        }
+        return e;
+      }
       case "buttons": { const e = el("div", "b-buttons"); b.items.forEach(a => e.append(actionBtn(a))); return e; }
       case "choices": {
         const e = el("div", "choices");
         b.items.forEach(a => {
           const c = el("button", "choice" + (b.selected && (a.label === b.selected) ? " sel" : ""), `<i class="r"></i><span><div>${esc(a.label)}</div>${a.description ? `<div class="d">${esc(a.description)}</div>` : ""}</span>`);
-          c.onclick = () => { e.querySelectorAll(".choice").forEach(x => x.classList.remove("sel")); c.classList.add("sel"); say(a.say); };
+          c.onclick = () => { e.querySelectorAll(".choice").forEach(x => x.classList.remove("sel")); c.classList.add("sel"); act(a.say); };
           e.append(c);
         });
         return e;
@@ -655,7 +728,7 @@
         const sw = el("button", "sw" + (b.on ? " on" : "")); let on = !!b.on;
         sw.type = "button"; sw.setAttribute("role", "switch"); sw.setAttribute("aria-checked", String(on));
         if (b.label) sw.setAttribute("aria-label", b.label);
-        sw.onclick = () => { on = !on; sw.classList.toggle("on", on); sw.setAttribute("aria-checked", String(on)); say(on ? b.say_on : b.say_off); };
+        sw.onclick = () => { on = !on; sw.classList.toggle("on", on); sw.setAttribute("aria-checked", String(on)); act(on ? b.say_on : b.say_off); };
         e.append(sw); return e;
       }
       case "form": {
@@ -726,12 +799,14 @@
   // anything longer waits for the owner (Esc / Close), and the pointer over the card keeps it
   function replyEnd(m) {
     if (!cur) return; cur.text = m.text || cur.text; $("reply-text").innerHTML = md(cur.text); paintQueued = false;
-    const short = cur.text.length < 90 && !cur.text.includes("\n"), opened = !!cur.opened;
+    // questions, failures and "no" answers stay until the owner moves on: they need reading, maybe an answer
+    const needs = /\?\s*$|\b(?:not|no|can'?t|cannot|couldn'?t|didn'?t|failed|isn'?t|error|unable)\b/i.test(cur.text);
+    const short = cur.text.length < 90 && !cur.text.includes("\n") && !needs, opened = !!cur.opened;
     conv.push(cur); cur = null; histPos = -1; $("reply-progress").classList.add("hidden"); $("reply").classList.remove("writing"); orb("idle", "");
     clearTimeout(autoHide);
     // the window IS the answer: a short reply that opened one folds at once; a short answer alone steps aside after a while
     if (opened && short) setTimeout(() => { if (!busy && !cur) collapseReply(); }, motionOff() ? 0 : 900);
-    else if (short && !motionOff()) autoHide = setTimeout(() => { if (!$("reply").matches(":hover") && !busy) hideReply(); }, 6000);
+    else if (short && !motionOff()) autoHide = setTimeout(() => { if (!$("reply").matches(":hover") && !busy) hideReply(); }, Math.max(12000, 250 * $("reply-text").textContent.length));
   }
   function replyError(m) { if (!cur) replyStart({ request: "" }); $("reply-text").className = "text err"; $("reply-text").textContent = m.text; cur.text = m.text; conv.push(cur); cur = null; histPos = -1; orb("attention", ""); setTimeout(presence, 1500); }
   function activity(m) {
@@ -756,17 +831,26 @@
   $("reply-close").onclick = hideReply;
   $("reply").addEventListener("click", (e) => { if ($("reply").classList.contains("collapsed")) { e.preventDefault(); expandReply(); } });
   $("reply-stop").onclick = () => post({ t: "cancel" });
-  $("reply-hist").onclick = () => {
-    const items = conv.slice(-40).map(c => ({ title: c.req, detail: c.text }));
-    openWindow({ id: "history", spec: { title: t("d_conversation"), kind: "text", size: "m", blocks: [{ type: "list", items: items.length ? items : [{ title: t("d_empty") }], numbered: false }] } });
-  };
+  $("reply-hist").onclick = () => act("conversations");
+
+  // ---------------------------------------------------------------- side chats: their replies go to their own window
+  function sideEvent(m) {
+    const w = wins.get("chat-" + m.chat); if (!w) return;
+    const log = w.el.querySelector(".chatlog"); if (!log) return;
+    let b = log.querySelector(".msg.ai.pending");
+    if (m.t === "reply.start") { if (!b) { b = el("div", "msg ai pending", THINK); log.append(b); } }
+    else if (m.t === "reply.delta") { if (!b) { b = el("div", "msg ai pending"); log.append(b); } b.dataset.raw = (b.dataset.raw || "") + m.text; b.innerHTML = md(b.dataset.raw); }
+    else if (m.t === "activity") { if (b && !b.dataset.raw) { let a = b.querySelector(".act"); if (!a) { b.innerHTML = THINK; a = el("div", "act"); b.append(a); } a.textContent = m.text; } }
+    else { if (!b) { b = el("div", "msg ai"); log.append(b); } b.classList.remove("pending"); if (m.t === "reply.error") b.classList.add("err"); b.innerHTML = md(m.text || b.dataset.raw || ""); delete b.dataset.raw; }
+    log.scrollTop = 1e6;
+  }
 
   // ---------------------------------------------------------------- toasts, dialogs
   function toast(m) {
     if (m.sticky) { const old = sticky.get(m.sticky); if (old) { old.remove(); sticky.delete(m.sticky); } if (!m.text) return; }
     const e = el("div", "toast", esc(m.text));
     $("toasts").append(e);
-    if (m.sticky) sticky.set(m.sticky, e); else setTimeout(() => afterAnim(e, "out", () => e.remove()), m.long ? 9000 : 3500);
+    if (m.sticky) sticky.set(m.sticky, e); else setTimeout(() => afterAnim(e, "out", () => e.remove()), Math.max(m.long ? 10000 : 6000, 90 * String(m.text).length));
   }
   function dialogDone(ov) { ov.classList.add("hidden"); dialogOpen = false; presence(); }
   function dialog(m) {
@@ -832,13 +916,13 @@
         case "screen": return screen(m);
         case "window": return openWindow(m);
         case "window.close": return closeWindow(m.id, false);
-        case "reply.start": return replyStart(m);
-        case "reply.delta": return replyDelta(m);
-        case "reply.end": return replyEnd(m);
-        case "reply.error": return replyError(m);
+        case "reply.start": return m.chat && m.chat !== "main" ? sideEvent(m) : replyStart(m);
+        case "reply.delta": return m.chat && m.chat !== "main" ? sideEvent(m) : replyDelta(m);
+        case "reply.end": return m.chat && m.chat !== "main" ? sideEvent(m) : replyEnd(m);
+        case "reply.error": return m.chat && m.chat !== "main" ? sideEvent(m) : replyError(m);
         case "reply.brain": return replyBrain(m);
         case "reply.eta": if (cur) cur.eta = m.seconds; return;
-        case "activity": return activity(m);
+        case "activity": return m.chat && m.chat !== "main" ? sideEvent(m) : activity(m);
         case "progress": return progress(m);
         case "toast": return toast(m);
         case "dialog": return dialog(m);
@@ -861,5 +945,6 @@
     }
   };
   clock();
+  try { LLMBG.start($("backdrop")); } catch (e) { console.log(e); }
   post({ t: "ready" });
 })();

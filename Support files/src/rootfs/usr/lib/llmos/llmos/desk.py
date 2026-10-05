@@ -17,6 +17,7 @@ A root-only control socket (/run/llmos/desk.sock) lets `llmos say "..."`
 drive the desk from the text console -- that is how the automated tests
 exercise the graphical interface.
 """
+import glob
 import json
 import os
 import queue
@@ -30,7 +31,7 @@ import sys
 import threading
 import time
 
-from . import agent, config, i18n, llm, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line
+from . import clip, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
@@ -42,6 +43,25 @@ SCREEN_MESSAGES = {
     "lock": {"ready", "active", "unlock", "cancel"},
     "wizard": {"ready", "active", "wizard", "tz.search", "wifi.scan", "dialog", "cancel", "signin"},
 }
+_MEDIUM_Q = re.compile(r"\b(?:(?:is|am)\s+(?:this|it|i|llm\s*os)\s+(?:running|booted|working)?\s*(?:off|from|on)\s+(?:the\s+|a\s+)?(?:usb|stick|flash\s*drive|thumb\s*drive|pen\s*drive)|"
+                       r"(?:is|was)\s+(?:it|this|llm\s*os)\s+installed|did\s+it\s+install|will\s+(?:my\s+)?(?:stuff|files|things|changes|settings|work|data)\s+(?:be\s+)?(?:saved|kept)|"
+                       r"(?:can|what happens if)\s+i\s+(?:unplug|remove|take\s+out)\s+(?:the\s+)?(?:usb|stick|flash\s*drive))", re.I)
+_TIME_Q = re.compile(r"(?:what(?:'s| is) the (?:time|date)(?: (?:now|today))?|what time is it(?: now)?|whats the time|what(?:'s| is) today(?:'s date)?|"
+                     r"what day is (?:it|today)|what(?:'s| is) the day today|what is the date today|time|date|today)[?.!]*")
+_BATTERY_Q = re.compile(r"(?:how much|what(?:'s| is)(?: my| the)?) battery(?: (?:do i have|is left|level|life|left|percentage))?[?.!]*|"
+                        r"(?:what(?:'s| is) (?:my |the )?)?battery(?: level| life| percentage| left)?[?.!]*|how(?:'s| is) (?:my |the )?battery[?.!]*|am i charging[?.!]*|is it charging[?.!]*")
+_CLIP_Q = re.compile(r"(?P<what>what(?:'s| is| did i| have i)? (?:on (?:my |the )?clipboard|i copied|did i (?:just )?copy|copied)|what(?:'s| is) (?:in )?(?:my |the )?clipboard|"
+                     r"paste what i copied|show (?:me )?(?:what i copied|(?:my |the )?clipboard))|"
+                     r"(?P<hist>(?:show |open )?(?:my |the )?clipboard(?: history| manager)?|copy history|(?:my )?copied (?:things|stuff|items))|"
+                     r"(?P<clear>clear (?:my |the )?clipboard(?: history)?|empty (?:my |the )?clipboard|forget what i copied)|"
+                     r"copy clip (?P<item>\d+)[?.!]*")
+_DEV_Q = re.compile(r"(?P<cam>(?:is |test |check |try |show )?(?:my |the )?(?:web ?cam|camera)(?: working| work| test| check)?|"
+                    r"(?:does|is) (?:my |the )?(?:web ?cam|camera) work(?:ing)?|test (?:my |the )?(?:web ?cam|camera)|"
+                    r"my (?:web ?cam|camera) (?:is ?n[o']?t|isnt|doesn'?t|won'?t) (?:working|work|show(?:ing)?)(?: in the call)?)|"
+                    r"(?P<mic>(?:test|check|try) (?:my |the )?(?:mic|microphone)|(?:is |does )?(?:my |the )?(?:mic|microphone)(?: working| work| test| check)?|"
+                    r"can you hear me|they can'?t hear me|my (?:mic|microphone) (?:is ?n[o']?t|isnt|doesn'?t) work(?:ing)?)[?.!]*")
+_LOCK_WORDS = {"lock", "lock the screen", "lock screen", "lock the computer", "lock my computer", "lock it", "lock the pc",
+               "i'm stepping away", "im stepping away", "lock up", "lock it up"}
 SOCK = os.path.join(config.RUN, "desk.sock")
 DISPLAY_ENV = os.path.join(config.RUN, "display.env")
 def _wallpaper():
@@ -65,7 +85,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "w_net_yes", "w_net_yes_d", "w_net_tor", "w_net_tor_d", "w_net_no", "w_net_no_d", "w_wifi_title",
               "w_wifi_none", "w_wifi_scan", "w_wifi_pass", "w_wifi_connect", "w_wifi_skip", "w_wifi_ok",
               "w_auto_off_d", "w_auto_bal_d", "w_auto_on_d", "w_pass_hint", "w_show", "w_hide", "w_done_title",
-              "w_done_text", "w_finish", "d_try", "d_try_btn", "g_ex1", "g_ex2", "g_ex3", "g_ex4", "g_ex5", "g_ex6", "g_ex7", "g_ex8", "g_ex9", "g_ex10",
+              "w_done_text", "w_finish", "d_try", "d_try_btn", "g_ex1", "g_ex2", "g_ex3", "g_ex4", "g_ex5", "g_ex6", "g_ex7", "g_ex8", "g_ex9", "g_ex10", "g_ex11", "g_ex12", "g_ex13", "g_ex14",
               "d_thinking", "d_writing", "d_listening", "d_speaking", "d_waiting", "d_morning", "d_afternoon", "d_evening", "d_idle_hint",
               "vault_exists", "passphrase_empty", "vault_made", "lock_failed", "d_host_gpu", "locked_short", "d_lock_tip", "d_reminder",
               "w_quiz_title", "w_quiz_text", "q_autonomy", "q_autonomy_0", "q_autonomy_1", "q_autonomy_2", "q_internet", "q_internet_0",
@@ -78,6 +98,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "w_sys", "w_sys_mem", "w_sys_cores", "w_sys_gpu", "w_sys_gpu_basic", "w_model_need", "w_model_ready", "w_model_dl",
               "w_rec_this", "w_rec_other", "w_model_none", "w_model_tight", "w_cloud_signin", "w_cloud_signin_how", "w_cloud_waiting", "w_cloud_none",
               "w_cloud_ok", "w_cloud_paste", "w_cloud_done", "w_cloud_other", "d_signin_none",
+              "d_live_chip", "d_live_title", "d_chat_ph", "d_network", "d_sound", "d_power", "d_battery", "d_myapps",
               "w_cloud_check", "w_cloud_checking", "w_cloud_key", "w_cloud_model", "w_cloud_url", "w_cloud_key_where", "w_cloud_none_note",
               "w_done_choices", "v_brain_local", "v_brain_ask", "v_brain_cloud", "v_guidance_owner", "v_guidance_standard", "v_not_set_up",
               "d_brain_chip_ask", "d_online_tag", "v_yes", "v_ask", "v_no", "v_hands-off", "v_balanced", "v_hands-on",
@@ -173,6 +194,79 @@ def _display_scale(monitor):
     return 2.0 if ppi >= 192 else 1.5 if ppi >= 144 else 1.25 if ppi >= 120 else 1.0
 
 
+_CHROMIUM_APPS = ("com.visualstudio.code", "com.discordapp.Discord", "com.slack.Slack", "md.obsidian.Obsidian", "org.signal.Signal",
+                  "com.github.IsmaelMartinez.teams_for_linux", "com.spotify.Client", "com.brave.Browser", "com.rtosta.zapzap")
+
+
+def _root_ok(argv):
+    """Everything here runs as the one owner account, root; Chromium-based programs refuse that unless told
+    (--no-sandbox), and VS Code also wants its own data folder named."""
+    base = os.path.basename(argv[0]) if argv else ""
+    if base in ("chromium", "chromium-browser") and "--no-sandbox" not in argv:
+        return argv + ["--no-sandbox"]
+    if base == "flatpak" and "run" in argv:
+        app = next((a for a in argv[argv.index("run") + 1:] if not a.startswith("-")), "")
+        if app in _CHROMIUM_APPS and "--no-sandbox" not in argv:
+            extra = ["--no-sandbox"] + (["--user-data-dir=" + os.path.join(config.home(), ".config", "Code")] if app == "com.visualstudio.code" else [])
+            i = argv.index(app) + 1
+            return argv[:i] + extra + argv[i:]
+    return argv
+
+
+def _airplane():
+    """Every radio (Wi-Fi, Bluetooth) switched off."""
+    try:
+        p = subprocess.run(["rfkill", "-n", "-o", "SOFT"], capture_output=True, text=True, timeout=5)
+        states = p.stdout.split()
+        return bool(states) and all(x == "blocked" for x in states)
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _battery():
+    """{"pct", "charging"} for a laptop's battery, None on a desktop."""
+    base = "/sys/class/power_supply"
+    try:
+        for n in sorted(os.listdir(base)):
+            p = os.path.join(base, n)
+            try:
+                with open(os.path.join(p, "type")) as f:
+                    if f.read().strip() != "Battery":
+                        continue
+                with open(os.path.join(p, "capacity")) as f:
+                    pct = int(f.read().strip())
+                with open(os.path.join(p, "status")) as f:
+                    st = f.read().strip()
+                return {"pct": pct, "charging": st in ("Charging", "Full")}
+            except (OSError, ValueError):
+                continue
+    except OSError:
+        pass
+    return None
+
+
+def _wifi_now():
+    """The Wi-Fi network this computer is on, or ''."""
+    dev = _wifi_device()
+    if not dev:
+        return ""
+    try:
+        p = subprocess.run(["iwctl", "station", dev, "show"], capture_output=True, text=True, timeout=10)
+        m = re.search(r"Connected network\s+(.+)", re.sub(r"\x1b\[[0-9;]*m", "", p.stdout))
+        return m.group(1).strip() if m else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _live():
+    """Running from the USB stick / ISO (a RAM overlay): nothing is kept after the computer turns off."""
+    try:
+        with open("/etc/llmos-release") as f:
+            return "MEDIUM=live" in f.read()
+    except OSError:
+        return False
+
+
 def _system_check():
     """What this computer has, for the set-up's recommendations: memory, processor cores, graphics."""
     cpu = ""
@@ -253,18 +347,18 @@ class DeskCtx:
     def on_text(self, stream, text):
         if self.cancel.is_set():
             raise agent.Cancelled()
-        self.d.emit({"t": "reply.delta", "text": text})
+        self.d.emit({"t": "reply.delta", "text": text, "chat": getattr(self, "chat_id", "main")})
 
     def end_stream(self, stream):
         pass
 
     def status(self, text):
         # a progress line from inside a tool updates that tool's activity line in place; other notes append
-        self.d.emit({"t": "activity", "text": str(text), "replace": bool(getattr(self, "_tool_open", False))})
+        self.d.emit({"t": "activity", "text": str(text), "replace": bool(getattr(self, "_tool_open", False)), "chat": getattr(self, "chat_id", "main")})
 
     def begin_tool(self, tool, args, risk):
         self._tool_open = True
-        self.d.emit({"t": "activity", "text": self.d.describe_tool(tool, args)})
+        self.d.emit({"t": "activity", "text": self.d.describe_tool(tool, args), "chat": getattr(self, "chat_id", "main")})
 
     def end_tool(self, tool, result):
         self._tool_open = False
@@ -311,6 +405,22 @@ class DeskCtx:
         if n in ("chatgpt", "openai", "gpt"):
             return "chatgpt"
         return n if n in llm.CLOUD_PROVIDERS else ""
+
+    def show_app(self, app):
+        self.d.show_app(app)
+
+    def show_apps(self):
+        self.d.show_apps()
+
+    def reload_apps(self):
+        """Open app windows show their new look (their page is loaded again; their saved state stays)."""
+        for wid, spec in list(self.d.windows.items()):
+            if spec.get("kind") == "app":
+                spec["src"] = spec["src"].split("?")[0] + "?v=" + str(int(time.time()))
+                self.d.emit({"t": "window", "id": wid, "spec": spec})
+
+    def close_window(self, wid):
+        self.d.close_window(wid)
 
     def signin(self, provider=None):
         """"sign in to Claude / ChatGPT": the service's key page in a window; the copied key comes in by itself."""
@@ -379,6 +489,12 @@ class DeskCtx:
         self.d.apply_theme()
         self.d.push_status()
 
+    def start_idle(self):
+        self.d.start_idle()
+
+    def start_night_light(self):
+        self.d.start_night_light()
+
     def show_panel(self, panel):
         self.d.open_panel(panel)
 
@@ -391,7 +507,15 @@ class DeskCtx:
         """"set up a passphrase" after first boot: a form whose submit posts straight to the OS."""
         import secrets
         if config.settings.get("vault"):
-            return "the vault already exists (say 'lock' to lock it); the passphrase cannot be changed from here"
+            self.d.vault_nonce = secrets.token_hex(12)
+            self.d.open_window({"id": "vault-form", "replace": True, "title": "Change passphrase", "size": "s", "slot": "cascade", "blocks": [
+                {"type": "text", "text": "Type the passphrase you use now, then the new one twice."},
+                {"type": "form", "fields": [{"name": "p0", "label": "Passphrase now", "kind": "password"},
+                                            {"name": "p1", "label": "New passphrase", "kind": "password"},
+                                            {"name": "p2", "label": T("ask_passphrase_again"), "kind": "password"},
+                                            {"name": "nonce", "kind": "hidden", "value": self.d.vault_nonce}],
+                 "submit": {"label": "Change it", "post": "vault.change"}}]})
+            return "a form to change the passphrase is on the owner's screen; they type it there. Say one sentence at most."
         self.d.vault_nonce = secrets.token_hex(12)
         self.d.open_window({"id": "vault-form", "replace": True, "title": T("passphrase"), "size": "s", "slot": "cascade", "blocks": [
             {"type": "text", "text": T("ask_passphrase")},
@@ -494,6 +618,7 @@ class Desk:
             self.webview = WebKit.WebView(settings=settings, user_content_manager=ucm, **kw)
             self.webview.connect("context-menu", lambda *a: True)
             self.webview.connect("web-process-terminated", self._page_ended)
+            self.webview.connect("decide-policy", self._decide_policy)
             th = ui.Theme()
             bg = th.bg or (11, 13, 20)
             self.webview.set_background_color(Gdk.RGBA(red=bg[0] / 255, green=bg[1] / 255, blue=bg[2] / 255, alpha=1))
@@ -508,10 +633,19 @@ class Desk:
             except Exception:
                 pass
             self._write_display_env()
+            self._start_sound()
+            subprocess.run(["pkill", "-f", "wl-paste --type text --watch"], capture_output=True)   # one watcher, even after a restart
+            GLib.timeout_add(2000, lambda: (clip.start_watch(), False)[1])
+            GLib.timeout_add(2500, lambda: (self._start_notifications(), False)[1])
+            GLib.timeout_add_seconds(20, lambda: (threading.Thread(target=system.sync_time, daemon=True).start(), False)[1])
+            GLib.timeout_add(1500, lambda: (self.apply_input(), False)[1])
             threading.Thread(target=self._control_socket, daemon=True).start()
+            GLib.timeout_add_seconds(3, self._poll_drives)
             threading.Thread(target=self._worker, daemon=True).start()
             GLib.timeout_add_seconds(20, self._poll_away)
             GLib.timeout_add_seconds(30, self._poll_autolock)
+            GLib.timeout_add_seconds(5, self._poll_power)
+            GLib.timeout_add(3000, lambda: (self.start_idle(), False)[1])
 
         self.app = Gtk.Application(application_id="org.llmos.desk")
         self.app.connect("activate", activate)
@@ -523,12 +657,116 @@ class Desk:
         finally:
             self._cleanup()
 
+    def _app_export(self, name, data):
+        """An app hands over a file (a drawing): saved in ~/Pictures under a name that is not taken."""
+        import base64
+        m = re.match(r"data:image/(png|jpeg);base64,(.+)$", data, re.S)
+        if not m or len(data) > apps.MAX_STATE:
+            return
+        d = os.path.join(config.home(), "Pictures")
+        try:
+            config.guard_write(d)
+            os.makedirs(d, exist_ok=True)
+            stem = re.sub(r"[^\w.-]+", "-", os.path.splitext(os.path.basename(name))[0])[:40] or "picture"
+            ext = "jpg" if m.group(1) == "jpeg" else "png"
+            path, n = os.path.join(d, f"{stem}.{ext}"), 1
+            while os.path.exists(path):
+                n += 1
+                path = os.path.join(d, f"{stem}-{n}.{ext}")
+            with open(path, "wb") as f:
+                f.write(base64.b64decode(m.group(2)))
+            self.emit({"t": "toast", "text": T("d_saved_to", path=path.replace(config.home(), "~"))})
+        except (OSError, ValueError) as e:
+            self.emit({"t": "toast", "text": f"{T('error')}: {e}"})
+
+    def _decide_policy(self, view, decision, kind):
+        """The desk and the apps in it are local pages: nothing in them may navigate to the web (an app sending what
+        it holds to a server by loading an address). Web pages open in the browser, never inside the desk."""
+        try:
+            from gi.repository import WebKit
+            if kind in (WebKit.PolicyDecisionType.NAVIGATION_ACTION, WebKit.PolicyDecisionType.NEW_WINDOW_ACTION):
+                uri = decision.get_navigation_action().get_request().get_uri() or ""
+                if not uri.startswith(("file://", "about:", "data:", "blob:")):
+                    decision.ignore()
+                    return True
+        except Exception as e:
+            sys.stderr.write(f"desk: navigation check failed: {e}\n")
+        return False
+
     def _page_ended(self, view, reason):
         """The page's process ended (out of memory, a crash): the screen would stay frozen on its last picture, so
         the page is loaded again; on "ready" it gets the current screen and the open windows back."""
         sys.stderr.write(f"desk: the page's process ended ({reason}); loading it again\n")
         self.ready, self._reloaded = False, True
         self.GLib.timeout_add(300, lambda: (view.load_uri("file://" + PAGE), False)[1])
+
+    def _start_notifications(self):
+        """Programs' own notifications (a download finished in the browser, a message in a call): shown in the
+        corner in the desk's colours by mako, the usual notification daemon for this kind of desktop."""
+        if not shutil.which("mako"):
+            return
+        a = config.settings.get("appearance", {}) or {}
+        bg, fg, acc = (a.get("background") or "#14161f"), (a.get("color") or "#e8e9ef"), (a.get("accent") or "#7c5cff")
+        d = os.path.join(config.home(), ".config", "mako")
+        try:
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, "config"), "w") as f:
+                f.write(f"font=Inter 12\nbackground-color={bg}ee\ntext-color={fg}\nborder-color={acc}\nborder-size=2\n"
+                        f"border-radius=12\npadding=12\nmargin=58,16,16,16\nwidth=360\ndefault-timeout=7000\nanchor=top-right\n"
+                        f"max-visible=3\nlayer=overlay\n\n[mode=do-not-disturb]\ninvisible=1\n")
+            subprocess.run(["pkill", "-x", "mako"], capture_output=True)
+            env = dict(os.environ, **(media.desk_env() or {}))
+            subprocess.Popen(["mako", "-c", os.path.join(d, "config")], env=env, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            if config.settings.get("do_not_disturb"):
+                self.GLib.timeout_add(1000, lambda: (subprocess.run(["makoctl", "mode", "-s", "do-not-disturb"], env=env, capture_output=True), False)[1])
+        except OSError:
+            pass
+        self.start_night_light()
+
+    def start_night_light(self):
+        """Warmer colours in the evening (settings: night_light on/off; 19:00 to 07:00 unless set)."""
+        subprocess.run(["pkill", "-x", "wlsunset"], capture_output=True)
+        if not config.settings.get("night_light") or not shutil.which("wlsunset"):
+            return
+        try:
+            subprocess.Popen(["wlsunset", "-t", "3800", "-T", "6500", "-S", str(config.settings.get("night_light_end") or "07:00"),
+                              "-s", str(config.settings.get("night_light_start") or "19:00")],
+                             env=dict(os.environ, **(media.desk_env() or {})), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        except OSError:
+            pass
+
+    def _start_sound(self):
+        """PipeWire for this session: programs (the browser, calls, Bluetooth headphones) need a sound server; the
+        desk's own sounds still work through ALSA without it."""
+        if not shutil.which("pipewire"):
+            return
+        env = dict(os.environ)
+        for prog in ("pipewire", "wireplumber", "pipewire-pulse"):
+            if shutil.which(prog) and subprocess.run(["pgrep", "-x", prog], capture_output=True).returncode != 0:
+                try:
+                    subprocess.Popen([prog], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     start_new_session=True)
+                    time.sleep(0.3)
+                except OSError as e:
+                    sys.stderr.write(f"desk: {prog} did not start: {e}\n")
+
+    def _poll_drives(self):
+        """A USB stick plugged in: say so, with a button to open it (and to eject it later)."""
+        try:
+            now = {d["path"]: d for d in syspanels.removable()}
+        except Exception:
+            return True
+        seen = getattr(self, "_drives_seen", None)
+        self._drives_seen = set(now)
+        if seen is None or self.screen != "desk":
+            return True
+        for path in set(now) - seen:
+            d = now[path]
+            self.emit({"t": "toast", "text": T("d_drive_in", name=d["label"], size=d["size"]), "long": True})
+            self.open_window(syspanels.drives())
+        return True
 
     def _cleanup(self):
         for p in list(self.apps.values()):
@@ -696,6 +934,20 @@ class Desk:
             return
         data = json.dumps(msg, ensure_ascii=False)
         self.GLib.idle_add(self._js, data)
+        if msg.get("t") in ("reply.end", "toast", "window", "ask") and (msg.get("t") != "toast" or msg.get("text")):
+            self._wake_screen()
+
+    def _wake_screen(self):
+        """Something to see (an answer, a timer ringing, a question): a screen that went dark for idleness comes back."""
+        now = time.time()
+        if now - getattr(self, "_woke", 0) < 5 or not shutil.which("wlopm"):
+            return
+        self._woke = now
+        try:
+            subprocess.Popen(["wlopm", "--on", "*"], env=dict(os.environ, **(media.desk_env() or {})),
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            pass
 
     def _js(self, data):
         if self.webview is not None:
@@ -745,6 +997,24 @@ class Desk:
         elif t == "say":
             self.last_active = time.time()
             self.say(str(msg.get("text", "")))
+        elif t == "chat.say":
+            cid = str(msg.get("chat", ""))
+            if cid.startswith("side-") and "chat-" + cid in self.windows:
+                self.last_active = time.time()
+                self.say(str(msg.get("text", "")), chat=cid)
+        elif t == "act":
+            threading.Thread(target=self.act, args=(str(msg.get("text", "")),), daemon=True).start()
+        elif t == "app.save":
+            aid, state = str(msg.get("id", "")), msg.get("state")
+            w = self.windows.get("app-" + aid)
+            if w and w.get("kind") == "app":
+                try:
+                    if apps.save_state(aid, state):
+                        w["state"] = state
+                except OSError:
+                    pass
+        elif t == "app.export":
+            self._app_export(str(msg.get("name", "picture.png")), str(msg.get("data", "")))
         elif t == "signin":
             pid = str(msg.get("provider", ""))
             if (llm.CLOUD_PROVIDERS.get(pid) or {}).get("signin"):
@@ -776,6 +1046,40 @@ class Desk:
                         self.emit({"t": "toast", "text": "", "sticky": "vault"})
                         self.emit({"t": "toast", "text": f"{T('error')}: {e}", "long": True})
                 threading.Thread(target=make, daemon=True).start()
+        elif t == "vault.change":
+            p0, p1, p2 = str(msg.get("p0", "")), str(msg.get("p1", "")), str(msg.get("p2", ""))
+            if not getattr(self, "vault_nonce", None) or msg.get("nonce") != self.vault_nonce:
+                sys.stderr.write("desk: ignored a vault.change that did not come from the passphrase form\n")
+            elif not p1:
+                self.emit({"t": "toast", "text": T("passphrase_empty")})
+            elif p1 != p2:
+                self.emit({"t": "toast", "text": T("passphrase_mismatch")})
+            else:
+                self.close_window("vault-form")
+                self.vault_nonce = None
+
+                def change(old=p0, new=p1):
+                    try:
+                        vault.change_passphrase(old, new)
+                        self.emit({"t": "toast", "text": "The passphrase is changed. Use the new one from now on.", "long": True})
+                    except Exception:
+                        self.emit({"t": "toast", "text": "Not changed: the passphrase you use now was not right.", "long": True})
+                threading.Thread(target=change, daemon=True).start()
+        elif t == "wifi.join":
+            if not getattr(self, "wifi_nonce", None) or msg.get("nonce") != self.wifi_nonce:
+                sys.stderr.write("desk: ignored a wifi.join that did not come from the Wi-Fi form\n")
+            else:
+                self.wifi_nonce = None
+                self.close_window("wifi-join")
+
+                def join(ssid=str(msg.get("ssid", "")), pw=str(msg.get("password", ""))):
+                    self.emit({"t": "toast", "text": T("d_net_joining", ssid=ssid), "sticky": "wifi"})
+                    good, note = _wifi_connect(ssid, pw)
+                    self.emit({"t": "toast", "text": "", "sticky": "wifi"})
+                    self.emit({"t": "toast", "text": T("w_wifi_ok") if good else note, "long": not good})
+                    self.push_status()
+                    self.network_panel()
+                threading.Thread(target=join, daemon=True).start()
         elif t == "cloud.setup":
             if not getattr(self, "cloud_nonce", None) or msg.get("nonce") != self.cloud_nonce:
                 sys.stderr.write("desk: ignored a cloud.setup that did not come from the online-model form\n")
@@ -884,7 +1188,9 @@ class Desk:
         elif t == "app.close":
             self.close_app(int(msg.get("pid", 0) or 0))
         elif t == "app.focus":
-            pass
+            a = self.apps.get(int(msg.get("pid", 0) or 0))
+            if a:
+                threading.Thread(target=wm.focus_program, args=(a["argv"],), daemon=True).start()
         elif t == "lock":
             if config.settings.get("vault"):
                 self.lock()             # at once, not queued behind a running request
@@ -928,6 +1234,12 @@ class Desk:
         self.push_status()
         self._model_watch()
         self.show_away()
+        if _live() and not getattr(self, "_live_told", False):
+            self._live_told = True          # once per start: running from the stick keeps nothing
+            self.open_window({"id": "live", "replace": True, "title": T("d_live_title"), "size": "s", "slot": "cascade", "blocks": [
+                {"type": "text", "text": T("d_live_text")},
+                {"type": "buttons", "items": [{"label": T("d_live_install"), "say": "install llm os on this computer", "primary": True},
+                                              {"label": T("d_live_keep"), "say": "close the live window"}]}]})
 
     def _model_watch(self):
         def watch():
@@ -961,6 +1273,10 @@ class Desk:
         css["--radius-sm"] = {"rounded": "9px", "square": "0px", "none": "16px", "double": "4px", "heavy": "5px"}[corners]
         css["--border-w"] = {"double": "3px", "heavy": "2px"}.get(corners, "1px")
         css["--border-style"] = "double" if corners == "double" else "solid"
+        appear = config.settings.get("appearance", {}) or {}
+        css["--font"] = themes.FONTS.get(appear.get("font") or "sans", themes.FONTS["sans"]) + \
+            ', "Noto Sans CJK SC", "Noto Sans Arabic", "Noto Sans Hebrew", "Noto Sans Devanagari", "Noto Sans Thai", sans-serif'
+        backdrop = appear.get("backdrop") or "living"
         motion = getattr(th, "motion", "full")
         lang = i18n.lang_code(config.llm_language())
         strings = {k: T(k) for k in _PAGE_KEYS}
@@ -970,7 +1286,8 @@ class Desk:
                 "layout": config.settings.get("appearance.layout") or "clean",
                 "software": os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1",
                 "dir": "rtl" if lang in ("ar", "he", "fa", "ur") else "ltr", "strings": strings,
-                "wallpaper": ("file://" + _wallpaper() + "?" + str(int(os.path.getmtime(_wallpaper())))) if (config.settings.get("onboarded") and (not config.settings.get("vault") or vault.unlocked()) and os.path.exists(_wallpaper())) else ""}
+                "backdrop": backdrop,
+                "wallpaper": "" if backdrop != "photo" else ("file://" + _wallpaper() + "?" + str(int(os.path.getmtime(_wallpaper())))) if (config.settings.get("onboarded") and (not config.settings.get("vault") or vault.unlocked()) and os.path.exists(_wallpaper())) else ""}
 
     def _zoom(self):
         return getattr(self, "display_scale", 1.0) * ui.Theme().scale / 100
@@ -987,6 +1304,18 @@ class Desk:
             if mon is None and mons.get_n_items():
                 mon = mons.get_item(0)
             self.display_scale = _display_scale(mon) if mon is not None else 1.0
+            # scale the whole screen in the compositor, so the programs (the browser, Files…) are as big as the desk;
+            # the screen then reports its size in scaled pixels and the page needs no zoom of its own for it
+            conn = mon.get_connector() if mon is not None else None
+            done = getattr(self, "_out_scaled", {})
+            if self.display_scale > 1 and conn and conn not in done and shutil.which("wlr-randr") and not os.environ.get("LLMOS_NO_OUTPUT_SCALE"):
+                done[conn] = self.display_scale
+                self._out_scaled = done
+                if subprocess.run(["wlr-randr", "--output", conn, "--scale", str(self.display_scale)], capture_output=True, timeout=10).returncode == 0:
+                    self.display_scale = 1.0
+                    self.GLib.timeout_add(1500, self._apply_zoom)
+            elif conn in done:
+                self.display_scale = 1.0
         except Exception as e:
             sys.stderr.write(f"desk: screen size unknown ({e}); 100%\n")
             self.display_scale = 1.0
@@ -998,7 +1327,11 @@ class Desk:
 
     def apply_theme(self):
         ui.reload_theme()
-        self.emit(self.theme_payload())
+        pay = self.theme_payload()
+        self.emit(pay)
+        a = config.settings.get("appearance", {}) or {}
+        threading.Thread(target=themes.apply_programs, args=(config.home(), pay["mode"], a.get("font") or "sans",
+                         pay["css"].get("--bg", ""), pay["css"].get("--fg", ""), pay["css"].get("--accent", ""), ui.Theme().scale), daemon=True).start()
         if getattr(self, "GLib", None) and self.webview is not None:
             self.GLib.idle_add(self._apply_zoom)
         if getattr(self, "GLib", None):
@@ -1016,13 +1349,22 @@ class Desk:
         s = config.settings.all()
         m = models.active()
         self.emit({"t": "status", "model": m["name"] if m else "", "model_ok": llm.health(),
-                   "autonomy": s.get("autonomy", "hands-off"), "host_gpu": models.host_mode(),
+                   "autonomy": s.get("autonomy", "balanced"), "host_gpu": models.host_mode(),
                    "brain": s.get("brain", "local"), "cloud": llm.cloud_label() if vault.unlocked() or not s.get("vault") else "",
                    "tor": bool(s.get("tor")), "internet": s.get("internet", "yes"),
                    "vault": ("locked" if not vault.unlocked() else "on") if s.get("vault") else "off",
                    "focus": bool(s.get("focus", {}).get("on")), "name": config.Profile().get("name", ""),
                    "tz": system.timezone(), "busy": self.busy, "listening": self.listening,
-                   "mic": voice.available(), "tasks": len(store.tasks())})
+                   "mic": voice.available(), "tasks": len(store.tasks()), "live": _live(),
+                   "net": ("wifi" if _wifi_device() and _online() else "wired" if _online() else "offline"),
+                   "battery": _battery(), "volume": self._volume_pct()})
+
+    def _volume_pct(self):
+        try:
+            m = re.search(r"Volume is (\d+)%", devices.volume())
+            return int(m.group(1)) if m else None
+        except Exception:
+            return None
 
     # ---- windows
 
@@ -1043,6 +1385,108 @@ class Desk:
     def close_window(self, wid):
         self.windows.pop(wid, None)
         self.emit({"t": "window.close", "id": wid})
+
+    # ---- the owner's apps (apps.py): each one a sandboxed page in a window
+
+    def show_app(self, app):
+        import urllib.parse
+        wid = "app-" + app["id"]
+        spec = {"id": wid, "title": app["title"], "kind": "app", "size": app.get("size") or "m", "app": app["id"],
+                "src": "file://" + urllib.parse.quote(app["file"]), "state": apps.load_state(app["id"]),
+                "blocks": [{"type": "text", "text": app["title"]}]}
+        self.windows[wid] = spec
+        self.emit({"t": "window", "id": wid, "spec": spec})
+
+    # ---- quick panels: the status bar's network, sound and power
+
+    def network_panel(self, nets=None):
+        now, dev = _wifi_now(), _wifi_device()
+        state = (T("d_net_wifi", ssid=now) if now else T("d_net_wired") if _online() else T("d_net_offline"))
+        blocks = [{"type": "kv", "rows": [[T("d_net_status"), state]]}]
+        if not dev:
+            blocks.append({"type": "text", "text": T("d_net_nowifi"), "dim": True})
+        elif nets is None:
+            blocks.append({"type": "text", "text": T("d_net_scanning"), "dim": True})
+            threading.Thread(target=lambda: self.network_panel(_wifi_scan()), daemon=True).start()
+        elif not nets:
+            blocks.append({"type": "text", "text": T("d_net_none"), "dim": True})
+        else:
+            blocks.append({"type": "list", "items": [
+                {"title": ("🔒 " if n["secured"] else "") + n["ssid"], "meta": "▂▄▆█"[:max(1, min(4, n["signal"]))],
+                 "actions": [{"label": "Disconnect", "say": "disconnect from wifi"}, {"label": "Forget", "say": "forget wifi " + n["ssid"], "danger": True}]
+                 if n["ssid"] == now else [{"label": T("d_connect"), "say": "join wifi " + n["ssid"], "primary": True}]}
+                for n in nets[:20]]})
+        airplane = _airplane()
+        blocks.append({"type": "buttons", "items": ([{"label": T("d_net_rescan"), "say": "show wifi networks"}] if dev else []) +
+                       ([{"label": "Airplane mode: on" if airplane else "Airplane mode", "say": "airplane mode off" if airplane else "airplane mode on",
+                          "primary": airplane}] if shutil.which("rfkill") else []) +
+                       [{"label": T("settings"), "say": "settings"}]})
+        self.open_window({"id": "panel-network", "replace": True, "title": T("d_network"), "size": "s", "slot": "side", "blocks": blocks})
+
+    def wifi_join(self, ssid):
+        nets = {n["ssid"]: n for n in (_wifi_scan() if _wifi_device() else [])}
+        n = nets.get(ssid)
+        if n and not n["secured"]:
+            good, note = _wifi_connect(ssid, "")
+            self.emit({"t": "toast", "text": (T("w_wifi_ok") if good else note)})
+            return self.network_panel()
+        import secrets
+        self.wifi_nonce = secrets.token_hex(12)
+        self.open_window({"id": "wifi-join", "replace": True, "title": ssid, "size": "s", "slot": "cascade", "blocks": [
+            {"type": "form", "fields": [{"name": "password", "label": T("w_wifi_pass"), "kind": "password"},
+                                        {"name": "ssid", "kind": "hidden", "value": ssid},
+                                        {"name": "nonce", "kind": "hidden", "value": self.wifi_nonce}],
+             "submit": {"label": T("d_connect"), "post": "wifi.join"}}]})
+
+    def sound_panel(self):
+        v = self._volume_pct()
+        blocks = [{"type": "kv", "rows": [[T("d_volume"), f"{v}%" if v is not None else T("d_sound_none")]]}]
+        if v is not None:
+            blocks.append({"type": "buttons", "items": [{"label": "🔇", "say": "mute"}, {"label": "🔈", "say": "unmute"}] +
+                           [{"label": f"{p}%", "say": f"set the volume to {p}%", "primary": v == p} for p in (25, 50, 75, 100)]})
+        outs = syspanels.audio_devices("Sinks")
+        if len(outs) > 1:
+            blocks.append({"type": "heading", "text": "Sound comes out of"})
+            blocks.append({"type": "choices", "selected": next((n for _, n, d in outs if d), ""),
+                           "items": [{"label": n, "say": f"use sound output {i}"} for i, n, d in outs]})
+        mics = syspanels.audio_devices("Sources")
+        if len(mics) > 1:
+            blocks.append({"type": "heading", "text": "Microphone"})
+            blocks.append({"type": "choices", "selected": next((n for _, n, d in mics if d), ""),
+                           "items": [{"label": n, "say": f"use sound input {i}"} for i, n, d in mics]})
+        if shutil.which("pavucontrol"):
+            blocks.append({"type": "buttons", "items": [{"label": T("d_sound_more"), "say": "open pavucontrol"}]})
+        self.open_window({"id": "panel-sound", "replace": True, "title": T("d_sound"), "size": "s", "slot": "side", "blocks": blocks})
+
+    def power_panel(self):
+        items = []
+        if config.settings.get("vault"):
+            items.append({"label": T("d_lock"), "say": "lock"})
+        items += [{"label": T("d_sleep"), "say": "sleep"}, {"label": T("d_restart"), "say": "restart"},
+                  {"label": T("d_shutdown"), "say": "shut down", "danger": True}]
+        b = _battery()
+        blocks = ([{"type": "kv", "rows": [[T("d_battery"), f"{b['pct']}%" + (" ⚡" if b["charging"] else "")]]}] if b else []) + \
+            [{"type": "buttons", "items": items}]
+        if _live():
+            blocks.append({"type": "buttons", "items": [{"label": T("d_live_install"), "say": "install llm os on this computer", "primary": True}]})
+        self.open_window({"id": "panel-power", "replace": True, "title": T("d_power"), "size": "s", "slot": "side", "blocks": blocks})
+
+    def show_apps(self):
+        mine = apps.installed()
+        items = [{"title": a["title"], "subtitle": time.strftime("%b %d", time.localtime(a["made"])),
+                  "actions": [{"label": T("d_open"), "say": f"open the app {a['id']}", "primary": True},
+                              {"label": T("d_remove"), "say": f"remove the app {a['id']}", "danger": True}]} for a in mine]
+        blocks = [{"type": "list", "items": items}] if items else [{"type": "text", "text": T("d_apps_none"), "dim": True}]
+        from . import programs
+        progs = programs.everyday()
+        if progs:
+            blocks += [{"type": "heading", "text": T("d_programs")},
+                       {"type": "buttons", "items": [{"label": lab, "say": f"open {p['name']}"} for lab, p in progs[:40]]}]
+        blocks += [{"type": "heading", "text": T("d_apps_make")},
+                   {"type": "buttons", "items": [{"label": t["title"], "say": f"make a {t['id']} app"} for t in apps.templates()]},
+                   {"type": "text", "text": T("d_apps_hint"), "dim": True},
+                   {"type": "buttons", "items": [{"label": T("d_apps_connectors"), "say": "connectors"}]}]
+        self.open_window({"id": "apps", "replace": True, "title": T("d_myapps"), "size": "m", "slot": "side", "blocks": blocks})
 
     def open_panel(self, which):
         spec = self.panel_spec(which)
@@ -1172,9 +1616,16 @@ class Desk:
         s = config.settings.all()
         if which == "settings":
             L = lambda k, **kw: T(k, area="settings", **kw)
-            auto = s.get("autonomy", "hands-off")
+            auto = s.get("autonomy", "balanced")
             pick = lambda k, v: {"label": L(k), "say": v}
             blocks = [
+                {"type": "buttons", "items": [{"label": T("d_network"), "say": "network"}, {"label": T("d_sound"), "say": "sound"},
+                                              {"label": "Displays", "say": "displays"}, {"label": "Keyboard and mouse", "say": "keyboard and mouse"},
+                                              {"label": "Bluetooth", "say": "bluetooth"}, {"label": "Printers", "say": "printers"},
+                                              {"label": "Drives", "say": "drives"}, {"label": "Storage", "say": "storage"},
+                                              {"label": "Updates", "say": "updates"}, {"label": T("d_power"), "say": "power"},
+                                              {"label": "What's running", "say": "task manager"}, {"label": T("d_myapps"), "say": "show my apps"},
+                                              {"label": T("d_conversations"), "say": "conversations"}, {"label": "About this computer", "say": "about this computer"}]},
                 {"type": "heading", "text": L("s_autonomy")},
                 {"type": "choices", "selected": L("v_" + auto), "items": [
                     {"label": L("v_hands-off"), "say": "switch to hands-off mode"},
@@ -1216,10 +1667,22 @@ class Desk:
                 {"type": "choices", "selected": i18n.display_name(s["language"]), "items": [
                     {"label": i18n.display_name(c), "say": f"put everything in {i18n.display_name(c)}"} for c in ("en", "zh", "es", "fr", "de", "ja")]},
                 {"type": "heading", "text": L("s_presets")},
-                {"type": "buttons", "items": [{"label": L("c_purple"), "say": "make everything purple"}, {"label": L("c_teal"), "say": "make everything teal"},
+                {"type": "buttons", "items": [{"label": T("d_th_dark"), "say": "dark mode"}, {"label": T("d_th_light"), "say": "light mode"},
+                                              {"label": L("c_purple"), "say": "make everything purple"}, {"label": L("c_teal"), "say": "make everything teal"},
                                               {"label": L("c_orange"), "say": "make everything orange"}, {"label": L("c_green"), "say": "make everything green"},
-                                              {"label": L("c_light"), "say": "make the background white and the text black"},
-                                              {"label": L("v_default"), "say": "make everything default"}]},
+                                              {"label": "Ocean", "say": "ocean theme"}, {"label": "Neon", "say": "neon theme"},
+                                              {"label": "Retro", "say": "retro theme"}, {"label": "Space", "say": "space theme"},
+                                              {"label": T("d_th_contrast"), "say": "high contrast mode"},
+                                              {"label": L("v_default"), "say": "default theme"}]},
+                {"type": "heading", "text": T("d_font")},
+                {"type": "choices", "selected": {"sans": "Sans", "serif": "Serif", "mono": "Mono", "pixel": "Pixel"}.get(s["appearance"].get("font") or "sans", "Sans"),
+                 "items": [{"label": "Sans", "say": "change the font to sans"}, {"label": "Serif", "say": "change the font to serif"},
+                           {"label": "Mono", "say": "change the font to mono"}, {"label": "Pixel", "say": "change the font to pixel"}]},
+                {"type": "heading", "text": T("d_backdrop")},
+                {"type": "choices", "selected": T("d_bd_" + (s["appearance"].get("backdrop") or "living")),
+                 "items": [{"label": T("d_bd_living"), "say": "animated background"}, {"label": T("d_bd_still"), "say": "still background"},
+                           {"label": T("d_bd_plain"), "say": "plain background"}] +
+                          ([{"label": T("d_bd_photo"), "say": "make the background photo"}] if os.path.exists(_wallpaper()) else [])},
                 {"type": "heading", "text": L("s_corners")},
                 {"type": "choices", "selected": L("v_" + s["appearance"]["corners"]) if s["appearance"]["corners"] in ("rounded", "square", "none") else s["appearance"]["corners"],
                  "items": [pick("v_rounded", "rounded corners"), pick("v_square", "square corners"), pick("v_none", "no corners")]},
@@ -1274,12 +1737,14 @@ class Desk:
             return {"title": T("audit"), "kind": "panel", "size": "l",
                     "blocks": [{"type": "table", "columns": ["", "", ""], "rows": rows}]}
         if which == "help":
-            examples = [T(f"g_ex{i}") for i in range(1, 11)]
+            examples = [T(f"g_ex{i}") for i in (11, 12, 1, 2, 13, 3, 4, 5, 9, 10, 14, 7)]
             return {"title": T("d_try"), "kind": "panel", "size": "l", "blocks": [
                 {"type": "text", "text": T("g_intro")},
                 {"type": "buttons", "items": [{"label": T("settings", area="settings"), "say": "settings"},
                                               {"label": T("models"), "say": "models"}, {"label": T("tasks"), "say": "tasks"},
                                               {"label": T("memory"), "say": "memory"}, {"label": T("d_lists"), "say": "show my lists"},
+                                              {"label": T("d_myapps"), "say": "show my apps"}, {"label": T("d_conversations"), "say": "conversations"},
+                                              {"label": T("d_network"), "say": "network"}, {"label": T("d_sound"), "say": "sound"},
                                               {"label": T("audit"), "say": "audit"}]},
                 {"type": "list", "columns": 2, "items": [{"title": f"“{e}”", "actions": [{"label": T("d_try_btn"), "say": e}]} for e in examples]},
                 {"type": "text", "text": T("d_shortcuts"), "dim": True}]}
@@ -1306,6 +1771,70 @@ class Desk:
             devices.chime()
             if config.settings.get("speak_replies"):
                 self.ctx.background(lambda t=ui.strip(un[-1]["text"])[:400]: voice.speak(t))
+
+    def sleep_now(self):
+        """Sleep; with a passphrase the screen locks first, so waking needs it (as on any PC)."""
+        if config.settings.get("vault") and vault.unlocked() and self.screen == "desk":
+            try:
+                self.lock()
+            except Exception as e:
+                sys.stderr.write(f"desk: lock before sleep failed: {e}\n")
+            time.sleep(1.5)
+        syspanels.sleep()
+
+    def _poll_power(self):
+        """Every 5 s: a laptop's lid closed sleeps it; a nearly empty battery warns, then sleeps before it dies."""
+        try:
+            lid = ""
+            for f in glob.glob("/proc/acpi/button/lid/*/state"):
+                with open(f) as fh:
+                    lid = fh.read().split()[-1]
+            was, self._lid = getattr(self, "_lid", lid), lid
+            if lid == "closed" and was == "open" and config.settings.get("lid", "sleep") == "sleep" and not self._external_screen():
+                threading.Thread(target=self.sleep_now, daemon=True).start()
+            b = _battery()
+            if b and not b["charging"]:
+                warned = getattr(self, "_low_warned", 100)
+                if b["pct"] <= 3 and warned > 3:
+                    self._low_warned = 3
+                    self.emit({"t": "toast", "text": "The battery is empty: going to sleep now. Plug in the charger.", "long": True})
+                    threading.Thread(target=lambda: (time.sleep(8), self.sleep_now()), daemon=True).start()
+                elif b["pct"] <= 10 and warned > 10:
+                    self._low_warned = 10
+                    self.emit({"t": "toast", "text": f"The battery is low ({b['pct']}%). Plug in the charger soon.", "long": True})
+            elif b:
+                self._low_warned = 100
+        except Exception as e:
+            sys.stderr.write(f"desk: power check failed: {e}\n")
+        return True
+
+    def _external_screen(self):
+        """A second screen is connected (closing the lid then keeps working, like a docked laptop)."""
+        try:
+            return sum(1 for d in glob.glob("/sys/class/drm/card*-*/status") if open(d).read().strip() == "connected") > 1
+        except OSError:
+            return False
+
+    def start_idle(self):
+        """The screen turns off after some minutes without use (settings: screen_off, default 10; 0 = never) and
+        wakes at a touch; optionally the computer sleeps later (sleep_after). swayidle watches; wlopm switches."""
+        subprocess.run(["pkill", "-x", "swayidle"], capture_output=True)
+        if not shutil.which("swayidle"):
+            return
+        off = int(config.settings.get("screen_off", 10) or 0)
+        nap = int(config.settings.get("sleep_after", 0) or 0)
+        argv = ["swayidle"]
+        if off > 0 and shutil.which("wlopm"):
+            argv += ["timeout", str(off * 60), "wlopm --off '*'", "resume", "wlopm --on '*'"]
+        if nap > 0:
+            argv += ["timeout", str(nap * 60), "/usr/bin/llmos desk-ctl act 'sleep'"]
+        if len(argv) == 1:
+            return
+        try:
+            subprocess.Popen(argv, env=dict(os.environ, **(media.desk_env() or {})), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        except OSError:
+            pass
 
     def _poll_autolock(self):
         """Lock the vault by itself after the owner's chosen idle time (settings: autolock minutes).
@@ -1418,6 +1947,12 @@ class Desk:
             return f"{what}: {'mute' if a.get('mute') else 'unmute'}"
         if n == "set_appearance":
             return "change the look"
+        if n == "make_app":
+            return f"make an app: {a.get('what', '')}" + (f" ({a.get('look')})" if a.get("look") else "")
+        if n == "open_app":
+            return f"open {a.get('command', '')}"
+        if n == "manage_apps":
+            return "Remove the app " + str(a.get("name", "")) + "?" if confirm and a.get("action") == "remove" else f"apps: {a.get('action', 'list')}"
         if n == "online_model":
             act = str(a.get("action", "")).lower()
             who = {"claude": "Claude", "anthropic": "Claude", "chatgpt": "ChatGPT", "openai": "ChatGPT"}.get(str(a.get("provider", "")).lower(), "")
@@ -1440,9 +1975,10 @@ class Desk:
         if n in ("show_screen", "show_panel", "show_image", "real_quote", "calculate", "remember", "forget", "schedule_task"):
             key = next((k for k in ("panel", "subject", "who_or_topic", "expression", "fact", "what", "task", "title") if a.get(k)), None)
             return f"{n.replace('_', ' ')}: {str(a.get(key, ''))[:70]}" if key else n.replace("_", " ")
-        s = json.dumps(a, ensure_ascii=False)
-        s = s if len(s) < 70 else s[:67] + "…"
-        return (f"Allow {n}?" if confirm else f"{n} {s}")
+        # never raw arguments: the tool's own first words ("Ask the owner which file…") read as plain language
+        what = re.split(r"[.:(]", (getattr(tool, "description", "") or n.replace("_", " ")))[0].strip()
+        what = what[:70] + ("…" if len(what) > 70 else "")
+        return (f"{what}?" if confirm else what)
 
     def describe_args(self, tool, args):
         a = args if isinstance(args, dict) else {}
@@ -1461,21 +1997,92 @@ class Desk:
 
     # ---- requests
 
-    def say(self, text, done=None):
-        """Queue a request; `done` (an Event) is set when its turn is over."""
+    def say(self, text, done=None, chat="main"):
+        """Queue a request; `done` (an Event) is set when its turn is over. While the model is still working on an
+        earlier one, something the OS does by itself (open the settings, show the lists, dark mode…) is done at once
+        instead of waiting behind it."""
         text = text.strip()
         if not text:
             if done:
                 done.set()
             return
         self.last_active = time.time()
-        self.requests.put((text, done))
+        if chat == "main" and self.busy and done is None and self._instant(text):
+            threading.Thread(target=self.act, args=(text,), daemon=True).start()
+            return
+        self.requests.put((text, done, chat))
+
+    # tools that finish at once and need no model: safe to run beside a request in progress
+    _SLOW = {"install_app", "manage_models", "web_search", "read_webpage", "show_image", "set_wallpaper", "install_to_disk",
+             "play_media", "check_new_models", "add_model", "manage_voice", "wifi_scan", "wifi_connect", "run_command"}
+
+    _QUICK = {"settings", "models", "tasks", "memory", "audit", "help", "connectors", "?", "lock", "voice", "listen", "clear",
+              "close the live window", "keep trying it", "network", "wifi", "wi-fi", "internet", "show wifi networks",
+              "show the wifi networks", "wifi networks", "connect to wifi", "connect to wi-fi", "network settings",
+              "show the network settings", "sound", "volume", "sound settings", "audio", "power", "power options", "power menu",
+              "history", "conversations", "my conversations", "show my conversations", "chat history", "show the history",
+              "show my chats", "chats", "sessions"}
+    _QUICK_RE = re.compile(r"(?:what can you do|what can i (?:do|say|ask)(?: here| with (?:this|it|you))?|how do i use (?:this|you|it)|what do i do|help me|show me what you can do|"
+                           r"what are you|what is this|get started|getting started|\?+)[?.!]*|(?:stop|cancel|never ?mind|forget it|abort|halt that|stop that|stop it|cancel that|no stop)[.!]*|(?:please )?close (?:all (?:the |my |of the )?(?:windows|apps)|everything|all of them|every window)(?: please)?[.!]?|"
+                           r"(?:join wifi |continue topic |forget topic |open side chat |delete side chat ).+|"
+                           r"(?:new (?:topic|chat|conversation)|start (?:fresh|over|a new (?:topic|chat|conversation))|fresh start|"
+                           r"clear (?:the )?chat|forget this conversation|change the subject)[.!]?|"
+                           r"(?:new |start a |open a |start a new |open a new )?side ?chat(?:\s+(?:about|on|for)\s+.+)?[.!]?")
+
+    def _instant(self, text):
+        low = intent.plain(text).lower().strip()
+        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
+                any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
+                any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
+                                                                            r"(?:extend|mirror) the displays|use only the main display|use only the (?:projector|tv|second (?:screen|display))|projector only|"
+                                                                            r"bluetooth (?:on|off|search|connect|disconnect|forget)(?: [0-9a-f:]{17})?|add printer \S+|print a test page on \S+|make \S+ the default printer|"
+                                                                            r"(?:natural scrolling|tap to click|left handed mouse) (?:on|off)|mouse (?:faster|slower|normal speed)|"
+                                                                            r"key repeat (?:faster|slower|normal)|set resolution \S+ \d+x\d+|"
+                                                                            r"(?:sleep|suspend|go to sleep|put (?:it|the computer) to sleep|hibernate)[.!]?|clear (?:the )?caches?[.!]?|install (?:the |all (?:the )?)?updates[.!]?|"
+                                                                            r"(?:keyboard layout|use an? |switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )[a-z ()-]+)", low):
+            return True
+        m = intent.match(text)
+        return bool(m) and m[0] not in self._SLOW and not m[0].startswith("mail_")
+
+    def act(self, text):
+        """A button on the desk (a status chip, the dock, the start menu, a window's button): done straight away on
+        its own thread, never queued behind a request the model is still thinking about. What the OS cannot do by
+        itself goes to the model like anything typed."""
+        text = str(text or "").strip()
+        if not text:
+            return
+        self.last_active = time.time()
+        if not self._instant(text):
+            return self.say(text)
+        try:
+            if self.shortcut(text):
+                self.last_reply = self.__dict__.pop("_said", None) or "(done by the OS: " + text + ")"
+                return
+            m = intent.match(text)
+            if not m:
+                return self.say(text)          # looked instant, but needs the model after all
+            name, args = m
+
+            class Lane:                     # the desk's context, with this button's words as "the request"
+                def __init__(lane, ctx):
+                    lane._ctx, lane.current_request = ctx, text
+
+                def __getattr__(lane, k):
+                    return getattr(lane._ctx, k)
+            out = agent.execute(Lane(self.ctx), name, args)
+            reply = agent._cap(agent._shortcut_reply(name, args, out))
+            self.last_reply = reply
+            if reply and reply not in ("Here it is.", "(done)"):
+                self.emit({"t": "toast", "text": reply[:240]})
+        except Exception as e:
+            self.emit({"t": "toast", "text": f"{T('error')}: {e}"})
 
     def _worker(self):
         while True:
-            text, done = self.requests.get()
+            item = self.requests.get()
+            text, done, chat = (item + ("main",))[:3] if len(item) == 2 else item
             try:
-                self.turn(text)
+                self.turn(text, chat)
             except Exception as e:      # never let the worker die
                 self.emit({"t": "reply.error", "text": f"{T('error')}: {e}"})
             finally:
@@ -1484,18 +2091,341 @@ class Desk:
                     done.set()
 
     def shortcut(self, line):
+        line = intent.plain(line)
         low = line.lower().strip()
-        if low in ("settings", "models", "tasks", "memory", "audit", "help", "?"):
+        if low in ("settings", "models", "tasks", "memory", "audit", "help", "connectors", "?"):
             self.open_panel("help" if low == "?" else low)
             return True
-        if low == "clear":
-            self.history.clear()
+        if re.fullmatch(r"(?:please )?close (?:all (?:the |my |of the )?(?:windows|apps)|everything|all of them|every window)(?: please)?[.!]?", low):
             for wid in list(self.windows):
                 self.close_window(wid)
             self.emit({"t": "clear"})
             return True
-        if low == "lock" and config.settings.get("vault"):
-            self.lock()
+        r = self._system_shortcut(low, line)
+        if r:
+            return True
+        if re.fullmatch(r"(?:pause|resume|unpause|play ?pause|pause (?:the |my )?(?:music|video|song)|resume (?:the |my )?(?:music|video|song)|keep playing)[.!]?", low):
+            if not media.playing():
+                # a video in the browser or another player: the standard media controls (MPRIS)
+                if shutil.which("playerctl"):
+                    env = dict(os.environ, **(media.desk_env() or {}))
+                    st = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=5, env=env).stdout.strip()
+                    if st in ("Playing", "Paused"):
+                        verb = "play" if re.match(r"resume|unpause|keep", low) else "pause" if not low.startswith("play") else "play-pause"
+                        subprocess.run(["playerctl", verb], capture_output=True, timeout=5, env=env)
+                        now = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=5, env=env).stdout.strip()
+                        self.instant_reply(line, "Paused." if now == "Paused" else "Playing.")
+                        return True
+                self.instant_reply(line, "Nothing is playing.")
+                return True
+            want = "resume" if re.match(r"resume|unpause|keep", low) else "pause"
+            if low.startswith("play"):
+                want = "resume" if getattr(self, "_np_state", "playing") == "paused" else "pause"
+            self.media_action(want)
+            self._np_state = "paused" if want == "pause" else "playing"
+            self.instant_reply(line, "Paused." if want == "pause" else "Playing.")
+            return True
+        m = _CLIP_Q.fullmatch(low)
+        if m:
+            if m.group("item"):
+                ok = clip.copy_again(m.group("item"))
+                self.instant_reply(line, "Copied. Paste it with Ctrl+V." if ok else "That item is gone; copy it again.")
+            elif m.group("clear"):
+                clip.clear()
+                self.instant_reply(line, "Cleared the clipboard.")
+            elif m.group("hist"):
+                self.open_window(clip.panel())
+                self.last_reply = self._said = "Here's what you've copied."
+            else:
+                t = clip.current()
+                self.instant_reply(line, ("You copied: \u201c" + (t[:400] + ("…" if len(t) > 400 else "")) + "\u201d") if t.strip()
+                                   else "The clipboard is empty, or holds a picture or a file rather than text.")
+            return True
+        m = _DEV_Q.fullmatch(low)
+        if m:
+            fn = clip.camera_test if m.group("cam") else clip.mic_test
+            if m.group("mic"):
+                self.emit({"t": "toast", "text": "Listening for 4 seconds: say something…"})
+            threading.Thread(target=lambda: self.instant_reply(line, fn()[1]), daemon=True).start()
+            self._said = "(checking)"
+            return True
+        m = re.fullmatch(r"(?:turn |switch )?(?:on |off )?(?:airplane|aeroplane|flight|plane) mode(?: (?P<v>on|off))?|(?P<v2>turn on|turn off|enable|disable) (?:airplane|aeroplane|flight) mode", low.rstrip(".!"))
+        if m and shutil.which("rfkill"):
+            v = m.group("v") or ("off" if (m.group("v2") or "").endswith(("off", "disable")) or low.startswith(("turn off", "switch off")) else "on")
+            subprocess.run(["rfkill", "block" if v == "on" else "unblock", "all"], capture_output=True, timeout=10)
+            self.instant_reply(line, "Airplane mode is on: Wi-Fi and Bluetooth are off." if v == "on" else "Airplane mode is off.")
+            self.push_status()
+            return True
+        m = re.fullmatch(r"forget (?:the )?wi-?fi(?: network)? (?P<s>.+)|(?P<dis>disconnect (?:from )?(?:the )?wi-?fi)", line.strip().rstrip(".!"), re.I)
+        if m and shutil.which("iwctl"):
+            dev = _wifi_device()
+            if m.group("dis"):
+                subprocess.run(["iwctl", "station", dev, "disconnect"], capture_output=True, timeout=15)
+                self.instant_reply(line, "Disconnected from Wi-Fi.")
+            else:
+                subprocess.run(["iwctl", "known-networks", m.group("s"), "forget"], capture_output=True, timeout=15)
+                self.instant_reply(line, f"Forgot {m.group('s')}: it won't join by itself any more.")
+            threading.Thread(target=self.network_panel, daemon=True).start()
+            return True
+        if re.fullmatch(r"(?:please )?(?:save|keep) (?:it|this|that|the (?:letter|story|poem|text|email|essay|list|draft|recipe|plan|answer|reply))(?: for me| please)?(?: (?:as a|to a|in a) (?:file|document))?[.!]?", low):
+            last = next((m["content"] for m in reversed(self.chat().msgs) if m["role"] == "assistant"), "")
+            path = re.search(r"(~/[^\s,;:]+?\.\w{1,5})(?=[\s.,;:!?]|$)", last or "")
+            if path:
+                self.instant_reply(line, f"It's already saved: {path.group(1)}.")
+            elif len(last) >= 120:
+                req = next((m["content"] for m in reversed(self.chat().msgs) if m["role"] == "user" and not re.match(r"(?:please )?(?:save|keep)\b", m["content"], re.I)), "")
+                title = re.sub(r"[^\w -]+", "", re.sub(r"^(?:please\s+)?(?:write|make|draft|give me|create)\s+(?:me\s+)?(?:a|an|the)?\s*", "", req, flags=re.I)).strip()[:40] or "Note"
+                d = os.path.join(config.home(), "Documents")
+                os.makedirs(d, exist_ok=True)
+                p, n = os.path.join(d, title.capitalize() + ".txt"), 1
+                while os.path.exists(p):
+                    n += 1
+                    p = os.path.join(d, f"{title.capitalize()} ({n}).txt")
+                config.guard_write(p)
+                with open(p, "w", encoding="utf-8") as f:
+                    f.write(last.strip() + "\n")
+                self.instant_reply(line, f"Saved in Documents as \u201c{os.path.basename(p)}\u201d.")
+            else:
+                self.instant_reply(line, "There's nothing here to save yet. In a program, press Ctrl+S; apps you made here save by themselves.")
+            return True
+        l2 = low.rstrip("?.!")
+        btn = {"switch to hands-off mode": ("autonomy", "hands-off"), "switch to balanced mode": ("autonomy", "balanced"),
+               "switch to hands-on mode": ("autonomy", "hands-on"), "follow my instructions on my machine": ("guidance", "owner"),
+               "keep standard assistant caution": ("guidance", "standard")}.get(l2)
+        if btn:      # the Settings window's own buttons: exactly what they say, no model, no guessing
+            self.ctx.current_request = f"change the {btn[0]} setting: {line}"     # (the button names the setting itself)
+            out = agent.execute(self.ctx, "change_setting", {"setting": btn[0], "value": btn[1]})
+            self.instant_reply(line, agent._cap(agent._shortcut_reply("change_setting", {"setting": btn[0], "value": btn[1]}, out)))
+            threading.Thread(target=lambda: (time.sleep(0.3), self.open_panel("settings") if "panel-settings" in self.windows or "settings" in self.windows else None), daemon=True).start()
+            return True
+        m = re.fullmatch(r"use sound (output|input) (\d+)", l2)
+        if m:
+            ok = syspanels.set_audio_default(m.group(2))
+            name = next((n for i, n, _ in syspanels.audio_devices("Sinks" if m.group(1) == "output" else "Sources") if i == m.group(2)), "it")
+            self.instant_reply(line, (f"Sound now comes out of {name}." if m.group(1) == "output" else f"The microphone is now {name}.") if ok
+                               else "That device isn't available any more.")
+            threading.Thread(target=self.sound_panel, daemon=True).start()
+            return True
+        if re.fullmatch(r"(?:please )?(?:make|create|start|open|do|build|i (?:want|need) to make) (?:a |an |some |my )?(?:new )?(?:presentation|slides|slide ?show|powerpoint)(?: .*)?", l2) \
+                and not programs.find("presentation"):
+            self.instant_reply(line, "There's no presentation program yet. Say \u201cinstall LibreOffice\u201d (about 300 MB) to get one that "
+                               "makes and opens PowerPoint files; or say \u201copen google slides\u201d to make them in the browser.")
+            return True
+        m = re.fullmatch(r"(?:my email is|i use|use) (?P<w>gmail|outlook|hotmail|yahoo|icloud|aol)(?: mail| for (?:my )?email)?", l2)
+        if m:
+            w = {"hotmail": "outlook"}.get(m.group("w"), m.group("w"))
+            site, name = {"gmail": ("gmail", "Gmail"), "outlook": ("outlook", "Outlook"), "yahoo": ("yahoo mail", "Yahoo Mail"),
+                          "icloud": ("https://www.icloud.com/mail", "iCloud Mail"), "aol": ("https://mail.aol.com", "AOL Mail")}[w]
+            config.settings.set("mail_web", site)
+            config.settings.set("mail_web_name", name)
+            self.close_window("mail-pick")
+            out = agent.execute(self.ctx, "browse", {"site": site})
+            self.instant_reply(line, f"Opened {name}. From now on, \u201ccheck my email\u201d opens it." if not out.startswith("error") else out)
+            return True
+        how = self._howto(l2)
+        if how:
+            self.instant_reply(line, how)
+            return True
+        if re.fullmatch(r"(?:what|which) (?:data |information |info )?(?:do|does|will) (?:you|it|this|llm os|the (?:os|computer|system)) (?:send|share|upload|collect)(?: to the internet| online| to anyone)?|"
+                        r"(?:do|does|are) (?:you|it|this) (?:spy(?:ing)?|track(?:ing)?|send(?:ing)? my data|collect(?:ing)? (?:my )?data|record(?:ing)? me|listen(?:ing)?(?: to me)?)(?: on me)?|"
+                        r"is (?:this|it|llm os|my data) private|privacy|(?:what about|tell me about) (?:my )?privacy|where does my data go|who can see my (?:data|files|chats)", l2):
+            s_ = config.settings
+            net = {"no": "The internet is off: nothing leaves this computer.", "ask": "The internet is set to ask: nothing goes online without your OK each time."}.get(
+                s_.get("internet", "yes"), "Something goes online only when a request needs it: a web search, a page or a video you asked for, a download, a model or app you asked to install.")
+            brain = ("Your requests are answered by the model on this computer." if s_.get("brain", "local") == "local" or not config.cloud()
+                     else "Requests you send to the online model (Claude/ChatGPT) go to that company; everything else stays here.")
+            self.instant_reply(line, f"{net} {brain} There is no tracking, no telemetry and no account. The microphone is only on while you talk to me. "
+                               "Your files and chats stay on this computer" + (", locked with your passphrase." if s_.get("vault") else
+                                                                                 "; say \u201cset a passphrase\u201d to lock them.") +
+                               " Say \u201caudit\u201d to see everything I did.")
+            return True
+        if re.fullmatch(r"(?:the )?(?:model|ai|assistant|you) (?:is ?n'?t|is not|isnt|aren'?t|are not|stopped|has stopped|keeps not) (?:responding|answering|working|replying)|"
+                        r"(?:you'?re|you are|it'?s|it is) (?:stuck|not answering|not responding|frozen)|why (?:aren'?t|are) you (?:not )?(?:answering|responding)|are you (?:there|alive|working)|hello\?*", l2):
+            def check():
+                if llm.health():
+                    self.instant_reply(line, "I'm here and working. " + ("I'm still busy with the last request; say \u201cstop\u201d to cancel it." if self.busy
+                                                                         else "Ask me anything."))
+                    return
+                subprocess.run(["rc-service", "llmos-model", "restart"], capture_output=True, timeout=60)
+                ok = llm.wait_ready(180) if hasattr(llm, "wait_ready") else llm.health()
+                self.instant_reply(line, "The model had stopped; I restarted it and it's answering again." if ok else
+                                   "The model had stopped and is still starting up. Give it a minute; buttons and settings work meanwhile.")
+            threading.Thread(target=check, daemon=True).start()
+            self._said = "(checking the model)"
+            return True
+        if re.fullmatch(r"(?:the )?(?:wi-?fi|internet|network|connection) (?:is ?n'?t|is not|isnt|doesn'?t|does not|not|stopped|keeps) (?:working|work|connecting|dropping)|"
+                        r"no (?:internet|wi-?fi|connection)|(?:i )?(?:can'?t|cannot) (?:get online|connect(?: to (?:the )?(?:internet|wi-?fi))?)|(?:the )?internet is (?:down|slow|out)", l2):
+            threading.Thread(target=self.network_panel, daemon=True).start()
+            wifi = _wifi_device()
+            state = ("You're on Wi-Fi (" + _wifi_now() + ") and online." if _online() else "You're on Wi-Fi (" + _wifi_now() + ") but the internet isn't answering; try another network or restart the router.") \
+                if _wifi_now() else ("You're online by cable." if _online() else "Not connected.")
+            tip = (" Here are the networks in range: pick yours to join." if wifi else
+                   " This computer has no Wi-Fi adapter that works here; a network cable or a USB Wi-Fi adapter will.")
+            off = " The internet is turned off in Settings; say \u201cturn the internet on\u201d." if config.settings.get("internet") == "no" else ""
+            self.instant_reply(line, f"{state}{off}{tip}")
+            return True
+        if re.fullmatch(r"(?:please )?(?:close|hide|dismiss|get rid of) (?:this|it|that)(?: window| one| thing| app| program)?|close the window", l2):
+            if self.windows:
+                wid = list(self.windows)[-1]
+                title = self.windows[wid].get("title") or "the window"
+                self.close_window(wid)
+                self.instant_reply(line, f"Closed {title}.")
+            elif shutil.which("wlrctl") and wm.last_program():
+                t = wm.last_program()
+                ok, note = wm.act("close", t)
+                self.instant_reply(line, f"Closed {wm.NAMES.get(t, t)}." if ok else note[:1].upper() + note[1:] + ".")
+            else:
+                self.instant_reply(line, "Nothing is open.")
+            return True
+        # read the last answer (or what is shown) aloud
+        if re.fullmatch(r"(?:please )?(?:read|say) (?:this|that|it|the (?:answer|reply|text|last (?:answer|reply)))(?: (?:to me|out loud|aloud|for me))*|read (?:it |this )?(?:out loud|aloud)(?: to me)?", l2):
+            last = next((m["content"] for m in reversed(self.chat().msgs) if m["role"] == "assistant" and len(m["content"]) > 3), "")
+            if not last:
+                self.instant_reply(line, "There's nothing to read yet. Ask me something, or say \u201cread your replies aloud\u201d to hear every answer.")
+            else:
+                threading.Thread(target=voice.speak, args=(re.sub(r"[*_`#>]", "", last),), daemon=True).start()
+                self.last_reply = self._said = "(reading aloud)"
+            return True
+        # dictation: words typed wherever the cursor is
+        if re.fullmatch(r"(?:please )?(?:type|write down|transcribe) (?:what|everything|whatever) i say|(?:start |turn on )?dictation|dictate|voice typing|speech to text", l2):
+            self.instant_reply(line, "Click where the words should go, then press the Windows key + D and talk: what you say is typed there. "
+                               "To talk to me instead, press the microphone button.")
+            return True
+        # hard to see: bigger, straight away
+        if re.fullmatch(r"(?:i )?(?:can'?t|cannot|can not) (?:see|read) (?:very well|well|anything|it|this|the (?:text|screen|words))?|(?:the )?(?:text|writing|words|letters|font) (?:is|are) (?:too |so |really )?(?:small|tiny|hard to read)|"
+                        r"(?:it'?s |everything is )?(?:too small|hard to (?:see|read))|my eyes (?:are bad|hurt)|i have (?:bad|poor|low) (?:eyesight|vision)", l2):
+            agent.execute(self.ctx, "set_appearance", {"scale": "bigger"})
+            self.instant_reply(line, "Made everything bigger. Say \u201cbigger\u201d again for more, \u201chigh contrast\u201d for stronger colours, "
+                               "or \u201cread your replies aloud\u201d to hear the answers.")
+            return True
+        # the clock: set it from the internet, then the time zone if the hour is still off
+        if re.fullmatch(r"(?:the )?(?:time|clock|date) (?:is |looks |seems )?(?:wrong|off|incorrect|not right)|wrong (?:time|clock|date)|fix (?:the )?(?:time|clock)|"
+                        r"(?:the )?(?:time|clock) is (?:an hour|\d+ hours?) (?:off|ahead|behind)", l2):
+            def fix():
+                ok = system.sync_time()
+                now = time.strftime("%-I:%M %p", time.localtime())
+                zone = system.timezone() or "UTC"
+                self.instant_reply(line, (f"I set the clock from the internet: it's {now} ({zone}). " if ok else f"It's {now} here ({zone}). ") +
+                                   "If the hour is still wrong, tell me your city: \u201cset my time zone to Chicago\u201d.")
+            threading.Thread(target=fix, daemon=True).start()
+            self._said = "(checking the clock)"
+            return True
+        # the wrong speaker / headphones: the sound panel lists the outputs
+        if re.fullmatch(r"(?:the )?sound (?:is )?(?:coming|playing) (?:from|out of|through) the wrong (?:speaker|place|device)|(?:switch|change) (?:the )?(?:speaker|audio output|sound output|output)(?: device)?|"
+                        r"use (?:my )?(?:headphones|headset|speakers|the hdmi|the tv) (?:for sound)?|(?:my )?headphones (?:are )?plugged in but (?:the )?sound (?:is )?(?:coming )?(?:from|out of) (?:the )?speakers|"
+                        r"(?:sound|audio) (?:still )?(?:comes|coming) (?:from|out of) (?:the )?speakers|(?:i )?(?:can'?t|cannot) hear (?:anything|the sound|sound|it)|no sound|there'?s no sound|sound (?:isn'?t|is not|doesn'?t) work(?:ing)?", l2):
+            def fix():
+                try:
+                    agent.execute(self.ctx, "set_volume", {"mute": False})
+                    if (self._volume_pct() or 0) < 30:
+                        agent.execute(self.ctx, "set_volume", {"percent": 50})
+                except Exception:
+                    pass
+                chime = "/usr/share/llmos/chime.wav"
+                player = shutil.which("pw-play") or shutil.which("aplay")
+                if player and os.path.exists(chime):
+                    subprocess.Popen([player, chime], env=dict(os.environ, **(media.desk_env() or {})),
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.act("sound")
+                self.instant_reply(line, "I turned the sound on and played a chime. Heard it? If not, pick your speaker or headphones "
+                                   "under Output in the sound panel (More\u2026 shows every device).")
+            threading.Thread(target=fix, daemon=True).start()
+            self._said = "(checking the sound)"
+            return True
+        # a new wallpaper: the choices, never a removal
+        if re.fullmatch(r"(?:change|switch|new|different|another|pick a) (?:my |the |a )?(?:wallpaper|background|desktop background|desktop picture)|(?:change|set) (?:my |the )?wallpaper|i want a (?:new|different) (?:wallpaper|background)", l2):
+            self.open_window({"id": "wallpaper", "replace": True, "title": "Wallpaper", "size": "s", "blocks": [
+                {"type": "text", "text": "Pick one, or say what you'd like: \u201cuse a photo of the sea as my wallpaper\u201d.", "dim": True},
+                {"type": "buttons", "items": [{"label": "Living (moves gently)", "say": "living background", "primary": True},
+                                              {"label": "A nature photo", "say": "use a photo of mountains at sunrise as my wallpaper"},
+                                              {"label": "One of my pictures", "say": "show my photos"},
+                                              {"label": "Plain", "say": "plain background"}]}]})
+            self.last_reply = self._said = "Here are the wallpaper choices."
+            return True
+        if _BATTERY_Q.fullmatch(low):
+            b = _battery()
+            self.instant_reply(line, "This computer has no battery; it runs on mains power." if not b else
+                               f"The battery is at {b['pct']}%" + (", charging." if b["charging"] else "."))
+            return True
+        if _TIME_Q.fullmatch(low):
+            now = time.localtime()
+            self.instant_reply(line, time.strftime("It's %-I:%M %p on %A, %B %-d, %Y.", now))
+            return True
+        if _MEDIUM_Q.search(low):
+            self.instant_reply(line, T("d_live_answer") if _live() else T("d_disk_answer"))
+            return True
+        if re.fullmatch(r"(?:what can you do|what can i (?:do|say|ask)(?: here| with (?:this|it|you))?|how do i use (?:this|you|it)|what do i do|help me|show me what you can do|"
+                        r"what are you|what is this|get started|getting started|\?+)[?.!]*", low):
+            self.open_panel("help")
+            return True
+        if re.fullmatch(r"(?:stop|cancel|never ?mind|forget it|abort|halt that|stop that|stop it|cancel that|no stop)[.!]*", low):
+            if self.busy:
+                self.ctx.cancel.set()           # the request in progress stops; its reply says so
+            else:
+                self.emit({"t": "toast", "text": T("d_nothing_running")})
+            return True
+        if low in ("network", "wifi", "wi-fi", "internet", "show wifi networks", "show the wifi networks", "wifi networks",
+                   "connect to wifi", "connect to wi-fi", "network settings", "show the network settings"):
+            self.network_panel()
+            return True
+        if low in ("sound", "volume", "sound settings", "audio"):
+            self.sound_panel()
+            return True
+        if low in ("power", "power options", "power menu"):
+            self.power_panel()
+            return True
+        if low.startswith("join wifi "):
+            self.wifi_join(line.strip()[len("join wifi "):])
+            return True
+        if low in ("close the live window", "keep trying it"):
+            self.close_window("live")
+            return True
+        if low == "clear":
+            self.chat().new_topic()
+            for wid in list(self.windows):
+                self.close_window(wid)
+            self.emit({"t": "clear"})
+            return True
+        if re.fullmatch(r"(?:new (?:topic|chat|conversation)|start (?:fresh|over|a new (?:topic|chat|conversation))|fresh start|"
+                        r"clear (?:the )?chat|forget this conversation|change the subject)[.!]?", low):
+            self.chat().new_topic()
+            self.emit({"t": "toast", "text": T("d_fresh")})
+            return True
+        m = re.fullmatch(r"(?:new |start a |open a |start a new |open a new )?side ?chat(?:\s+(?:about|on|for)\s+(?P<about>.+))?[.!]?", low)
+        if m:
+            self.open_chat(conversation.new_side(m.group("about") or "").id)
+            return True
+        if low in ("history", "conversations", "my conversations", "show my conversations", "chat history", "show the history",
+                   "show my chats", "chats", "sessions"):
+            self.conversations_panel()
+            return True
+        m = re.fullmatch(r"(continue|forget) topic (t[0-9a-f]+)", low)
+        if m:
+            c = self.chat()
+            if m.group(1) == "continue":
+                t = c.resume(m.group(2))
+                if t:
+                    self.emit({"t": "toast", "text": T("d_resumed", title=t["title"])})
+            else:
+                c.forget_topic(m.group(2))
+            self.conversations_panel()
+            return True
+        m = re.fullmatch(r"(open|delete) side chat (side-[0-9a-f]+)", low)
+        if m:
+            if m.group(1) == "open":
+                self.open_chat(m.group(2))
+            else:
+                conversation.delete(m.group(2))
+                self.chats.pop(m.group(2), None)
+                self.close_window("chat-" + m.group(2))
+                self.conversations_panel()
+            return True
+        if low in _LOCK_WORDS:
+            if config.settings.get("vault"):
+                self.lock()
+            else:                               # no passphrase: the screen still locks (and says how to protect it)
+                self._keybinds(False)
+                self.set_screen("lock", {"note": T("d_lock_open"), "open": True})
             return True
         if low in ("voice", "listen"):
             self.voice_turn()
@@ -1511,22 +2441,394 @@ class Desk:
             return True
         return False
 
-    def turn(self, text):
-        if self.shortcut(text):
-            self.history.append({"role": "user", "content": text})
-            self.history.append({"role": "assistant", "content": "(done)"})
+    # ---- conversations (conversation.py): the main one never needs clearing; side chats beside it
+
+    def chat(self, cid="main"):
+        if not hasattr(self, "chats"):
+            self.chats = {}
+        if cid not in self.chats:
+            self.chats[cid] = conversation.Chat(cid)
+        return self.chats[cid]
+
+    def open_chat(self, cid):
+        c = self.chat(cid)
+        wid = "chat-" + cid
+        spec = {"id": wid, "title": c.title or T("d_sidechat"), "kind": "chat", "size": "m", "chat": cid,
+                "transcript": c.transcript(), "blocks": [{"type": "text", "text": c.title or T("d_sidechat")}]}
+        self.windows[wid] = spec
+        self.emit({"t": "window", "id": wid, "spec": spec})
+
+    def conversations_panel(self):
+        c = self.chat()
+        cur = c.current()
+        topics = [{"title": t["title"], "subtitle": time.strftime("%b %d, %H:%M", time.localtime(t["last"])) + f" · {t['n']}×",
+                   "detail": t.get("gist", ""), "meta": T("d_now") if (cur and t["id"] == cur["id"] and not c.fresh) else "",
+                   "actions": ([] if (cur and t["id"] == cur["id"] and not c.fresh) else [{"label": T("d_continue"), "say": f"continue topic {t['id']}", "primary": True}]) +
+                              [{"label": T("d_forget"), "say": f"forget topic {t['id']}", "danger": True}]}
+                  for t in reversed(c.topics[-30:])]
+        sides = [{"title": x["title"], "subtitle": time.strftime("%b %d, %H:%M", time.localtime(x["last"])),
+                  "actions": [{"label": T("d_open"), "say": f"open side chat {x['id']}", "primary": True},
+                              {"label": T("d_delete"), "say": f"delete side chat {x['id']}", "danger": True}]} for x in conversation.side_chats()[:20]]
+        blocks = [{"type": "text", "text": T("d_conv_intro"), "dim": True},
+                  {"type": "buttons", "items": [{"label": T("d_new_topic"), "say": "new topic", "primary": True}, {"label": T("d_new_side"), "say": "new side chat"}]},
+                  {"type": "heading", "text": T("d_topics")}]
+        blocks.append({"type": "list", "items": topics} if topics else {"type": "text", "text": T("d_none_yet"), "dim": True})
+        if sides:
+            blocks += [{"type": "heading", "text": T("d_sidechats")}, {"type": "list", "items": sides}]
+        self.open_window({"id": "panel-conversations", "replace": True, "title": T("d_conversations"), "size": "m", "slot": "side", "blocks": blocks})
+
+    _SYS = [
+        (re.compile(r"(?:open (?:the )?)?(?:task manager|activity monitor|system monitor|processes|what'?s running|what is running|"
+                    r"what'?s using (?:my |the )?(?:memory|ram|cpu|processor)|why is (?:it|everything|my computer|the computer) (?:so )?(?:slow|laggy)|"
+                    r"(?:my )?computer is (?:so )?(?:slow|laggy))[?.!]*"), "processes"),
+        (re.compile(r"(?:open (?:my |the )?)?(?:drives|usb|usb drives?|my usb|my stick|usb stick|flash drive|external drives?|whats on the (?:stick|usb)|"
+                    r"what'?s on (?:the|my) (?:stick|usb(?: stick| drive)?|flash ?drive|memory stick|thumb ?drive|sd card)|open (?:the |my )?(?:usb(?: stick| drive)?|flash ?drive))[?.!]*"), "drives"),
+        (re.compile(r"(?:open (?:the )?)?(?:displays?|monitors?|screens|display settings|second (?:monitor|screen)|use both screens|projector)[?.!]*"), "displays"),
+        (re.compile(r"(?:open (?:the )?)?(?:bluetooth|bluetooth settings|pair (?:a |my )?(?:device|headphones|mouse|keyboard|speaker)s?|"
+                    r"connect (?:my )?bluetooth(?: \w+)*)[?.!]*"), "bluetooth"),
+        (re.compile(r"(?:open (?:the )?)?(?:printers?|printer settings|add (?:a |my )?printer|set up (?:a |my )?printer|print(?:ing)? (?:is ?n'?t|not) working)[?.!]*"), "printers"),
+        (re.compile(r"(?:open (?:the )?)?(?:keyboard|mouse|touchpad|trackpad|keyboard settings|mouse settings|touchpad settings|keyboard and mouse|"
+                    r"keyboard layout|change (?:the |my )?keyboard(?: layout)?|input settings)[?.!]*"), "input"),
+        (re.compile(r"(?:open (?:the )?)?(?:storage|disk space|disk usage|free (?:up )?(?:some )?space|(?:my )?disk is full|clean ?up(?: the computer| my computer| disk)?|"
+                    r"what'?s (?:using|filling|taking up) (?:my |the )?(?:disk|space|storage)|running out of space|"
+                    r"how much (?:free |disk |storage )?(?:space|storage)(?: do i have| is left| left| have i got)?|how full is (?:my |the )?(?:disk|computer|drive))[?.!]*"), "storage"),
+        (re.compile(r"(?:update (?:the )?(?:system|computer|os|llm os|everything)|are there (?:any )?updates|check for updates|any updates|updates|"
+                    r"is (?:it|the system|everything) up to date)[?.!]*"), "updates"),
+        (re.compile(r"(?:about this computer|what computer is this|system info(?:rmation)?|how much (?:ram|memory) do i have|"
+                    r"what (?:processor|cpu) do i have|specs|my specs|computer specs)[?.!]*"), "about"),
+    ]
+
+    _WIN = re.compile(r"(?P<key>(?:go )?back|previous page|go forward|next page|reload(?: the page)?|refresh(?: the page)?|(?:open )?(?:a )?new tab|"
+                      r"close (?:this |the )?tab)|"
+                      r"(?:switch|go back|go) to (?:the |my )?(?P<focus>browser|firefox|internet|files|file manager|terminal|editor|text editor|"
+                      r"document|word processor|spreadsheet|photos|image viewer|player|video)(?: window| app| program)?|"
+                      r"(?:maximi[sz]e|make (?:it|this|the window) (?:full ?screen|bigger|full size)|bigger window|full ?screen)(?: (?:the )?(?P<maxw>\w[\w ]*))?|"
+                      r"(?:minimi[sz]e|hide) (?:the )?(?P<minw>\w[\w ]*)|"
+                      r"(?:close|quit|exit) (?:the )?(?P<closew>firefox|browser|internet|files|file manager|terminal|editor|text editor|abiword|"
+                      r"gnumeric|word processor|spreadsheet|photos|image viewer|player|video|mousepad|thunar)(?: window| app| program)?|"
+                      r"(?:force quit|kill) (?:the )?(?P<killw>\w[\w ]*)|(?:the )?(?P<frozen>\w[\w ]*?) (?:is|has|seems) (?:frozen|stuck|not responding|hung)")
+
+    def _window_shortcut(self, low):
+        """Program windows (the browser, files, a terminal…): switch, maximize, close, unfreeze; the browser's own keys."""
+        m = self._WIN.fullmatch(low.rstrip(".!?"))
+        if not m:
+            return False
+        g = m.groupdict()
+        for k in ("maxw", "minw", "killw"):          # a name that is not a program's ("hide the clock": a desk window) is not for here
+            if g[k] and not wm.app_id(g[k]):
+                return False
+        frozen = (g["frozen"] or "").strip()
+        if frozen and frozen not in ("screen", "computer", "desk", "everything", "it", "system", "the screen", "my computer", "llm os") \
+                and not wm.app_id(frozen):
+            return False
+        said = {"back": "Back.", "forward": "Forward.", "reload": "Reloaded.", "new tab": "New tab open.", "close tab": "Tab closed."}
+        if g["key"]:
+            k = g["key"].replace("go ", "").replace(" the page", "").replace("open ", "").replace("a new", "new").replace("this ", "").replace("the ", "")
+            k = {"previous page": "back", "next page": "forward", "refresh": "reload"}.get(k, k)
+            ok, note = wm.browser_key(k)
+            done = said.get(k, "Done.")
+        elif g["focus"]:
+            t = wm.app_id(g["focus"]) or ""
+            ok, note = wm.act("focus", t)
+            done = f"Switched to {wm.NAMES.get(t, t)}."
+        elif m.group(0).startswith(("maximi", "make", "bigger", "full")):
+            target = wm.app_id(g["maxw"]) if g["maxw"] else wm.last_program()
+            ok, note = wm.act("maximize", target) if target else (False, "there is no program window to make bigger")
+            done = f"Made {wm.NAMES.get(target, target)} full size."
+        elif g["minw"]:
+            t = wm.app_id(g["minw"]) or ""
+            ok, note = wm.act("minimize", t)
+            done = f"Hid {wm.NAMES.get(t, t)}; say \u201cswitch to {g['minw']}\u201d to bring it back."
+        elif g["closew"]:
+            t = wm.app_id(g["closew"]) or ""
+            ok, note = wm.act("close", t)
+            done = f"Closed {wm.NAMES.get(t, t)}."
+        elif (g["frozen"] or "").strip() in ("screen", "computer", "desk", "everything", "it", "system", "the screen", "my computer", "llm os"):
+            # the desk itself: load its page again (windows come back; nothing is lost)
+            self._reloaded = True
+            self.GLib.idle_add(lambda: (self.webview.load_uri("file://" + PAGE), False)[1])
+            self.last_reply = self._said = "Reloaded the screen."
+            return True
+        else:
+            def stop():
+                target = wm.app_id(g["killw"] or g["frozen"] or "") or wm.last_program()
+                if not target:
+                    return self.instant_reply(low, "No program is open to stop.")
+                if self.ask({"title": f"Stop {wm.NAMES.get(target, target)}?", "text": "Anything unsaved in it is lost.", "danger": True}):
+                    note = wm.force_quit(target)[1]
+                    self.instant_reply(low, note[:1].upper() + note[1:] + ".")
+            threading.Thread(target=stop, daemon=True).start()
+            return True
+        text = done if ok else (note[:1].upper() + note[1:] + "." if note else "That didn\u2019t work.")
+        self.instant_reply(low, text)
+        return True
+
+    # what people say -> the exact phrase a panel's button says (one code path for both)
+    _CANON = [
+        (re.compile(r"(?:make |set )?(?:the |my )?(?:mouse|pointer|cursor|touchpad|trackpad)(?: speed)? (?:faster|quicker)|speed up (?:the |my )?(?:mouse|pointer|cursor|touchpad)|"
+                    r"(?:the |my )?(?:mouse|pointer|cursor|touchpad) is (?:too )?slow|increase (?:the )?(?:mouse|pointer) speed"), "mouse faster"),
+        (re.compile(r"(?:make |set )?(?:the |my )?(?:mouse|pointer|cursor|touchpad|trackpad)(?: speed)? slower|slow down (?:the |my )?(?:mouse|pointer|cursor|touchpad)|"
+                    r"(?:the |my )?(?:mouse|pointer|cursor|touchpad) is (?:too )?fast|decrease (?:the )?(?:mouse|pointer) speed"), "mouse slower"),
+        (re.compile(r"(?:turn on |enable |use )?(?:natural|reverse[d]?|mac[- ]style|inverted) scrolling(?: on)?|reverse (?:the )?scroll(?:ing)?(?: direction)?|invert (?:the )?scroll(?:ing)?"), "natural scrolling on"),
+        (re.compile(r"(?:turn off |disable |stop )(?:natural|reverse[d]?|inverted) scrolling|(?:natural|reverse) scrolling off|normal scrolling"), "natural scrolling off"),
+        (re.compile(r"(?:turn on |enable )?tap(?:ping)? to click(?: on)?|let me tap (?:the touchpad )?to click"), "tap to click on"),
+        (re.compile(r"(?:turn off |disable )tap(?:ping)? to click|tap to click off|stop tap(?:ping)? to click"), "tap to click off"),
+        (re.compile(r"(?:i'?m left[- ]handed|left[- ]handed mouse(?: on)?|swap (?:the )?mouse buttons|make the mouse left[- ]handed)"), "left handed mouse on"),
+        (re.compile(r"(?:right[- ]handed mouse|left[- ]handed mouse off|normal mouse buttons)"), "left handed mouse off"),
+        (re.compile(r"(?:mirror|duplicate|clone) (?:my |the )?(?:screen|display|displays|screens)(?: (?:to|on) (?:the )?(?:projector|tv|second screen|monitor))?|"
+                    r"show (?:my |the )?screen on (?:the )?(?:projector|tv|big screen)|same picture on both screens"), "mirror the displays"),
+        (re.compile(r"extend (?:my |the )?(?:screen|display|displays|desktop)(?: (?:to|onto) (?:the )?(?:second (?:screen|monitor)|monitor|tv))?|use both (?:screens|monitors) separately"), "extend the displays"),
+        (re.compile(r"(?:make )?(?:the )?key(?:board)? repeat(?: rate)? faster|keys repeat (?:too )?slow(?:ly)?"), "key repeat faster"),
+        (re.compile(r"(?:make )?(?:the )?key(?:board)? repeat(?: rate)? slower|keys repeat (?:too )?(?:fast|quickly)"), "key repeat slower"),
+    ]
+    _ROTATE = re.compile(r"(?:rotate|turn|flip) (?:the |my )?(?:screen|display|monitor)(?: (?P<how>left|right|upside down|around|back|back to normal|normal|90 degrees|180 degrees))?|"
+                         r"(?:the |my )?(?:screen|display) is (?P<side>sideways|upside down)|(?:portrait|landscape) mode")
+    _RES = re.compile(r"(?:set|change|make) (?:the |my )?(?:screen |display )?resolution (?:to )?(?P<w>\d{3,4}) ?[x×*by ]+ ?(?P<h>\d{3,4})")
+    _EJECT = re.compile(r"(?:eject|safely remove|unmount|disconnect) (?:the |my )?(?:usb(?: stick| drive)?|stick|flash ?drive|thumb ?drive|external (?:drive|disk)|memory stick|sd card|drive)|"
+                        r"(?:is it|can i) (?:safe to )?(?:remove|unplug|take out|pull out) (?:the |my )?(?:usb|stick|flash ?drive|drive)")
+    _DESKTOP = re.compile(r"show (?:me )?(?:the )?desktop|minimi[sz]e (?:everything|all(?: (?:the )?windows)?)|hide (?:all (?:the )?)?(?:windows|programs|everything)|clear the screen")
+    _TILE = re.compile(r"(?:put|move|snap) (?:the )?(?P<w>[\w ]+?) (?:on|to) the (?P<side>left|right)(?: side| half)?")
+
+    _HOWTO = [
+        (r"talk to me|(?:can|could) (?:i|we) talk|(?:can|could) you (?:hear|listen to) me|how (?:do|can) i talk to you|voice mode|use my voice",
+         "Press the microphone button (or F1) and talk; I answer when you pause. Say \u201cread your replies aloud\u201d to hear my answers too."),
+        (r"how (?:do|can) i (?:take|make|get) (?:a )?screen ?shot|how to (?:take a )?screen ?shot",
+         "Press the Print Screen key (or say \u201ctake a screenshot\u201d); Shift+Print Screen or Windows+Shift+S lets you drag a box around part of the screen. It's saved in Pictures and copied, so you can paste it with Ctrl+V."),
+        (r"how (?:do|can) i copy and paste|how to copy(?: and paste)?|how (?:do|can) i (?:copy|paste)(?: (?:text|something|things))?",
+         "Select the text, press Ctrl+C to copy, click where it should go and press Ctrl+V to paste. Super+V (or \u201cclipboard history\u201d) shows what you copied before."),
+        (r"how (?:do|can) i (?:switch|change|move) between (?:windows|programs|apps)|how (?:do|can) i switch windows",
+         "Press Alt+Tab, or say \u201cswitch to the browser\u201d. Super+Up makes a window full size; Super+Left and Super+Right put it on half the screen."),
+        (r"how (?:do|can) i close (?:a |the |this )?(?:program|window|app)",
+         "Press Alt+F4 or the \u00d7 in its corner, or say \u201cclose the browser\u201d. A frozen one: \u201cforce quit firefox\u201d."),
+        (r"how (?:do|can) i install (?:a |an )?(?:program|app|software|apps|programs)",
+         "Say \u201cinstall\u201d and its name: \u201cinstall VLC\u201d, \u201cinstall Spotify\u201d. It comes from Alpine's packages or Flathub and then opens by name."),
+        (r"where (?:are|do) (?:my |the )?(?:files|downloads|documents|pictures|photos)(?: go| saved| kept)?|where (?:is|are) my stuff",
+         "In your home folder: Documents, Downloads, Pictures, Music and Videos. Say \u201cshow my files\u201d or \u201copen my downloads\u201d."),
+        (r"how (?:do|can) i (?:turn (?:it |this |the computer )?off|shut (?:it |this |the computer )?down|switch (?:it )?off)",
+         "Say \u201cshut down\u201d, or press the power symbol at the top right and choose Shut down."),
+        (r"how (?:do|can) i (?:lock|log out)(?: the (?:screen|computer))?",
+         "Press Super+L or say \u201clock\u201d. With a passphrase set, it's needed to get back in."),
+        (r"what(?:'s| is) (?:the )?(?:keyboard )?shortcuts?|(?:list|show)(?: me)? (?:the |all )?(?:keyboard )?shortcuts|keyboard shortcuts",
+         "Alt+Tab switch windows \u00b7 Super+Up full size \u00b7 Super+Left/Right half screen \u00b7 Alt+F4 close \u00b7 Print Screen screenshot (Shift: an area) \u00b7 "
+         "Ctrl+Alt+Left/Right workspaces \u00b7 Super+V clipboard \u00b7 Super+L lock \u00b7 Super+E files \u00b7 Ctrl+Alt+T terminal \u00b7 Super+D dictation \u00b7 Ctrl+Shift+Esc task manager \u00b7 F1 talk to me."),
+    ]
+
+    def _howto(self, l2):
+        for rx, text in self._HOWTO:
+            if re.fullmatch(rx, l2):
+                return text
+        return None
+
+    def _system_shortcut(self, low, line):
+        """The system's own panels and their buttons (syspanels.py): no model, done at once."""
+        low = low.rstrip("?.!")
+        for rx, canon in self._CANON:
+            if rx.fullmatch(low):
+                low = line = canon
+                break
+        said = {"mouse faster": "The pointer is faster.", "mouse slower": "The pointer is slower.", "mouse normal speed": "The pointer is at normal speed.",
+                "natural scrolling on": "Scrolling is reversed (natural), like a phone.", "natural scrolling off": "Scrolling is back to normal.",
+                "tap to click on": "Tapping the touchpad clicks.", "tap to click off": "Tapping no longer clicks; press to click.",
+                "left handed mouse on": "The mouse buttons are swapped for the left hand.", "left handed mouse off": "The mouse buttons are back to normal.",
+                "key repeat faster": "Keys repeat faster.", "key repeat slower": "Keys repeat slower.", "key repeat normal": "Key repeat is normal."}.get(low)
+        if said:
+            self.instant_reply(line, said)
+        m = self._ROTATE.fullmatch(low)
+        if m:
+            how = (m.group("how") or m.group("side") or "").replace("90 degrees", "left").replace("180 degrees", "upside down").replace("around", "upside down")
+            how = {"sideways": "left", "back": "normal", "back to normal": "normal", "": "left"}.get(how, how)
+            if low.startswith("landscape"):
+                how = "normal"
+            if "is upside down" in low or "is sideways" in low:
+                how = "normal"
+            ok, note = syspanels.rotate(how)
+            self.instant_reply(line, note[:1].upper() + note[1:])
+            return True
+        m = self._RES.fullmatch(low)
+        if m:
+            out = syspanels.first_output()
+            ok, note = syspanels.set_mode(out, f"{m.group('w')}x{m.group('h')}") if out else (False, "no screen found")
+            self.instant_reply(line, (note[:1].upper() + note[1:] + ".") if ok else note[:1].upper() + note[1:] + ". Say \u201cdisplays\u201d to see the ones this screen offers.")
+            return True
+        if self._EJECT.fullmatch(low):
+            ds = syspanels.removable()
+            if not ds:
+                self.instant_reply(line, "No USB stick is plugged in.")
+                return True
+            else:
+                low = line = f"eject drive {ds[0]['disk']}"
+        if self._DESKTOP.fullmatch(low) and shutil.which("wlrctl"):
+            for w in list(self.windows):
+                self.close_window(w)
+            ok, note = wm.minimize_all()
+            self.instant_reply(line, "Here's the desktop." if ok or self.windows == {} else note)
+            return True
+        m = re.fullmatch(r"(?:go to|switch to|show) (?:workspace|desktop|virtual desktop) (?P<n>[1-4]|one|two|three|four)|(?P<dir>next|previous) (?:workspace|desktop)", low)
+        if m and shutil.which("wtype"):
+            if m.group("n"):
+                n = {"one": "1", "two": "2", "three": "3", "four": "4"}.get(m.group("n"), m.group("n"))
+                keys = ["-M", "logo", "-k", n, "-m", "logo"]
+            else:
+                keys = ["-M", "ctrl", "-M", "alt", "-k", "Right" if m.group("dir") == "next" else "Left", "-m", "alt", "-m", "ctrl"]
+            subprocess.run(["wtype"] + keys, capture_output=True, timeout=5, env=dict(os.environ, **(media.desk_env() or {})))
+            self.instant_reply(line, "Here you are. Ctrl+Alt+Left and Right move between workspaces; Super+1 to 4 jumps.")
+            return True
+        m = self._TILE.fullmatch(low)
+        if m and shutil.which("wlrctl") and wm.app_id(m.group("w")):
+            ok, note = wm.tile(wm.app_id(m.group("w")), m.group("side"))
+            self.instant_reply(line, note[:1].upper() + note[1:])
+            return True
+        if shutil.which("wlrctl") and self._window_shortcut(low):
+            return True
+        for rx, which in self._SYS:
+            if rx.fullmatch(low):
+                fn = {"processes": syspanels.processes, "drives": syspanels.drives, "displays": syspanels.displays,
+                      "bluetooth": syspanels.bluetooth, "printers": syspanels.printers, "about": syspanels.about,
+                      "input": syspanels.input_panel, "storage": syspanels.storage, "updates": syspanels.updates_panel}[which]
+                threading.Thread(target=lambda: self.open_window(fn()), daemon=True).start()
+                return True
+        m = re.fullmatch(r"end process (\d+)", low)
+        if m:
+            def end(pid=m.group(1)):
+                if self.ask({"title": f"End {syspanels.friendly_name(pid)}?", "text": "Anything unsaved in it is lost.", "danger": True}):
+                    ok, note = syspanels.end_process(pid)
+                    self.emit({"t": "toast", "text": note})
+                    self.open_window(syspanels.processes())
+            threading.Thread(target=end, daemon=True).start()
+            return True
+        m = re.fullmatch(r"(open|eject) drive (/dev/\S+)", low)
+        if m:
+            def drive(act=m.group(1), dev=m.group(2)):
+                if act == "eject":
+                    ok, note = syspanels.eject(dev)
+                    self.emit({"t": "toast", "text": note.capitalize(), "long": not ok})
+                    self.open_window(syspanels.drives())
+                else:
+                    ok, where = syspanels.mount(dev)
+                    if ok:
+                        agent.execute(self.ctx, "show_files", {"path": where})
+                    else:
+                        self.emit({"t": "toast", "text": where, "long": True})
+            threading.Thread(target=drive, daemon=True).start()
+            return True
+        m = re.fullmatch(r"(extend|mirror) the displays|use only the main display|(?P<proj>use only the (?:projector|tv|second (?:screen|display))|projector only)", low)
+        if m:
+            ok, note = syspanels.arrange("projector" if m.group("proj") else m.group(1) if m.group(1) else "only")
+            self.instant_reply(line, note[:1].upper() + note[1:] + ".")
+            self.open_window(syspanels.displays())
+            return True
+        m = re.fullmatch(r"bluetooth (on|off|search|connect|disconnect|forget)(?: ([0-9a-f:]{17}))?", low)
+        if m:
+            def bt(act=m.group(1), mac=(m.group(2) or "").upper()):
+                if act == "search":
+                    self.emit({"t": "toast", "text": "Looking for Bluetooth devices…"})
+                    self.open_window(syspanels.bluetooth(scan=True))
+                    return
+                ok, note = syspanels.bt_action(act, mac)
+                self.emit({"t": "toast", "text": note.capitalize(), "long": not ok})
+                self.open_window(syspanels.bluetooth())
+            threading.Thread(target=bt, daemon=True).start()
+            return True
+        m = re.fullmatch(r"(?:keyboard layout|use an? |switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )(?P<k>[a-z ()-]+?)(?: keyboard)?(?: layout)?", low)
+        if m and syspanels.layout_code(m.group("k")):
+            code = syspanels.layout_code(m.group("k"))
+            config.settings.set("input.layout", code)
+            self.apply_input()
+            self.emit({"t": "toast", "text": T("d_kb_set", name=syspanels.LAYOUTS[code])})
+            self.open_window(syspanels.input_panel())
+            return True
+        m = re.fullmatch(r"(natural scrolling|tap to click|left handed mouse) (on|off)|mouse (faster|slower|normal speed)|key repeat (faster|slower|normal)", low)
+        if m:
+            inp = config.settings.get("input", {}) or {}
+            if m.group(1):
+                key = {"natural scrolling": "natural_scroll", "tap to click": "tap", "left handed mouse": "left_handed"}[m.group(1)]
+                config.settings.set(f"input.{key}", m.group(2) == "on")
+            elif m.group(3):
+                sp = float(inp.get("pointer_speed", 0))
+                sp = 0.0 if m.group(3) == "normal speed" else max(-1.0, min(1.0, sp + (0.25 if m.group(3) == "faster" else -0.25)))
+                config.settings.set("input.pointer_speed", sp)
+            else:
+                rate = int(inp.get("repeat_rate", 25))
+                config.settings.set("input.repeat_rate", 25 if m.group(4) == "normal" else max(5, min(60, rate + (10 if m.group(4) == "faster" else -10))))
+            self.apply_input()
+            self.open_window(syspanels.input_panel())
+            return True
+        m = re.fullmatch(r"set resolution (\S+) (\d+x\d+)", low)
+        if m:
+            ok, note = syspanels.set_mode(m.group(1), m.group(2))
+            self.emit({"t": "toast", "text": note})
+            self.open_window(syspanels.displays())
+            return True
+        if re.fullmatch(r"clear (?:the )?caches?[.!]?", low):
+            self.emit({"t": "toast", "text": syspanels.clear_caches().capitalize()})
+            self.open_window(syspanels.storage())
+            return True
+        if re.fullmatch(r"install (?:the |all (?:the )?)?updates[.!]?", low):
+            def upd():
+                if not self.ask({"title": "Install the updates?", "text": "This takes a few minutes; you can keep working.", "danger": False}):
+                    return
+                self.emit({"t": "toast", "text": "Installing updates…", "sticky": "upd"})
+                ok, note = syspanels.updates_apply()
+                self.emit({"t": "toast", "text": "", "sticky": "upd"})
+                self.emit({"t": "toast", "text": note.capitalize(), "long": True})
+                self.open_window(syspanels.updates_panel())
+            threading.Thread(target=upd, daemon=True).start()
+            return True
+        if re.fullmatch(r"(?:sleep|suspend|go to sleep|put (?:it|the computer) to sleep|hibernate)[.!]?", low):
+            threading.Thread(target=self.sleep_now, daemon=True).start()
+            return True
+        m = re.fullmatch(r"(?:print a test page on|make) (\S+?)(?: the default printer)?", line.strip(), re.I)
+        if m and (low.startswith("print a test page") or low.endswith("the default printer")):
+            def prn(name=m.group(1), test=low.startswith("print a test")):
+                ok, note = syspanels.test_page(name) if test else syspanels.default_printer(name)
+                self.instant_reply(line, note)
+                self.open_window(syspanels.printers())
+            threading.Thread(target=prn, daemon=True).start()
+            self._said = "(printer)"
+            return True
+        m = re.fullmatch(r"add printer (\S+)", line.strip(), re.I)
+        if m:
+            def addp(uri=m.group(1)):
+                ok, note = syspanels.add_printer(uri)
+                self.emit({"t": "toast", "text": note, "long": True})
+                self.open_window(syspanels.printers())
+            threading.Thread(target=addp, daemon=True).start()
+            return True
+        return False
+
+    def instant_reply(self, request, text):
+        """An answer the OS knows itself, shown like any reply (no model involved)."""
+        self.emit({"t": "reply.start", "request": request})
+        self.emit({"t": "reply.end", "text": text})
+        self.last_reply = self._said = text
+        try:
+            self.chat().record(request, text, False)
+        except OSError:
+            pass
+
+    def turn(self, text, chat="main"):
+        if chat == "main" and self.shortcut(text):
+            self.last_reply = self.__dict__.pop("_said", None) or "(done by the OS: " + text + ")"
             return
+        c = self.chat(chat)
+        cont = c.continues(text)
+        replay, note = c.context(text)
         self.busy = True
         self.ctx.after_turn = None
         self.ctx.cancel.clear()
+        self.ctx.chat_id, self.ctx.topic_note = chat, note
         self.last_activity = []
         self.sources = []
-        self.emit({"t": "reply.start", "request": text})
+        self.emit({"t": "reply.start", "request": text, "chat": chat})
         self.push_status()
         final = ""
         try:
-            final = agent.run(self.ctx, text, self.history)
-            self.emit({"t": "reply.end", "text": final})
+            final = agent.run(self.ctx, text, replay)
+            try:
+                c.record(text, final, cont)
+            except OSError as e:
+                sys.stderr.write(f"desk: the conversation could not be kept: {e}\n")
+            self.emit({"t": "reply.end", "text": final, "chat": chat})
             if final and config.settings.get("speak_replies"):
                 self.emit({"t": "speaking", "on": True})
                 try:
@@ -1534,14 +2836,15 @@ class Desk:
                 finally:
                     self.emit({"t": "speaking", "on": False})
         except llm.ModelError as e:
-            self.emit({"t": "reply.error", "text": f"{T('error')}: {e}"})
+            self.emit({"t": "reply.error", "text": f"{T('error')}: {e}", "chat": chat})
         except llm.ModelDown:
-            self.emit({"t": "reply.error", "text": T("model_down")})
+            self.emit({"t": "reply.error", "text": T("model_down"), "chat": chat})
         except agent.Cancelled:
-            self.emit({"t": "reply.error", "text": T("stopped")})
+            self.emit({"t": "reply.error", "text": T("stopped"), "chat": chat})
         except Exception as e:
-            self.emit({"t": "reply.error", "text": f"{T('error')}: {e}"})
+            self.emit({"t": "reply.error", "text": f"{T('error')}: {e}", "chat": chat})
         finally:
+            self.ctx.chat_id, self.ctx.topic_note = "main", ""
             self.busy = False
             self.last_reply = final
             self.push_status()
@@ -1582,7 +2885,12 @@ class Desk:
     # ---- lock / unlock / power
 
     _KEEP = ("labwc", "python3", "WebKitWebProcess", "WebKitNetworkProcess", "WebKitGPUProcess", "seatd", "dbus-daemon",
-             "at-spi2-registryd", "at-spi-bus-launcher", "xdg-dbus-proxy")
+             "pipewire", "wireplumber", "pipewire-pulse",
+             "at-spi2-registryd", "at-spi-bus-launcher", "xdg-dbus-proxy",
+             # the session's own helpers (nothing of the owner's inside the vault): notifications, idle screen-off,
+             # night light, the clipboard history watcher, the portals for screen sharing
+             "mako", "swayidle", "wlsunset", "wl-paste", "xdg-desktop-portal", "xdg-desktop-portal-wlr",
+             "xdg-document-portal", "xdg-permission-store", "fusermount3")
 
     def _session_pids(self):
         """Every process of this desk session except the compositor, the desk itself and its WebKit helpers.
@@ -1615,26 +2923,51 @@ class Desk:
         return out
 
     def _keybinds(self, enabled):
-        """While locked the compositor keeps no shortcuts (no new terminal, no Alt-Tab to an old one)."""
+        """The compositor's configuration: the system's own, with the owner's keyboard and mouse settings; while
+        locked it keeps no shortcuts (no new terminal, no Alt-Tab to an old one)."""
+        self._locked_keys = not enabled
+        self.apply_input()
+
+    def apply_input(self):
+        """Write the compositor's settings (keyboard layout and repeat, pointer speed, scrolling, tapping) and reload."""
         cfg = os.path.join(os.environ.get("XDG_CONFIG_HOME", "/var/cache/llmos"), "labwc")
+        inp = config.settings.get("input", {}) or {}
         try:
             os.makedirs(cfg, exist_ok=True)
-            rc = os.path.join(cfg, "rc.xml")
-            if enabled:
-                if os.path.exists(rc):
-                    os.unlink(rc)
-            else:
-                with open("/etc/xdg/labwc/rc.xml") as f:
-                    xml = f.read()
-                xml = re.sub(r"<keyboard>.*?</keyboard>", '<keyboard><keybind key="W-A-C-S-F24"><action name="None"/></keybind></keyboard>',
-                             xml, flags=re.S)
+            with open("/etc/xdg/labwc/rc.xml") as f:
+                xml = f.read()
+            yn = lambda v: "yes" if v else "no"
+            dev = (f'<device category="default"><pointerSpeed>{float(inp.get("pointer_speed", 0)):.2f}</pointerSpeed>'
+                   f'<leftHanded>{yn(inp.get("left_handed"))}</leftHanded></device>'
+                   f'<device category="touchpad"><naturalScroll>{yn(inp.get("natural_scroll", True))}</naturalScroll>'
+                   f'<tap>{yn(inp.get("tap", True))}</tap><pointerSpeed>{float(inp.get("pointer_speed", 0)):.2f}</pointerSpeed>'
+                   f'<leftHanded>{yn(inp.get("left_handed"))}</leftHanded></device>')
+            if "natural_scroll" in inp:          # asked for by the owner: a mouse wheel too, not only the touchpad
+                dev = dev.replace('<device category="default">', f'<device category="default"><naturalScroll>{yn(inp.get("natural_scroll"))}</naturalScroll>', 1)
+            xml = re.sub(r"<libinput>.*?</libinput>", f"<libinput>{dev}</libinput>", xml, flags=re.S)
+            # maximized programs leave the desk's bar (clock, Wi-Fi, battery) in view: top bar, or bottom in the Windows layout
+            bar = int(round((48 if (config.settings.get("appearance.layout") or "clean") == "windows" else
+                             32 if config.settings.get("appearance.layout") == "mac" else 46) * ui.Theme().scale / 100))
+            side = "bottom" if config.settings.get("appearance.layout") == "windows" else "top"
+            xml = re.sub(r"\s*<margin [^>]*/>", "", xml)
+            xml = xml.replace("</labwc_config>", f'  <margin {side}="{bar}" />\n</labwc_config>', 1)
+            rate, delay = int(inp.get("repeat_rate", 25)), int(inp.get("repeat_delay", 600))
+            xml = xml.replace("<keyboard>", f"<keyboard><repeatRate>{rate}</repeatRate><repeatDelay>{delay}</repeatDelay>", 1)
+            if getattr(self, "_locked_keys", False):
+                xml = re.sub(r"<keyboard>.*?</keyboard>", f'<keyboard><repeatRate>{rate}</repeatRate><repeatDelay>{delay}</repeatDelay>'
+                             '<keybind key="W-A-C-S-F24"><action name="None"/></keybind></keyboard>', xml, flags=re.S)
                 xml = re.sub(r"<mouse>.*?</mouse>", '<mouse><context name="Root"><mousebind button="Right" action="Press"><action name="None"/>'
                              '</mousebind></context></mouse>', xml, flags=re.S)
-                with open(rc, "w") as f:
-                    f.write(xml)
+            with open(os.path.join(cfg, "rc.xml"), "w") as f:
+                f.write(xml)
+            # the keyboard layout is read from the compositor's environment file
+            with open(os.path.join(cfg, "environment"), "w") as f:
+                f.write(f"XKB_DEFAULT_LAYOUT={re.sub(r'[^a-z,]', '', str(inp.get('layout', 'us')).lower()) or 'us'}\n")
+                if inp.get("variant"):
+                    f.write(f"XKB_DEFAULT_VARIANT={re.sub(r'[^a-z0-9_,]', '', str(inp['variant']).lower())}\n")
             subprocess.run(["labwc", "--reconfigure"], capture_output=True, timeout=10, env=self._child_env())
         except Exception as e:
-            sys.stderr.write(f"desk: keybinds not switched: {e}\n")
+            sys.stderr.write(f"desk: compositor settings not applied: {e}\n")
 
     def lock(self):
         self.lock_stuck = False
@@ -1642,7 +2975,7 @@ class Desk:
         self.decline_dialogs()
         while True:
             try:
-                _, done = self.requests.get_nowait()
+                done = self.requests.get_nowait()[1]
             except queue.Empty:
                 break
             if done:
@@ -1684,13 +3017,17 @@ class Desk:
             note = T("lock_failed")
         for wid in list(self.windows):
             self.close_window(wid)
-        self.history.clear()
+        self.chats = {}                     # read again from the vault after unlocking
         self.set_screen("lock", {"note": note})
         self.push_status()
 
     def unlock(self, passphrase):
         # only from the lock screen (a repeat that arrives after the desk opened is not a failed attempt), one at
         # a time; vault.unlock checks the passphrase against the header even when the vault is still mounted
+        if self.screen == "lock" and not config.settings.get("vault"):
+            self._keybinds(True)                # a screen lock without a passphrase: back to the desk
+            self.enter_desk()
+            return
         if not passphrase or self.screen != "lock":
             return
         if not self._unlocking.acquire(blocking=False):
@@ -1832,7 +3169,7 @@ class Desk:
                     err(note)
             elif step == "autonomy":
                 v = str(value or "hands-off")
-                config.settings.set("autonomy", v if v in ("hands-off", "balanced", "hands-on") else "hands-off")
+                config.settings.set("autonomy", v if v in ("hands-off", "balanced", "hands-on") else "balanced")
                 ok()
             elif step == "internet":
                 v = "no" if value in (False, "no", "n", 0, "offline") else "yes"
@@ -1897,12 +3234,30 @@ class Desk:
 
     def launch_app(self, argv, name=""):
         log = open(os.path.join(config.RUN, "gui.log"), "a")
+        if argv and os.path.basename(argv[0]) == "foot" and not any(a.startswith("--working-directory") for a in argv) \
+                and (not config.settings.get("vault") or vault.unlocked()):
+            argv = [argv[0], "--working-directory=" + config.home()] + list(argv[1:])     # a terminal starts at home, as everywhere
+        argv = _root_ok(list(argv))
         try:
+            start = log.tell()
             p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                  start_new_session=True, env=self._child_env(), cwd="/")   # never inside the vault
         except OSError as e:
             return f"could not start {argv[0]}: {e}"
         name = name or os.path.basename(argv[0])
+        # a program that closes again at once did not open: say so instead of "opened"
+        for _ in range(12):
+            if p.poll() is not None:
+                break
+            time.sleep(0.25)
+        if p.poll() not in (None, 0):
+            try:
+                with open(os.path.join(config.RUN, "gui.log"), errors="replace") as f:
+                    f.seek(start)
+                    tail = " ".join(f.read().strip().splitlines()[-2:])[-200:]
+            except OSError:
+                tail = ""
+            return f"could not start {name}: it closed at once" + (f" ({tail})" if tail else "")
         self.apps[p.pid] = {"name": name, "popen": p, "argv": argv}
         self._push_apps()
         threading.Thread(target=self._reap, args=(p,), daemon=True).start()
@@ -2060,6 +3415,30 @@ class Desk:
                 out = {"ok": isinstance(r, int), "pid": r if isinstance(r, int) else None, "error": None if isinstance(r, int) else r}
             elif cmd == "lock":
                 self.lock()
+                out = {"ok": True}
+            elif cmd == "testreset" and _fwcfg("testshell"):   # tests: the same clean state before every case
+                self.decline_dialogs()
+                for wid in list(self.windows):
+                    self.close_window(wid)
+                for k, v in (("autonomy", "hands-off"), ("internet", "yes"), ("brain", "local"), ("guidance", "owner"), ("tor", False),
+                             ("screen_off", 0), ("do_not_disturb", False)):
+                    config.settings.set(k, v)
+                self.start_idle()             # tests drive the desk without touching the keyboard: the screen must stay on
+                system.apply_firewall("yes")
+                if self.screen == "lock":
+                    self.unlock("x")
+                self.chat().new_topic()
+                self.push_status()
+                out = {"ok": True}
+            elif cmd == "act":            # press a button by its words, as the page does (tests)
+                self.act(arg)
+                out = {"ok": True, "windows": [w.get("title", "") for w in self.windows.values()], "reply": getattr(self, "last_reply", "")}
+            elif cmd == "focus":         # the Super key: the desk comes back in front of programs, ready to type
+                if shutil.which("wlrctl"):
+                    subprocess.run(["wlrctl", "toplevel", "focus", "app_id:org.llmos.desk"], capture_output=True, timeout=5,
+                                   env=dict(os.environ, **(media.desk_env() or {})))
+                self.GLib.idle_add(lambda: (self.gtkwin.present() if getattr(self, "gtkwin", None) else None, False)[1])
+                self.emit({"t": "eval", "js": "document.getElementById('in') && document.getElementById('in').focus()"})
                 out = {"ok": True}
             elif cmd == "js":
                 self.emit({"t": "eval", "js": arg})

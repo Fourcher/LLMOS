@@ -142,7 +142,7 @@ here. On a real machine the model runs on the CPU; see *Requirements*.
 A short set‑up on screen — six steps, each one card: language (your Mac's is
 pre‑selected), your name, time zone (type a city; pre‑filled from your Mac),
 how much the OS may do on its own (three choices with plain explanations;
-hands‑off is recommended), internet (yes / yes through Tor / stay offline),
+“asks if risky” is recommended), internet (yes / yes through Tor / stay offline),
 and an optional passphrase (with a *Show* button so you can see what you
 typed). On a laptop with no connection yet, a Wi‑Fi step lists the networks
 in range. The last card offers three example requests to try with one click,
@@ -250,13 +250,16 @@ screens ("make everything bigger" adds to that).
 
 Chosen at set‑up, changeable any time by asking (or in Settings):
 
-- **hands‑off** (default): does everything without asking.
-- **balanced**: asks before destructive or irreversible actions.
+- **hands‑off**: does everything without asking.
+- **balanced** (default): asks before destructive or irreversible actions.
 - **hands‑on**: asks before every change.
 
 Every tool action is written to an audit log (`audit`) in all modes. Changing
 the internet/Tor/autonomy/online‑model policy itself always asks, so a
-background task can't loosen its own leash. Writing to the computer's disk
+background task can't loosen its own leash. In every mode, email that leaves,
+emptying the trash and removing programs ask first, and once a request has
+read a web page, a file or an email, any change it makes is shown first (such
+text can carry instructions meant to trick the model). Writing to the computer's disk
 (the installer) always shows its plan first. Scheduled tasks follow the same
 level: under hands‑off they do what you scheduled; under balanced or hands‑on
 anything that would have asked is left undone and reported.

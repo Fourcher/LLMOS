@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import tempfile
 
-from . import config, devices, i18n, llm, mail, media, models, store, system, ui, uispec, web
+from . import apps, config, devices, programs, themes, i18n, llm, mail, media, models, store, system, ui, uispec, web
 
 SAFE, READ, CHANGE, DESTRUCTIVE, SECURITY = "safe", "read", "change", "destructive", "security"
 
@@ -146,6 +146,15 @@ def classify_command(cmd):
             return DESTRUCTIVE
     if re.search(r"\b(?:shutil\.rmtree|os\.(?:remove|unlink|rmdir|removedirs)|rmtree\()", c):
         return DESTRUCTIVE
+    # other ways of losing work: rewriting history, wiping folders, emptying files, dropping schedules, deleting in perl
+    if re.search(r"\bgit\s+(?:reset\s+--hard|clean\s+-\w*[fdx]|checkout\s+--\s|restore\b|push\s+(?:-f|--force)|branch\s+-D|stash\s+(?:drop|clear))"
+                 r"|\brsync\b[^;|&]*--delete|\bcrontab\s+-r\b|(?:^|[;&|]\s*):\s*>\s*\S|\bunlink\s*\(|\bchmod\s+0*00\b|\bmv\s+-f\b", c):
+        return DESTRUCTIVE
+    # turning off the firewall or changing who may log in is a security change, however it is phrased
+    for name, words, _ in cmds:
+        if name in ("nft", "iptables", "ip6tables", "passwd", "chpasswd", "visudo", "ufw") or \
+                (name in ("tee", "cp", "mv", "sed") and any("authorized_keys" in w or "/etc/shadow" in w or "sudoers" in w for w in words)):
+            return SECURITY
     risk = READ
     if re.search(r"(^|[^>2&])>{1,2}\s*[^&\s]", c) or re.search(r"\bsed\b[^|;]*\s-i", c) or re.search(r"\btee\b", c):
         risk = CHANGE
@@ -337,30 +346,91 @@ def run_command(a, ctx):
     cmd = str(a.get("command", "")).strip()
     if not cmd:
         return "error: empty command"
+    # a text-mode browser in a terminal is never what a person wants to look at when the real browser is there
+    m = re.match(r"^\s*(?:w3m|lynx|links2?|elinks|curl|wget)\b.*?(https?://\S+)", cmd)
+    if m and re.match(r"^\s*(?:w3m|lynx|links2?|elinks)\b", cmd) and _display_available() and hasattr(ctx, "launch"):
+        return browse({"site": m.group(1).strip("'\"")}, ctx)
     if a.get("interactive") and not ctx.headless:
         rc = ctx.interactive(cmd)
         return f"the user used `{cmd}` interactively; it exited with code {rc}"
-    env = dict(os.environ, TERM="dumb", PAGER="cat", SYSTEMD_PAGER="cat", LANG="C.UTF-8")
+    env = dict(os.environ, TERM="dumb", PAGER="cat", SYSTEMD_PAGER="cat", LANG="C.UTF-8", **(media.desk_env() or {}))
+    from . import wm
+    before = set(wm.windows()) if media.desk_env() else None
     try:
-        p = subprocess.run(["/bin/sh", "-c", cmd], stdin=subprocess.DEVNULL, capture_output=True,
-                           text=True, timeout=600, cwd=config.home(), env=env, errors="replace")
-    except subprocess.TimeoutExpired:
-        return "error: the command was still running after 10 minutes and was stopped"
-    out = (p.stdout or "") + (("\n" + p.stderr) if p.stderr.strip() else "")
+        p = subprocess.Popen(["/bin/sh", "-c", cmd], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, cwd=config.home(), env=env, errors="replace", start_new_session=True)
+    except OSError as e:
+        return f"error: {e}"
+    t0 = time.time()
+    while True:
+        try:
+            so, se = p.communicate(timeout=3)
+            break
+        except subprocess.TimeoutExpired:
+            pass
+        # a program that opened a window is for the owner to use: leave it running (the request does not wait for it to close)
+        if before is not None and time.time() - t0 > 3 and set(wm.windows()) - before:
+            import threading
+            threading.Thread(target=p.communicate, daemon=True).start()     # keep reading its output so it never blocks
+            return "started; it is open in a window on the screen and keeps running. Done: tell the owner in one sentence."
+        cancel = getattr(ctx, "cancel", None)
+        if cancel is not None and cancel.is_set():          # the owner pressed Stop: the command stops too
+            try:
+                os.killpg(p.pid, 15)
+            except OSError:
+                p.kill()
+            return "stopped: the owner pressed Stop"
+        if time.time() - t0 > 600:
+            p.kill()
+            return "error: the command was still running after 10 minutes and was stopped"
+    out = (so or "") + (("\n" + se) if (se or "").strip() else "")
     return f"exit code {p.returncode}\n{clip(out.strip() or '(no output)')}"
 
 
-@tool("read_file", "Read a text file. (The owner's home folder is /root, i.e. ~.)", {"path": STR}, ["path"], risk=READ)
+def document_text(path):
+    """The text of a document: PDF (pdftotext), Word / LibreOffice / PowerPoint / Excel files (their XML), or plain text."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".pdf":
+        if not shutil.which("pdftotext"):
+            raise OSError(2, "there is no PDF reader for text here")
+        p = subprocess.run(["pdftotext", "-layout", "-l", "60", path, "-"], capture_output=True, text=True, timeout=60)
+        if p.returncode:
+            raise OSError(5, (p.stderr.strip() or "unreadable PDF")[:200])
+        return p.stdout
+    if ext in (".docx", ".odt", ".pptx", ".odp", ".xlsx", ".ods"):
+        import zipfile
+        import html as _html
+        with zipfile.ZipFile(path) as z:
+            names = z.namelist()
+            want = (["word/document.xml"] if ext == ".docx" else ["content.xml"] if ext in (".odt", ".odp", ".ods") else
+                    sorted((n for n in names if re.match(r"ppt/slides/slide\d+\.xml$", n)), key=lambda n: int(re.findall(r"\d+", n)[-1]))
+                    if ext == ".pptx" else ["xl/sharedStrings.xml"])
+            parts = []
+            for n in want:
+                if n in names:
+                    x = z.read(n).decode("utf-8", "replace")
+                    x = re.sub(r"</(?:w:p|text:p|text:h|a:p|si|table:table-row)>", "\n", x)
+                    x = re.sub(r"<(?:w:tab|text:tab)\s*/>", "\t", x)
+                    parts.append(_html.unescape(re.sub(r"<[^>]+>", "", x)))
+            return "\n\n".join(parts)
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+@tool("read_file", "Read a file's text: plain text, PDF, Word (.docx), LibreOffice, PowerPoint (.pptx) or Excel text. "
+      "(The owner's home folder is /root, i.e. ~.)", {"path": STR}, ["path"], risk=READ)
 def read_file(a, ctx):
     path = _path(a.get("path", ""))
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            return clip(f.read(), 12000)
+        return clip(document_text(path), 12000)
     except OSError as e:
         return f"error: {e.strerror}: {path}"
+    except Exception as e:
+        return f"error: could not read {os.path.basename(path)}: {e}"
 
 
-@tool("write_file", "Create or overwrite a text file (or append to it). The owner's home folder is /root (~).",
+@tool("write_file", "Create or overwrite a text file (or append to it). The owner's home folder is /root (~). Letters, essays "
+      "and other documents the owner asked for go in ~/Documents with a plain title as the name (~/Documents/Letter to landlord.txt).",
       {"path": STR, "content": STR, "append": {"type": "boolean"}}, ["path", "content"],
       risk=lambda a: SECURITY if _policy_path(_path(a.get("path", ""))) else CHANGE)
 def write_file(a, ctx):
@@ -374,20 +444,72 @@ def write_file(a, ctx):
         return f"error: {e.strerror}: {path}"
 
 
-@tool("install_app", "Install software (official Alpine packages). Open installed programs with run_command.",
+# What people call programs that are not Alpine packages, or are named differently: Alpine package, or a Flathub app id
+APP_NAMES = {"vs code": "flathub:com.visualstudio.code", "vscode": "flathub:com.visualstudio.code", "visual studio code": "flathub:com.visualstudio.code",
+             "code": "flathub:com.visualstudio.code", "spotify": "flathub:com.spotify.Client", "zoom": "flathub:us.zoom.Zoom",
+             "steam": "flathub:com.valvesoftware.Steam", "discord": "flathub:com.discordapp.Discord", "slack": "flathub:com.slack.Slack",
+             "teams": "flathub:com.github.IsmaelMartinez.teams_for_linux", "skype": "flathub:com.skype.Client", "obs": "obs-studio",
+             "chrome": "chromium", "google chrome": "chromium", "libreoffice": "libreoffice", "office": "libreoffice", "word": "libreoffice",
+             "excel": "libreoffice", "gimp": "gimp", "photoshop": "gimp", "vlc": "vlc", "audacity": "audacity", "inkscape": "inkscape",
+             "blender": "blender", "kdenlive": "kdenlive", "thunderbird": "thunderbird", "signal": "flathub:org.signal.Signal",
+             "telegram": "telegram-desktop", "whatsapp": "flathub:com.rtosta.zapzap", "minecraft": "flathub:org.prismlauncher.PrismLauncher",
+             "obsidian": "flathub:md.obsidian.Obsidian", "brave": "flathub:com.brave.Browser", "chromium": "chromium", "krita": "krita",
+             "transmission": "transmission-gtk", "torrent": "transmission-gtk", "calibre": "calibre", "kodi": "kodi"}
+
+
+UNOFFICIAL = {"com.github.IsmaelMartinez.teams_for_linux": "an unofficial Teams app, not made by Microsoft; Teams also works in the browser",
+              "com.rtosta.zapzap": "an unofficial WhatsApp app, not made by Meta; web.whatsapp.com also works in the browser",
+              "org.prismlauncher.PrismLauncher": "a community launcher for Minecraft; you sign in with your Microsoft account"}
+
+
+def _flatpak(app_id):
+    """Install one app from Flathub; (ok, words)."""
+    if not shutil.which("flatpak"):
+        return False, "Flathub apps are not available on this system"
+    subprocess.run(["flatpak", "remote-add", "--if-not-exists", "flathub", "https://dl.flathub.org/repo/flathub.flatpakrepo"],
+                   capture_output=True, text=True, timeout=120)
+    p = subprocess.run(["flatpak", "install", "-y", "--noninteractive", "flathub", app_id], capture_output=True, text=True, timeout=1800)
+    if p.returncode == 0:
+        return True, f"installed {app_id} from Flathub"
+    err = (p.stderr or p.stdout).strip()
+    if re.search(r"(?i)no remote refs|nothing matches|not found|arch|no ref", err):
+        return False, f"{app_id} is not made for this kind of computer ({os.uname().machine}) or is not on Flathub"
+    return False, f"install failed: {clip(err, 500)}"
+
+
+@tool("install_app", "Install a program: an Alpine package name, or what people call it ('spotify', 'vs code', 'zoom', 'gimp'); apps that are not Alpine packages come from Flathub. Then open it with open_app.",
       {"packages": {"type": "string", "description": "space-separated package names"}},
       ["packages"], risk=CHANGE, network=True)
 def install_app(a, ctx):
-    pkgs = [p for p in re.split(r"[\s,]+", str(a.get("packages", ""))) if re.fullmatch(r"[a-z0-9][a-z0-9+._-]*", p)]
+    raw = str(a.get("packages", "")).strip().lower()
+    named = APP_NAMES.get(raw) or APP_NAMES.get(re.sub(r"^(?:the |a )|\s+(?:app|program)$", "", raw))
+    if named and named.startswith("flathub:"):
+        ok, words = _flatpak(named[8:])
+        if ok and named[8:] in UNOFFICIAL:
+            words += f" ({UNOFFICIAL[named[8:]]})"
+        if ok:
+            from . import programs
+            programs.refresh()
+        return words + (" -- it is now in the programs list; open it by name." if ok else "")
+    pkgs = [named] if named else [p for p in re.split(r"[\s,]+", raw) if re.fullmatch(r"[a-z0-9][a-z0-9+._-]*", p)]
     if not pkgs:
         return "error: no valid package names"
     p = subprocess.run(["apk", "add", "--no-progress", *pkgs], capture_output=True, text=True, timeout=900)
     if p.returncode != 0:
+        if shutil.which("flatpak") and len(pkgs) == 1:          # not an Alpine package: look on Flathub
+            s = subprocess.run(["flatpak", "search", "--columns=application", pkgs[0]], capture_output=True, text=True, timeout=60)
+            # only an app whose own name is what was asked for (never just the first search hit)
+            ids = [x for x in s.stdout.split() if "." in x and x.rsplit(".", 1)[-1].lower().replace("_", "").replace("-", "")
+                   == pkgs[0].lower().replace("_", "").replace("-", "")]
+            if ids:
+                ok, words = _flatpak(ids[0])
+                if ok:
+                    return words + " -- it is now in the programs list; open it by name."
         s = subprocess.run(["apk", "search", "-q", pkgs[0]], capture_output=True, text=True)
         hint = ", ".join(s.stdout.split()[:8])
         return f"install failed: {clip(p.stderr.strip() or p.stdout.strip(), 800)}" + \
             (f"\nsimilar packages: {hint}" if hint else "")
-    return "installed: " + " ".join(pkgs) + "\n" + clip(p.stdout.strip().splitlines()[-1] if p.stdout.strip() else "", 300)
+    return "installed: " + " ".join(pkgs) + " -- open it by name.\n" + clip(p.stdout.strip().splitlines()[-1] if p.stdout.strip() else "", 300)
 
 
 @tool("system_power", "Shut down or restart this computer.",
@@ -401,8 +523,16 @@ def system_power(a, ctx):
 
 @tool("set_appearance",
       "Change how the interface looks or which language it uses. Include only what the user asked to "
-      "change; 'default' resets a color.",
-      {"color": {"type": "string", "description": "text color, a name or #hex"},
+      "change. For a whole look ('dark mode', 'light mode', 'ocean theme', 'make everything purple', 'retro', "
+      "'high contrast', 'default theme') use theme -- it sets background, text and accent together so the screen "
+      "stays readable; color/background/accent change one thing only.",
+      {"theme": {"type": "string", "description": "a whole look in the owner's words: dark, light, a colour, ocean, neon, "
+                 "retro, forest, sunset, pastel, gold, space, coffee, minimal, high contrast, default"},
+       "font": {"type": "string", "description": "the typeface: sans (default), serif, mono (typewriter/code), pixel"},
+       "backdrop": {"type": "string", "enum": list(themes.BACKGROUNDS), "description": "what is behind the windows: living "
+                    "(animated, reacts to what the computer is doing; default), still (the same picture, no motion), photo "
+                    "(the wallpaper photo), plain (one colour)"},
+       "color": {"type": "string", "description": "text color, a name or #hex"},
        "background": {"type": "string", "description": "background color"},
        "accent": {"type": "string", "description": "highlight color (prompt, frames)"},
        "corners": {"type": "string", "enum": ["rounded", "square", "double", "heavy", "none"]},
@@ -415,7 +545,39 @@ def system_power(a, ctx):
         "should differ from the rest (e.g. 'settings in Chinese, rest in English' -> language=English, "
         "settings_language=Chinese)"}})
 def set_appearance(a, ctx):
+    _undo_push("settings", _settings_snapshot())
     changed = []
+    if a.get("theme"):
+        app = config.settings.get("appearance", {})
+        cur = (app.get("background") or themes.DEFAULT[0], app.get("color") or themes.DEFAULT[1], app.get("accent") or themes.DEFAULT[2])
+        cur = tuple(themes.hx(ui.parse_color(c)) if ui.parse_color(c) else d for c, d in zip(cur, themes.DEFAULT))
+        res = themes.resolve(a["theme"], cur)
+        if not res:
+            return (f"error: '{a['theme']}' is not a look I know; say dark, light, a colour, ocean, neon, retro, forest, "
+                    "sunset, pastel, gold, space, coffee, minimal, high contrast or default")
+        for key in ("background", "color", "accent"):
+            config.settings.set(f"appearance.{key}", res[key])
+        if res.get("font"):
+            config.settings.set("appearance.font", res["font"])
+        tname = str(a["theme"]).strip().lower()
+        changed.append(f"{tname} mode" if tname in ("dark", "light") else "the default look" if "default" in tname else f"{tname} theme")
+    if a.get("font"):
+        f = str(a["font"]).lower().strip()
+        f = f if f in themes.FONTS else themes.font_for(f)
+        if not f:
+            return f"error: '{a['font']}' is not a font here; say sans (the default), serif, mono or pixel"
+        config.settings.set("appearance.font", f)
+        changed.append(f"font {f}")
+    if a.get("backdrop"):
+        v = str(a["backdrop"]).lower().strip()
+        v = {"animated": "living", "alive": "living", "moving": "living", "static": "still", "wallpaper": "photo", "picture": "photo",
+             "none": "plain", "solid": "plain", "off": "still"}.get(v, v)
+        if v not in themes.BACKGROUNDS:
+            return f"error: '{a['backdrop']}' is not a background style; say living, still, photo or plain"
+        if v == "photo" and not os.path.exists(config.data("wallpaper.img")):
+            return "error: there is no wallpaper photo yet; ask for one (e.g. 'set a wallpaper of the Alps')"
+        config.settings.set("appearance.backdrop", v)
+        changed.append(f"background {v}")
     for key in ("color", "background", "accent"):
         if key in a and a[key] is not None:
             val = str(a[key]).strip()
@@ -482,6 +644,12 @@ def set_appearance(a, ctx):
     if not changed:
         return "nothing to change"
     ui.reload_theme()
+    if a.get("theme") or a.get("font") or a.get("color") or a.get("background") or a.get("accent"):
+        try:
+            if apps.retheme() and hasattr(ctx, "reload_apps"):
+                ctx.reload_apps()
+        except OSError:
+            pass
     ctx.redraw()
     return "appearance updated: " + ", ".join(changed)
 
@@ -565,18 +733,32 @@ def show_image(a, ctx):
 
 @tool("set_wallpaper", "ONLY when the owner asks for a wallpaper / desktop background: put a real photograph "
       "(Wikimedia Commons) behind the desk, or remove it. To just show a photo, use show_image.",
-      {"subject": {"type": "string", "description": "what the photo should show, e.g. 'the Alps at dawn'; 'none' removes the wallpaper"}},
-      ["subject"], risk=READ, network=lambda a: str(a.get("subject", "")).strip().lower() not in ("none", "remove", "off", ""))
+      {"subject": {"type": "string", "description": "what the photo should show, e.g. 'the Alps at dawn'; or the path of the owner's own picture (~/Pictures/beach.jpg); 'none' removes the wallpaper"}},
+      ["subject"], risk=READ, network=lambda a: str(a.get("subject", "")).strip().lower() not in ("none", "remove", "off", "") and not re.match(r"^[~/]", str(a.get("subject", "")).strip()))
 def set_wallpaper(a, ctx):
     subject = str(a.get("subject", "")).strip()
+    req = getattr(ctx, "current_request", "") or ""
+    if subject.lower() in ("none", "remove", "off", "") and req and not re.search(r"\b(remove|no|off|delete|get rid|plain|clear|without|stop)\b", req, re.I):
+        return "not done: the owner did not ask to remove the wallpaper. Ask which picture they mean."
     dest = config.data("wallpaper.img")
     if subject.lower() in ("none", "remove", "off", ""):
         try:
             os.unlink(dest)
         except OSError:
             pass
+        if config.settings.get("appearance.backdrop") == "photo":
+            config.settings.set("appearance.backdrop", "living")
         ctx.redraw()
         return "wallpaper removed"
+    local = _path(subject) if re.match(r"^[~/]", subject) else ""
+    if local and os.path.isfile(local):
+        if os.path.splitext(local)[1].lower() not in _IMAGE_EXT:
+            return f"error: {os.path.basename(local)} is not a picture"
+        shutil.copyfile(local, dest + ".tmp")
+        os.replace(dest + ".tmp", dest)
+        config.settings.set("appearance.backdrop", "photo")
+        ctx.redraw()
+        return f"wallpaper set to {os.path.basename(local)}. Done: tell the owner in one sentence."
     try:
         info = web.wikimedia_image(subject)
         web.fetch(info["url"], dest=dest + ".tmp")
@@ -585,6 +767,7 @@ def set_wallpaper(a, ctx):
         return f"no photo found: {e}"
     ctx.redraw()
     credit = ", ".join(x for x in (info["author"], info["license"]) if x)
+    config.settings.set("appearance.backdrop", "photo")
     return f"wallpaper set: {info['title']} ({credit}). Source: {info['page']}"
 
 
@@ -1033,18 +1216,37 @@ def _policy_risk(setting, value):
     return SAFE
 
 
+_SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission|approv|without asking|careful|cautious|balanced|mode",
+                  "internet": r"internet|online|offline|network|\bweb\b|wifi|wi-fi", "tor": r"\btor\b|anonym",
+                  "brain": r"online model|claude|cloud|chatgpt|on this computer|locally|think only|brain|offline model",
+                  "speak_replies": r"speak|read (?:aloud|out)|voice|talk|out loud", "think": r"\bthink|reason",
+                  "name": r"\bname\b|call me", "focus_mode": r"focus|distract", "guidance": r"guidance|lectur|caution|careful|warn|preach|instructions|my machine",
+                  "timezone": r"time ?zone|\btime\b|clock|\bhour", "autolock": r"\block",
+                  "screen_off": r"screen|display|monitor|blank|dim|presentation|awake", "sleep_after": r"sleep|suspend|idle|nap", "lid": r"\blid\b|close|clos",
+                  "do_not_disturb": r"disturb|notification|quiet|silen|focus", "night_light": r"night|warm|blue light|eye|evening|yellow"}
+
+
 @tool("change_setting", "Change a system setting. autonomy: hands-off | balanced (ask before destructive "
       "actions) | hands-on (ask before any change). internet: yes | ask | no. tor: on/off. speak_replies: "
       "on/off. focus_mode: on/off (+minutes), blocks feed sites. think: on/off. name: what to call the "
       "user. brain: local (answered only on this computer) | ask (here; asks before a big request goes to "
       "the online model) | cloud (the online model answers everything). guidance: owner | standard. "
+      "autolock: minutes (0 = off). screen_off: minutes idle before the screen turns off (0 = never). "
+      "sleep_after: minutes idle before the computer sleeps (0 = never). lid: sleep | nothing. "
+      "do_not_disturb: on/off (programs' notifications hidden). night_light: on/off (warmer screen in the evening). timezone: a city, country or zone name ('Paris', 'Pacific', 'Asia/Tokyo'). "
       "(Language changes go through set_appearance.)",
       {"setting": {"type": "string", "enum": ["autonomy", "internet", "tor", "speak_replies", "focus_mode",
-                                              "think", "name", "autolock", "guidance", "brain"]},
+                                              "think", "name", "autolock", "guidance", "brain", "timezone",
+                                              "screen_off", "sleep_after", "lid", "do_not_disturb", "night_light"]},
        "value": STR, "minutes": {"type": "integer"}}, ["setting", "value"],
       risk=lambda a: _policy_risk(a.get("setting"), a.get("value")))
 def change_setting(a, ctx):
     s, v = a.get("setting"), a.get("value", "")
+    req = str(getattr(ctx, "current_request", "") or "")
+    if req and s in _SETTING_WORDS and not re.search(_SETTING_WORDS[s], req, re.I):
+        return f"not done: the owner did not ask about '{s}'. Do only what was asked."
+    if s not in ("language", "settings_language"):
+        _undo_push("settings", _settings_snapshot())
     if s in ("language", "settings_language"):
         return set_appearance({s: v}, ctx)
     if s == "autonomy":
@@ -1058,6 +1260,12 @@ def change_setting(a, ctx):
         v = {"on": "yes", "allow": "yes", "true": "yes", "off": "no", "never": "no", "false": "no"}.get(v, v)
         if v not in ("yes", "ask", "no"):
             return "error: internet must be yes, ask or no"
+        req = str(getattr(ctx, "current_request", "") or "")
+        if v == "no" and req and not re.search(r"\b(?:go(?:ing)? offline|offline mode|(?:turn|switch|shut)\s+(?:the\s+)?internet\s+off|(?:turn|switch|shut|cut)\s+off\s+(?:the\s+)?internet|"
+                                               r"internet\s+off|disable\s+(?:the\s+)?internet|no\s+(?:more\s+)?internet|block\s+(?:the\s+)?internet|"
+                                               r"disconnect\s+from\s+the\s+internet|stop\s+(?:using\s+)?the\s+internet|cut\s+(?:me\s+)?off)\b", req, re.I):
+            return ("not done: the owner did not ask to turn the internet off. Do only what was asked "
+                    "(if they have no network, offer to show the Wi-Fi networks)")
         config.settings.set("internet", v)
         ok, err = system.apply_firewall(v)
         return f"internet is now '{v}'" + ("" if ok else f" (firewall error: {err})") + \
@@ -1117,6 +1325,32 @@ def change_setting(a, ctx):
             return f"auto-lock after {mins} minute{'s' if mins != 1 else ''} of inactivity" if mins else "auto-lock is off"
         return (f"auto-lock after {mins} minute{'s' if mins != 1 else ''} of inactivity, on the screen (the text console has no idle timer)"
                 if mins else "auto-lock is off")
+    if s in ("screen_off", "sleep_after"):
+        m = re.search(r"\d+", str(v))
+        mins = int(a.get("minutes") or (m.group(0) if m else 0)) if not re.search(r"\b(never|off|no|0|stay on|keep on)\b", str(v), re.I) else 0
+        if re.search(r"\bhours?\b", str(v), re.I):
+            mins *= 60
+        mins = max(0, min(mins, 24 * 60))
+        config.settings.set(s, mins)
+        if hasattr(ctx, "start_idle"):
+            ctx.start_idle()
+        what = "the screen turns off" if s == "screen_off" else "the computer sleeps"
+        return f"{what} after {mins} minute{'s' if mins != 1 else ''} without use" if mins else \
+            ("the screen stays on" if s == "screen_off" else "the computer never sleeps by itself")
+    if s in ("do_not_disturb", "night_light"):
+        on = not re.search(r"\b(off|no|disable|stop|false|0)\b", str(v), re.I)
+        config.settings.set(s, on)
+        if s == "do_not_disturb":
+            subprocess.run(["makoctl", "mode", "-s" if on else "-r", "do-not-disturb"], capture_output=True,
+                           env=dict(os.environ, **(media.desk_env() or {})))
+            return "do not disturb is on: programs' notifications stay hidden" if on else "do not disturb is off"
+        if hasattr(ctx, "start_night_light"):
+            ctx.start_night_light()
+        return "night light is on: the screen turns warmer from 7 pm to 7 am" if on else "night light is off"
+    if s == "lid":
+        val = "nothing" if re.search(r"\b(nothing|stay|keep|awake|no|off|don'?t)\b", str(v), re.I) else "sleep"
+        config.settings.set("lid", val)
+        return "closing the lid now does nothing (it keeps running)" if val == "nothing" else "closing the lid puts the computer to sleep"
     if s == "timezone":
         try:
             zone = system.set_timezone(v)
@@ -1527,11 +1761,26 @@ def _human_size(n):
         n /= 1024
 
 
+def _friendly_when(ts):
+    """'Today 2:25 PM', 'Yesterday', 'Mon 3 Oct', '12 Mar 2024': how people read dates."""
+    t, now = time.localtime(ts), time.localtime()
+    days = (time.mktime(now[:3] + (0, 0, 0) + now[6:]) - time.mktime(t[:3] + (0, 0, 0) + t[6:])) // 86400
+    if days == 0:
+        return "Today " + time.strftime("%-I:%M %p", t)
+    if days == 1:
+        return "Yesterday " + time.strftime("%-I:%M %p", t)
+    if 0 < days < 7:
+        return time.strftime("%A", t)
+    return time.strftime("%-d %b" if t.tm_year == now.tm_year else "%-d %b %Y", t)
+
+
 @tool("show_files", "Show the owner's files as a window: a folder listing with open/delete buttons. The home folder is "
       "/root (~). Use for 'show my files', 'open my documents folder', 'what's in ~/projects'.",
       {"path": {"type": "string", "description": "folder to show (default: the home folder)"}}, [], risk=READ)
 def show_files(a, ctx):
     path = _path(a.get("path") or "~")
+    if path.rstrip("/") == _trash():
+        os.makedirs(path, exist_ok=True)       # nothing deleted yet: an empty trash, not an error
     if not os.path.isdir(path):
         return f"error: {path} is not a folder"
     try:
@@ -1550,7 +1799,7 @@ def show_files(a, ctx):
         except OSError:
             continue
         isdir = os.path.isdir(p)
-        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
+        when = _friendly_when(st.st_mtime)
         in_trash = is_trash or path.startswith(_trash() + "/")
         if in_trash:
             acts = [{"label": i18n.t("d_restore"), "say": f"restore {n} from the trash", "primary": True},
@@ -1559,20 +1808,31 @@ def show_files(a, ctx):
             acts = [{"label": i18n.t("d_open"), "say": f"show my files in {p}" if isdir else f"open the file {p}"}]
             if not isdir:
                 acts.append({"label": i18n.t("d_delete"), "say": f"delete the file {p}", "danger": True})
-        items.append({"title": (n + "/") if isdir else n, "subtitle": when if isdir else f"{_human_size(st.st_size)} · {when}",
+        items.append({"title": ("📁 " + n) if isdir else n, "subtitle": when if isdir else f"{_human_size(st.st_size)} · {when}",
                       "actions": acts})
     home = config.home().rstrip("/")
     shown = "~" + path[len(home):] if path.startswith(home) else path
     title = i18n.t("d_home") if path.rstrip("/") == home else (i18n.t("d_trash") if is_trash else shown)
     parent = os.path.dirname(path.rstrip("/")) or "/"
     up = i18n.t("d_home") if parent == home else (os.path.basename(parent) or "/")
-    blocks = ([{"type": "buttons", "items": [{"label": "↑ " + up, "say": f"show my files in {parent}"}]}]
-              if path.rstrip("/") not in ("", "/") else [])
-    blocks.append({"type": "list", "items": items} if items else {"type": "text", "text": i18n.t("d_empty_folder"), "dim": True})
+    nav = ([{"label": "↑ " + up, "say": f"show my files in {parent}"}] if path.rstrip("/") not in ("", "/") else []) + \
+        ([{"label": "Open in Files", "say": f"open {path} in files"}] if shutil.which("thunar") and not is_trash else [])
+    blocks = [{"type": "buttons", "items": nav}] if nav else []
+    if is_trash:
+        blocks.insert(0, {"type": "text", "text": "Deleted files wait here until you empty the trash. Press Restore to put one back where it was."
+                          if items else "The trash is empty: nothing has been deleted (or it was emptied).", "dim": True})
+    # pictures as pictures: a folder of photos shows thumbnails (click one to see it big), other files as the list
+    pics = [n for n in names if os.path.splitext(n)[1].lower() in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp") and not is_trash]
+    if pics:
+        blocks.append({"type": "gallery", "items": [{"src": os.path.join(path, n), "title": n, "say": f"open the file {os.path.join(path, n)}"}
+                                                    for n in pics]})
+        items = [it for it in items if it["title"] not in pics]
+    if items or (not is_trash and not pics):
+        blocks.append({"type": "list", "items": items} if items else {"type": "text", "text": i18n.t("d_empty_folder"), "dim": True})
     if is_trash and items:
         blocks.append({"type": "buttons", "items": [{"label": i18n.t("d_empty_trash"), "say": "empty the trash", "danger": True}]})
     show(ctx, {"id": "files", "replace": True, "title": title, "size": "l", "blocks": blocks})
-    return f"{len(items)} item(s) in {shown} are listed on the owner's screen" + (f" (the first {uispec.MAX_ITEMS} of more)" if cut else "") + "; do not repeat them, say one sentence at most."
+    return f"{len(items) + len(pics)} item(s) in {shown} are listed on the owner's screen" + (f" (the first {uispec.MAX_ITEMS} of more)" if cut else "") + "; do not repeat them, say one sentence at most."
 
 
 _IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif")
@@ -1603,7 +1863,7 @@ def _in_home(path):
 
 @tool("open_file", "Open one of the owner's files on the screen: text and code as a window, pictures as an image, "
       "music and video played, folders as a listing. Use for 'open the file X' / 'open ~/notes.txt'.",
-      {"path": STR}, ["path"], risk=READ)
+      {"path": STR, "edit": {"type": "boolean", "description": "true to change it in the text editor"}}, ["path"], risk=READ)
 def open_file(a, ctx):
     path = _path(a.get("path", ""))
     if not path:
@@ -1621,14 +1881,38 @@ def open_file(a, ctx):
     if ext in _IMAGE_EXT:
         show(ctx, {"id": "file:" + path, "replace": True, "title": name, "kind": "image", "size": "l",
                    "blocks": [{"type": "image", "src": path, "caption": f"{path} · {_human_size(size)}"},
-                              {"type": "buttons", "items": [{"label": i18n.t("d_delete"), "say": f"delete the file {path}", "danger": True}]}]})
+                              {"type": "buttons", "items": [{"label": "Set as wallpaper", "say": f"set {path} as my wallpaper"},
+                                                            {"label": "Print", "say": f"print the file {path}"},
+                                                            {"label": i18n.t("d_delete"), "say": f"delete the file {path}", "danger": True}]}]})
         return f"{name} is shown on the owner's screen. Say one sentence at most."
+    editor = next((e for e in ("mousepad", "gnome-text-editor", "gedit") if shutil.which(e)), None)
+    if a.get("edit") and editor and hasattr(ctx, "launch") and _display_available() and (_looks_like_text(path) or size == 0):
+        ctx.launch([editor, path], name=editor)
+        return f"opened {name} in the text editor to change it. Done: tell the owner in one sentence and call no other tool."
     if ext in _MEDIA_EXT:
         denv = media.desk_env()
         if denv is None and not media.has_audio():
             return "there is no screen or sound device to play it on"
         media.play_local(path, name, ext in _AUDIO_EXT)
         return f"now playing {name}. Say one sentence at most."
+    prog = {".pdf": "firefox", ".docx": "abiword", ".doc": "abiword", ".odt": "abiword", ".rtf": "abiword",
+            ".xlsx": "gnumeric", ".xls": "gnumeric", ".ods": "gnumeric", ".csv": "gnumeric",
+            ".pptx": "libreoffice", ".ppt": "libreoffice", ".odp": "libreoffice",
+            ".zip": "xarchiver", ".7z": "xarchiver", ".tar": "xarchiver", ".gz": "xarchiver", ".rar": "xarchiver"}.get(ext)
+    if prog and shutil.which(prog) and hasattr(ctx, "launch") and _display_available():
+        ctx.launch([prog, path], name=prog)
+        return f"opened {name} in {prog.capitalize()}. Done: tell the owner in one sentence and call no other tool."
+    if ext in (".pptx", ".ppt", ".odp", ".docx", ".odt", ".xlsx", ".ods", ".pdf") and not (prog and shutil.which(prog)) and \
+            not (ext == ".pdf" and any(shutil.which(v) for v in ("firefox", "mupdf", "zathura", "evince"))):
+        try:
+            text = document_text(path)[:uispec.MAX_TEXT]
+        except Exception:
+            text = ""
+        if text.strip():
+            show(ctx, {"id": "file:" + path, "replace": True, "title": name, "size": "l", "blocks": [
+                {"type": "text", "text": "The text of this document (no program here edits this kind of file; say \u201cinstall LibreOffice\u201d for one).", "dim": True},
+                {"type": "text", "text": text}]})
+            return f"{name} is shown as text on the owner's screen. Say one sentence at most."
     if ext == ".pdf" or not _looks_like_text(path):
         viewer = next((v for v in ("mupdf", "zathura", "evince", "xdg-open") if shutil.which(v)), None) if ext == ".pdf" else None
         if viewer and hasattr(ctx, "launch") and _display_available():
@@ -1648,7 +1932,9 @@ def open_file(a, ctx):
                        ".css", ".html", ".xml", ".csv", ".log")
     show(ctx, {"id": "file:" + path, "replace": True, "title": name, "size": "l",
                "blocks": [{"type": "code" if code_ext else "text", "text": text, "lang": ext.lstrip(".") if code_ext else ""},
-                          {"type": "buttons", "items": [{"label": i18n.t("d_delete"), "say": f"delete the file {path}", "danger": True}]}]})
+                          {"type": "buttons", "items": ([{"label": "Edit", "say": f"edit the file {path}", "primary": True}] if editor else []) +
+                                                        [{"label": "Print", "say": f"print the file {path}"},
+                                                         {"label": i18n.t("d_delete"), "say": f"delete the file {path}", "danger": True}]}]})
     return (f"{name} ({_human_size(size)}) is shown on the owner's screen" + ("" if shown_all else f" (the first {uispec.MAX_TEXT} characters; read_file can take the rest)") +
             "; do not repeat its contents, say one sentence at most.")
 
@@ -1663,6 +1949,89 @@ def _origins():
 
 def _save_origins(o):
     config.save_json(config.data("trash-origins.json"), o)
+
+
+@tool("extract_archive", "Unpack a zip / 7z / tar / rar archive into a folder next to it, and show that folder.",
+      {"path": STR}, ["path"], risk=CHANGE)
+def extract_archive(a, ctx):
+    path = _path(a.get("path", ""))
+    if not path or not os.path.isfile(path):
+        return f"error: there is no file {path}"
+    base = re.sub(r"(\.tar)?\.(zip|7z|rar|tar|gz|tgz|bz2|xz|zst)$", "", os.path.basename(path), flags=re.I) or "unpacked"
+    dest, n = os.path.join(os.path.dirname(path), base), 1
+    while os.path.exists(dest):
+        n += 1
+        dest = os.path.join(os.path.dirname(path), f"{base} ({n})")
+    os.makedirs(dest)
+    low = path.lower()
+    if re.search(r"\.(tar(\.\w+)?|tgz)$", low):
+        argv = ["tar", "-xf", path, "-C", dest, "--no-same-owner"]
+    elif shutil.which("7z"):
+        argv = ["7z", "x", "-y", f"-o{dest}", path]
+    elif low.endswith(".zip") and shutil.which("unzip"):
+        argv = ["unzip", "-q", path, "-d", dest]
+    else:
+        return "there is no program to unpack this kind of archive"
+    p = subprocess.run(argv, capture_output=True, text=True, timeout=900)
+    if p.returncode:
+        return f"could not unpack it: {(p.stderr or p.stdout).strip()[-300:]}"
+    # paths in an archive never land outside the new folder (7z/tar refuse absolute paths; check anyway)
+    real = os.path.realpath(dest)
+    for d, dirs, files in os.walk(dest):
+        for f in files + dirs:
+            if not os.path.realpath(os.path.join(d, f)).startswith(real + os.sep):
+                return "error: the archive tried to write outside its folder; stopped"
+    show_files({"path": dest}, ctx)
+    return f"unpacked {os.path.basename(path)} into {dest} and showed it. Done: tell the owner in one sentence and call no other tool."
+
+
+@tool("remove_software", "Uninstall a program the owner installed (an Alpine package or a Flathub app). Never the system's own parts.",
+      {"name": STR}, ["name"], risk=DESTRUCTIVE)
+def remove_software(a, ctx):
+    name = str(a.get("name", "")).strip().lower()
+    named = APP_NAMES.get(name, name)
+    if named.startswith("flathub:"):
+        if not shutil.which("flatpak"):
+            return "it is not installed"
+        p = subprocess.run(["flatpak", "uninstall", "-y", "--noninteractive", named[8:]], capture_output=True, text=True, timeout=600)
+        return f"removed {name}" if p.returncode == 0 else f"could not remove it: {(p.stderr or p.stdout).strip()[:200]}"
+    if not re.fullmatch(r"[a-z0-9][a-z0-9+._-]*", named):
+        return "error: not a program name"
+    try:
+        with open("/etc/apk/world") as f:
+            world = set(f.read().split())
+    except (OSError, ImportError):
+        world = set()
+    base = set()
+    try:
+        with open("/usr/share/llmos/base-packages") as f:
+            base = set(f.read().split())
+    except OSError:
+        pass
+    if named in base or named in ("python3", "labwc", "llama-server", "webkit2gtk-6.0", "gtk4.0", "alpine-base", "linux-lts", "musl"):
+        return f"{named} is part of the system itself and cannot be removed"
+    if world and named not in world:
+        return f"{named} is not installed (or it is part of something else)"
+    p = subprocess.run(["apk", "del", "--no-progress", named], capture_output=True, text=True, timeout=600)
+    return f"removed {named}" if p.returncode == 0 else f"could not remove it: {(p.stderr or p.stdout).strip()[:200]}"
+
+
+@tool("print_file", "Print one of the owner's files (PDF, picture, text, document) on the default printer, or a named one.",
+      {"path": STR, "copies": {"type": "integer"}, "printer": STR}, ["path"], risk=CHANGE)
+def print_file(a, ctx):
+    path = _path(a.get("path", ""))
+    if not path or not os.path.isfile(path):
+        return f"error: there is no file {path}"
+    if not shutil.which("lp"):
+        return "printing is not available on this system"
+    st = subprocess.run(["lpstat", "-d"], capture_output=True, text=True, timeout=10)
+    if not a.get("printer") and "no system default" in (st.stdout + st.stderr).lower():
+        return "no printer is set up yet: say 'printers' to find and add one"
+    argv = ["lp"] + (["-d", str(a["printer"])] if a.get("printer") else []) + (["-n", str(max(1, min(int(a.get("copies") or 1), 50)))]) + [path]
+    p = subprocess.run(argv, capture_output=True, text=True, timeout=60)
+    if p.returncode:
+        return f"could not print: {(p.stderr or p.stdout).strip()[:200]}"
+    return f"sent {os.path.basename(path)} to the printer. Done: tell the owner in one sentence."
 
 
 @tool("delete_file", "Move one of the owner's files or folders (inside the home folder) to the trash (~/.Trash), "
@@ -1698,6 +2067,7 @@ def delete_file(a, ctx):
     o = _origins()
     o[os.path.basename(dest)] = path
     _save_origins(o)
+    _undo_push("trash", (path, dest))
     if hasattr(ctx, "close_ui"):
         ctx.close_ui("file:" + path)
     return f"moved {os.path.basename(path)} to the trash ({dest}). Say one sentence at most."
@@ -1840,26 +2210,35 @@ def note_remove(a, ctx):
       "is none yet (the passphrase is typed into a form, never said aloud). Use for 'set up a passphrase', "
       "'encrypt my data', 'protect my files with a password'.", {}, [], risk=SAFE)
 def set_passphrase(a, ctx):
-    if config.settings.get("vault"):
-        return "the vault already exists (say 'lock' to lock it); the passphrase cannot be changed from here"
     if hasattr(ctx, "setup_vault"):
         return ctx.setup_vault()
+    if config.settings.get("vault"):
+        return "the vault already exists; the passphrase can be changed on the screen (say 'change my passphrase')"
     return "a passphrase can only be set at the screen or the console"
 
 
-@tool("screenshot", "Take a screenshot of the screen and show it (saved in ~/Pictures).", {}, [], risk=SAFE,
+@tool("screenshot", "Take a screenshot of the screen and show it (saved in ~/Pictures and copied). area=true lets the owner drag a box.",
+      {"area": {"type": "boolean"}}, [], risk=SAFE,
       available=lambda: shutil.which("grim") is not None and media.desk_env() is not None)
 def screenshot(a, ctx):
     d = os.path.join(config.home(), "Pictures")
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, time.strftime("screenshot-%Y%m%d-%H%M%S.png"))
     env = dict(os.environ, **(media.desk_env() or {}))
-    p = subprocess.run(["grim", path], capture_output=True, text=True, timeout=20, env=env)
+    argv = ["grim", path]
+    if a.get("area") and shutil.which("slurp"):
+        g = subprocess.run(["slurp"], capture_output=True, text=True, timeout=120, env=env)
+        if g.returncode != 0 or not g.stdout.strip():
+            return "screenshot cancelled (no area was chosen)"
+        argv = ["grim", "-g", g.stdout.strip(), path]
+    p = subprocess.run(argv, capture_output=True, text=True, timeout=60, env=env)
     if p.returncode != 0 or not os.path.exists(path):
         return f"could not take a screenshot: {(p.stderr or p.stdout).strip()[:200]}"
+    from . import clip
+    copied = clip.copy(path=path, mime="image/png")
     show(ctx, {"id": "screenshot", "replace": True, "title": os.path.basename(path), "kind": "image", "size": "l",
-               "blocks": [{"type": "image", "src": path, "caption": path}]})
-    return f"screenshot saved as {path} and shown. Say one sentence at most."
+               "blocks": [{"type": "image", "src": path, "caption": "Saved in Pictures" + (" and copied: paste it anywhere with Ctrl+V." if copied else ".")}]})
+    return f"screenshot saved as {path}" + (" and copied to the clipboard" if copied else "") + ". Say one sentence at most."
 
 
 @tool("real_quote", "Find REAL, attributed quotations by a person or on a topic (from Wikiquote) instead of "
@@ -1895,15 +2274,161 @@ def _display_available():
         (media.desk_env() is not None or shutil.which("cage") is not None)
 
 
-@tool("open_app", "Open a program for the owner to use directly. Text programs (editors, htop, w3m, games) take "
-      "over this console until they exit. Graphical programs open in a window on the screen: a terminal window "
-      "is 'foot'; a web browser is 'firefox-esr URL' (install it first with install_app if missing).",
-      {"command": {"type": "string", "description": "the command line, e.g. 'htop', 'w3m https://example.com', 'firefox-esr https://…'"},
+# ---- undo: the last few changes the owner can take back ("undo that", "oops", "put it back")
+_UNDO = []
+_UNDO_KEYS = ("appearance", "autonomy", "internet", "tor", "brain", "guidance", "speak_replies", "think", "language",
+              "settings_language", "focus")
+
+
+def _undo_push(kind, data):
+    _UNDO.append((kind, data, time.time()))
+    del _UNDO[:-20]
+
+
+def _settings_snapshot():
+    import copy
+    allv = config.settings.all()
+    return {k: copy.deepcopy(allv.get(k)) for k in _UNDO_KEYS}
+
+
+@tool("undo", "Take back the last change the owner made: a look or setting change, or a file moved to the trash.", {}, [], risk=CHANGE)
+def undo(a, ctx):
+    if not _UNDO:
+        return "there is nothing to undo"
+    kind, data, _ = _UNDO.pop()
+    if kind == "settings":
+        before = config.settings.get("internet")
+        for k, v in data.items():
+            if v is not None:
+                config.settings.set(k, v)
+        if config.settings.get("internet") != before:
+            system.apply_firewall(config.settings.get("internet"))
+        ui.reload_theme()
+        if hasattr(ctx, "redraw"):
+            ctx.redraw()
+        return "undone: the settings are back to how they were"
+    if kind == "move":
+        for now, before in reversed(data):
+            if os.path.exists(now) and not os.path.exists(before):
+                shutil.move(now, before)
+        return "undone: the files are back where they were"
+    if kind == "made":
+        try:
+            os.rmdir(data)
+            return f"undone: removed the new folder {os.path.basename(data)}"
+        except OSError:
+            return "the new folder is no longer empty, so it was left"
+    if kind == "trash":
+        src, dest = data
+        if os.path.lexists(src):
+            return f"error: {src} exists again, so the trashed copy was left in the trash"
+        os.makedirs(os.path.dirname(src), exist_ok=True)
+        shutil.move(dest, src)
+        o = _origins()
+        o.pop(os.path.basename(dest), None)
+        _save_origins(o)
+        return f"undone: {os.path.basename(src)} is back in {os.path.dirname(src)}"
+    return "there is nothing to undo"
+
+
+_VAGUE_LOOK = ("different", "new", "cool", "fun", "unique", "nice", "pretty", "fresh", "interesting", "custom", "random", "another")
+
+
+def _vague_look(look):
+    """'a calculator with a different theme': no colour named, so one of the palettes, not the same look again."""
+    w = str(look or "").lower()
+    if w and any(v in w for v in _VAGUE_LOOK) and not any(any(n in w for n in p[0]) for p in apps.PALETTES) \
+            and not any(ui.parse_color(x) for x in re.findall(r"[a-z]+", w)):
+        import random
+        return random.choice(["neon", "ocean", "sunset", "forest", "pastel", "retro", "gold", "space"])
+    return look
+
+
+@tool("make_app", "Make a small app for the owner and open it in a window. Ready at once: calculator, timer/stopwatch, "
+      "clock (world clock), unit converter, notepad, to-do list, sketch/drawing pad, calendar, password maker, dice/coin. "
+      "Anything else (a tip calculator, a water tracker, a quiz, a game…) is written for them. 'look' is how it should look "
+      "in the owner's words ('retro green', 'pink with big buttons'). To open an app made before use open_app.",
+      {"what": {"type": "string", "description": "the app, in the owner's words, e.g. 'calculator', 'habit tracker with streaks'"},
+       "look": {"type": "string", "description": "optional: colours, theme or style asked for"}}, ["what"], risk=CHANGE)
+def make_app(a, ctx):
+    what = str(a.get("what", "")).strip()
+    if not what:
+        return "error: say what the app is for"
+    look = _vague_look(str(a.get("look", "")).strip())
+    t = apps.match_template(what)
+    if t:
+        app = apps.from_template(t, look, what)
+        how = "ready-made"
+    else:
+        if hasattr(ctx, "expect"):
+            try:
+                ctx.expect(150, 1)
+            except Exception:
+                pass
+        cloud = bool(config.cloud()) and config.settings.get("brain", "local") != "local" and config.settings.get("internet") != "no"
+        app, how = apps.generate(what, look, use_cloud=cloud)
+        if not app:
+            return (f"error: {how}. The ready-made apps are a calculator, timer, clock, converter, notepad, to-do list, "
+                    "sketch pad, calendar, password maker and dice")
+    if hasattr(ctx, "show_app"):
+        ctx.show_app(app)
+    return (f"made the app '{app['title']}' ({how}) and opened it in a window; it is kept in ~/Apps and opens again with "
+            f"'open {app['title'].split(' (')[0].lower()}'. Done: tell the owner in one sentence and call no other tool.")
+
+
+@tool("manage_apps", "The owner's apps (made with make_app): action 'list' shows them; 'remove' deletes one by name.",
+      {"action": {"type": "string", "enum": ["list", "remove"]}, "name": STR}, ["action"],
+      risk=lambda a: DESTRUCTIVE if str(a.get("action")) == "remove" else SAFE)
+def manage_apps(a, ctx):
+    if str(a.get("action")) == "remove":
+        gone = apps.remove(a.get("name", ""))
+        if not gone:
+            return f"error: no app called '{a.get('name', '')}'"
+        if hasattr(ctx, "close_window"):
+            ctx.close_window("app-" + gone["id"])
+        return f"removed the app '{gone['title']}'. Say one sentence at most."
+    items = apps.installed()
+    if hasattr(ctx, "show_apps"):
+        ctx.show_apps()
+        return f"{len(items)} app(s) are listed on the owner's screen; do not repeat them, say one sentence at most."
+    return "apps: " + (", ".join(x["title"] for x in items) or "none yet")
+
+
+@tool("open_app", "Open a program for the owner to use directly, by what people call it ('the browser', 'files', "
+      "'text editor', 'spreadsheet', 'terminal', 'calculator') or its name. Web sites: use browse instead, never a "
+      "text-mode browser.",
+      {"command": {"type": "string", "description": "what to open, e.g. 'files', 'spreadsheet', 'terminal', 'gimp'"},
        "graphical": {"type": "boolean"}}, ["command"], risk=CHANGE)
 def open_app(a, ctx):
     cmd = str(a.get("command", "")).strip()
     if not cmd:
         return "error: empty command"
+    m = re.match(r"^\s*(?:w3m|lynx|links2?|elinks|firefox(?:-esr)?|chromium)\b\s*(?:-\S+\s+)*(?P<url>https?://\S+)?", cmd)
+    if m and _display_available() and hasattr(ctx, "launch") and (m.group("url") or not cmd.startswith(("firefox", "chromium"))):
+        return browse({"site": (m.group("url") or "").strip("'\"")} if m.group("url") else {}, ctx)
+    # an installed program by what people call it ("the browser", "a text editor", "file manager")
+    # (also when the words are the program's own command, "pavucontrol": a program with a menu entry is a window program)
+    # a command line with arguments ("thunar /root/Documents") is run as written below
+    is_command_line = len(cmd.split()) > 1 and shutil.which(cmd.split()[0])
+    if hasattr(ctx, "launch") and _display_available() and not is_command_line:
+        p = programs.find(cmd)
+        if p and p.get("terminal"):
+            rc = ctx.interactive(" ".join(programs.argv(p)))
+            return f"the owner used {p['name']}; it exited with code {rc}"
+        if p:
+            r = ctx.launch(programs.argv(p), name=p["name"])
+            if isinstance(r, str):
+                return f"error: {r}"
+            return f"opened {programs.label(p)} in a window. Done: tell the owner in one sentence and call no other tool."
+    # one of the owner's own apps ("open my calculator"), or a ready-made one made on the spot
+    if hasattr(ctx, "show_app") and not shutil.which(cmd.split()[0]):
+        app = apps.find(cmd)
+        if not app:
+            t = apps.match_template(cmd)
+            app = apps.from_template(t, "", cmd) if t else None
+        if app:
+            ctx.show_app(app)
+            return f"opened the app '{app['title']}'. Done: tell the owner in one sentence and call no other tool."
     prog = os.path.basename(cmd.split()[0])
     # "a terminal window" is foot on the screen; a bare shell asked for
     # graphically means the same thing
@@ -1915,8 +2440,11 @@ def open_app(a, ctx):
         if not _display_available():
             return "there is no screen attached (or the display server is missing), so graphical programs can't open; text programs still can"
         if hasattr(ctx, "launch"):
-            ctx.launch(["/bin/sh", "-c", cmd], name=prog)
-            return f"opened '{cmd}' in a window on the desk. Done: tell the owner in one sentence and call no other tool."
+            r = ctx.launch(["/bin/sh", "-c", cmd], name=prog)
+            if isinstance(r, str):
+                return f"error: {r}"
+            what = programs.EXTRA.get(prog, f"'{cmd}'")
+            return f"opened {what} in a window. Done: tell the owner in one sentence and call no other tool."
         if media.desk_env() is None:
             media.stop()   # a kiosk shows one thing at a time
         media.kiosk_launch(["/bin/sh", "-c", cmd], os.path.join(config.RUN, "gui.log"))
@@ -1999,3 +2527,252 @@ def _wifi_device():
         return next((d for d in sorted(os.listdir("/sys/class/net")) if d.startswith(("wlan", "wlp", "wlo", "wlx"))), None)
     except OSError:
         return None
+
+
+# ------------------------------------------------------------ everyday web and files (no guessing needed)
+
+SITES = {"youtube": "https://www.youtube.com", "google": "https://www.google.com", "gmail": "https://mail.google.com",
+         "bbc": "https://www.bbc.co.uk", "bbc news": "https://www.bbc.co.uk/news", "amazon": "https://www.amazon.com",
+         "netflix": "https://www.netflix.com", "facebook": "https://www.facebook.com", "wikipedia": "https://www.wikipedia.org",
+         "reddit": "https://www.reddit.com", "twitter": "https://x.com", "x": "https://x.com", "instagram": "https://www.instagram.com",
+         "outlook": "https://outlook.live.com", "hotmail": "https://outlook.live.com", "spotify": "https://open.spotify.com",
+         "google maps": "https://maps.google.com", "maps": "https://www.openstreetmap.org", "weather": "https://www.weather.gov",
+         "linkedin": "https://www.linkedin.com", "ebay": "https://www.ebay.com", "github": "https://github.com",
+         "chatgpt": "https://chatgpt.com", "claude": "https://claude.ai", "zoom": "https://zoom.us/join", "google meet": "https://meet.google.com", "google slides": "https://docs.google.com/presentation", "google docs": "https://docs.google.com", "google sheets": "https://sheets.google.com",
+         "whatsapp": "https://web.whatsapp.com", "duckduckgo": "https://duckduckgo.com", "yahoo": "https://www.yahoo.com",
+         "yahoo mail": "https://mail.yahoo.com", "icloud": "https://www.icloud.com", "office": "https://www.office.com",
+         "google docs": "https://docs.google.com", "google drive": "https://drive.google.com", "twitch": "https://www.twitch.tv",
+         "tiktok": "https://www.tiktok.com", "pinterest": "https://www.pinterest.com", "news": "https://news.google.com"}
+
+
+def _browser_open(ctx, url=None):
+    p = programs.find("browser")
+    if not p:
+        return None
+    if not _display_available() or not hasattr(ctx, "launch"):
+        return None
+    ctx.launch(programs.argv(p, url), name=p["name"])
+    return p["name"]
+
+
+@tool("browse", "Open the web browser: on a site ('youtube', 'bbc.co.uk', a full address) or on a web search, or just "
+      "open it. For the owner to look at the web themselves.",
+      {"site": {"type": "string", "description": "a site name or address (optional)"},
+       "search": {"type": "string", "description": "words to search the web for (optional)"}}, [])
+def browse(a, ctx):
+    import urllib.parse
+    site, q = str(a.get("site") or "").strip(), str(a.get("search") or "").strip()
+    url = None
+    if site:
+        key = site.lower().rstrip("/").removeprefix("www.")
+        if key in SITES:
+            url = SITES[key]
+        elif re.match(r"^https?://", site):
+            url = site
+        elif re.match(r"^[\w.-]+\.[a-z]{2,}(/\S*)?$", key):
+            url = "https://" + site
+        else:
+            q = q or site
+    if q and not url:
+        url = "https://duckduckgo.com/?q=" + urllib.parse.quote_plus(q)
+    name = _browser_open(ctx, url)
+    if not name:
+        return "error: there is no web browser here; say 'install firefox'"
+    what = f"on {url}" if url and not q else f"searching for '{q}'" if q else ""
+    drm = ""
+    if url and re.search(r"netflix|disneyplus|primevideo|amazon\.\w+/(?:gp/)?video|hulu|max\.com|hbomax|tv\.apple|open\.spotify|crunchyroll|peacocktv|paramountplus", url):
+        drm = (" Note: signing in works, but protected films, shows and Spotify music can't play in this browser on LLM OS "
+               "(the studios' copy protection isn't made for it); YouTube and most other video works.")
+    return f"opened {name} {what}.{drm} Done: tell the owner in one sentence and call no other tool.".replace("  ", " ")
+
+
+FOLDERS = {"documents": "Documents", "docs": "Documents", "downloads": "Downloads", "pictures": "Pictures", "photos": "Pictures",
+           "pics": "Pictures", "images": "Pictures", "music": "Music", "songs": "Music", "videos": "Videos", "movies": "Videos",
+           "desktop": "Desktop", "home": "", "files": "", "stuff": ""}
+KINDS = {"photos": (".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".bmp", ".tif", ".tiff"),
+         "pictures": (".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".bmp", ".tif", ".tiff"),
+         "images": (".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".bmp", ".svg"),
+         "videos": (".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v"), "music": (".mp3", ".flac", ".ogg", ".m4a", ".wav", ".opus"),
+         "songs": (".mp3", ".flac", ".ogg", ".m4a", ".wav", ".opus"), "documents": (".pdf", ".doc", ".docx", ".odt", ".txt", ".rtf", ".md", ".xlsx", ".xls", ".ods", ".csv", ".pptx"),
+         "pdfs": (".pdf",), "spreadsheets": (".xlsx", ".xls", ".ods", ".csv")}
+
+
+def folder(name):
+    """~/Documents for 'documents', the home folder for 'home', made if it is missing."""
+    sub = FOLDERS.get(str(name).lower().strip().removeprefix("my ").strip(), None)
+    if sub is None:
+        return None
+    p = os.path.join(config.home(), sub) if sub else config.home()
+    os.makedirs(p, exist_ok=True)
+    return p
+
+
+def _walk(root, limit=20000):
+    n = 0
+    for d, dirs, files in os.walk(root):
+        dirs[:] = [x for x in dirs if not x.startswith(".")]
+        for f in files:
+            if f.startswith("."):
+                continue
+            n += 1
+            if n > limit:
+                return
+            yield os.path.join(d, f)
+
+
+def find_paths(query, root=None):
+    """Files whose name matches the words (best first), newest first among equals."""
+    words = [w for w in re.findall(r"[a-z0-9]+", str(query).lower()) if w not in ("my", "the", "a", "file", "files", "about", "that", "i", "was", "on",
+                                                                                   "called", "named", "folder", "folders", "with", "in", "name")]
+    if not words:
+        return []
+    out = []
+    base = root or config.home()
+    folders = (os.path.join(d, x) for d, dirs, _ in os.walk(base) for x in dirs if not x.startswith(".") and "/." not in d)
+    import itertools
+    for p in itertools.chain(_walk(base), itertools.islice(folders, 5000)):
+        name = os.path.basename(p).lower()
+        score = sum(1 for w in words if w in name)
+        if score:
+            try:
+                out.append((score, os.path.getmtime(p), p))
+            except OSError:
+                pass
+    out.sort(key=lambda x: (-x[0], -x[1]))
+    return [p for _, _, p in out[:30]]
+
+
+@tool("find_files", "Find the owner's files by name ('my resume', 'tax pdf') and list them with open buttons.",
+      {"query": STR}, ["query"], risk=READ)
+def find_files(a, ctx):
+    hits = find_paths(a.get("query", ""))
+    if not hits:
+        return f"no file in the home folder matches '{a.get('query', '')}'"
+    home = config.home()
+    show(ctx, {"id": "find", "replace": True, "title": f"Found: {a.get('query', '')}", "size": "m", "blocks": [{"type": "list", "items": [
+        {"title": os.path.basename(p), "subtitle": os.path.dirname(p).replace(home, "~") + " · " + time.strftime("%b %d", time.localtime(os.path.getmtime(p))),
+         "actions": [{"label": "Open", "say": f"open the file {p}", "primary": True}, {"label": "Show folder", "say": f"show the folder {os.path.dirname(p)}"}]}
+        for p in hits[:20]]}]})
+    return f"{len(hits)} file(s) are listed on the owner's screen; do not repeat them, say one sentence at most."
+
+
+@tool("make_folder", "Make a new folder (in Documents unless a place is named) and show it.",
+      {"name": STR, "where": {"type": "string", "description": "documents, downloads, desktop, home or a path (optional)"}}, ["name"], risk=CHANGE)
+def make_folder(a, ctx):
+    name = re.sub(r"[/\\\0]", "-", str(a.get("name", "")).strip().strip("'\"")) or "New folder"
+    base = folder(a.get("where") or "documents") or _path(a.get("where"))
+    if not base or not _in_home(base):
+        return "error: folders are made inside the home folder"
+    p = os.path.join(base, name)
+    if os.path.exists(p):
+        return f"error: {p.replace(config.home(), '~')} already exists"
+    os.makedirs(p)
+    _undo_push("made", p)
+    show_files({"path": base}, ctx)
+    return f"made the folder {p.replace(config.home(), '~')}. Say one sentence at most."
+
+
+@tool("rename_file", "Rename one of the owner's files or folders; the extension is kept unless a new one is given.",
+      {"name": {"type": "string", "description": "the current name (or part of it) or path"}, "to": STR}, ["name", "to"], risk=CHANGE)
+def rename_file(a, ctx):
+    src = _path(a["name"]) if "/" in str(a.get("name", "")) else None
+    if not src or not os.path.exists(src):
+        hits = find_paths(a.get("name", ""))
+        exact = [h for h in hits if os.path.basename(h).lower() == str(a.get("name", "")).lower()]
+        src = (exact or hits or [None])[0]
+        if len(hits) > 1 and not exact:
+            return f"error: several files match '{a.get('name')}': " + ", ".join(os.path.basename(h) for h in hits[:5]) + " -- say which"
+    if not src or not _in_home(src):
+        return f"error: no file called '{a.get('name')}' in the home folder"
+    new = str(a.get("to", "")).strip().strip("'\"").replace("/", "-")
+    if not os.path.splitext(new)[1] and os.path.isfile(src):
+        new += os.path.splitext(src)[1]
+    dst = os.path.join(os.path.dirname(src), new)
+    if os.path.exists(dst):
+        return f"error: {new} already exists there"
+    os.rename(src, dst)
+    _undo_push("move", [(dst, src)])
+    return f"renamed {os.path.basename(src)} to {new}. Say one sentence at most."
+
+
+@tool("move_files", "Move or copy files between the owner's folders or to a USB stick: a kind of file (photos, videos, music, "
+      "documents, pdfs, everything) or one file by name, from a folder (documents, downloads, pictures, desktop, ...) to another "
+      "folder or 'usb'.",
+      {"what": STR, "from": STR, "to": STR, "copy": {"type": "boolean"}}, ["what", "to"], risk=CHANGE)
+def move_files(a, ctx):
+    from . import syspanels
+    what = str(a.get("what", "")).lower().strip()
+    src_dir = folder(a.get("from") or "home") or _path(a.get("from"))
+    to = str(a.get("to", "")).lower().strip()
+    if to in ("usb", "usb stick", "stick", "flash drive", "the usb", "my usb", "external drive", "drive"):
+        drives = syspanels.removable()
+        if not drives:
+            return "error: no USB stick is plugged in"
+        d = drives[0]
+        ok, where = (True, d["mountpoint"]) if d["mountpoint"] else syspanels.mount(d["path"])
+        if not ok:
+            return f"error: the USB stick could not be opened: {where}"
+        dest, copy = where, True
+    else:
+        dest, copy = folder(to) or _path(a.get("to")), bool(a.get("copy"))
+    if not dest or not os.path.isdir(dest) or (not _in_home(dest) and not dest.startswith(("/media/", "/run/media/"))):
+        return f"error: no folder '{a.get('to')}'"
+    kind = KINDS.get(what.removeprefix("all ").removeprefix("my ").removeprefix("the ").strip())
+    if kind or what in ("everything", "all", "all files"):
+        files = [p for p in _walk(src_dir) if os.path.dirname(p) == src_dir and (not kind or p.lower().endswith(kind))]
+    else:
+        files = find_paths(what, src_dir)[:1]
+    if not files:
+        where = src_dir.replace(config.home(), "~")
+        return (f"there are no {what.removeprefix('all ').removeprefix('my ').removeprefix('the ').strip()} in {where}" if kind
+                else f"error: nothing matching '{a.get('what')}' in {where}")
+    done, moves = 0, []
+    for p in files:
+        target = os.path.join(dest, os.path.basename(p))
+        if os.path.exists(target):
+            continue
+        if copy:
+            shutil.copy2(p, target) if os.path.isfile(p) else shutil.copytree(p, target)
+        else:
+            shutil.move(p, target)
+            moves.append((target, p))
+        done += 1
+    if moves:
+        _undo_push("move", moves)
+    if dest.startswith(("/media/", "/run/media/")):
+        subprocess.run(["sync"], timeout=120)
+    return (f"{'copied' if copy else 'moved'} {done} file(s) to {dest.replace(config.home(), '~')}"
+            + (" (and wrote everything to the stick; eject it before pulling it out)" if copy and dest.startswith(("/media/", "/run/media/")) else "")
+            + ". Say one sentence at most.")
+
+
+@tool("open_latest", "Open the newest file in a folder (default Downloads): 'open what I just downloaded'.",
+      {"where": STR}, [], risk=READ)
+def open_latest(a, ctx):
+    base = folder(a.get("where") or "downloads")
+    files = sorted(_walk(base), key=lambda p: -os.path.getmtime(p)) if base else []
+    if not files:
+        return f"error: {str(a.get('where') or 'Downloads')} is empty"
+    return open_file({"path": files[0]}, ctx)
+
+
+@tool("which_file", "Ask the owner which file they mean when they say 'this' or 'that' without one open.", {"request": STR}, [], risk=READ)
+def which_file(a, ctx):
+    req = str(a.get("request", "") or getattr(ctx, "current_request", "") or "")
+    verb = re.match(r"\s*(?:please\s+)?(print|save)\b", req, re.I)
+    if verb and _display_available() and shutil.which("wtype"):
+        from . import wm
+        ok, prog = wm.key_to_front(verb.group(1).lower())
+        if ok:
+            return (f"opened the print window of {prog}: choose the printer and press Print" if verb.group(1).lower() == "print"
+                    else f"pressed Save in {prog}") + ". Done: tell the owner in one sentence and call no other tool."
+    if re.search(r"wallpaper|background", req, re.I):
+        return ("which picture? Open it first (say 'show my photos' and press Set as wallpaper on it), or say "
+                "'use a photo of the sea as my wallpaper' for a new one")
+    if re.search(r"\b(video|song|clip|movie)\b", str(a.get("request", "")), re.I):
+        return ("which one? Say what to play (for example 'play the moon landing video' or 'play some jazz'), "
+                "or 'show my videos' to pick one of yours")
+    v = (re.match(r"\s*(?:please\s+)?(\w+)", req) or [None, "open"])[1].lower()
+    v = v if v in ("open", "print", "copy", "move", "rename", "send", "email", "attach", "delete", "show") else "open"
+    return (f"which file? Say its name (for example '{v} recipe.pdf'), or say 'find my recipe' to look for it, "
+            "or open your files and use the buttons there")

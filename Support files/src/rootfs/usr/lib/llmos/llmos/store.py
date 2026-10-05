@@ -289,6 +289,8 @@ def _clock(text):
             h = 0
     elif h < 12 and any(w in text for w in ("evening", "night", "tonight", "afternoon")):
         h += 12
+    elif 1 <= h <= 7 and "morning" not in text and "early" not in text:
+        h += 12              # "at 3" means 3 in the afternoon; 3 in the night is said so ("3 am", "early morning")
     if not (0 <= h < 24 and 0 <= mi < 60):
         raise WhenError(f"'{h}:{mi:02d}' is not a valid time")
     return h, mi

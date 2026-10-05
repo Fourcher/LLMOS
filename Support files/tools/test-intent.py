@@ -12,6 +12,32 @@ from llmos import intent  # noqa: E402
 intent._note_exists = lambda ref: True      # the host has no lists; the VM checks the real store
 
 CASES = {
+    # 1.7.0: everyday wordings found by the use-case run and the XFCE parity check
+    "music": ("play_media", {"query": "chill instrumental music mix"}),
+    "play something": ("play_media", {"query": "chill instrumental music mix"}),
+    "start a video call": ("browse", {"site": "https://meet.google.com/new"}),
+    "play the video call song": None,
+    "i deleted something by accident": ("show_files", {"path": "~/.Trash"}),
+    "open the recycle bin": ("show_files", {"path": "~/.Trash"}),
+    "install spotify": ("install_app", {"packages": "spotify"}),
+    "i need zoom": None,
+    "uninstall spotify": ("remove_software", {"name": "spotify"}),
+    "unzip ~/Downloads/photos.zip": ("extract_archive", {"path": "~/Downloads/photos.zip"}),
+    "edit the file ~/notes.txt": ("open_file", {"path": "~/notes.txt", "edit": True}),
+    "print the file ~/a.pdf": ("print_file", {"path": "~/a.pdf"}),
+    "set ~/Pictures/beach.jpg as my wallpaper": ("set_wallpaper", {"subject": "~/Pictures/beach.jpg"}),
+    "snip": ("screenshot", {"area": True}),
+    "screenshot this window": ("screenshot", {}),
+    "set my time zone to paris": ("change_setting", {"setting": "timezone", "value": "paris"}),
+    "use dark mode": ("set_appearance", {"theme": "dark"}),
+    "keep the screen on": ("change_setting", {"setting": "screen_off", "value": "never"}),
+    "sleep after 30 minutes": ("change_setting", {"setting": "sleep_after", "value": "30"}),
+    "closing the lid should do nothing": ("change_setting", {"setting": "lid", "value": "nothing"}),
+    "do not disturb": ("change_setting", {"setting": "do_not_disturb", "value": "on"}),
+    "turn on night light": ("change_setting", {"setting": "night_light", "value": "on"}),
+    "change my password": ("set_passphrase", {}),
+    "don’t turn off the screen": ("change_setting", {"setting": "screen_off", "value": "never"}),
+    "show all my programs": ("manage_apps", {"action": "list"}),
     # email account spelled out -> every field passed through
     "set up my email: address jordan@localhost, password test, imap_host 127.0.0.1, imap_port 143, imap_ssl false, "
     "smtp_host 127.0.0.1, smtp_port 25, smtp_security none":
@@ -29,15 +55,15 @@ CASES = {
     "add my email address to the signature": None,
     "what's in my inbox?": None,
     # the look
-    "make everything green with square corners": ("set_appearance", {"color": "green", "accent": "green", "corners": "square"}),
-    "make everything purple": ("set_appearance", {"color": "purple", "accent": "purple"}),
+    "make everything green with square corners": ("set_appearance", {"theme": "green", "corners": "square"}),
+    "make everything purple": ("set_appearance", {"theme": "purple"}),
     "Make the background dark blue": ("set_appearance", {"background": "dark blue"}),
     "turn the text green, with rounded corners": ("set_appearance", {"color": "green", "corners": "rounded"}),
     "paint the background #112233": ("set_appearance", {"background": "#112233"}),
     "make the frames orange": ("set_appearance", {"accent": "orange"}),
     "square corners": ("set_appearance", {"corners": "square"}),
     "no sharp corners": ("set_appearance", {"corners": "rounded"}),
-    "make everything default": ("set_appearance", {"color": "default", "accent": "default"}),
+    "make everything default": ("set_appearance", {"theme": "default"}),
     "make everything bigger": ("set_appearance", {"scale": "bigger"}),
     "bigger text please": ("set_appearance", {"scale": "bigger"}),
     "make the text smaller": ("set_appearance", {"scale": "smaller"}),
@@ -48,7 +74,7 @@ CASES = {
     "make everything faded": None,
     "change the theme to dark": None,
     "set the display to sleep": None,
-    "make a folder called projects in my home": None,
+    "make a folder called projects in my home": ("make_folder", {"name": "projects", "where": "home"}),
     "make everything green?": None,
     "make the text larger please": ("set_appearance", {"scale": "bigger"}),
     "turn off animations": ("set_appearance", {"motion": "off"}),
@@ -217,7 +243,7 @@ CASES = {
     "add the model TheOrg/Some-Model-GGUF Some-Model-Q4_K_M.gguf": ("add_model", {"repo": "TheOrg/Some-Model-GGUF", "file": "Some-Model-Q4_K_M.gguf"}),
     # connectors (the apps of this OS)
     "show connectors": ("show_panel", {"panel": "connectors"}),
-    "open the apps": ("show_panel", {"panel": "connectors"}),
+    "open the apps": ("manage_apps", {"action": "list"}),
     "open integrations": ("show_panel", {"panel": "connectors"}),
     "add a connector": ("manage_connectors", {"action": "add"}),
     "add a connector named weather that runs uvx mcp-server-weather": ("manage_connectors", {"action": "add", "name": "weather", "command": "uvx mcp-server-weather", "transport": "stdio"}),
@@ -253,7 +279,7 @@ CASES = {
     "put everything in Chinese": ("set_appearance", {"language": "Chinese"}),
     "switch everything back to English": ("set_appearance", {"language": "English"}),
     "put the settings in Chinese but keep everything else in English": ("set_appearance", {"settings_language": "Chinese", "language": "English"}),
-    "make everything purple": ("set_appearance", {"color": "purple", "accent": "purple"}),
+    "make everything purple": ("set_appearance", {"theme": "purple"}),
     "shut down the computer": ("system_power", {"action": "shutdown"}),
     "restart": ("system_power", {"action": "restart"}),
     "power off now": ("system_power", {"action": "shutdown"}),
@@ -262,7 +288,7 @@ CASES = {
     # replies need a mail account (none on the build host) -> model / no-account guard
     "reply to Alice that Friday at 7 works and I'll bring dessert": None,
     # review 2026-10-04: words after "speak", "use" or "switch to" are a language only when they name one
-    "speak louder": None, "speak slower": None, "speak up": None, "use firefox": None, "switch to firefox": None,
+    "speak louder": None, "speak slower": None, "speak up": None, "use firefox": ("browse", {}), "switch to firefox": None,
     "use python": None, "use gemma": None, "talk to me in riddles": None, "put everything in bold": None,
     "speak spanish": ("set_appearance", {"language": "spanish"}),
     "speak in spanish": ("set_appearance", {"language": "spanish"}),
@@ -274,7 +300,7 @@ CASES = {
     "put the settings in order": None,
     # "no corners and everything to be rounded" (the brief): no corners means rounded
     "no corners": ("set_appearance", {"corners": "rounded"}),
-    "make everything purple with no corners": ("set_appearance", {"color": "purple", "accent": "purple", "corners": "rounded"}),
+    "make everything purple with no corners": ("set_appearance", {"theme": "purple", "corners": "rounded"}),
 }
 
 bad = 0

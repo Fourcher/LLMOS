@@ -1,0 +1,22 @@
+<!-- llmos-app: id=sketch; title=Sketch; size=l; words=sketch draw drawing paint painting doodle whiteboard canvas -->
+<style>
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.tools input[type=color]{width:42px;height:36px;padding:2px;border-radius:8px;border:1px solid var(--line);background:none}
+.tools .sw{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);padding:0;min-width:0}
+canvas{width:100%;height:calc(100% - 52px);background:#fff;border-radius:var(--r);touch-action:none;cursor:crosshair}
+</style>
+<div class="tools"><input type="color" id="col" value="#222222"><span id="sws"></span><label>Size <input type="range" id="sz" min="1" max="40" value="4"></label><button id="er">Eraser</button><button id="un">Undo</button><button id="cl">Clear</button><button id="sv" class="primary">Save picture</button></div>
+<canvas id="cv"></canvas>
+<script>
+const $=id=>document.getElementById(id),cv=$("cv"),cx=cv.getContext("2d");let draw=false,last=null,erase=false,undo=[];
+["#222222","#e63946","#f4a261","#2a9d8f","#457b9d","#8e44ad","#ffffff"].forEach(c=>{const b=document.createElement("button");b.className="sw";b.style.background=c;b.onclick=()=>{$("col").value=c;erase=false};$("sws").append(b)});
+function fit(){const img=cv.width?cx.getImageData(0,0,cv.width,cv.height):null;cv.width=cv.clientWidth;cv.height=cv.clientHeight;cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height);if(img)cx.putImageData(img,0,0)}
+function pos(e){const r=cv.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top]}
+cv.onpointerdown=e=>{draw=true;last=pos(e);undo.push(cx.getImageData(0,0,cv.width,cv.height));if(undo.length>30)undo.shift();cv.setPointerCapture(e.pointerId)};
+cv.onpointermove=e=>{if(!draw)return;const p=pos(e);cx.strokeStyle=erase?"#fff":$("col").value;cx.lineWidth=+$("sz").value*(erase?3:1);cx.lineCap=cx.lineJoin="round";cx.beginPath();cx.moveTo(...last);cx.lineTo(...p);cx.stroke();last=p};
+cv.onpointerup=()=>{draw=false;LLMOS.save({png:cv.toDataURL("image/png")})};
+$("er").onclick=()=>{erase=!erase;$("er").classList.toggle("primary",erase)};$("col").oninput=()=>{erase=false;$("er").classList.remove("primary")};
+$("un").onclick=()=>{const u=undo.pop();if(u)cx.putImageData(u,0,0)};$("cl").onclick=()=>{undo.push(cx.getImageData(0,0,cv.width,cv.height));cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height)};
+$("sv").onclick=()=>LLMOS.export("sketch.png",cv.toDataURL("image/png"));
+new ResizeObserver(fit).observe(cv);
+LLMOS.load(s=>{if(s&&s.png){const i=new Image();i.onload=()=>cx.drawImage(i,0,0);i.src=s.png}});
+</script>

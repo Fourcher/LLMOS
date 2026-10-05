@@ -1,0 +1,14 @@
+<!-- llmos-app: id=tictactoe; title=Tic-tac-toe; size=s; words=tictactoe tic-tac-toe noughts crosses xo -->
+<style>.b{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:330px;margin:10px auto}.b button{aspect-ratio:1;font-size:44px;font-weight:700}
+.st{text-align:center;font-size:18px;margin:6px 0}.row{display:flex;gap:8px;justify-content:center}.sc{text-align:center;color:var(--dim)}</style>
+<div class="st" id="st"></div><div class="b" id="b"></div><div class="row"><button id="nw" class="primary">New game</button><button id="md">Vs computer</button></div><div class="sc" id="sc"></div>
+<script>
+const $=id=>document.getElementById(id);let B,turn,over,cpu=true,score={X:0,O:0,draw:0};const W=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function win(b){for(const w of W)if(b[w[0]]&&b[w[0]]===b[w[1]]&&b[w[1]]===b[w[2]])return b[w[0]];return b.every(x=>x)?"draw":null}
+function mm(b,p){const r=win(b);if(r==="O")return 1;if(r==="X")return -1;if(r)return 0;let best=p==="O"?-2:2,mv=-1;for(let i=0;i<9;i++)if(!b[i]){b[i]=p;const s=mm(b,p==="O"?"X":"O")[0];b[i]="";if(p==="O"?s>best:s<best){best=s;mv=i}}return[best,mv]}
+function draw(){$("b").innerHTML="";B.forEach((v,i)=>{const c=document.createElement("button");c.textContent=v;c.style.color=v==="X"?"var(--accent)":"var(--fg)";c.onclick=()=>play(i);$("b").append(c)});
+ const r=win(B);$("st").textContent=r?(r==="draw"?"Draw!":r+" wins!"):turn+"'s turn";$("sc").textContent=`X ${score.X} · O ${score.O} · draws ${score.draw}`;$("md").textContent=cpu?"Vs computer":"Two players"}
+function play(i){if(over||B[i])return;B[i]=turn;turn=turn==="X"?"O":"X";let r=win(B);if(!r&&cpu&&turn==="O"){const m=Math.random()<.15?B.map((v,j)=>v?-1:j).filter(j=>j>=0)[0]:mm(B.slice(),"O")[1];B[m]="O";turn="X";r=win(B)}
+ if(r){over=true;score[r]++;LLMOS.save({score})}draw()}
+function nw(){B=Array(9).fill("");turn="X";over=false;draw()}$("nw").onclick=nw;$("md").onclick=()=>{cpu=!cpu;nw()};LLMOS.load(s=>{if(s&&s.score)score=s.score;nw()});
+</script>

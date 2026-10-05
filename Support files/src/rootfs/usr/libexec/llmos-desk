@@ -12,7 +12,7 @@ rm -f /var/cache/llmos/labwc/rc.xml   # a lock-screen keybind profile left by a 
 export XDG_RUNTIME_DIR=/run/llmos
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
 export XDG_CONFIG_DIRS=/etc/xdg XDG_DATA_DIRS=/usr/share:/usr/local/share
-export XDG_SESSION_TYPE=wayland
+export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=wlroots   # (the screen-sharing portal for calls looks for it)
 # GTK and WebKit look for an accessibility bus and a settings portal at
 # start-up and wait for them to time out; there are none here
 export GTK_A11Y=none NO_AT_BRIDGE=1 GTK_USE_PORTAL=0

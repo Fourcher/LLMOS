@@ -1,0 +1,15 @@
+<!-- llmos-app: id=notes; title=Notepad; size=m; words=notepad notes note scratchpad memo journal diary jot -->
+<style>
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:8px}.bar span{color:var(--dim);font-size:13px;margin-left:auto}
+textarea{width:100%;height:calc(100% - 46px);resize:none;font:inherit;font-size:16px;line-height:1.55;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+</style>
+<div class="bar"><button id="clr">Clear</button><button id="cp">Copy all</button><span id="st"></span></div>
+<textarea id="tx" placeholder="Write anything. It is kept automatically."></textarea>
+<script>
+const $=id=>document.getElementById(id);let t=null;
+function words(){const n=($("tx").value.match(/\S+/g)||[]).length;$("st").textContent=n+" words"}
+$("tx").oninput=()=>{words();clearTimeout(t);t=setTimeout(()=>{LLMOS.save({text:$("tx").value});$("st").textContent+=" · saved"},600)};
+$("clr").onclick=()=>{if(confirm("Clear the page?")){$("tx").value="";LLMOS.save({text:""});words()}};
+$("cp").onclick=()=>{$("tx").select();document.execCommand("copy")};
+LLMOS.load(s=>{$("tx").value=(s&&s.text)||"";words();$("tx").focus()});
+</script>

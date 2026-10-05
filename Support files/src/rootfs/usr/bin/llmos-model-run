@@ -13,4 +13,6 @@ while :; do
 done
 
 # no network needed to serve; bound to 127.0.0.1 inside serve-argv
+# under memory pressure the model goes first (its supervisor starts it again in seconds), not the owner's browser
+echo 800 > /proc/self/oom_score_adj 2>/dev/null || true
 exec $argv

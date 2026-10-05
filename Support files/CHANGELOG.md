@@ -4,6 +4,74 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.0 — 2026-10-05
+Useful, not just pretty: real apps, programs that behave, a conversation that
+never needs clearing, a living background, and what a stock Linux desktop
+does, asked for in plain words. Checked against a list of 283 everyday tasks
+(the 93 must-work ones run on the real OS, failures fixed and run again), an
+item-by-item map of what stock Alpine + XFCE offers (809 items; a 60-task
+side-by-side run of the everyday ones), and reviews from four kinds of user.
+
+- **One conversation that never needs clearing.** A follow-up continues the
+  topic in progress; something unrelated starts clean; earlier topics come back
+  as short notes when asked about, so the model never drowns in old messages
+  (the same for the online models). "New topic", side chats in their own
+  windows, Conversations to resume or forget a topic.
+- **Apps that work.** "Make me a calculator" (or a timer, notes, to-do,
+  converter, calendar, sketch pad, password generator, dice, a tracker that
+  sets itself up from what you ask for (water, steps, budget, sleep…), tip
+  splitter, countdown, flashcards, tic-tac-toe, snake) opens a working app at
+  once; "…with a forest theme" keeps that look; anything else is written by
+  the model. Apps can't reach the network and keep their data.
+- **Programs.** Firefox, Files (Thunar), a text editor, image viewer, word
+  processor, spreadsheet, archive manager, sound mixer and a terminal are
+  installed and open by what people call them. "Install Spotify / VS Code /
+  GIMP" installs from Alpine or Flathub; "uninstall …" removes it. Window
+  control in words: switch to, maximize, minimize, close, force quit a frozen
+  one, put the browser on the left, show the desktop, browser back / reload /
+  new tab. A program started for you never freezes the desk any more.
+- **Looks as whole themes.** Dark mode is a neutral dark look (no bright
+  wallpaper left behind); "ocean", "retro terminal", "make everything purple"
+  are coherent palettes with readable text; fonts (sans, serif, mono, pixel)
+  apply everywhere; programs follow dark mode, the font and the terminal
+  colours. "Go back to the default theme" resets it.
+- **A living background**, dark by default: slow, surreal colour fields that
+  breathe while idle, swirl while the model thinks, ripple where you click;
+  light on the processor (it slows itself on weak graphics).
+- **System panels**, instant even while the model is busy: task manager, USB
+  drives (open, eject), displays (resolution, extend/mirror, rotate), sound,
+  Wi-Fi, Bluetooth, printers (add, test page, default), keyboard and mouse,
+  storage clean-up, updates, about this computer. Plain words work too: "make
+  the mouse faster", "reverse scrolling", "eject the USB stick", "set the
+  resolution to 1920x1080", "the screen is upside down".
+- **Everyday system things:** screenshots (Print Screen, saved and copied),
+  clipboard history (Super+V), camera and microphone check, time zone and
+  network time, screen off when idle / keep the screen on, sleep after a while,
+  lid closes to sleep, low-battery warning, night light, do not disturb,
+  programs' notifications, lock with Super+L, change the passphrase, the
+  screen scaled for high-resolution laptops (programs too), edit / print /
+  unzip files, your own photo as wallpaper, a trash you can restore from.
+- **Is it installed?** The status bar says when LLM OS is running from the USB
+  stick, with Install in the power menu; "is this running off the USB?"
+  answers plainly.
+- **Safer by default.** The assistant now asks before anything irreversible
+  (it used to act on its own unless set otherwise); email that leaves,
+  emptying the trash and removing programs always ask; and once it has read a
+  web page, a file or an email in a request, any change it makes is shown
+  first (such text can carry instructions meant to trick it). Delete buttons
+  ask "Sure?" first. Notes meant for the model never reach the screen.
+- **For everyday people:** "check my email" opens your webmail (asked once);
+  "write an email to…" writes it for you to paste; "print this" opens the
+  print window of the program in front; photos show as pictures; answers that
+  need reading stay up; the Windows key brings LLM OS back over any program.
+- **Known limits:** programs run as the computer's single owner account
+  (root), so a few apps warn about it; films and music with copy protection
+  (Netflix, Disney+, Spotify) can sign in but not play; Spotify, Zoom and
+  Steam from Flathub are made for Intel/AMD PCs only.
+- Fixes: Settings, Lists and the top/bottom bar buttons respond at once; "dark
+  mode" no longer leaves an orange wallpaper; "music" plays music; "start a
+  video call" opens a call (it used to play a song called "Video Call").
+
 ## 1.6.1 — 2026-10-05
 The first run, after booting a real PC: clearer, bigger, fitted to the
 computer, and connecting Claude or ChatGPT without typing a key.

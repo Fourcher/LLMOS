@@ -19,7 +19,7 @@
     <div class="orb big" id="lock-orb"><i class="halo"></i></div>
     <div class="brand">LLM OS</div>
     <div class="sub" data-s="locked"></div>
-    <div id="lock-note" class="error"></div>
+    <div id="lock-note" class="note"></div>
     <input id="lock-pass" type="password" autocomplete="off" spellcheck="false" data-ph="passphrase">
     <div class="row"><button id="lock-go" class="btn primary" data-s="d_unlock"></button></div>
     <div id="lock-error" class="error"></div>
@@ -45,6 +45,7 @@
 
 <!-- the desk -->
 <section id="desk" class="hidden">
+  <canvas id="backdrop" aria-hidden="true"></canvas>
   <header id="top">
     <div class="left"><span class="brand small">LLM OS</span><span id="greet" class="dim"></span></div>
     <div id="clock" class="clock"></div>
@@ -89,6 +90,7 @@
   <div id="overlay" class="hidden"></div>
 </section>
 
+<script src="desk-bg.js"></script>
 <script src="desk.js"></script>
 </body>
 </html>

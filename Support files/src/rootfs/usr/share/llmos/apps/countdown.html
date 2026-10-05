@@ -1,0 +1,12 @@
+<!-- llmos-app: id=countdown; title=Countdown; size=s; words=countdown days until how many days birthday vacation event deadline -->
+<style>.add{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}.add input{flex:1;min-width:120px}
+.c{background:var(--card);border-radius:var(--r);padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}.c b{font-size:30px;min-width:70px;text-align:center}.c div{flex:1}.c span{color:var(--dim);font-size:13px;display:block}.c button{background:none;border:0;color:var(--dim)}</style>
+<div class="add"><input id="nm" placeholder="What? (e.g. Vacation)"><input id="dt" type="date"><button class="primary" id="ad">Add</button></div><div id="ls"></div>
+<script>
+const $=id=>document.getElementById(id);let C=[];
+function draw(){const now=new Date();now.setHours(0,0,0,0);$("ls").innerHTML="";C.sort((a,b)=>a.d.localeCompare(b.d)).forEach((c,i)=>{const d=Math.round((new Date(c.d+"T00:00")-now)/864e5);const el=document.createElement("div");el.className="c";
+ el.innerHTML=`<b>${Math.abs(d)}</b><div><span></span>${d===0?"Today!":d>0?(d===1?"day to go":"days to go"):(d===-1?"day ago":"days ago")}</div><button>×</button>`;el.querySelector("span").textContent=c.n+" · "+new Date(c.d+"T00:00").toLocaleDateString();
+ el.querySelector("button").onclick=()=>{C.splice(i,1);LLMOS.save({C});draw()};$("ls").append(el)});if(!C.length)$("ls").innerHTML='<p style="color:var(--dim)">Add something to count down to.</p>'}
+$("ad").onclick=()=>{if(!$("dt").value)return;C.push({n:$("nm").value.trim()||"Event",d:$("dt").value});$("nm").value="";LLMOS.save({C});draw()};
+LLMOS.load(s=>{C=(s&&s.C)||[];draw()});setInterval(draw,60000);
+</script>

@@ -1,0 +1,17 @@
+<!-- llmos-app: id=flashcards; title=Flashcards; size=m; words=flashcards flash cards study quiz vocabulary memorize revise revision learn -->
+<style>.card{background:var(--card);border-radius:var(--r);min-height:180px;display:grid;place-items:center;text-align:center;padding:20px;font-size:24px;cursor:pointer;user-select:none;margin:10px 0}
+.card small{display:block;color:var(--dim);font-size:13px;margin-top:8px}.row{display:flex;gap:6px;flex-wrap:wrap}.row button{flex:1}.add{display:flex;gap:6px;margin-top:10px}.add input{flex:1;min-width:0}.st{color:var(--dim);font-size:13px}</style>
+<div class="st" id="st"></div><div class="card" id="cd"></div>
+<div class="row"><button id="pv">‹ Back</button><button id="no">Again</button><button class="primary" id="ok">Got it</button><button id="sh">Shuffle</button></div>
+<div class="add"><input id="q" placeholder="Front (question)"><input id="a" placeholder="Back (answer)"><button id="ad">Add</button></div>
+<script>
+const $=id=>document.getElementById(id);let D=[],i=0,flip=false;
+function draw(){$("st").textContent=D.length?`Card ${i+1} of ${D.length} · known ${D.filter(x=>x.k).length}`:"No cards yet: add some below.";const c=D[i];
+ $("cd").innerHTML=c?`${flip?c.a:c.q}<small>${flip?"answer":"click to see the answer"}</small>`:"…";$("cd").querySelector&&0}
+function save(){LLMOS.save({D})}
+$("cd").onclick=()=>{flip=!flip;draw()};$("ok").onclick=()=>{if(D[i]){D[i].k=1;save()}flip=false;i=(i+1)%Math.max(1,D.length);draw()};$("no").onclick=()=>{if(D[i]){D[i].k=0;save()}flip=false;i=(i+1)%Math.max(1,D.length);draw()};
+$("pv").onclick=()=>{flip=false;i=(i-1+D.length)%Math.max(1,D.length);draw()};$("sh").onclick=()=>{D.sort(()=>Math.random()-.5);i=0;flip=false;save();draw()};
+$("ad").onclick=()=>{const q=$("q").value.trim(),a=$("a").value.trim();if(!q||!a)return;D.push({q,a});$("q").value="";$("a").value="";save();draw()};$("a").onkeydown=e=>{if(e.key==="Enter")$("ad").click()};
+document.addEventListener("keydown",e=>{if(e.target.tagName==="INPUT")return;if(e.key===" "){e.preventDefault();$("cd").click()}if(e.key==="ArrowRight")$("ok").click();if(e.key==="ArrowLeft")$("pv").click()});
+LLMOS.load(s=>{D=(s&&s.D)||[{q:"Capital of France?",a:"Paris"},{q:"7 × 8",a:"56"},{q:"H₂O is…",a:"Water"}];draw()});
+</script>

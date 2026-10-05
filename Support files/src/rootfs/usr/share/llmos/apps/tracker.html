@@ -1,0 +1,36 @@
+<!-- llmos-app: id=tracker; title=Tracker; size=s; words=tracker track habit habits water hydration log logger steps workout exercise expenses expense spending sleep mood weight reading streak -->
+<style>
+h2{margin:0 0 4px}.sub{color:var(--dim);font-size:14px;margin-bottom:12px}
+.today{display:flex;align-items:center;gap:14px;background:var(--card);border-radius:var(--r);padding:14px;margin-bottom:12px}
+.ring{width:84px;height:84px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:20px;flex:none}
+.add{display:flex;gap:8px;margin-bottom:10px}.add input{flex:1;min-width:0}
+.quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:8px 0}.days div{height:34px;border-radius:6px;background:var(--card);display:grid;place-items:center;font-size:11px;color:var(--dim)}
+ul{list-style:none;padding:0;margin:0;max-height:160px;overflow:auto}li{display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--line);font-size:14px}
+li button{background:none;border:0;color:var(--dim);padding:0 4px}
+</style>
+<h2 id="t"></h2><div class="sub" id="sub"></div>
+<div class="today"><div class="ring" id="ring"></div><div><b id="tot"></b><div class="sub" id="goal" style="margin:2px 0 0"></div><div class="sub" id="streak" style="margin:2px 0 0"></div></div></div>
+<div class="quick" id="quick"></div>
+<div class="add"><input id="amt" type="number" step="any" placeholder="amount"><input id="note" placeholder="note (optional)"><button class="primary" id="ad">Add</button></div>
+<div class="days" id="days"></div>
+<ul id="ls"></ul>
+<script>
+const $=id=>document.getElementById(id);const T=(document.title||"Tracker").replace(/\s*·.*$/,"");const L=T.toLowerCase();
+const K=/water|hydrat|drink/.test(L)?{u:"glasses",g:8,q:[1,2]}:/step/.test(L)?{u:"steps",g:10000,q:[1000,2500,5000]}:/sleep/.test(L)?{u:"hours",g:8,q:[1,6,7,8]}:/workout|exercise|run|gym|fitness/.test(L)?{u:"minutes",g:30,q:[10,20,30,60]}:/budget|spend|expense|money|cost/.test(L)?{u:"$",g:50,q:[5,10,20],money:1}:/read/.test(L)?{u:"pages",g:20,q:[5,10,20]}:/weight/.test(L)?{u:"kg",g:0,q:[],last:1}:{u:"times",g:1,q:[1]};
+let E=[];const day=d=>d.toISOString().slice(0,10),today=()=>day(new Date());
+function sum(d){return E.filter(e=>e.d===d).reduce((a,e)=>a+e.v,0)}
+function fmt(v){if(K.money)return "$"+v.toFixed(2);const n=+v.toFixed(2);return n+" "+(n===1?K.u.replace(/s$/,"").replace(/^glasse$/,"glass"):K.u)}
+function draw(){$("t").textContent=T;$("sub").textContent=K.last?"Log a value each day":K.money?"Spending today vs. your daily budget":"Today vs. your daily goal";
+ const s=K.last?((E.filter(e=>e.d===today()).slice(-1)[0]||{}).v||0):sum(today()),p=K.g?Math.min(1,s/K.g):0,over=K.money&&s>K.g;
+ $("ring").style.background=`conic-gradient(${over?"#e5484d":"var(--accent)"} ${p*360}deg, var(--line) 0)`;$("ring").innerHTML=`<span style="background:var(--card);border-radius:50%;width:66px;height:66px;display:grid;place-items:center">${K.g?Math.round(p*100)+"%":"·"}</span>`;
+ $("tot").textContent=K.last?(s?fmt(s):"Nothing yet today"):fmt(s)+" today";$("goal").textContent=K.g?(K.money?"Budget: ":"Goal: ")+fmt(K.g):"";
+ let st=0;for(let i=0;;i++){const d=new Date();d.setDate(d.getDate()-i);const v=sum(day(d));if((K.money?v<=K.g&&E.some(e=>e.d===day(d)):v>=K.g&&v>0))st++;else if(i>0)break;else continue;if(i>365)break}
+ $("streak").textContent=st>1?`${st}-day streak`:"";
+ $("days").innerHTML=[...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);const v=sum(day(d)),r=K.g?Math.min(1,v/K.g):(v?1:0);return `<div style="background:color-mix(in srgb,var(--accent) ${Math.round(r*85)}%,var(--card))" title="${day(d)}: ${fmt(v)}">${d.toLocaleDateString([], {weekday:"narrow"})}</div>`}).join("");
+ $("ls").innerHTML="";E.slice().reverse().slice(0,40).forEach(e=>{const li=document.createElement("li");li.innerHTML=`<span>${e.d.slice(5)} · ${fmt(e.v)}</span><span></span>`;li.lastChild.textContent=e.n||"";const x=document.createElement("button");x.textContent="×";x.onclick=()=>{E.splice(E.indexOf(e),1);LLMOS.save({E});draw()};li.append(x);$("ls").append(li)})}
+function add(v,n){if(!isFinite(v)||v===0)return;E.push({d:today(),v:+v,n:n||""});LLMOS.save({E});draw()}
+$("quick").innerHTML=K.q.map(q=>`<button data-q="${q}">+${K.money?"$"+q:q+" "+K.u}</button>`).join("");$("quick").querySelectorAll("button").forEach(b=>b.onclick=()=>add(+b.dataset.q));
+$("ad").onclick=()=>{add(parseFloat($("amt").value),$("note").value.trim());$("amt").value="";$("note").value=""};$("amt").onkeydown=$("note").onkeydown=e=>{if(e.key==="Enter")$("ad").click()};
+$("amt").placeholder=K.money?"amount ($)":K.u;LLMOS.load(s=>{E=(s&&s.E)||[];draw()});
+</script>

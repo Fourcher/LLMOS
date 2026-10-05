@@ -88,6 +88,9 @@ table inet llmos {{
     ip protocol icmp icmp type {{ echo-reply, destination-unreachable, time-exceeded }} accept
     ip6 nexthdr icmpv6 accept
     udp sport 67 udp dport 68 accept
+    # printers and other devices announce themselves on the local network (mDNS): answers from local addresses only
+    ip saddr {{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }} udp dport 5353 accept
+    ip6 saddr fe80::/10 udp dport 5353 accept
   }}
   chain forward {{
     type filter hook forward priority 0; policy drop;
@@ -341,3 +344,20 @@ def set_timezone(name, chosen_by_user=True):
             f.write(zone + "\n")
     apply_timezone_env()
     return zone
+
+
+def sync_time():
+    """Set the clock from the network once (busybox ntpd), when the owner allows the internet. A PC's clock is
+    often off after another OS used it, and a wrong clock breaks every secure web site."""
+    import shutil
+    import subprocess
+    from . import config as _c
+    if _c.settings.get("internet", "yes") == "no" or not shutil.which("ntpd"):
+        return False
+    try:
+        p = subprocess.run(["ntpd", "-q", "-n", "-p", "pool.ntp.org"], capture_output=True, timeout=30)
+        if p.returncode == 0 and shutil.which("hwclock"):
+            subprocess.run(["hwclock", "-w", "-u"], capture_output=True, timeout=10)
+        return p.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False

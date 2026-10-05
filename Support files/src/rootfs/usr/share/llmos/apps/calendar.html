@@ -1,0 +1,27 @@
+<!-- llmos-app: id=calendar; title=Calendar; size=m; words=calendar planner agenda -->
+<style>
+.hd{display:flex;align-items:center;gap:8px;margin-bottom:10px}.hd b{flex:1;font-size:20px;text-align:center}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.dow{color:var(--dim);font-size:12px;text-align:center;padding:4px 0}
+.day{background:var(--card);border-radius:8px;min-height:52px;padding:4px 6px;font-size:14px;cursor:pointer;position:relative;border:1px solid transparent}
+.day.out{opacity:.35}.day.today{border-color:var(--accent)}.day.sel{background:color-mix(in srgb,var(--accent) 25%,var(--card))}
+.day i{display:block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-top:4px}
+.ev{margin-top:12px}.ev .add{display:flex;gap:8px}.ev .add input{flex:1}.ev ul{list-style:none;padding:0;margin:8px 0 0}.ev li{display:flex;justify-content:space-between;padding:6px 8px;background:var(--card);border-radius:8px;margin-bottom:4px}
+.ev li button{background:none;border:0;color:var(--dim)}
+</style>
+<div class="hd"><button id="pv">‹</button><b id="mt"></b><button id="nx">›</button><button id="td">Today</button></div>
+<div class="grid" id="g"></div>
+<div class="ev"><div id="sd" style="color:var(--dim);margin-bottom:6px"></div><div class="add"><input id="ei" placeholder="Add an event for this day"><button class="primary" id="ea">Add</button></div><ul id="el"></ul></div>
+<script>
+const $=id=>document.getElementById(id);let view=new Date(),sel=new Date(),ev={};
+const key=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+function draw(){const y=view.getFullYear(),m=view.getMonth();$("mt").textContent=view.toLocaleDateString([], {month:"long",year:"numeric"});
+ const first=new Date(y,m,1),start=new Date(y,m,1-((first.getDay()+6)%7));let h=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=>`<div class="dow">${d}</div>`).join("");
+ for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const k=key(d);h+=`<div class="day${d.getMonth()!==m?" out":""}${k===key(new Date())?" today":""}${k===key(sel)?" sel":""}" data-k="${k}">${d.getDate()}${ev[k]&&ev[k].length?"<i></i>":""}</div>`}
+ $("g").innerHTML=h;document.querySelectorAll(".day").forEach(e=>e.onclick=()=>{const [a,b,c]=e.dataset.k.split("-");sel=new Date(+a,b-1,+c);draw()});
+ $("sd").textContent=sel.toLocaleDateString([], {weekday:"long",month:"long",day:"numeric"});const l=ev[key(sel)]||[];
+ $("el").innerHTML="";l.forEach((t,i)=>{const li=document.createElement("li");li.innerHTML="<span></span><button>×</button>";li.firstChild.textContent=t;li.lastChild.onclick=()=>{l.splice(i,1);if(!l.length)delete ev[key(sel)];LLMOS.save({ev});draw()};$("el").append(li)})}
+$("pv").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()-1,1);draw()};$("nx").onclick=()=>{view=new Date(view.getFullYear(),view.getMonth()+1,1);draw()};
+$("td").onclick=()=>{view=new Date();sel=new Date();draw()};
+$("ea").onclick=()=>{const v=$("ei").value.trim();if(!v)return;(ev[key(sel)]=ev[key(sel)]||[]).push(v);$("ei").value="";LLMOS.save({ev});draw()};$("ei").onkeydown=e=>{if(e.key==="Enter")$("ea").click()};
+LLMOS.load(s=>{ev=(s&&s.ev)||{};draw()});
+</script>

@@ -264,7 +264,58 @@ def _layout(text):
     return ("set_appearance", dict(_LAYOUT_PRESETS[which]))
 
 
+_MODE = re.compile(r"^\s*(?:please\s+)?(?:(?:turn|switch|put|set|change|go)\s+(?:on\s+|it\s+|everything\s+|the\s+(?:screen|computer|system|os)\s+)?"
+                   r"(?:on\s+|to\s+|in(?:to)?\s+)?|use\s+|enable\s+|activate\s+|give\s+me\s+|i\s+(?:want|prefer|like)\s+|make\s+(?:it|everything|the\s+\w+)\s+)?"
+                   r"(?:a\s+|an\s+|the\s+)?(?P<t>[\w #-]{2,40}?)\s+(?:mode|theme|look|colou?r\s+scheme|style|palette|skin)"
+                   r"(?:\s+(?:on|please|for\s+everything|everywhere))?\s*[.!]?\s*$", re.I)
+_DARK = re.compile(r"^\s*(?:please\s+)?(?:make\s+(?:it|everything|the\s+screen)\s+)?(?P<t>dark(?:er)?|light(?:er)?|darker please|lighter please)\s*[.!]?\s*$", re.I)
+_FONT = re.compile(r"^\s*(?:please\s+)?(?:(?:change|switch|set|make)\s+(?:the\s+)?(?:font|typeface|letters|text\s+style|lettering)\s+(?:to\s+|into\s+)?(?:a\s+|an\s+)?|"
+                   r"(?:use|give\s+me|i\s+want)\s+(?:a\s+|an\s+)?)(?P<f>[\w -]{2,30}?)(?:\s+(?:font|typeface|letters|text))?\s*[.!]?\s*$", re.I)
+_BACKDROP = re.compile(r"^\s*(?:please\s+)?(?:(?:turn|switch)\s+(?P<onoff>on|off)\s+(?:the\s+)?(?:animated|living|moving)\s+(?:background|backdrop)|"
+                       r"(?:make|set|turn|switch|change)\s+(?:the\s+)?(?:background|backdrop)\s+(?:to\s+|into\s+)?(?:a\s+|an\s+)?(?P<style>animated|living|alive|moving|still|static|"
+                       r"plain|solid|simple|calm|photo|picture|wallpaper)|(?P<style2>animated|living|still|static|plain|solid)\s+(?:background|backdrop)(?:\s+please)?|"
+                       r"(?:stop|freeze)\s+the\s+(?:background|backdrop)(?:\s+(?:moving|animation))?)\s*[.!]?\s*$", re.I)
+
+
+def _theme(text):
+    from . import themes
+    m = _BACKDROP.match(text)
+    if m:
+        st = (m.group("style") or m.group("style2") or "").lower()
+        if m.group("onoff"):
+            st = "living" if m.group("onoff").lower() == "on" else "still"
+        st = {"animated": "living", "alive": "living", "moving": "living", "static": "still", "calm": "still", "solid": "plain",
+              "simple": "plain", "picture": "photo", "wallpaper": "photo", "": "still"}.get(st, st)
+        return ("set_appearance", {"backdrop": st})
+    m = _DARK.match(text)
+    if m:
+        return ("set_appearance", {"theme": "dark" if m.group("t").lower().startswith("dark") else "light"})
+    m = _MODE.match(text)
+    if m and m.group("t").strip().lower() in ("default", "original", "normal", "standard", "stock", "usual"):
+        return ("set_appearance", {"theme": "default theme"})
+    if m and themes.resolve(m.group("t")) and not re.search(r"\b(?:app|airplane|aeroplane|flight|focus|sleep|power|safe|kiosk)\b", m.group("t"), re.I):
+        return ("set_appearance", {"theme": m.group("t").strip()})
+    m = _FONT.match(text)
+    if m and re.search(r"\b(?:font|typeface|letters|lettering|text style)\b", text, re.I) and themes.font_for(m.group("f")):
+        return ("set_appearance", {"font": themes.font_for(m.group("f"))})
+    return None
+
+
+_RESET_LOOK = re.compile(r"^\s*(?:please\s+)?(?:(?:go\s+|switch\s+|change\s+(?:it\s+)?|put\s+it\s+)?back\s+to\s+(?:the\s+)?(?:default|original|normal|standard|stock|usual|old)\s+"
+                         r"(?:theme|look|colou?rs?|appearance|style)|reset\s+(?:the\s+|my\s+)?(?:theme|look|colou?rs?|appearance|style)(?:\s+to\s+(?:the\s+)?default)?|"
+                         r"reset\s+(?:everything|the\s+screen)\s+to\s+(?:the\s+)?default(?:\s+look)?)\s*[.!]?\s*$", re.I)
+
 def _look(text):
+    t = text.strip().lower().rstrip(".!")
+    if t in ("high contrast", "more contrast", "higher contrast", "stronger colours", "stronger colors"):
+        return ("set_appearance", {"theme": "high contrast"})
+    if t in ("bigger", "even bigger", "larger", "smaller", "even smaller", "bigger please", "smaller please"):
+        return ("set_appearance", {"scale": "smaller" if "small" in t else "bigger"})
+    if _RESET_LOOK.match(text):
+        return ("set_appearance", {"theme": "default theme"})
+    th = _theme(text)
+    if th:
+        return th
     lay = _layout(text)
     if lay:
         return lay
@@ -290,7 +341,7 @@ def _look(text):
         "accent" if re.search(r"accent|highlight|frame|prompt", what) else "color"
     args = {key: color}
     if key == "color" and not re.search(r"text|font|letters|writing|foreground", what):
-        args["accent"] = color        # "everything purple": text AND frames, buttons, highlights
+        args = {"theme": color}       # "everything purple": a whole purple look that stays readable, not purple text
     if m.group("corners"):
         args["corners"] = _CORNER_WORDS[m.group("corners").lower()]
     return ("set_appearance", args)
@@ -303,15 +354,101 @@ _INSTALL = re.compile(r"^\s*(?:please\s+)?(?:(?P<erase>erase|wipe|format)\s+(?:t
                       r"install\s+(?:llm\s*os|this\s+(?:os|system)|yourself)\s+(?:on|onto|to)\s+(?:it|(?:this|the|my)\s+"
                       r"(?P<what>computer|machine|pc|mac|laptop|disk|drive|hard\s*drive|ssd|internal\s+disk))"
                       r"(?:\s+(?P<how>next\s+to|alongside|beside|with|keeping|without\s+erasing)\b.*|\s+\((?P<paren>[^)]*)\))?\s*[.!]?\s*$", re.I)
+_INSTALL_LOOSE = re.compile(r"^\s*(?:please\s+)?(?:how\s+(?:do|can)\s+i\s+|can\s+(?:you|i)\s+|i\s+(?:want|would\s+like|'d\s+like)\s+to\s+|let'?s\s+)?"
+                            r"install\s+(?P<os>llm\s*os|this\s+(?:os|system|operating\s+system)|the\s+(?:os|system|operating\s+system)|yourself|it|this)?\s*"
+                            r"(?P<target>(?:on|onto|to|into)\s+(?:the\s+|my\s+|this\s+)?(?:computer|machine|pc|laptop|desktop|disk|drive|hard\s*drive|"
+                            r"hard\s*disk|ssd|internal\s+(?:disk|drive)|nvme))?\s*(?:permanently|for\s+good)?\s*[.?!]?\s*$", re.I)
 _INSTALL_OK = re.compile(r"^\s*install\s+llm\s*os:\s*confirmed\s+(?P<token>[0-9a-f]{8})\s*$", re.I)
 
 
+# "install spotify" / "get me gimp" / "i need vs code": programs people know by name (tools.APP_NAMES); anything
+# else goes to the model, which knows the package names
+_INSTALL_PROG = re.compile(r"^\s*(?:please\s+)?(?:can\s+you\s+)?(?:install|get\s+me|download(?:\s+and\s+install)?)\s+"
+                           r"(?:the\s+|a\s+)?(?P<app>[a-z][a-z0-9 .+-]{1,30}?)(?:\s+(?:app|program|please))?\s*[.!?]?\s*$", re.I)
+
+
+_TZ = re.compile(r"^\s*(?:please\s+)?(?:(?:set|change|switch|update|put)\s+(?:my\s+|the\s+)?(?:time\s*zone|clock|time)\s+to|"
+                 r"my\s+time\s*zone\s+is|i(?:'m|\s+am)\s+(?:now\s+)?in\s+the|use)\s+(?P<z>[a-z][a-z /_+-]{1,40}?)(?:\s+time(?:\s*zone)?)?\s*[.!]?\s*$", re.I)
+
+
+_SCREEN_OFF = re.compile(r"^\s*(?:please\s+)?(?:(?P<keep>keep|leave)\s+(?:the\s+|my\s+)?(?:screen|display|computer)\s+(?:on|awake)(?:\s+(?:all\s+the\s+time|always))?|"
+                         r"(?:never|don'?t|do\s+not|stop)\s+(?:turn(?:ing)?\s+off|blank(?:ing)?|dim(?:ming)?)\s+(?:the\s+|my\s+)?(?:screen|display)|presentation\s+mode(?:\s+on)?|"
+                         r"(?:turn|switch)\s+(?:the\s+|my\s+)?(?:screen|display)\s+off\s+after\s+(?P<n>\d+)\s*(?P<u>min(?:ute)?s?|hours?)|"
+                         r"(?:put\s+(?:the\s+|my\s+)?computer\s+to\s+sleep|sleep)\s+after\s+(?P<s>\d+)\s*(?P<su>min(?:ute)?s?|hours?)(?:\s+(?:of\s+)?(?:idle|inactivity|not\s+using\s+it))?|"
+                         r"(?P<lidn>(?:when\s+i\s+)?clos(?:e|ing)\s+the\s+lid\s+(?:should\s+)?(?:do(?:es)?\s+nothing|keep(?:s)?\s+(?:it\s+)?running|stay(?:s)?\s+awake)|don'?t\s+sleep\s+when\s+i\s+close\s+the\s+lid))\s*[.!]?\s*$", re.I)
+
+
+_DND = re.compile(r"^\s*(?:please\s+)?(?:(?P<on>turn\s+on|enable|start|switch\s+on)\s+|(?P<off>turn\s+off|disable|stop|switch\s+off|end)\s+)?"
+                  r"(?:the\s+)?(?P<what>do\s+not\s+disturb|don'?t\s+disturb|dnd|night\s+light|night\s+mode|night\s+shift|blue\s+light\s+filter|warm(?:er)?\s+screen)"
+                  r"(?:\s+(?P<on2>on)|\s+(?P<off2>off))?(?:\s+mode)?\s*[.!]?\s*$|^\s*(?P<quiet>(?:no|stop|hide|silence|mute)\s+(?:the\s+)?notifications|(?P<shownot>show\s+(?:the\s+)?notifications(?:\s+again)?))\s*[.!]?\s*$", re.I)
+
+
+def _dnd(text):
+    m = _DND.match(text)
+    if not m:
+        return None
+    if m.group("quiet"):
+        return ("change_setting", {"setting": "do_not_disturb", "value": "off" if m.group("shownot") else "on"})
+    off = bool(m.group("off") or m.group("off2"))
+    which = "night_light" if re.search(r"night|blue|warm", m.group("what"), re.I) else "do_not_disturb"
+    return ("change_setting", {"setting": which, "value": "off" if off else "on"})
+
+
+def _screen_power(text):
+    d = _dnd(text)
+    if d:
+        return d
+    m = _SCREEN_OFF.match(text)
+    if not m:
+        return None
+    if m.group("lidn"):
+        return ("change_setting", {"setting": "lid", "value": "nothing"})
+    if m.group("s"):
+        n = int(m.group("s")) * (60 if m.group("su").lower().startswith("h") else 1)
+        return ("change_setting", {"setting": "sleep_after", "value": str(n)})
+    if m.group("n"):
+        n = int(m.group("n")) * (60 if m.group("u").lower().startswith("h") else 1)
+        return ("change_setting", {"setting": "screen_off", "value": str(n)})
+    return ("change_setting", {"setting": "screen_off", "value": "never"})
+
+
+def _timezone(text):
+    m = _TZ.match(text)
+    if not m or (text.strip().lower().startswith("use") and not re.search(r"time\s*zone|\btime$", text, re.I)):
+        return None
+    z = m.group("z").strip()
+    if re.fullmatch(r"\d.*|(?:dark|light)\b.*|\d+\s*(?:am|pm)", z, re.I):
+        return None
+    from . import system
+    return ("change_setting", {"setting": "timezone", "value": z}) if system.find_timezone(z) else None
+
+
 def _install(text):
+    sp = _screen_power(text)
+    if sp:
+        return sp
+    tz = _timezone(text)
+    if tz:
+        return tz
+    m = _UNINSTALL.match(text)
+    if m:
+        from .tools import APP_NAMES
+        if m.group("n").lower().strip() in APP_NAMES:
+            return ("remove_software", {"name": m.group("n").lower().strip()})
+    m = _INSTALL_PROG.match(text)
+    if m:
+        from .tools import APP_NAMES
+        app = m.group("app").lower().strip()
+        if app in APP_NAMES:
+            return ("install_app", {"packages": app})
     m = _INSTALL_OK.match(text)
     if m:
         return ("install_to_disk", {"token": m.group("token")})
     m = _INSTALL.match(text)
     if not m:
+        m2 = _INSTALL_LOOSE.match(text)
+        if m2 and (m2.group("target") or (m2.group("os") and m2.group("os").lower() != "it")):
+            return ("install_to_disk", {"mode": "alongside"})      # shows the plan first; nothing is written yet
         return None
     whole = bool(m.group("erase")) or re.search(r"\b(whole|entire|erase|wipe|all of it)\b", text, re.I) is not None
     return ("install_to_disk", {"mode": "whole" if whole else "alongside"})
@@ -452,7 +589,9 @@ _OTHER_ONLINE = re.compile(r"^\s*(?:please\s+)?connect\s+(?:another|a\s+differen
 
 def _online_model(text):
     if _BRAIN.match(text):
-        return None   # "use the online model for everything" is the brain setting, handled in _policy
+        return None
+    if re.match(r"^\s*(?:sign\s*in|log\s*in|login|connect\s+my\s+account|connect\s+an?\s+(?:online\s+)?account)\s*[.!]?\s*$", text, re.I):
+        return ("online_model", {"action": "set up"})   # "use the online model for everything" is the brain setting, handled in _policy
     m = _SIGNIN.match(text)
     if m:
         p = m.group("p").lower().replace(" ", "")
@@ -584,10 +723,18 @@ def _model(text):
 # "show my files" / "what's in ~/projects" / "take a screenshot"
 _FILES = re.compile(r"^\s*(?:please\s+)?(?:(?:show|open|list)\s+(?:me\s+)?(?:my\s+|the\s+)?(?:files|documents|downloads|pictures|desktop|home|folder)(?:\s+(?:folder|directory|dir))?(?:\s+(?:in|of|at)\s+(?P<p>\S+))?"
                     r"|(?:show|list)\s+(?:me\s+)?(?:my\s+)?files\s+in\s+(?P<p2>\S+)|what(?:'s|\s+is)\s+in\s+(?P<p3>(?:~|/)\S*))\s*[.!?]?\s*$", re.I)
-_SHOT = re.compile(r"^\s*(?:please\s+)?(?:take|grab|capture)\s+(?:a\s+)?screenshot(?:\s+of\s+(?:the\s+)?screen)?\s*[.!]?\s*$|^\s*screenshot\s*[.!]?\s*$", re.I)
+_SHOT = re.compile(r"^\s*(?:please\s+)?(?:take|grab|capture|make|do)\s+(?:a\s+|me\s+a\s+)?screen ?shot(?:\s+of\s+(?:the\s+|my\s+|this\s+)?(?:screen|window|page|desktop))?\s*[.!]?\s*$|"
+                   r"^\s*(?:screen ?shot|snip|print screen)(?:\s+(?:this|the|my)\s+(?:screen|window|page))?\s*[.!]?\s*$|"
+                   r"^\s*(?:take a picture of|capture) (?:the|my|this) screen\s*[.!]?\s*$", re.I)
 
 
-_OPEN_FILE = re.compile(r"^\s*(?:please\s+)?(?:open|show|read|view)\s+(?:me\s+)?(?:the\s+)?file\s+(?P<p>(?:~|/)\S*)\s*[.!]?\s*$", re.I)
+_UNZIP = re.compile(r"^\s*(?:please\s+)?(?:unzip|extract|unpack|open\s+up|decompress)\s+(?:the\s+)?(?:file\s+)?(?P<p>(?:~|/)\S.*?)\s*$", re.I)
+_UNINSTALL = re.compile(r"^\s*(?:please\s+)?(?:uninstall|remove\s+the\s+program|get\s+rid\s+of\s+the\s+program)\s+(?P<n>[a-z][a-z0-9 .+-]{1,30}?)\s*[.!]?\s*$", re.I)
+_WALL_THIS = re.compile(r"^\s*(?:please\s+)?(?:set|use|make)\s+(?:this|that|the)\s+(?:photo|picture|image|pic)\s+(?:as|my)\s+(?:my\s+|the\s+)?(?:wallpaper|background)\s*[.!]?\s*$", re.I)
+_EDIT_FILE = re.compile(r"^\s*(?:please\s+)?(?:edit|change|modify)\s+(?:the\s+)?(?:file\s+)?(?P<p>(?:~|/)\S.*?)\s*$", re.I)
+_PRINT_FILE = re.compile(r"^\s*(?:please\s+)?print\s+(?:the\s+)?(?:file\s+)?(?P<p>(?:~|/)\S.*?)\s*$", re.I)
+_WALL_FILE = re.compile(r"^\s*(?:please\s+)?(?:set|use|make)\s+(?P<p>(?:~|/)\S.*?)\s+(?:as|my)\s+(?:my\s+|the\s+)?(?:wallpaper|background|desktop background)\s*$", re.I)
+_OPEN_FILE = re.compile(r"^\s*(?:please\s+)?(?:open|show|read|view)\s+(?:me\s+)?(?:the\s+)?file\s+(?P<p>(?:~|/).*?)\s*$", re.I)
 _DEL_FILE = re.compile(r"^\s*(?:please\s+)?(?:delete|remove|trash)\s+(?:the\s+)?(?:file|folder)\s+(?P<p>(?:~|/)\S*)\s*[.!]?\s*$", re.I)
 
 
@@ -601,7 +748,10 @@ _NOTES_SHOW = re.compile(r"^\s*(?:please\s+)?(?:(?:show|open|read|list)\s+(?:me\
 _NOTE_DONE = re.compile(r"^\s*(?:please\s+)?(?:(?:tick|check|cross)\s+off\s+(?P<a>.+?)|mark\s+(?P<b>.+?)\s+(?:as\s+)?done|un-?tick\s+(?P<u>.+?))\s*[.!]?\s*$", re.I)
 _NOTE_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:(?:remove|delete|take)\s+(?P<item>.+?)\s+(?:from|off)\s+(?:my\s+|the\s+)?(?P<list>" + _LIST_W + r")\s+list"
                           r"|(?:clear|empty)\s+(?:my\s+|the\s+)?(?P<list2>" + _LIST_W + r")\s+list)\s*[.!]?\s*$", re.I)
-_TRASH = re.compile(r"^\s*(?:please\s+)?(?:(?P<empty>empty)\s+(?:my\s+|the\s+)?trash|(?:show|open)\s+(?:me\s+)?(?:my\s+|the\s+)?(?P<show>trash)"
+_TRASH = re.compile(r"^\s*(?:please\s+)?(?:(?P<empty>empty)\s+(?:my\s+|the\s+)?(?:trash|recycle\s+bin|bin)|(?:show|open|check)\s+(?:me\s+)?(?:my\s+|the\s+)?(?P<show>trash|recycle\s+bin|bin|deleted\s+(?:files|stuff|things))"
+                    r"|(?P<oops>(?:oops,?\s+)?i\s+(?:accidentally\s+)?(?:deleted|removed|lost|trashed)\s+(?:something|a\s+file|my\s+\w+|the\s+wrong\s+(?:file|thing))(?:\s+by\s+(?:accident|mistake))?"
+                    r"|(?:how\s+(?:do|can)\s+i\s+|can\s+(?:you|i)\s+)?(?:get\s+back|recover|restore|undelete)\s+(?:a\s+|my\s+|the\s+)?(?:deleted\s+(?:file|files|stuff|photo|photos)|(?:file|files|something)\s+i\s+deleted)"
+                    r"|where\s+(?:do|did)\s+(?:deleted\s+files|my\s+deleted\s+files|things\s+i\s+delete(?:d)?)\s+go|where(?:'s|\s+is)\s+(?:the\s+)?(?:trash|recycle\s+bin))"
                     r"|(?:restore|put\s+back|undelete)\s+(?P<name>.+?)\s+from\s+(?:my\s+|the\s+)?trash|(?:restore|put\s+back|undelete)\s+(?P<file>\S+\.\w{1,5}))\s*[.!]?\s*$", re.I)
 
 
@@ -610,7 +760,7 @@ def _notes(text):
     if m:
         if m.group("empty"):
             return ("empty_trash", {})
-        if m.group("show"):
+        if m.group("show") or m.group("oops"):
             return ("show_files", {"path": "~/.Trash"})
         return ("restore_file", {"name": (m.group("name") or m.group("file")).strip()})
     m = _NOTE_ADD.match(text)
@@ -676,7 +826,7 @@ _AUTOLOCK = re.compile(r"^\s*(?:please\s+)?(?:(?:auto-?lock|lock(?:\s+(?:the\s+)
                        r"|(?:never|don'?t)\s+(?:auto-?)?lock(?:\s+(?:automatically|by\s+itself|on\s+its\s+own))?)\s*[.!]?\s*$", re.I)
 
 
-_PASS = re.compile(r"^\s*(?:please\s+)?(?:(?:set|set\s+up|add|create|make)\s+(?:a\s+|my\s+)?(?:passphrase|password|vault)(?:\s+for\s+(?:my\s+)?(?:data|files|computer))?"
+_PASS = re.compile(r"^\s*(?:please\s+)?(?:(?:set|set\s+up|add|create|make|change|reset|update|new)\s+(?:a\s+|my\s+|the\s+)?(?:new\s+)?(?:passphrase|password|vault|login\s+password|lock\s+(?:screen\s+)?password)(?:\s+for\s+(?:my\s+)?(?:data|files|computer))?"
                    r"|(?:protect|encrypt|secure)\s+(?:my\s+)?(?:data|files|storage|computer|everything)(?:\s+with\s+(?:a\s+)?(?:passphrase|password))?)\s*[.!]?\s*$", re.I)
 
 
@@ -724,7 +874,30 @@ def _device(text):
 def _files(text):
     m = _SHOT.match(text)
     if m:
-        return ("screenshot", {})
+        return ("screenshot", {"area": True} if re.match(r"^\s*snip\b", text, re.I) else {})
+    if re.match(r"^\s*(?:please\s+)?(?:take\s+a\s+|grab\s+a\s+)?(?:screen\s*shot|snip|capture)\s+(?:of\s+)?(?:an?\s+|part\s+of\s+the\s+|a\s+part\s+of\s+the\s+|some\s+of\s+the\s+)?(?:area|region|part|section|bit)(?:\s+of\s+the\s+screen)?\s*[.!]?\s*$|^\s*snipping\s+tool\s*$", text, re.I):
+        return ("screenshot", {"area": True})
+    if _WALL_THIS.match(text):
+        return ("which_file", {"request": text.strip()})
+    m = re.match(r"^\s*(?:please\s+)?open\s+(?P<p>(?:~|/)\S.*?)\s+in\s+(?:files|the\s+file\s+manager|thunar)\s*$", text, re.I)
+    if m:
+        import shlex
+        return ("open_app", {"command": "thunar " + shlex.quote(m.group("p")), "graphical": True})
+    if re.match(r"^\s*(?:please\s+)?(?:where\s+(?:did|do|does|is|are)\s+(?:that|the|my|it|this|these|those)?\s*(?:download(?:ed)?(?:\s+(?:file|files|things))?|file\s+i\s+(?:just\s+)?downloaded|downloads?)"
+                r"(?:\s+(?:go|end\s+up|get\s+saved|saved|save|go\s+to|land))?|where\s+(?:do|did)\s+(?:my\s+)?downloads\s+go|(?:show|open)\s+(?:me\s+)?(?:my\s+|the\s+)?downloads(?:\s+folder)?)\s*[?.!]*\s*$", text, re.I):
+        return ("show_files", {"path": "~/Downloads"})
+    m = _UNZIP.match(text)
+    if m:
+        return ("extract_archive", {"path": m.group("p")})
+    m = _EDIT_FILE.match(text)
+    if m:
+        return ("open_file", {"path": m.group("p"), "edit": True})
+    m = _PRINT_FILE.match(text)
+    if m:
+        return ("print_file", {"path": m.group("p")})
+    m = _WALL_FILE.match(text)
+    if m:
+        return ("set_wallpaper", {"subject": m.group("p")})
     m = _OPEN_FILE.match(text)
     if m:
         return ("open_file", {"path": m.group("p")})
@@ -802,7 +975,7 @@ def _photo(text):
 
 
 # "open https://example.com in the browser" (also what a link on the desk says)
-_OPEN_URL = re.compile(r"^\s*(?:please\s+)?(?:open|go to|visit|browse|show me|load)\s+(?P<url>https?://\S+)"
+_OPEN_URL = re.compile(r"^\s*(?:please\s+)?(?:(?:open|go to|visit|browse|show me|load|join)\s+(?:this\s+(?:link|meeting|call|meet|zoom)(?:\s+link)?:?\s+)?|(?:join\s+)?)(?P<url>https?://\S+)"
                        r"(?:\s+in\s+(?:the\s+|a\s+)?(?:web\s+)?browser)?\s*[.!]?\s*$", re.I)
 
 
@@ -827,10 +1000,30 @@ _TERMINAL = re.compile(r"^\s*(?:please\s+)?(?:open|show|give me|start|launch|bri
 _PLAY = re.compile(r"^\s*(?:please\s+)?(?:play|put on|pull up|start)\s+(?:me\s+)?(?:a|an|some|the)?\s*"
                    r"(?P<q>.+?)(?:\s+(?:and\s+)?(?:play\s+it)?(?:\s+(?:on|in)\s+(?:the\s+)?(?:screen|window|background)))?"
                    r"(?:\s+please)?\s*[.!]?\s*$", re.I)
-_MEDIA_WORDS = re.compile(r"\b(video|youtube|music|song|songs|stream|album|podcast|playlist|radio|mix|lofi|lo-fi|live|concert|trailer|movie|clip)\b", re.I)
+_MEDIA_WORDS = re.compile(r"\b(video|youtube|music|song|songs|stream|album|podcast|playlist|radio|mix|lofi|lo-fi|live|concert|trailer|movie|clip|"
+                          r"jazz|rock|pop|classical|hip hop|hip-hop|rap|country|blues|reggae|metal|edm|techno|house|ambient|r&b|soul|funk|"
+                          r"disco|punk|indie|folk|opera|piano|guitar|beats|tunes)\b", re.I)
+# "music", "play something", "some tunes": a request for music with nothing named -- a real mix, not a site's front page
+_ANY_MUSIC = re.compile(r"^\s*(?:please\s+)?(?:(?:play|put\s+on)\s+)?(?:me\s+)?(?:some\s+|a\s+(?:little\s+)?bit\s+of\s+)?"
+                        r"(?:music|songs|tunes|something(?:\s+(?:to\s+listen\s+to|nice|good))?|a\s+song|anything)\s*[.!]?\s*$", re.I)
+DEFAULT_MUSIC = "chill instrumental music mix"
+
+
+_CALL = re.compile(r"^\s*(?:please\s+)?(?:start|make|begin|open|set\s+up|host|do|have|i\s+(?:want|need)\s+to\s+(?:start|make|do|have))\s+(?:a\s+|an\s+)?"
+                   r"(?:new\s+)?(?P<kind>video\s+call|video\s+chat|call|meeting|video\s+meeting|zoom(?:\s+call|\s+meeting)?|google\s+meet|meet|facetime|teams\s+(?:call|meeting))\s*[.!]?\s*$", re.I)
 
 
 def _play(text):
+    if re.match(r"^\s*(?:please\s+)?(?:play|open|watch|start)\s+(?:this|that|the)\s+(?:video|song|clip|movie|file)\s*[.!]?\s*$", text, re.I):
+        return ("which_file", {"request": text.strip()})
+    m = _CALL.match(text)
+    if m:
+        k = m.group("kind").lower()
+        return ("browse", {"site": "zoom" if "zoom" in k else ("https://teams.live.com" if "teams" in k else "https://meet.google.com/new")})
+    if re.search(r"\b(video|zoom|teams)\s+(?:call|chat|meeting)s?\b|\bcall\b", text, re.I):
+        return None          # about a call, not something to play
+    if _ANY_MUSIC.match(text) and re.search(r"\b(music|songs|tunes|song|play|put on)\b", text, re.I):
+        return ("play_media", {"query": DEFAULT_MUSIC})
     m = _PLAY.match(text)
     if not m or not _MEDIA_WORDS.search(text) or _QUESTION.search(text):
         return None
@@ -839,7 +1032,168 @@ def _play(text):
     return ("play_media", {"query": q}) if len(q) >= 2 else None
 
 
+# apps: "make me a calculator", "build a habit tracker app with a dark theme", "open my calculator", "show my apps"
+_APP_NOUN = r"(?:app|apps|application|program|widget|tool|utility|game)"
+_MAKE_APP = re.compile(
+    r"^\s*(?:(?:please|hey|ok|okay|so)[,\s]+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?|i\s+(?:want|need|would\s+like|'d\s+like)"
+    r"(?:\s+you)?\s+to\s+|let'?s\s+|go\s+ahead\s+and\s+)?(?:please\s+)?(?:make|create|build|write|code|design|program|generate|whip\s+up|"
+    r"put\s+together|give|get)\s+(?:me\s+|us\s+)?(?:(?:a|an|another|some|one|my\s+own|a\s+new|a\s+simple|a\s+little|a\s+small|a\s+basic)\s+)?"
+    r"(?P<rest>.+?)\s*(?:please)?[.!?]*\s*$", re.I)
+_WANT_APP = re.compile(r"^\s*(?:i\s+(?:want|need)|give\s+me|get\s+me)\s+(?:a|an)\s+(?P<rest>.+?)\s*[.!?]*\s*$", re.I)
+_LOOK_SPLIT = re.compile(r"\s+(?:with|in|using|that\s+(?:looks|has|is)|which\s+(?:looks|has|is)|themed|styled|but)\s+(?:a\s+|an\s+)?(?P<look>.+)$", re.I)
+_LOOKISH = re.compile(r"theme|look|style|colou?r|dark|light|neon|retro|pastel|font|button|design|skin|mode|vibe|aesthetic|"
+                      r"red|orange|yellow|green|blue|purple|pink|black|white|gold|silver|teal|cyan|magenta|grey|gray|brown", re.I)
+_OPEN_APP = re.compile(r"^\s*(?:please\s+)?(?:open|launch|start|run|bring\s+up|pull\s+up|show\s+me|show)\s+(?:up\s+)?(?:the\s+|my\s+)?"
+                       r"(?:app\s+)?(?P<n>[\w' -]{2,40}?)(?:\s+(?:app|application|program))?\s*[.!?]*\s*$", re.I)
+_LIST_APPS = re.compile(r"^\s*(?:please\s+)?(?:(?:show|list|open|see)\s+(?:me\s+)?(?:all\s+)?(?:of\s+)?(?:my|the)\s+(?:apps|programs|applications|software)|"
+                        r"(?:what|which)\s+(?:apps|programs|applications|software)\s+(?:do\s+i\s+have|are\s+there|are\s+installed|have\s+i\s+(?:got|made))|"
+                        r"my\s+(?:apps|programs)|apps|programs|all\s+(?:apps|programs)|app\s+menu|start\s+menu)\s*[.!?]*\s*$", re.I)
+_REMOVE_APP = re.compile(r"^\s*(?:please\s+)?(?:delete|remove|uninstall|get\s+rid\s+of|trash)\s+(?:the\s+|my\s+)?(?:app\s+)?(?P<n>.+?)"
+                         r"(?:\s+app)?\s*[.!?]*\s*$", re.I)
+
+
+_UNDO_RE = re.compile(r"^\s*(?:please\s+)?(?:undo(?:\s+(?:that|it|the\s+last\s+(?:thing|change)|what\s+you\s+(?:just\s+)?did))?|oops|whoops|"
+                      r"(?:no,?\s+)?put\s+it\s+back|revert\s+(?:that|it|the\s+last\s+change)|change\s+it\s+back|go\s+back\s+to\s+(?:how\s+it\s+was|before)|"
+                      r"take\s+(?:that|it)\s+back)\s*[.!]?\s*$", re.I)
+
+
+_BROWSER_WORDS = r"(?:the\s+)?(?:internet|web|world\s+wide\s+web|browser|web\s+browser|firefox|chrome|google\s+chrome|safari|edge)"
+_OPEN_BROWSER = re.compile(r"^\s*(?:please\s+)?(?:(?:open|launch|start|run|bring\s+up|go\s+on|get\s+on|use)\s+(?:up\s+)?" + _BROWSER_WORDS +
+                           r"|" + _BROWSER_WORDS + r"|go\s+online|browse(?:\s+the\s+(?:web|internet))?|surf\s+the\s+(?:web|internet))\s*[.!]?\s*$", re.I)
+_SITE = re.compile(r"^\s*(?:please\s+)?(?:open|go\s+to|visit|take\s+me\s+to|load|bring\s+up|pull\s+up|navigate\s+to|show\s+me|watch|check|"
+                   r"(?:i\s+want\s+to\s+|let'?s\s+)?(?:watch|go\s+on|use|browse))\s+(?:the\s+|some\s+)?"
+                   r"(?P<site>[\w.-]+\.[a-z]{2,}(?:/\S*)?|[\w ]{2,20}?)(?:\s+(?:website|site|page|\.com))?(?:\s+in\s+(?:the\s+)?browser)?\s*[.!]?\s*$", re.I)
+_WEB_SEARCH = re.compile(r"^\s*(?:please\s+)?(?:google|bing|search\s+(?:the\s+web|online|the\s+internet|google)\s+for|search\s+online\s+for|"
+                         r"look\s+up|web\s+search(?:\s+for)?|search\s+for)\s+(?P<q>.+?)\s*[.!?]?\s*$", re.I)
+_FILEISH = re.compile(r"\b(?:my|file|files|document|documents|doc|docx|pdf|resume|cv|photo|photos|picture|pictures|folder|spreadsheet|"
+                      r"downloaded|saved|i\s+(?:saved|wrote|downloaded))\b", re.I)
+_FIND_FILE = re.compile(r"^\s*(?:please\s+)?(?:find|search\s+for|look\s+for|where(?:'s|\s+is|\s+are|\s+did\s+i\s+(?:save|put))|locate)\s+"
+                        r"(?P<q>.+?)\s*[.?!]?\s*$", re.I)
+_OPEN_FOLDER = re.compile(r"^\s*(?:please\s+)?(?:open|show(?:\s+me)?|go\s+to|browse|where(?:'s|\s+is|\s+are))\s+(?:my\s+|the\s+)?"
+                          r"(?P<f>documents|docs|downloads|pictures|photos|pics|images|music|songs|videos|movies|desktop|home(?:\s+folder)?|stuff)"
+                          r"(?:\s+folder)?\s*[.?!]?\s*$", re.I)
+_MAKE_FOLDER = re.compile(r"^\s*(?:please\s+)?(?:make|create|add|new)\s+(?:me\s+)?(?:a\s+)?(?:new\s+)?folder(?:\s+(?:called|named))?(?:\s+(?P<name>.+?))?"
+                          r"(?:\s+(?:in|on|inside)\s+(?:my\s+|the\s+)?(?P<where>documents|downloads|desktop|home|pictures|music|videos))?\s*[.!]?\s*$", re.I)
+_RENAME = re.compile(r"^\s*(?:please\s+)?rename\s+(?:the\s+file\s+|my\s+)?(?P<n>.+?)\s+(?:to|as)\s+(?P<to>.+?)\s*[.!]?\s*$", re.I)
+_MOVE = re.compile(r"^\s*(?:please\s+)?(?P<op>move|copy|put\s+a\s+copy\s+of|put|transfer|back\s+up)\s+(?:all\s+)?(?:of\s+)?(?:the\s+|my\s+)?(?P<what>.+?)"
+                   r"(?:\s+(?:from|in|out\s+of)\s+(?:my\s+|the\s+)?(?P<frm>documents|downloads|desktop|home|pictures|photos|music|videos))?"
+                   r"\s+(?:to|into|onto|on)\s+(?:my\s+|the\s+|a\s+)?(?P<to>documents|downloads|desktop|home|pictures|photos|music|videos|"
+                   r"usb(?:\s+stick|\s+drive)?|stick|flash\s*drive|thumb\s*drive|external\s+drive)\s*[.!]?\s*$", re.I)
+_LATEST = re.compile(r"^\s*(?:please\s+)?open\s+(?:the\s+|my\s+)?(?:latest|newest|last|most\s+recent)\s+(?:download|downloaded\s+file|file\s+i\s+downloaded)|"
+                     r"^\s*(?:please\s+)?open\s+what\s+i\s+(?:just\s+)?downloaded", re.I)
+
+
+_THIS_FILE = re.compile(r"^\s*(?:please\s+)?(?:delete|trash|remove|rename|open|print|copy|move|send|attach|email)\s+(?:this|that|it)"
+                        r"(?:\s+(?:file|pdf|document|docx|photo|picture|one))?(?:\s+.*)?$", re.I)
+
+
+def _everyday(text):
+    from . import tools as T
+    if _THIS_FILE.match(text) and not re.search(r"\b(?:to|as)\s+\S+\.\w{2,4}\b|\busb|stick|flash", text, re.I):
+        return ("which_file", {"request": text})
+    m = re.match(r"^\s*show\s+the\s+folder\s+(?P<p>(?:~|/).*?)\s*$", text)
+    if m:
+        return ("show_files", {"path": m.group("p")})
+    if _OPEN_BROWSER.match(text):
+        return ("browse", {})
+    m = _OPEN_FOLDER.match(text)
+    if m:
+        f = m.group("f").lower().split()[0]
+        return ("show_files", {"path": "~/" + T.FOLDERS.get(f, "") if T.FOLDERS.get(f, "") else "~"})
+    if _LATEST.match(text):
+        return ("open_latest", {"where": "downloads"})
+    m = _MAKE_FOLDER.match(text)
+    if m:
+        args = {"name": (m.group("name") or "New folder").strip().strip("'\"")}
+        if m.group("where"):
+            args["where"] = m.group("where").lower()
+        return ("make_folder", args)
+    m = _RENAME.match(text)
+    if m and not re.search(r"\b(?:wifi|network|computer|keyboard)\b", m.group("n"), re.I):
+        return ("rename_file", {"name": m.group("n").strip().strip("'\""), "to": m.group("to").strip().strip("'\"")})
+    m = _MOVE.match(text)
+    if m:
+        to = m.group("to").lower()
+        to = "usb" if re.search(r"usb|stick|flash|thumb|external", to) else to
+        args = {"what": m.group("what").strip(), "to": to, "copy": bool(re.match(r"copy|put a copy|back up", m.group("op"), re.I)) or to == "usb"}
+        if m.group("frm"):
+            args["from"] = m.group("frm").lower()
+        return ("move_files", args)
+    m = _WEB_SEARCH.match(text)
+    if m and not _FILEISH.search(m.group("q")):
+        return ("browse", {"search": m.group("q")})
+    m = _FIND_FILE.match(text)
+    if m and _FILEISH.search(text) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I):
+        q = re.sub(r"\b(?:my|the|that|file|files|folder|folders|called|named|i|saved|downloaded|put|was|working|on|about|yesterday)\b", " ", m.group("q"), flags=re.I)
+        if q.strip():
+            return ("find_files", {"query": " ".join(q.split())})
+    m = _SITE.match(text)
+    if m:
+        site = m.group("site").strip().lower()
+        if site in T.SITES or re.match(r"^[\w.-]+\.[a-z]{2,}(/\S*)?$", site):
+            return ("browse", {"site": site})
+    if text.strip().lower().rstrip(".!") in T.SITES and len(text.split()) <= 2:
+        return ("browse", {"site": text.strip().lower().rstrip(".!")})
+    return None
+
+
+def _apps(text):
+    if _UNDO_RE.match(text):
+        return ("undo", {})
+    from . import apps
+    m = _LIST_APPS.match(text)
+    if m:
+        return ("manage_apps", {"action": "list"})
+    m = _REMOVE_APP.match(text)
+    if m and re.search(r"\bapp\b", text, re.I) and apps.find(m.group("n")):
+        return ("manage_apps", {"action": "remove", "name": m.group("n").strip()})
+    if re.search(r"\b(spreadsheet|excel|word document|word doc|document in word|presentation|slides|powerpoint)\b", text, re.I) and \
+            re.match(r"^\s*(?:please\s+)?(?:make|create|start|open|i\s+(?:want|need)|new|build|set\s+up)\b", text, re.I):
+        kind = "spreadsheet" if re.search(r"spreadsheet|excel", text, re.I) else \
+            "presentation" if re.search(r"presentation|slides|powerpoint", text, re.I) else "word processor"
+        from . import programs
+        if programs.find(kind):
+            return ("open_app", {"command": kind})
+    m = _MAKE_APP.match(text) or _WANT_APP.match(text)
+    if m:
+        rest = m.group("rest").strip()
+        look = ""
+        lm = _LOOK_SPLIT.search(rest)
+        if lm and _LOOKISH.search(lm.group("look")):
+            look, rest = lm.group("look").strip(), rest[:lm.start()].strip()
+        # "a pink calculator", "a retro-looking timer": the look can come first too
+        what = re.sub(r"\b" + _APP_NOUN + r"\b", " ", rest, flags=re.I).strip(" -,")
+        if re.search(r"\b" + _APP_NOUN + r"\b", rest, re.I) or apps.match_template(what):
+            if not re.search(r"\b(?:note|reminder|timer for|wallpaper|backup|screenshot|folder|file|playlist|list called)\b", rest, re.I) \
+                    or re.search(r"\b" + _APP_NOUN + r"\b", rest, re.I):
+                if not look:
+                    t = apps.match_template(what)
+                    lead = what[:what.lower().find(t["id"])] if t and t["id"] in what.lower() else ""
+                    if lead.strip() and _LOOKISH.search(lead):
+                        look = lead.strip()
+                return ("make_app", {"what": what or rest, "look": look} if look else {"what": what or rest})
+    m = re.match(r"^\s*(?:a\s+|an\s+|the\s+|my\s+)?(?P<n>[a-z][a-z -]{1,25}?)\s+app\s*[.!?]?\s*$", text, re.I)
+    if m and (apps.find(m.group("n")) or apps.match_template(m.group("n"))):
+        return ("open_app", {"command": m.group("n").strip()})
+    m = _OPEN_APP.match(text)
+    if m:
+        n = m.group("n").strip()
+        from . import tools as _T
+        if n.lower().removeprefix("my ").strip() in _T.FOLDERS or n.lower() in ("files", "my files", "file"):
+            return None              # "show my files": the folder, not a program called something like Files
+        from . import programs
+        if apps.find(n) or (apps.match_template(n) and len(n.split()) <= 3) or programs.find(n):
+            return ("open_app", {"command": n})
+    return None
+
+
+def plain(text):
+    """Typed text as the patterns expect it: phones and Macs turn ' and " into curly quotes (what’s, “this”)."""
+    return str(text or "").translate({0x2019: "'", 0x2018: "'", 0x201C: '"', 0x201D: '"', 0x2032: "'"})
+
+
 def match(text):
+    text = plain(text)
     t = text.strip()
     if len(t) > 400 or "\n" in t:
         return None
@@ -848,6 +1202,12 @@ def match(text):
         return ms
     if len(t) > 200:
         return None
+    ap = _apps(t)
+    if ap:
+        return ap
+    ev = _everyday(t)
+    if ev:
+        return ev
     lk = _look(t)
     if lk:
         return lk

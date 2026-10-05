@@ -1,0 +1,21 @@
+<!-- llmos-app: id=clock; title=Clock; size=m; words=clock worldclock -->
+<style>
+.now{text-align:center;margin:8px 0 18px}.now .t{font-size:64px;font-weight:600;font-variant-numeric:tabular-nums}.now .d{color:var(--dim);font-size:17px}
+.zones{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.z{background:var(--card);border-radius:var(--r);padding:10px 12px}.z b{display:block;font-size:22px;font-variant-numeric:tabular-nums}.z span{color:var(--dim);font-size:13px}
+.add{display:flex;gap:8px;margin-top:12px}.add input{flex:1}
+</style>
+<div class="now"><div class="t" id="t"></div><div class="d" id="d"></div></div>
+<div class="zones" id="zones"></div>
+<div class="add"><input id="zi" placeholder="Add a city, e.g. Tokyo"><button id="za">Add</button></div>
+<script>
+const CITIES={london:"Europe/London",paris:"Europe/Paris",berlin:"Europe/Berlin",madrid:"Europe/Madrid",rome:"Europe/Rome",tokyo:"Asia/Tokyo",beijing:"Asia/Shanghai",shanghai:"Asia/Shanghai","hong kong":"Asia/Hong_Kong",singapore:"Asia/Singapore",sydney:"Australia/Sydney",dubai:"Asia/Dubai",mumbai:"Asia/Kolkata",delhi:"Asia/Kolkata","new york":"America/New_York","los angeles":"America/Los_Angeles",chicago:"America/Chicago",denver:"America/Denver",phoenix:"America/Phoenix",toronto:"America/Toronto","mexico city":"America/Mexico_City","sao paulo":"America/Sao_Paulo",moscow:"Europe/Moscow",cairo:"Africa/Cairo",seoul:"Asia/Seoul",honolulu:"Pacific/Honolulu",auckland:"Pacific/Auckland",utc:"UTC"};
+let zones=["London","Tokyo","New York"];
+const $=id=>document.getElementById(id);
+function draw(){const n=new Date();$("t").textContent=n.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});$("d").textContent=n.toLocaleDateString([], {weekday:"long",year:"numeric",month:"long",day:"numeric"});
+ $("zones").innerHTML=zones.map((c,i)=>{const z=CITIES[c.toLowerCase()]||c;let s;try{s=n.toLocaleTimeString([], {timeZone:z,hour:"2-digit",minute:"2-digit"})}catch(e){s="?"}return `<div class="z" title="click to remove" data-i="${i}"><b>${s}</b><span>${c}</span></div>`}).join("");
+ document.querySelectorAll(".z").forEach(e=>e.onclick=()=>{zones.splice(+e.dataset.i,1);LLMOS.save({zones});draw()})}
+$("za").onclick=()=>{const v=$("zi").value.trim();if(!v)return;zones.push(v.replace(/\b\w/g,c=>c.toUpperCase()));$("zi").value="";LLMOS.save({zones});draw()};
+$("zi").onkeydown=e=>{if(e.key==="Enter")$("za").click()};
+LLMOS.load(s=>{if(s&&s.zones)zones=s.zones;draw()});setInterval(draw,1000);draw();
+</script>

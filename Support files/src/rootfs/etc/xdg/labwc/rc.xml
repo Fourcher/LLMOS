@@ -20,6 +20,8 @@
     <raiseOnFocus>yes</raiseOnFocus>
   </focus>
   <placement><policy>center</policy></placement>
+  <!-- four workspaces (Ctrl+Alt+Left/Right, Super+1..4); the desk itself is on all of them -->
+  <desktops number="4"><popupTime>600</popupTime></desktops>
   <windowSwitcher preview="no" outlines="yes"><osd show="yes"/></windowSwitcher>
   <libinput>
     <device category="touchpad"><naturalScroll>yes</naturalScroll><tap>yes</tap></device>
@@ -27,8 +29,8 @@
   <windowRules>
     <!-- the desk: no frame, no taskbar entry, cannot be closed by a key -->
     <!-- (the desk makes itself full-screen; labwc 0.20 has no plain "Fullscreen" action) -->
-    <windowRule identifier="org.llmos.desk" serverDecoration="no" skipTaskbar="yes" skipWindowSwitcher="no" fixedPosition="yes"/>
-    <windowRule identifier="llmos-media"><action name="Raise"/></windowRule>
+    <windowRule identifier="org.llmos.desk" serverDecoration="no" skipTaskbar="yes" skipWindowSwitcher="no" fixedPosition="yes"><action name="ToggleOmnipresent"/></windowRule>
+    <windowRule identifier="llmos-media"><action name="AutoPlace"/><action name="Raise"/></windowRule>
   </windowRules>
   <keyboard>
     <keybind key="A-Tab"><action name="NextWindow"/></keybind>
@@ -42,6 +44,31 @@
     <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
     <keybind key="W-f"><action name="ToggleFullscreen"/></keybind>
     <keybind key="W-Return"><action name="Execute" command="foot"/></keybind>
+    <!-- the Print Screen key: a screenshot, saved in Pictures and copied -->
+    <keybind key="Print"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'take a screenshot'"/></keybind>
+    <keybind key="W-S-s"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'snip'"/></keybind>
+    <keybind key="S-Print"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'snip'"/></keybind>
+    <!-- lock: Super+L as on Windows, Ctrl+Alt+L as on Linux desktops; a terminal: Ctrl+Alt+T; files: Super+E -->
+    <keybind key="W-l"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'lock the screen'"/></keybind>
+    <keybind key="C-A-l"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'lock the screen'"/></keybind>
+    <keybind key="C-A-t"><action name="Execute" command="foot"/></keybind>
+    <keybind key="W-e"><action name="Execute" command="thunar"/></keybind>
+    <keybind key="C-S-Escape"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'task manager'"/></keybind>
+    <keybind key="XF86AudioPlay"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'play pause'"/></keybind>
+    <keybind key="XF86AudioNext"><action name="Execute" command="playerctl next"/></keybind>
+    <keybind key="XF86AudioPrev"><action name="Execute" command="playerctl previous"/></keybind>
+    <keybind key="C-A-Left"><action name="GoToDesktop" to="left" wrap="yes"/></keybind>
+    <keybind key="C-A-Right"><action name="GoToDesktop" to="right" wrap="yes"/></keybind>
+    <keybind key="S-C-A-Left"><action name="SendToDesktop" to="left" wrap="yes"/></keybind>
+    <keybind key="S-C-A-Right"><action name="SendToDesktop" to="right" wrap="yes"/></keybind>
+    <keybind key="W-1"><action name="GoToDesktop" to="1"/></keybind>
+    <keybind key="W-2"><action name="GoToDesktop" to="2"/></keybind>
+    <keybind key="W-3"><action name="GoToDesktop" to="3"/></keybind>
+    <keybind key="W-4"><action name="GoToDesktop" to="4"/></keybind>
+    <!-- the Super (Windows) key on its own, or Super+Space: back to LLM OS, ready to type -->
+    <keybind key="Super_L" onRelease="yes"><action name="Execute" command="/usr/bin/llmos desk-ctl focus"/></keybind>
+    <keybind key="W-space"><action name="Execute" command="/usr/bin/llmos desk-ctl focus"/></keybind>
+    <keybind key="W-v"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'clipboard history'"/></keybind>
     <!-- system-wide dictation: speak, pause, and the words are typed wherever the cursor is -->
     <keybind key="W-d"><action name="Execute" command="/usr/bin/llmos dictate"/></keybind>
     <keybind key="XF86AudioRaiseVolume"><action name="Execute" command="/usr/bin/llmos volume +5"/></keybind>

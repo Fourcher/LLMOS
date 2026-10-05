@@ -1,0 +1,3 @@
+[screencast]
+# share the whole screen without asking which one (one screen, or the first of two)
+chooser_type=none

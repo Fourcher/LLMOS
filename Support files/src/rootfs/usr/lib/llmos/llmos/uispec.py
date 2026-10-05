@@ -23,7 +23,7 @@ import re
 SIZES = ("s", "m", "l", "xl")
 KINDS = ("panel", "dialog", "image", "media", "text", "form")
 BLOCK_TYPES = ("text", "kv", "stat", "list", "table", "image", "buttons", "toggle", "form",
-               "quote", "code", "progress", "choices", "media", "sources", "heading", "divider")
+               "quote", "code", "progress", "choices", "media", "sources", "heading", "divider", "gallery")
 MAX_BLOCKS = 40
 MAX_ITEMS = 60
 MAX_TEXT = 12000
@@ -185,6 +185,17 @@ def _block(b):
             return None
         return {"type": "image", "src": src, "caption": _s(b.get("caption"), 300), "credit": _s(b.get("credit"), 300),
                 "link": _url(b.get("link"))}
+    if t == "gallery":           # photos as thumbnails: local files only, each opens when clicked
+        items = []
+        raw = b.get("items")
+        for it in (raw if isinstance(raw, list) else [])[:MAX_ITEMS]:
+            if not isinstance(it, dict):
+                continue
+            src = _url(it.get("src"), local_only=True)
+            if src:
+                acts = _actions([{"label": "Open", "say": it.get("say")}], 1) if it.get("say") else []
+                items.append({"src": src, "title": _s(it.get("title"), 80), "say": acts[0]["say"] if acts else ""})
+        return {"type": "gallery", "items": items} if items else None
     if t == "buttons":
         acts = _actions(b.get("items") or b.get("buttons") or b.get("actions"), 8)
         return {"type": "buttons", "items": acts} if acts else None
@@ -305,6 +316,8 @@ def to_rows(spec):
             if b["columns"]:
                 rows.append(" · ".join(b["columns"]))
             rows += [" · ".join(r) for r in b["rows"]]
+        elif t == "gallery":
+            rows.append(f"[{len(b['items'])} photos] " + ", ".join(i["title"] for i in b["items"][:6]))
         elif t == "image":
             rows.append(f"[image] {b['caption'] or b['src']}" + (f" — {b['credit']}" if b["credit"] else ""))
         elif t in ("buttons", "choices"):

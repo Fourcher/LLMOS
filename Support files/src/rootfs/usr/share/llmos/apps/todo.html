@@ -1,0 +1,18 @@
+<!-- llmos-app: id=todo; title=To-do; size=s; words=todo to-do checklist tasklist task_list list_app -->
+<style>
+.add{display:flex;gap:8px;margin-bottom:12px}.add input{flex:1}
+ul{list-style:none;margin:0;padding:0}li{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--r);background:var(--card);margin-bottom:6px}
+li.done span{text-decoration:line-through;color:var(--dim)}li span{flex:1}li .x{background:none;border:0;color:var(--dim);font-size:18px;padding:0 6px}
+.foot{color:var(--dim);font-size:13px;display:flex;justify-content:space-between;margin-top:8px}
+input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+</style>
+<div class="add"><input id="in" placeholder="Add a task and press Enter"><button class="primary" id="ad">Add</button></div>
+<ul id="ls"></ul><div class="foot"><span id="cnt"></span><button id="cl">Clear done</button></div>
+<script>
+const $=id=>document.getElementById(id);let items=[];
+function save(){LLMOS.save({items})}
+function draw(){$("ls").innerHTML="";items.forEach((it,i)=>{const li=document.createElement("li");if(it.d)li.className="done";li.innerHTML=`<input type="checkbox" ${it.d?"checked":""}><span></span><button class="x" title="remove">×</button>`;li.querySelector("span").textContent=it.t;li.querySelector("input").onchange=e=>{it.d=e.target.checked;save();draw()};li.querySelector(".x").onclick=()=>{items.splice(i,1);save();draw()};$("ls").append(li)});$("cnt").textContent=items.filter(x=>!x.d).length+" left"}
+function add(){const v=$("in").value.trim();if(!v)return;items.push({t:v,d:false});$("in").value="";save();draw()}
+$("ad").onclick=add;$("in").onkeydown=e=>{if(e.key==="Enter")add()};$("cl").onclick=()=>{items=items.filter(x=>!x.d);save();draw()};
+LLMOS.load(s=>{items=(s&&s.items)||[];draw();$("in").focus()});
+</script>

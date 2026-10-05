@@ -1,0 +1,25 @@
+<!-- llmos-app: id=converter; title=Converter; size=s; words=converter convert conversion units -->
+<style>
+.cat{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}.cat button{flex:1;min-width:80px}.cat .on{background:var(--accent);color:var(--on-accent)}
+.side{display:flex;gap:8px;margin:8px 0}.side input{flex:1;font-size:22px}.side select{width:46%}
+.swap{display:block;margin:4px auto}
+</style>
+<div class="cat" id="cat"></div>
+<div class="side"><input id="a" type="number" value="1"><select id="ua"></select></div>
+<button class="swap" id="sw">⇅</button>
+<div class="side"><input id="b" type="number"><select id="ub"></select></div>
+<script>
+const U={Length:{m:1,km:1000,cm:.01,mm:.001,mile:1609.344,yard:.9144,foot:.3048,inch:.0254},Weight:{kg:1,g:.001,lb:.45359237,oz:.028349523,stone:6.35029,tonne:1000},Volume:{liter:1,ml:.001,"gallon (US)":3.785411784,"quart (US)":.946352946,"cup (US)":.2365882365,"fl oz (US)":.0295735296,"tablespoon":.0147867648,teaspoon:.00492892159},Area:{"m²":1,"km²":1e6,"ft²":.09290304,acre:4046.8564224,hectare:1e4},Speed:{"km/h":1,mph:1.609344,"m/s":3.6,knot:1.852},Temperature:{"°C":"c","°F":"f",K:"k"},Data:{byte:1,KB:1e3,MB:1e6,GB:1e9,TB:1e12,KiB:1024,MiB:1048576,GiB:1073741824},Time:{second:1,minute:60,hour:3600,day:86400,week:604800,year:31557600}};
+let cat="Length";const $=id=>document.getElementById(id);
+function toC(v,u){return u==="c"?v:u==="f"?(v-32)*5/9:v-273.15}function fromC(v,u){return u==="c"?v:u==="f"?v*9/5+32:v+273.15}
+function conv(v,from,to){const t=U[cat];if(cat==="Temperature")return fromC(toC(v,t[from]),t[to]);return v*t[from]/t[to]}
+function fmt(n){return isFinite(n)?String(+n.toPrecision(8)):""}
+function fill(){for(const s of ["ua","ub"]){$(s).innerHTML=Object.keys(U[cat]).map(k=>`<option>${k}</option>`).join("")}$("ub").selectedIndex=1;calc()}
+function calc(){$("b").value=fmt(conv(parseFloat($("a").value),$("ua").value,$("ub").value))}
+function back(){$("a").value=fmt(conv(parseFloat($("b").value),$("ub").value,$("ua").value))}
+$("cat").innerHTML=Object.keys(U).map(k=>`<button>${k}</button>`).join("");
+$("cat").querySelectorAll("button").forEach(b=>b.onclick=()=>{cat=b.textContent;$("cat").querySelectorAll("button").forEach(x=>x.className=x===b?"on":"");fill()});
+$("cat").firstChild.className="on";$("a").oninput=calc;$("b").oninput=back;$("ua").onchange=$("ub").onchange=calc;
+$("sw").onclick=()=>{const i=$("ua").selectedIndex;$("ua").selectedIndex=$("ub").selectedIndex;$("ub").selectedIndex=i;calc()};
+fill();
+</script>

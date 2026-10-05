@@ -1,0 +1,14 @@
+<!-- llmos-app: id=tip; title=Tip and split; size=s; words=tip tips tip_calculator tipping gratuity split bill restaurant -->
+<style>label{display:block;margin:10px 0 4px;color:var(--dim)}input{width:100%;font-size:22px}.row{display:flex;gap:6px;flex-wrap:wrap}.row button{flex:1}.row .on{background:var(--accent);color:var(--on-accent)}
+.res{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.res div{background:var(--card);border-radius:var(--r);padding:12px}.res b{display:block;font-size:24px}.res span{color:var(--dim);font-size:13px}</style>
+<label>Bill</label><input id="bill" type="number" step="0.01" placeholder="0.00" autofocus>
+<label>Tip</label><div class="row" id="pct"></div>
+<label>People</label><div class="row"><button id="m">−</button><button id="n" disabled>1</button><button id="p">+</button></div>
+<div class="res"><div><span>Tip</span><b id="ti">0.00</b></div><div><span>Total</span><b id="to">0.00</b></div><div><span>Each pays</span><b id="ea">0.00</b></div><div><span>Tip each</span><b id="te">0.00</b></div></div>
+<script>
+const $=id=>document.getElementById(id);let pct=18,n=1;
+$("pct").innerHTML=[10,15,18,20,25].map(p=>`<button data-p="${p}">${p}%</button>`).join("");
+function calc(){const b=parseFloat($("bill").value)||0,t=b*pct/100;$("ti").textContent=t.toFixed(2);$("to").textContent=(b+t).toFixed(2);$("ea").textContent=((b+t)/n).toFixed(2);$("te").textContent=(t/n).toFixed(2);$("n").textContent=n;
+ $("pct").querySelectorAll("button").forEach(x=>x.className=+x.dataset.p===pct?"on":"")}
+$("pct").querySelectorAll("button").forEach(x=>x.onclick=()=>{pct=+x.dataset.p;calc()});$("bill").oninput=calc;$("m").onclick=()=>{n=Math.max(1,n-1);calc()};$("p").onclick=()=>{n++;calc()};calc();
+</script>

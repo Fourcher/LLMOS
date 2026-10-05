@@ -128,7 +128,7 @@ PUBLIC_DEFAULTS = {
     "onboarded": False,
     "language": "English",
     "settings_language": "",        # "" = same as language
-    "autonomy": "hands-off",        # hands-off | balanced | hands-on
+    "autonomy": "balanced",         # hands-off | balanced | hands-on (balanced: asks before anything irreversible)
     "internet": "yes",              # yes | ask | no
     "tor": False,
     "model": "",                    # catalog id; "" = whatever is installed
@@ -141,6 +141,8 @@ PUBLIC_DEFAULTS = {
         "prompt": "›",
         "scale": 100,               # text/interface size on the desk, percent
         "motion": "full",           # animations on the desk: full | reduced | off
+        "font": "sans",             # sans | serif | mono | pixel (themes.FONTS)
+        "backdrop": "living",       # behind the windows: living (animated) | still | photo (the wallpaper) | plain
         "layout": "clean",          # the desk's arrangement: clean (LLM OS) | windows (taskbar + start menu) | mac (menu bar + dock)
     },
     "speak_replies": False,

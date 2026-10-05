@@ -1,0 +1,16 @@
+<!-- llmos-app: id=dice; title=Dice; size=s; words=dice die coin -->
+<style>
+.res{font-size:64px;text-align:center;margin:18px 0;min-height:90px}.row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.row button{min-width:84px}
+.hist{color:var(--dim);text-align:center;font-size:14px}.rng{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px}.rng input{width:80px}
+</style>
+<div class="res" id="r">🎲</div>
+<div class="row"><button class="primary" data-d="6">Roll a die</button><button data-d="2d6">Two dice</button><button data-d="coin">Flip a coin</button><button data-d="20">d20</button></div>
+<div class="rng">From <input id="lo" type="number" value="1"> to <input id="hi" type="number" value="100"> <button id="pk">Pick</button></div>
+<p class="hist" id="h"></p>
+<script>
+const $=id=>document.getElementById(id),F=["⚀","⚁","⚂","⚃","⚄","⚅"];let hist=[];
+function rnd(n){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]%n}
+function show(s){$("r").textContent=s;$("r").animate([{transform:"rotate(-12deg) scale(.8)"},{transform:"none"}],{duration:250});hist.unshift(s);hist=hist.slice(0,8);$("h").textContent=hist.join("  ·  ")}
+document.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{const d=b.dataset.d;if(d==="coin")show(rnd(2)?"Heads":"Tails");else if(d==="2d6"){const a=rnd(6),c=rnd(6);show(F[a]+F[c]+" = "+(a+c+2))}else if(d==="6")show(F[rnd(6)]);else show(String(rnd(+d)+1))});
+$("pk").onclick=()=>{const lo=Math.ceil(+$("lo").value),hi=Math.floor(+$("hi").value);if(hi>=lo)show(String(lo+rnd(hi-lo+1)))};
+</script>
