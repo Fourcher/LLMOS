@@ -1,23 +1,36 @@
 #!/usr/bin/env python3
-"""LLM OS Setup: the first thing to open, on whatever computer you have. One window, no dependencies
-beyond Python 3.
+"""LLM OS Setup: makes a USB stick that starts LLM OS on a PC or an Intel Mac, from any Mac, Windows PC or
+Linux computer, and shows how to try LLM OS in a window on this computer.
 
-It recognises the computer (Mac with Apple Silicon or Intel, Windows, Linux; its memory) and recommends
-the right way in: try LLM OS in a window (a virtual machine), make a bootable USB stick (with size and type
-recommendations), install or dual boot, or just save the ISO. It is a tiny local web app: this file serves
-./index.html on 127.0.0.1 and opens it in the default browser. Nothing leaves the machine.
+A tiny local web app: this file serves index.html on 127.0.0.1 to the default browser; nothing leaves this
+computer. It needs only Python 3.8+ (the Start Here files find one, or fetch a private copy once).
 
-Open it with the "1 - START HERE" file for your computer in the folder above, or `python3 llmos-setup.py`.
+Writing a stick
+  macOS    The stick is opened with /usr/libexec/authopen: macOS shows its own password prompt, then hands this
+           program an open device, and this program streams the image. (A password asked for with osascript's
+           "with administrator privileges" runs the copy outside Terminal's privacy permissions, and macOS then
+           refuses it with "Operation not permitted".)
+  Windows, Linux
+           A second copy of this program runs with administrator rights (the Windows "Yes" prompt, or polkit's
+           pkexec) for the write and reports progress through a small file.
+The image is written with its first 4 MiB last, so no operating system sees the new partition table before the
+rest is in place, then read back and compared (SHA-256). Disks that hold this program's own files, Time Machine
+backups, the system, or anything mounted from them, are never offered.
 """
+import base64
 import hashlib
 import hmac
 import http.server
 import json
+import mmap
 import os
-import re
 import platform
 import plistlib
+import re
+import secrets
 import shutil
+import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -26,37 +39,814 @@ import time
 import urllib.parse
 import webbrowser
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-DIST = os.path.dirname(HERE)
-SYSTEM = platform.system()          # Darwin | Windows | Linux
-MACHINE = platform.machine().lower()  # arm64 / aarch64 on Apple Silicon and ARM PCs, x86_64 / amd64 otherwise
+HERE = os.path.dirname(os.path.abspath(__file__))    # .../dist/setup
+FILES = os.environ.get("LLMOS_SETUP_FILES") or os.path.dirname(HERE)   # .../dist: the images and checksums
+OS = {"Darwin": "mac", "Windows": "windows"}.get(platform.system(), "linux")
+USB_IMAGE = "llmos-x86_64.iso"     # starts PCs and Intel Macs: every computer that can boot from a USB stick
+CHUNK = 4 << 20                    # 4 MiB, a multiple of every disk sector size
+ALIGN = 4096                       # the last write is padded to a whole 4 KiB
+MIN_STICK = 8 * 10**9
+LARGE = 129 * 10**9                # bigger than a usual USB stick: listed, with a warning
+AUTHOPEN = os.environ.get("LLMOS_SETUP_AUTHOPEN", "/usr/libexec/authopen")   # tests substitute a stand-in
+UTM_URL = "https://mac.getutm.app/"
+VBOX_URL = "https://www.virtualbox.org/wiki/Downloads"
+BOXES_URL = "https://apps.gnome.org/Boxes/"
+TOKEN = ""                         # per launch; every /api call must carry it (see Handler.authorized)
+TEST_DEVICE = os.environ.get("LLMOS_SETUP_TEST_DEVICE", "")   # tests only: a device or file offered as "Test drive"
 
 
-def _apple_silicon():
-    """A Mac with Apple Silicon, even when this Python is an Intel build running under Rosetta (which reports
-    x86_64): the chip, not the program, decides which ISO the Mac can run."""
+def log(msg):
+    print("  " + msg, flush=True)
+
+
+def run(args, timeout=60):
+    """Run a command and return its CompletedProcess (text); a command that cannot run reads as failed."""
     try:
-        return subprocess.run(["sysctl", "-n", "hw.optional.arm64"], capture_output=True, text=True, timeout=5).stdout.strip() == "1"
-    except Exception:
-        return False
+        return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as e:
+        return subprocess.CompletedProcess(args, 127, "", str(e))
 
 
-if SYSTEM == "Darwin" and MACHINE not in ("arm64", "aarch64") and _apple_silicon():
-    MACHINE = "arm64"
-ARM = MACHINE in ("arm64", "aarch64")
-UTM_PAGE = "https://mac.getutm.app/"   # UTM: free, open-source virtual machines for the Mac
-STATE = {"phase": "idle", "done": 0, "total": 0, "message": "", "error": "", "started": 0}
+def gb(n):
+    return f"{n / 1e9:.0f} GB" if n >= 10e9 else f"{n / 1e9:.1f} GB"
+
+# ----------------------------------------------------------------- this computer
+
+def _sysctl(name):
+    return run(["sysctl", "-n", name], timeout=5).stdout.strip()
+
+
+def native_arch():
+    """The processor this computer has, not the one this Python was built for (an Intel Python under Rosetta,
+    or an x64 Python on an ARM Windows PC, reports x86_64)."""
+    if OS == "mac":
+        return "arm64" if _sysctl("hw.optional.arm64") == "1" else "x86_64"
+    if OS == "windows":
+        try:
+            import ctypes
+            from ctypes import wintypes
+            k32 = ctypes.windll.kernel32
+            k32.GetCurrentProcess.restype = wintypes.HANDLE
+            k32.IsWow64Process2.argtypes = [wintypes.HANDLE, ctypes.POINTER(ctypes.c_ushort), ctypes.POINTER(ctypes.c_ushort)]
+            proc, native = ctypes.c_ushort(), ctypes.c_ushort()
+            if k32.IsWow64Process2(k32.GetCurrentProcess(), ctypes.byref(proc), ctypes.byref(native)):
+                return "arm64" if native.value == 0xAA64 else "x86_64"
+        except (AttributeError, OSError):
+            pass
+        env = (os.environ.get("PROCESSOR_ARCHITEW6432", "") + os.environ.get("PROCESSOR_ARCHITECTURE", "")).upper()
+        return "arm64" if "ARM64" in env else "x86_64"
+    return "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x86_64"
+
+
+ARCH = native_arch()
+
+
+def ram_gb():
+    try:
+        if OS == "mac":
+            return int(_sysctl("hw.memsize")) / 2**30
+        if OS == "linux":
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        return int(line.split()[1]) / 2**20
+        if OS == "windows":
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + \
+                           [(n, ctypes.c_ulonglong) for n in ("total", "avail", "pagetotal", "pageavail", "virttotal", "virtavail", "extavail")]
+            m = MEMORYSTATUSEX()
+            m.dwLength = ctypes.sizeof(m)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+            return m.total / 2**30
+    except (OSError, ValueError, AttributeError):
+        pass
+    return 0
+
+
+def host():
+    chip = ""
+    if OS == "mac":
+        chip = "Apple silicon" if ARCH == "arm64" else "Intel"
+    return {"os": OS, "arch": ARCH, "chip": chip, "ram_gb": round(ram_gb()),
+            "kind": {"mac": "Mac", "windows": "PC"}.get(OS, "computer"),
+            "boots_usb": ARCH == "x86_64"}    # can this computer itself start from the stick it makes
+
+
+def version():
+    for p in (os.path.join(FILES, "VERSION"), os.path.join(os.path.dirname(FILES), "VERSION")):
+        try:
+            with open(p, encoding="utf-8") as f:
+                return f.read().strip()
+        except OSError:
+            continue
+    return ""
+
+
+def published_sha256(name):
+    try:
+        with open(os.path.join(FILES, "SHA256SUMS"), encoding="utf-8") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) == 2 and parts[1].lstrip("*") == name:
+                    return parts[0].lower()
+    except OSError:
+        pass
+    return ""
+
+# ----------------------------------------------------------------- is the image intact (checked once, in the background)
+
+CHECK = {"state": "idle", "done": 0, "total": 0, "sha256": ""}      # idle | running | ok | bad | missing
+_check_lock = threading.Lock()
+
+
+def start_image_check():
+    with _check_lock:
+        if CHECK["state"] != "idle":
+            return
+        CHECK["state"] = "running"
+    threading.Thread(target=_check_image, daemon=True).start()
+
+
+def _check_image():
+    path = os.path.join(FILES, USB_IMAGE)
+    if not os.path.isfile(path):
+        CHECK["state"] = "missing"
+        return
+    CHECK["total"] = os.path.getsize(path)
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for block in iter(lambda: f.read(8 << 20), b""):
+                h.update(block)
+                CHECK["done"] += len(block)
+    except OSError:
+        CHECK["state"] = "bad"
+        return
+    want = published_sha256(USB_IMAGE)
+    CHECK["sha256"] = h.hexdigest()
+    CHECK["state"] = "ok" if not want or want == CHECK["sha256"] else "bad"
+
+# ----------------------------------------------------------------- USB sticks
+
+def _under(path, mount):
+    path, mount = os.path.realpath(path), os.path.realpath(mount)
+    return path == mount or path.startswith(mount.rstrip(os.sep) + os.sep)
+
+
+def list_drives():
+    """USB sticks and cards this computer could write. Never: the disk this program runs from, a Time Machine
+    backup, an internal or system disk, or one holding a mounted system part."""
+    try:
+        drives = {"mac": _mac_drives, "windows": _win_drives}.get(OS, _linux_drives)()
+    except Exception as e:      # listing must never take the page down
+        return {"drives": [], "error": f"Couldn't list the drives: {e}"}
+    if TEST_DEVICE:
+        drives.append({"id": "test", "name": "Test drive", "labels": [], "bus": "test", "test": True,
+                       "size": int(os.environ.get("LLMOS_SETUP_TEST_SIZE") or os.path.getsize(TEST_DEVICE))})
+    for d in drives:
+        d["too_small"] = 0 < d["size"] < MIN_STICK
+        d["large"] = d["size"] > LARGE
+    return {"drives": drives}
+
+
+def _dplist(args):
+    try:
+        out = subprocess.run(["diskutil"] + args, capture_output=True, timeout=30).stdout
+        return plistlib.loads(out) if out else {}
+    except (OSError, subprocess.SubprocessError, ValueError, plistlib.InvalidFileException):
+        return {}
+
+
+def _mac_backup_mounts():
+    out = run(["tmutil", "destinationinfo", "-X"], timeout=20).stdout
+    try:
+        info = plistlib.loads(out.encode()) if out.strip() else {}
+    except (ValueError, plistlib.InvalidFileException):
+        return []
+    return [d.get("MountPoint") for d in info.get("Destinations", []) if d.get("MountPoint")]
+
+
+def _mac_backup_disks(whole_of):
+    """Physical disks holding an APFS volume whose role is Backup (Time Machine), mounted or not."""
+    disks = set()
+    for c in _dplist(["apfs", "list", "-plist"]).get("Containers", []):
+        if any("Backup" in (v.get("Roles") or []) for v in c.get("Volumes", [])):
+            for s in c.get("PhysicalStores", []):
+                disks.add(whole_of.get(s.get("DeviceIdentifier"), ""))
+    return disks
+
+
+def _mac_drives():
+    every = _dplist(["list", "-plist"]).get("AllDisksAndPartitions", [])
+    external = _dplist(["list", "-plist", "external", "physical"]).get("WholeDisks", [])
+    whole_of, mounts, labels = {}, {}, {}
+    for d in every:
+        w = d.get("DeviceIdentifier", "")
+        for p in d.get("Partitions") or []:
+            whole_of[p.get("DeviceIdentifier")] = w
+            if p.get("MountPoint"):
+                mounts.setdefault(w, []).append(p["MountPoint"])
+            if p.get("VolumeName"):
+                labels.setdefault(w, []).append(p["VolumeName"])
+        if d.get("MountPoint"):
+            mounts.setdefault(w, []).append(d["MountPoint"])
+    for d in every:      # an APFS container is its own disk: credit its volumes to the physical disk under it
+        for store in d.get("APFSPhysicalStores") or []:
+            w = whole_of.get(store.get("DeviceIdentifier"), "")
+            for v in d.get("APFSVolumes") or []:
+                if v.get("MountPoint"):
+                    mounts.setdefault(w, []).append(v["MountPoint"])
+                if v.get("VolumeName"):
+                    labels.setdefault(w, []).append(v["VolumeName"])
+    backup_mounts, backup_disks = _mac_backup_mounts(), _mac_backup_disks(whole_of)
+    drives = []
+    for w in external:
+        info = _dplist(["info", "-plist", w])
+        if info.get("Internal") or info.get("VirtualOrPhysical") == "Virtual" or not info.get("WholeDisk", True):
+            continue
+        mps = mounts.get(w, [])
+        if any(_under(FILES, m) or _under(HERE, m) for m in mps):
+            continue                                  # this program's own drive
+        if w in backup_disks or any(m in backup_mounts for m in mps):
+            continue                                  # a Time Machine backup
+        name = (info.get("MediaName") or info.get("IORegistryEntryName") or w).strip()
+        vols = [v for v in labels.get(w, []) if v and v.upper() not in ("EFI", "RECOVERY")]
+        drives.append({"id": w, "name": name, "size": int(info.get("Size") or info.get("TotalSize") or 0),
+                       "labels": vols[:3], "bus": info.get("BusProtocol", "")})
+    return drives
+
+
+def _ps(script, timeout=60):
+    return run(["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], timeout)
+
+
+def _win_self_disk_letter():
+    drive = os.path.splitdrive(os.path.realpath(FILES))[0].rstrip(":\\/")
+    return drive.upper() if len(drive) == 1 and drive.isalpha() else ""
+
+
+def _win_drives():
+    letter = _win_self_disk_letter()
+    own = f"try {{ $own = (Get-Partition -DriveLetter '{letter}' -ErrorAction Stop).DiskNumber }} catch {{}}; " if letter else ""
+    script = (
+        "$own = -1; " + own +
+        "@(Get-Disk | Where-Object { ($_.BusType -eq 'USB' -or $_.BusType -eq 'SD' -or $_.BusType -eq 'MMC') -and "
+        "-not $_.IsSystem -and -not $_.IsBoot -and $_.Number -ne $own } | ForEach-Object { $n = $_.Number; "
+        "$labels = @(Get-Partition -DiskNumber $n -ErrorAction SilentlyContinue | Get-Volume -ErrorAction SilentlyContinue | "
+        "Where-Object { $_.FileSystemLabel } | ForEach-Object { $_.FileSystemLabel }); "
+        "[pscustomobject]@{ Number = $n; Name = $_.FriendlyName; Size = [int64]$_.Size; Bus = [string]$_.BusType; Labels = $labels } }) "
+        "| ConvertTo-Json -Compress -Depth 3")
+    r = _ps(script)
+    if r.returncode != 0 and not r.stdout.strip():
+        raise RuntimeError((r.stderr or "PowerShell didn't answer").strip()[:200])
+    data = json.loads(r.stdout) if r.stdout.strip() else []
+    if isinstance(data, dict):
+        data = [data]
+    drives = []
+    for d in data:
+        labels = d.get("Labels") or []
+        labels = [labels] if isinstance(labels, str) else [x for x in labels if x]
+        drives.append({"id": str(d["Number"]), "name": (d.get("Name") or f"Disk {d['Number']}").strip(),
+                       "size": int(d.get("Size") or 0), "labels": labels[:3], "bus": d.get("Bus", "")})
+    return drives
+
+
+_SYSTEM_MOUNTS = ("/", "/boot", "/boot/efi", "/efi", "/home", "/usr", "/var", "/opt", "/srv", "/nix", "/gnu")
+
+
+def _lsblk(device=None):
+    args = ["lsblk", "-J", "-b", "-o", "NAME,SIZE,RM,TRAN,TYPE,MODEL,VENDOR,LABEL,MOUNTPOINT"]
+    out = run(args + ([device] if device else []), timeout=20).stdout
+    try:
+        return json.loads(out or "{}").get("blockdevices", [])
+    except ValueError:
+        return []
+
+
+def _walk(node):
+    yield node
+    for child in node.get("children") or []:
+        yield from _walk(child)
+
+
+def _linux_blocker(disk):
+    """Why this disk must not be written, or "": it holds part of the running system, swap, an open encrypted /
+    LVM / RAID volume, or this program's own files. A stick mounted under /media is fine (it is unmounted first)."""
+    for n in _walk(disk):
+        mp = n.get("mountpoint")
+        if mp and (mp in _SYSTEM_MOUNTS or mp == "[SWAP]"):
+            return f"it holds {mp} of this computer"
+        if mp and (_under(FILES, mp) or _under(HERE, mp)):
+            return "LLM OS Setup itself runs from it"
+        t = str(n.get("type", ""))
+        if t in ("crypt", "lvm", "dm") or t.startswith("raid"):
+            return "it holds an open encrypted or LVM volume"
+    try:
+        with open("/proc/swaps") as f:
+            if re.search(r"^/dev/" + re.escape(disk["name"]) + r"\S*\s", f.read(), re.M):
+                return "it is used as swap"
+    except OSError:
+        pass
+    return ""
+
+
+def _linux_drives():
+    drives = []
+    for d in _lsblk():
+        removable = str(d.get("rm")).lower() in ("1", "true") or d.get("tran") == "usb"
+        if d.get("type") != "disk" or not removable or _linux_blocker(d):
+            continue
+        name = " ".join(x for x in ((d.get("vendor") or "").strip(), (d.get("model") or "").strip()) if x) or d["name"]
+        labels = [n.get("label") for n in _walk(d) if n.get("label")]
+        drives.append({"id": "/dev/" + d["name"], "name": name, "size": int(d.get("size") or 0),
+                       "labels": labels[:3], "bus": d.get("tran") or ""})
+    return drives
+
+# ----------------------------------------------------------------- writing (the part shared by every system)
+
+def _aligned(n):
+    return (n + ALIGN - 1) // ALIGN * ALIGN
+
+
+def _fill(f, view):
+    got = 0
+    while got < len(view):
+        n = f.readinto(view[got:])
+        if not n:
+            break
+        got += n
+    return got
+
+
+def write_and_verify(path, size, expected, pwrite, pread, progress, flush=None):
+    """Stream the image at `path` onto a device, then read it back and compare.
+
+    pwrite(view, offset) must write all of view at offset; pread(view, offset) must fill view from offset.
+    The first chunk is written last, so the device shows no partition table until everything after it is in
+    place. progress(phase, bytes_done) reports "writing" and "verifying". flush() runs between the two.
+    Raises RuntimeError when the image changes underneath or the device reads back differently."""
+    buf = mmap.mmap(-1, CHUNK)             # page-aligned memory: raw disk devices want aligned buffers
+    first = mmap.mmap(-1, CHUNK)
+    view, first_view = memoryview(buf), memoryview(first)
+    first_len = 0
+    try:
+        h = hashlib.sha256()
+        off = 0
+        with open(path, "rb", buffering=0) as f:
+            while off < size:
+                n = _fill(f, view[:min(CHUNK, size - off)])
+                if n <= 0:
+                    raise RuntimeError("The LLM OS image ended early. Get a fresh copy of the LLM OS folder.")
+                h.update(view[:n])
+                m = _aligned(n)
+                if m > n:
+                    view[n:m] = bytes(m - n)
+                if off == 0:
+                    first_view[:m] = view[:m]          # written last
+                    first_len = m
+                else:
+                    pwrite(view[:m], off)
+                off += n
+                progress("writing", off)
+        if expected and h.hexdigest() != expected:
+            raise RuntimeError("The LLM OS image changed while it was being written. Try again.")
+        pwrite(first_view[:first_len], 0)
+        if flush:
+            flush()
+        check = hashlib.sha256()
+        off = 0
+        while off < size:
+            n = min(CHUNK, size - off)
+            pread(view[:_aligned(n)], off)
+            check.update(view[:n])
+            off += n
+            progress("verifying", off)
+        if check.digest() != h.digest():
+            raise RuntimeError("The stick didn't read back correctly, so it may be faulty. Try another USB stick.")
+        return h.hexdigest()
+    finally:
+        view.release()
+        first_view.release()
+        buf.close()
+        first.close()
+
+
+def _fd_io(fd):
+    """pwrite/pread for a POSIX file descriptor (whole-buffer, retrying short transfers)."""
+    def pwrite(view, offset):
+        done = 0
+        while done < len(view):
+            n = os.pwrite(fd, view[done:], offset + done)
+            if n <= 0:
+                raise RuntimeError("The stick stopped accepting data. Is it still plugged in?")
+            done += n
+
+    def pread(view, offset):
+        os.lseek(fd, offset, os.SEEK_SET)
+        got = 0
+        while got < len(view):
+            n = os.readv(fd, [view[got:]])
+            if n <= 0:
+                raise RuntimeError("The stick stopped answering while it was being checked. Is it still plugged in?")
+            got += n
+    return pwrite, pread
+
+# ----------------------------------------------------------------- the write job
+
+STATE = {"phase": "idle", "done": 0, "total": 0, "drive": None, "error": "", "started": 0.0}
 LOCK = threading.Lock()
-TOKEN = ""     # per launch; the page sends it back with every request, so another site cannot drive this app
+_FINISHED = ("idle", "done", "error", "cancelled")
 
+
+class Cancelled(Exception):
+    pass
+
+
+def set_state(**kw):
+    with LOCK:
+        STATE.update(kw)
+
+
+def start_write(drive_id):
+    """Start writing the USB image to the drive with this id; returns "" or the reason it can't start."""
+    with LOCK:
+        if STATE["phase"] not in _FINISHED:
+            return "A stick is already being written."
+    drive = next((d for d in list_drives().get("drives", []) if d["id"] == drive_id), None)
+    if not drive:
+        return "That stick isn't connected any more. Plug it in again and choose it."
+    path = os.path.join(FILES, USB_IMAGE)
+    if not os.path.isfile(path):
+        return "This copy of LLM OS is missing its USB image. Get a fresh copy of the LLM OS folder."
+    size = os.path.getsize(path)
+    if drive["size"] and drive["size"] < max(size, MIN_STICK):
+        return f"{drive['name']} is too small. Use a stick of 8 GB or more."
+    set_state(phase="checking", done=0, total=size, drive=drive, error="", started=time.time())
+    threading.Thread(target=_write_job, args=(drive, path, size), daemon=True).start()
+    return ""
+
+
+def _write_job(drive, path, size):
+    try:
+        start_image_check()                    # the image must be intact before anything is erased
+        while CHECK["state"] == "running":
+            set_state(phase="checking", done=CHECK["done"], total=CHECK["total"] or size)
+            time.sleep(0.25)
+        if CHECK["state"] == "missing":
+            raise RuntimeError("This copy of LLM OS is missing its USB image. Get a fresh copy of the LLM OS folder.")
+        if CHECK["state"] == "bad":
+            raise RuntimeError("The LLM OS image in this folder is damaged. Get a fresh copy of the LLM OS folder "
+                               "(download or copy it again), then try again. Your stick was not touched.")
+        set_state(total=size, done=0, started=time.time())
+        log(f"Writing {USB_IMAGE} to {drive['name']} ({drive['id']}, {gb(drive['size'])})")
+        if OS == "mac":
+            _mac_write(drive, path, size, CHECK["sha256"])
+        elif drive.get("test"):
+            fd = os.open(TEST_DEVICE, os.O_RDWR)
+            try:
+                write_and_verify(path, size, CHECK["sha256"], *_fd_io(fd), _progress)
+            finally:
+                os.close(fd)
+        else:
+            _elevated_write(drive, path, size, CHECK["sha256"])
+        set_state(phase="done", done=size, total=size)
+        log("Done: the stick is ready.")
+    except Cancelled:
+        set_state(phase="cancelled", error="")
+        log("Cancelled: nothing was written.")
+    except Exception as e:      # every failure ends in a readable message on the page
+        set_state(phase="error", error=str(e) or e.__class__.__name__)
+        log(f"Error: {e}")
+
+
+def _progress(phase, done):
+    set_state(phase=phase, done=done)
+
+# ----------------------------------------------------------------- macOS
+
+def _authopen(path, flags):
+    """Open `path` through Apple's authopen: macOS asks for the password in its own window, then authopen hands
+    this process the open descriptor over a socket (SCM_RIGHTS). Raises Cancelled when the prompt is cancelled."""
+    parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        proc = subprocess.Popen([AUTHOPEN, "-stdoutpipe", "-o", str(flags), path],
+                                stdin=subprocess.DEVNULL, stdout=child, stderr=subprocess.PIPE)
+    finally:
+        child.close()
+    fds = []
+    try:
+        parent.settimeout(900)                 # time to type the password
+        _msg, anc, _flags, _addr = parent.recvmsg(64, socket.CMSG_SPACE(struct.calcsize("i")))
+        for level, kind, data in anc:
+            if level == socket.SOL_SOCKET and kind == socket.SCM_RIGHTS:
+                whole = len(data) - len(data) % struct.calcsize("i")
+                fds.extend(struct.unpack(f"{whole // struct.calcsize('i')}i", data[:whole]))
+    except socket.timeout:
+        proc.kill()
+    finally:
+        parent.close()
+    err = proc.stderr.read().decode("utf-8", "replace").strip() if proc.stderr else ""
+    proc.wait()
+    if fds:
+        for extra in fds[1:]:
+            os.close(extra)
+        return fds[0]
+    low = err.lower()
+    if not err or "cancel" in low or "-60006" in low:
+        raise Cancelled()
+    if "not permitted" in low or "-60005" in low or "denied" in low:
+        raise RuntimeError("macOS didn't allow writing to the stick. Open System Settings > Privacy & Security > "
+                           "Full Disk Access, turn on Terminal, then quit Terminal and start Setup again.")
+    raise RuntimeError(f"macOS couldn't open the stick: {err}")
+
+
+def _mac_write(drive, path, size, expected):
+    dev, raw = "/dev/" + drive["id"], "/dev/r" + drive["id"]
+    if drive.get("test"):
+        dev = raw = TEST_DEVICE
+    set_state(phase="preparing")
+    r = run(["diskutil", "unmountDisk", "force", dev], timeout=90) if not drive.get("test") else run(["true"])
+    if r.returncode != 0:
+        why = (r.stderr or r.stdout).strip().splitlines()
+        raise RuntimeError("Couldn't get the stick ready" + (f" ({why[-1]})" if why else "") +
+                           ". Close any windows or apps using it and try again.")
+    set_state(phase="password")
+    fd = _authopen(raw, os.O_RDWR)
+    try:
+        pwrite, pread = _fd_io(fd)
+        write_and_verify(path, size, expected, pwrite, pread, _progress)
+    finally:
+        os.close(fd)
+    set_state(phase="finishing")
+    if not drive.get("test"):
+        run(["diskutil", "eject", dev], timeout=90)
+
+# ----------------------------------------------------------------- Windows and Linux: an elevated helper
+
+class _WinProcess:
+    """The elevated helper on Windows, started with ShellExecuteExW("runas")."""
+
+    def __init__(self, args):
+        import ctypes
+        from ctypes import wintypes
+        self.ctypes, self.wintypes = ctypes, wintypes
+
+        class SHELLEXECUTEINFOW(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("fMask", ctypes.c_ulong), ("hwnd", wintypes.HWND),
+                        ("lpVerb", wintypes.LPCWSTR), ("lpFile", wintypes.LPCWSTR), ("lpParameters", wintypes.LPCWSTR),
+                        ("lpDirectory", wintypes.LPCWSTR), ("nShow", ctypes.c_int), ("hInstApp", wintypes.HINSTANCE),
+                        ("lpIDList", ctypes.c_void_p), ("lpClass", wintypes.LPCWSTR), ("hkeyClass", wintypes.HKEY),
+                        ("dwHotKey", wintypes.DWORD), ("hIcon", wintypes.HANDLE), ("hProcess", wintypes.HANDLE)]
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        shell32.ShellExecuteExW.argtypes = [ctypes.POINTER(SHELLEXECUTEINFOW)]
+        shell32.ShellExecuteExW.restype = wintypes.BOOL
+        self.k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        self.k32.WaitForSingleObject.restype = wintypes.DWORD
+        self.k32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        self.k32.GetExitCodeProcess.restype = wintypes.BOOL
+        self.k32.CloseHandle.argtypes = [wintypes.HANDLE]
+        sei = SHELLEXECUTEINFOW()
+        sei.cbSize = ctypes.sizeof(sei)
+        sei.fMask = 0x00000040 | 0x00000400          # SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI
+        sei.lpVerb = "runas"
+        sei.lpFile = sys.executable
+        sei.lpParameters = subprocess.list2cmdline(args)
+        sei.nShow = 0                                 # SW_HIDE: progress shows on the page
+        if not shell32.ShellExecuteExW(ctypes.byref(sei)):
+            code = ctypes.get_last_error()
+            if code == 1223:                          # ERROR_CANCELLED: "No" on the Windows prompt
+                raise Cancelled()
+            raise RuntimeError(f"Windows couldn't start the writer (error {code}). Use an administrator account.")
+        self.handle = sei.hProcess
+
+    def poll(self):
+        if self.k32.WaitForSingleObject(self.handle, 0) != 0:      # WAIT_OBJECT_0 once it has exited
+            return None
+        code = self.wintypes.DWORD()
+        self.k32.GetExitCodeProcess(self.handle, self.ctypes.byref(code))
+        self.k32.CloseHandle(self.handle)
+        return code.value
+
+
+def _elevated_write(drive, path, size, expected):
+    fd, progress = tempfile.mkstemp(prefix="llmos-setup-", suffix=".json")
+    os.close(fd)
+    args = [os.path.abspath(__file__), "--write-helper", path, drive["id"], progress, expected or "-"]
+    set_state(phase="password")
+    if OS == "windows":
+        proc = _WinProcess(args)
+    else:
+        for n in _walk((_lsblk(drive["id"]) or [{}])[0]):      # let the desktop release an automounted stick
+            if n.get("mountpoint") and n.get("name") and shutil.which("udisksctl"):
+                run(["udisksctl", "unmount", "-b", "/dev/" + n["name"]], timeout=30)
+        if shutil.which("pkexec"):
+            proc = subprocess.Popen(["pkexec", sys.executable] + args, stdin=subprocess.DEVNULL,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        else:                                          # no polkit: sudo asks in the window Setup was started from
+            log("Type your password here to let Setup write to the stick:")
+            proc = subprocess.Popen(["sudo", sys.executable] + args)
+    last, rc = {}, None
+    try:
+        while rc is None:
+            time.sleep(0.4)
+            rc = proc.poll()
+            try:
+                with open(progress, encoding="utf-8") as f:
+                    last = json.loads(f.read() or "{}")
+            except (OSError, ValueError):
+                pass
+            if last.get("phase") in ("preparing", "writing", "verifying"):
+                set_state(phase=last["phase"], done=int(last.get("done") or 0))
+    finally:
+        try:
+            os.remove(progress)
+        except OSError:
+            pass
+    if last.get("phase") == "done":
+        return
+    if last.get("error"):
+        raise RuntimeError(last["error"])
+    if OS == "linux" and rc in (126, 127) and not last:
+        raise Cancelled()
+    raise RuntimeError("The writer stopped before it finished. Try again with the stick plugged straight into this computer.")
+
+
+def helper_main(path, device, progress, expected):
+    """The elevated part (Windows, Linux): write the image to `device` and report through `progress`."""
+    expected = "" if expected == "-" else expected
+    sent = [0.0]
+
+    def report(force=False, **kw):
+        if not force and time.time() - sent[0] < 0.25:
+            return
+        sent[0] = time.time()
+        tmp = progress + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(kw, f)
+        for _ in range(60):        # Windows refuses the swap while Setup has the file open to read it: try again
+            try:
+                os.replace(tmp, progress)
+                return
+            except PermissionError:
+                time.sleep(0.05)
+
+    try:
+        size = os.path.getsize(path)
+        report(force=True, phase="preparing")
+        step = lambda phase, done: report(phase=phase, done=done)      # noqa: E731
+        if OS == "windows":
+            _win_helper_write(path, device, size, expected, step)
+        else:
+            _linux_helper_write(path, device, size, expected, step)
+        report(force=True, phase="done")
+        return 0
+    except Exception as e:
+        report(force=True, phase="error", error=str(e) or e.__class__.__name__)
+        return 1
+
+
+def _win_helper_write(path, number, size, expected, step):
+    number = int(number)
+    r = _ps(f"$d = Get-Disk -Number {number}; [pscustomobject]@{{ Bus = [string]$d.BusType; "
+            "System = [bool]$d.IsSystem; Boot = [bool]$d.IsBoot }} | ConvertTo-Json -Compress")
+    try:
+        info = json.loads(r.stdout or "{}")
+    except ValueError:
+        info = {}
+    if info.get("Bus") not in ("USB", "SD", "MMC") or info.get("System") or info.get("Boot"):
+        raise RuntimeError("That disk isn't a USB stick, so it was not written.")
+    fd, script = tempfile.mkstemp(suffix=".txt")
+    with os.fdopen(fd, "w") as f:
+        f.write(f"select disk {number}\nclean\n")     # Windows lets go of the stick's drives
+    try:
+        r = run(["diskpart", "/s", script], timeout=180)
+    finally:
+        os.remove(script)
+    if r.returncode != 0:
+        lines = [x for x in (r.stdout or "").splitlines() if x.strip()]
+        raise RuntimeError("Windows couldn't prepare the stick" + (f": {lines[-1].strip()}" if lines else "") +
+                           ". Close any windows showing the stick and try again.")
+    time.sleep(2)
+    with open(rf"\\.\PhysicalDrive{number}", "r+b", buffering=0) as d:
+        def pwrite(view, offset):
+            d.seek(offset)
+            done = 0
+            while done < len(view):
+                n = d.write(view[done:])
+                if not n:
+                    raise RuntimeError("The stick stopped accepting data. Is it still plugged in?")
+                done += n
+
+        def pread(view, offset):
+            d.seek(offset)
+            got = 0
+            while got < len(view):
+                n = d.readinto(view[got:])
+                if not n:
+                    raise RuntimeError("The stick stopped answering while it was being checked.")
+                got += n
+        write_and_verify(path, size, expected, pwrite, pread, step, flush=lambda: os.fsync(d.fileno()))
+
+
+def _linux_helper_write(path, device, size, expected, step):
+    if not re.fullmatch(r"/dev/[a-z0-9]+", device):
+        raise RuntimeError("That isn't a whole disk, so it was not written.")
+    disks = _lsblk(device)
+    disk = disks[0] if disks else {}
+    removable = str(disk.get("rm")).lower() in ("1", "true") or disk.get("tran") == "usb"
+    if disk.get("type") != "disk" or not removable:
+        raise RuntimeError("That disk isn't a USB stick, so it was not written.")
+    why = _linux_blocker(disk)
+    if why:
+        raise RuntimeError(f"That disk was not written: {why}.")
+    for n in _walk(disk):
+        if n.get("mountpoint") and run(["umount", "/dev/" + n["name"]], timeout=60).returncode != 0:
+            raise RuntimeError(f"Couldn't unmount {n['mountpoint']}. Close anything using the stick and try again.")
+    fd = os.open(device, os.O_RDWR | os.O_EXCL | getattr(os, "O_CLOEXEC", 0))
+
+    def flush():                   # to the stick, then out of the page cache so the check reads the stick itself
+        os.fsync(fd)
+        if hasattr(os, "posix_fadvise"):
+            os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_DONTNEED)
+    try:
+        pwrite, pread = _fd_io(fd)
+        write_and_verify(path, size, expected, pwrite, pread, step, flush=flush)
+    finally:
+        os.close(fd)
+
+# ----------------------------------------------------------------- trying it in a window
+
+def vm_plan():
+    image = "llmos-arm64.iso" if ARCH == "arm64" else "llmos-x86_64.iso"
+    plan = {"image": image, "have_image": os.path.isfile(os.path.join(FILES, image)),
+            "low_memory": 0 < ram_gb() < 7.5}
+    if OS == "mac":
+        launcher, disk = os.path.join(FILES, "run-llmos.sh"), os.path.join(FILES, "llmos-arm64.qcow2")
+        qemu = shutil.which("qemu-system-aarch64") or next(
+            (p for p in ("/opt/homebrew/bin/qemu-system-aarch64", "/usr/local/bin/qemu-system-aarch64") if os.path.exists(p)), None)
+        if ARCH == "arm64" and qemu and os.path.isfile(launcher) and os.path.isfile(disk):
+            plan["method"] = "launcher"
+        else:
+            plan.update(method="utm", installed=os.path.isdir("/Applications/UTM.app"))
+    elif OS == "windows":
+        if ARCH == "arm64":
+            plan["method"] = "none"
+        else:
+            plan.update(method="virtualbox", installed=bool(shutil.which("VBoxManage")) or os.path.exists(
+                os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Oracle", "VirtualBox", "VirtualBox.exe")))
+    else:
+        plan.update(method="boxes", installed=bool(shutil.which("gnome-boxes") or shutil.which("virt-manager")))
+    return plan
+
+
+def _reveal(path):
+    if OS == "mac":
+        subprocess.Popen(["open", "-R", path])
+    elif OS == "windows":
+        subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+    else:
+        subprocess.Popen(["xdg-open", os.path.dirname(path)])
+
+
+def do_open(what):
+    """The page's buttons: only these fixed actions exist."""
+    plan = vm_plan()
+    try:
+        if what == "image":
+            path = os.path.join(FILES, plan["image"])
+            if not os.path.isfile(path):
+                return {"ok": False, "error": "This copy of LLM OS doesn't include that file."}
+            _reveal(path)
+        elif what == "get-app":
+            webbrowser.open({"utm": UTM_URL, "virtualbox": VBOX_URL, "boxes": BOXES_URL}.get(plan.get("method"), UTM_URL))
+        elif what == "open-app":
+            if OS == "mac" and plan.get("method") == "utm":
+                subprocess.Popen(["open", "-a", "UTM"])
+            elif OS == "windows":
+                exe = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Oracle", "VirtualBox", "VirtualBox.exe")
+                subprocess.Popen([exe] if os.path.exists(exe) else ["VirtualBox"])
+            else:
+                subprocess.Popen(["gnome-boxes"] if shutil.which("gnome-boxes") else ["virt-manager"])
+        elif what == "start" and plan.get("method") == "launcher":
+            launcher = os.path.join(FILES, "run-llmos.sh")
+            run(["xattr", "-d", "com.apple.quarantine", launcher], timeout=10)   # a downloaded copy is quarantined
+            subprocess.Popen(["open", "-a", "Terminal", launcher])
+        else:
+            return {"ok": False, "error": "Unknown action."}
+        return {"ok": True}
+    except OSError as e:
+        return {"ok": False, "error": str(e)}
+
+# ----------------------------------------------------------------- the local web app
 
 def _page_script_hash():
     """The CSP source for the page's one inline script (its SHA-256), so no other script can run in the page."""
-    import base64
-    import hashlib
     try:
-        page = open(os.path.join(HERE, "index.html"), encoding="utf-8").read()
-        code = page.split("<script>", 1)[1].split("</script>", 1)[0]
+        with open(os.path.join(HERE, "index.html"), encoding="utf-8") as f:
+            code = f.read().split("<script>", 1)[1].split("</script>", 1)[0]
         return "'sha256-" + base64.b64encode(hashlib.sha256(code.encode("utf-8")).digest()).decode() + "'"
     except (OSError, IndexError):
         return "'none'"
@@ -64,512 +854,34 @@ def _page_script_hash():
 
 PAGE_SCRIPT_HASH = _page_script_hash()
 
-# ----------------------------------------------------------------- this computer
 
-def host_ram_gb():
-    try:
-        if SYSTEM == "Darwin":
-            out = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=5).stdout
-            return int(out.strip()) / 1024 ** 3
-        if SYSTEM == "Linux":
-            with open("/proc/meminfo") as f:
-                for ln in f:
-                    if ln.startswith("MemTotal:"):
-                        return int(ln.split()[1]) / 1024 ** 2
-        if SYSTEM == "Windows":
-            import ctypes
-
-            class MemStatus(ctypes.Structure):
-                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + \
-                           [(n, ctypes.c_ulonglong) for n in ("total", "avail", "tpage", "apage", "tvirt", "avirt", "aext")]
-            m = MemStatus()
-            m.dwLength = ctypes.sizeof(MemStatus)
-            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
-            return m.total / 1024 ** 3
-    except Exception:
-        pass
-    return 0
+def status():
+    start_image_check()
+    return {"version": version(), "host": host(), "vm": vm_plan(),
+            "usb": {"image": USB_IMAGE, "state": CHECK["state"]}}
 
 
-def _have(names, paths=()):
-    return any(shutil.which(n) for n in names) or any(os.path.exists(p) for p in paths)
-
-
-def host():
-    """What this computer is, and what is already installed that the setup can use."""
-    return {
-        "system": SYSTEM, "machine": MACHINE, "arm": ARM, "apple_silicon": SYSTEM == "Darwin" and ARM,
-        "ram_gb": round(host_ram_gb(), 1),
-        "qemu": _have(["qemu-system-aarch64"], ["/opt/homebrew/bin/qemu-system-aarch64", "/usr/local/bin/qemu-system-aarch64"])
-        if SYSTEM == "Darwin" else _have(["qemu-system-x86_64", "qemu-system-aarch64"]),
-        "utm": SYSTEM == "Darwin" and os.path.isdir("/Applications/UTM.app"),
-        "virtualbox": _have(["VBoxManage"], [r"C:\Program Files\Oracle\VirtualBox\VBoxManage.exe", "/Applications/VirtualBox.app"]),
-    }
-
-
-def recommend(h):
-    """The right way in for this computer: which instructions come first, which ISO it needs, and why."""
-    rec = {"iso": "llmos-arm64.iso" if h["arm"] else "llmos-x86_64.iso"}
-    if h["apple_silicon"]:
-        rec.update(section="apple-silicon", goal="vm", headline=(
-            "This is a Mac with Apple Silicon. Run LLM OS in a window on this Mac: these Macs can't start it "
-            "directly yet. The easiest way is the free app UTM."))
-    elif SYSTEM == "Darwin":
-        rec.update(section="intel-mac", goal="vm", headline=(
-            "This is an Intel Mac. Try LLM OS in a window first (the free app UTM). It can also start from a USB "
-            "stick and install next to macOS."))
-    elif SYSTEM == "Windows":
-        rec.update(section="pc", goal="usb", headline=(
-            "This is a Windows PC. Make a USB stick and start the PC from it to try LLM OS — nothing on this PC "
-            "changes. Or run it in a window with the free VirtualBox."))
-    else:
-        rec.update(section="pc", goal="vm", headline=(
-            "This is a Linux computer. Run LLM OS in a window (QEMU or virt-manager), or make a USB stick for any PC."))
-    if h["ram_gb"] and h["ram_gb"] < 8 and rec["goal"] == "vm":
-        rec["note"] = (f"This computer has {h['ram_gb']:.0f} GB of memory and LLM OS in a window needs 4 GB of it, "
-                       "so close other programs first; a USB stick on another PC avoids sharing memory.")
-    return rec
-
-
-# ----------------------------------------------------------------- release
-
-def read_release():
-    """What this folder contains: version, build date, images with sizes and checksums."""
-    rel = {"version": "", "built": "", "images": []}
-    p = os.path.join(DIST, "RELEASE.json")
-    if os.path.exists(p):
-        try:
-            with open(p, encoding="utf-8") as f:
-                rel.update(json.load(f))
-        except (OSError, ValueError):
-            pass
-    if not rel["version"]:
-        for cand in (os.path.join(DIST, "VERSION"), os.path.join(os.path.dirname(DIST), "VERSION")):
-            if os.path.exists(cand):
-                rel["version"] = open(cand, encoding="utf-8").read().strip()
-                break
-    sums = {}
-    sp = os.path.join(DIST, "SHA256SUMS")
-    if os.path.exists(sp):
-        for line in open(sp, encoding="utf-8"):
-            parts = line.split()
-            if len(parts) == 2:
-                sums[parts[1].lstrip("*")] = parts[0]
-    images = []
-    for name in sorted(os.listdir(DIST)):
-        if not name.endswith((".iso", ".qcow2")):
-            continue
-        path = os.path.join(DIST, name)
-        arch = "x86_64" if "x86" in name else "arm64" if "arm64" in name else "?"
-        images.append({"file": name, "kind": "iso" if name.endswith(".iso") else "vm", "arch": arch,
-                       "size": os.path.getsize(path), "sha256": sums.get(name, ""),
-                       "built": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(path)))})
-    rel["images"] = images
-    rel["platform"] = SYSTEM
-    rel["downloads"] = downloads_dir()
-    rel["python"] = platform.python_version()
-    rel["host"] = host()
-    rel["recommend"] = recommend(rel["host"])
-    return rel
-
-
-def downloads_dir():
-    d = os.path.join(os.path.expanduser("~"), "Downloads")
-    return d if os.path.isdir(d) else os.path.expanduser("~")
-
-# ----------------------------------------------------------------- drives
-
-def list_drives():
-    """Removable drives the owner could write to. Internal / system disks are never listed."""
-    drives = []
-    try:
-        if SYSTEM == "Darwin":
-            out = subprocess.run(["diskutil", "list", "-plist", "external", "physical"], capture_output=True, timeout=20).stdout
-            pl = plistlib.loads(out) if out else {}
-            for d in pl.get("AllDisksAndPartitions", []):
-                dev = d.get("DeviceIdentifier", "")
-                size = int(d.get("Size", 0))
-                info = subprocess.run(["diskutil", "info", "-plist", dev], capture_output=True, timeout=20).stdout
-                pi = plistlib.loads(info) if info else {}
-                if pi.get("Internal") or not pi.get("RemovableMediaOrExternalDevice", True):
-                    continue
-                name = pi.get("MediaName") or pi.get("IORegistryEntryName") or dev
-                drives.append({"id": "/dev/" + dev, "raw": "/dev/r" + dev, "name": name, "size": size,
-                               "bus": pi.get("BusProtocol", ""), "label": ", ".join(p.get("VolumeName", "") for p in d.get("Partitions", []) if p.get("VolumeName"))})
-        elif SYSTEM == "Linux":
-            out = subprocess.run(["lsblk", "-J", "-b", "-d", "-o", "NAME,SIZE,RM,MODEL,TRAN,TYPE,HOTPLUG"], capture_output=True, text=True, timeout=20).stdout
-            for d in json.loads(out or "{}").get("blockdevices", []):
-                if d.get("type") != "disk":
-                    continue
-                # removable means a USB transport or the removable flag: "hotplug" alone is set for a laptop's
-                # built-in eMMC, which is often its system disk
-                removable = str(d.get("rm")) in ("1", "True", "true") or d.get("tran") == "usb"
-                if not removable or _linux_in_use(d["name"]):
-                    continue
-                drives.append({"id": "/dev/" + d["name"], "raw": "/dev/" + d["name"], "name": (d.get("model") or d["name"]).strip(),
-                               "size": int(d.get("size") or 0), "bus": d.get("tran") or "", "label": ""})
-        elif SYSTEM == "Windows":
-            ps = ("Get-Disk | Where-Object { $_.BusType -in 'USB','SD','MMC' } | "
-                  "Select-Object Number,FriendlyName,Size,BusType,IsSystem,IsBoot | ConvertTo-Json")
-            out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=30).stdout
-            data = json.loads(out) if out.strip() else []
-            if isinstance(data, dict):
-                data = [data]
-            for d in data:
-                if d.get("IsSystem") or d.get("IsBoot"):
-                    continue
-                drives.append({"id": str(d["Number"]), "raw": r"\\.\PhysicalDrive%s" % d["Number"], "name": d.get("FriendlyName", ""),
-                               "size": int(d.get("Size") or 0), "bus": d.get("BusType", ""), "label": ""})
-    except Exception as e:  # listing must never crash the app
-        return {"drives": [], "error": f"could not list drives: {e}"}
-    return {"drives": drives}
-
-_SYSTEM_MOUNTS = ("/", "/boot", "/boot/efi", "/efi", "/home", "/usr", "/var", "/opt", "/srv", "/nix", "/gnu")
-
-
-def _linux_in_use(name):
-    """Why this disk must not be written, or "": it holds part of the running system (a system mount point,
-    swap) or an open encrypted / LVM / RAID volume. A stick the desktop mounted under /media or /run/media is
-    fine: it is unmounted before writing."""
-    try:
-        out = subprocess.run(["lsblk", "-J", "-o", "NAME,TYPE,MOUNTPOINT", "/dev/" + name], capture_output=True, text=True, timeout=20).stdout
-        tree = json.loads(out or "{}")
-    except Exception:
-        return "what is on it could not be checked"
-
-    def walk(n):
-        mp = n.get("mountpoint")
-        if mp and (mp in _SYSTEM_MOUNTS or mp == "[SWAP]"):
-            return f"it holds {mp} of this computer"
-        if str(n.get("type", "")) in ("crypt", "lvm", "dm") or str(n.get("type", "")).startswith("raid"):
-            return "it holds an open encrypted or LVM volume"
-        for c in n.get("children") or []:
-            r = walk(c)
-            if r:
-                return r
-        return ""
-    for d in tree.get("blockdevices", []):
-        r = walk(d)
-        if r:
-            return r
-    try:
-        with open("/proc/swaps") as f:
-            if re.search(r"^/dev/" + re.escape(name) + r"\S*\s", f.read(), re.M):
-                return "it is used as swap"
-    except OSError:
-        pass
-    return ""
-
-# ----------------------------------------------------------------- long jobs
-
-def set_state(**kw):
+def progress():
     with LOCK:
-        STATE.update(kw)
+        st = {k: v for k, v in STATE.items()}
+    st["elapsed"] = round(time.time() - st["started"], 1) if st["started"] else 0
+    return st
 
-
-def sha256_of(path, total, base_done=0, base_total=0):
-    h = hashlib.sha256()
-    done = 0
-    with open(path, "rb") as f:
-        while True:
-            chunk = f.read(8 << 20)
-            if not chunk:
-                break
-            h.update(chunk)
-            done += len(chunk)
-            set_state(done=base_done + done, total=base_total or total)
-    return h.hexdigest()
-
-
-def job_save(name):
-    set_state(phase="copy", done=0, total=0, message="Starting…", error="", started=time.time())
-    src = os.path.join(DIST, name)
-    rel = read_release()
-    img = next((i for i in rel["images"] if i["file"] == name), None)
-    ver = rel.get("version") or "current"
-    dst = os.path.join(downloads_dir(), f"LLM-OS-{ver}-{name}")
-    try:
-        size = os.path.getsize(src)
-        set_state(phase="copy", done=0, total=size, message=f"Saving {name} to {dst}", error="", started=time.time())
-        with open(src, "rb") as s, open(dst, "wb") as d:
-            done = 0
-            while True:
-                chunk = s.read(8 << 20)
-                if not chunk:
-                    break
-                d.write(chunk)
-                done += len(chunk)
-                set_state(done=done)
-        if img and img.get("sha256"):
-            set_state(phase="verify", done=0, total=size, message="Checking the copy against its checksum")
-            if sha256_of(dst, size) != img["sha256"]:
-                raise RuntimeError("the saved file does not match the checksum; try again")
-        set_state(phase="done", message=f"Saved: {dst}", done=size, total=size)
-    except Exception as e:
-        set_state(phase="error", error=str(e))
-
-
-def _has_full_disk_access():
-    """macOS only: can the app running Setup read a Full-Disk-Access-gated file? On recent macOS that access is
-    what lets the privileged writer reach a USB device (and read an external volume). True off macOS."""
-    if SYSTEM != "Darwin":
-        return True
-    for path in ("/Library/Application Support/com.apple.TCC/TCC.db",
-                 os.path.expanduser("~/Library/Application Support/com.apple.TCC/TCC.db")):
-        try:
-            with open(path, "rb") as f:
-                f.read(1)
-            return True
-        except OSError:
-            continue
-    return False
-
-
-def _staged_source(src):
-    """macOS blocks a root process (the privileged `dd`) from reading files on an external/removable volume, even
-    when a normal read works -- "Operation not permitted". When the ISO is on a volume other than the startup disk,
-    copy it to a temp file on the startup disk first and write from there. Returns (path, temp_or_None); the caller
-    deletes the temp. Elsewhere, or when the ISO is already on the startup disk, nothing is copied."""
-    if SYSTEM != "Darwin" or _has_full_disk_access():
-        return src, None
-    try:
-        if os.stat(src).st_dev == os.stat("/").st_dev:
-            return src, None
-    except OSError:
-        return src, None
-    need = os.path.getsize(src)
-    st = os.statvfs("/private/tmp")
-    if st.f_bavail * st.f_frsize < need + (256 << 20):
-        raise RuntimeError("the ISO is on an external drive macOS won't let the writer read, and there isn't room "
-                           "to copy it to the startup disk first. Move the LLM OS folder onto this Mac's own disk "
-                           "(not Downloads/Desktop/Documents), or grant Terminal Full Disk Access in System "
-                           "Settings > Privacy & Security, then try again.")
-    set_state(phase="write", done=0, total=need, message="Preparing the image (copying it to the startup disk)...", error="", started=time.time())
-    fd, tmp = tempfile.mkstemp(prefix="llmos-write-", suffix=".iso", dir="/private/tmp")
-    try:
-        with os.fdopen(fd, "wb") as out, open(src, "rb") as f:
-            done = 0
-            while True:
-                chunk = f.read(16 << 20)
-                if not chunk:
-                    break
-                out.write(chunk)
-                done += len(chunk)
-                set_state(done=done)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-    return tmp, tmp
-
-
-def job_write(name, drive_id):
-    set_state(phase="write", done=0, total=0, message="Checking the drive…", error="", started=time.time())
-    src = os.path.join(DIST, name)
-    drives = list_drives().get("drives", [])
-    drive = next((d for d in drives if d["id"] == drive_id), None)
-    if not drive:
-        set_state(phase="error", error="that drive is no longer listed; unplug and replug it, then refresh")
-        return
-    size = os.path.getsize(src)
-    if drive["size"] and drive["size"] < size:
-        set_state(phase="error", error=f"{drive['name']} is too small ({drive['size'] // 10**9} GB) for this image")
-        return
-    try:
-        read_from, staged = _staged_source(src)
-        try:
-            set_state(phase="write", done=0, total=size, message=f"Writing {name} to {drive['name']} ({drive['id']})", error="", started=time.time())
-            if SYSTEM == "Darwin":
-                cmd = (f"diskutil unmountDisk force {drive['id']} && dd if={shlex_q(read_from)} of={drive['raw']} bs=4m && sync && diskutil eject {drive['id']}")
-                r = subprocess.run(["osascript", "-e", f'do shell script "{cmd}" with administrator privileges'], capture_output=True, text=True)
-                if r.returncode != 0:
-                    err = r.stderr.strip()
-                    if "not permitted" in err.lower():
-                        err = ("macOS blocked the write. Grant Full Disk Access to the app running LLM OS Setup "
-                               "(Terminal) in System Settings > Privacy & Security > Full Disk Access, then quit "
-                               "and reopen Setup and try again.")
-                    raise RuntimeError(err[-300:] or "the write was cancelled")
-            elif SYSTEM == "Linux":
-                busy = _linux_in_use(os.path.basename(drive["id"]))
-                if busy:
-                    raise RuntimeError(f"{drive['name']} is not written: {busy}")
-                cmd = f"for p in {drive['id']}?*; do umount $p 2>/dev/null; done; if grep -q '^{drive['id']}' /proc/mounts; then echo 'still mounted' >&2; exit 3; fi; dd if={shlex_q(read_from)} of={drive['raw']} bs=4M conv=fsync status=progress"
-                runner = "pkexec" if shutil.which("pkexec") else "sudo"
-                p = subprocess.Popen([runner, "sh", "-c", cmd], stderr=subprocess.PIPE, text=True)
-                buf = ""
-                while True:
-                    ch = p.stderr.read(1)
-                    if not ch:
-                        break
-                    buf += ch
-                    if ch in "\r\n":
-                        m = buf.strip().split(" bytes")[0]
-                        if m.isdigit():
-                            set_state(done=min(int(m), size))
-                        buf = ""
-                if p.wait() != 0:
-                    raise RuntimeError("the write failed or was cancelled (is the stick still plugged in?)")
-            elif SYSTEM == "Windows":
-                write_windows(src, drive, size)
-            set_state(phase="done", done=size, total=size, message=f"Done. {drive['name']} now boots LLM OS; you can unplug it.")
-        finally:
-            if staged:
-                try:
-                    os.unlink(staged)
-                except OSError:
-                    pass
-    except Exception as e:
-        set_state(phase="error", error=str(e))
-
-
-def shlex_q(s):
-    return "'" + s.replace("'", "'\\''") + "'"
-
-
-def write_windows(src, drive, size):
-    """Raw write on Windows: needs administrator rights, so the app relaunches itself elevated
-    for the write step and watches a progress file."""
-    import ctypes
-    if not ctypes.windll.shell32.IsUserAnAdmin():
-        prog = os.path.join(os.environ.get("TEMP", HERE), "llmos-write-progress.txt")
-        try:
-            os.remove(prog)
-        except OSError:
-            pass
-        params = f'"{os.path.abspath(__file__)}" --write "{src}" {drive["id"]} "{prog}"'
-        rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, params, None, 0)
-        if rc <= 32:
-            raise RuntimeError("Windows did not allow the elevated write (needs an administrator account). "
-                               "Alternative: write the ISO with Rufus or balenaEtcher.")
-        waited = 0
-        while True:
-            time.sleep(1)
-            waited += 1
-            if waited > 1800:
-                raise RuntimeError("the elevated writer did not report back (was the prompt cancelled?)")
-            try:
-                with open(prog, encoding="utf-8") as f:
-                    line = f.read().strip()
-            except OSError:
-                continue
-            if line.startswith("DONE"):
-                return
-            if line.startswith("ERROR"):
-                raise RuntimeError(line[6:])
-            if line.isdigit():
-                set_state(done=min(int(line), size))
-        return
-    # elevated instance: clear the disk's volumes, then stream the image onto the physical drive
-    script = os.path.join(os.environ.get("TEMP", HERE), "llmos-diskpart.txt")
-    with open(script, "w", encoding="utf-8") as f:
-        f.write(f"select disk {drive['id']}\nclean\nrescan\n")
-    subprocess.run(["diskpart", "/s", script], capture_output=True)
-    time.sleep(2)
-    with open(src, "rb") as s, open(drive["raw"], "r+b", buffering=0) as d:
-        done = 0
-        while True:
-            chunk = s.read(4 << 20)
-            if not chunk:
-                break
-            if len(chunk) % 512:
-                chunk += b"\0" * (512 - len(chunk) % 512)
-            d.write(chunk)
-            done += len(chunk)
-            set_state(done=min(done, size))
-            yield_progress(done)
-
-
-_PROGRESS_FILE = None
-
-
-def yield_progress(n):
-    if _PROGRESS_FILE:
-        try:
-            with open(_PROGRESS_FILE, "w", encoding="utf-8") as f:
-                f.write(str(n))
-        except OSError:
-            pass
-
-# ----------------------------------------------------------------- other actions
-
-def _reveal(path):
-    """Show a file selected in Finder / Explorer / the file manager."""
-    if SYSTEM == "Darwin":
-        subprocess.Popen(["open", "-R", path])
-    elif SYSTEM == "Windows":
-        subprocess.Popen(f'explorer /select,"{path}"')
-    else:
-        subprocess.Popen(["xdg-open", os.path.dirname(path)])
-
-
-def open_target(what):
-    """The page's buttons. Only fixed targets: this folder, the ISO this computer needs, the launcher in this
-    folder, or the free virtual-machine apps' own download pages."""
-    h = host()
-    rec = recommend(h)
-    try:
-        if what == "folder":
-            if SYSTEM == "Darwin":
-                subprocess.Popen(["open", DIST])
-            elif SYSTEM == "Windows":
-                os.startfile(DIST)  # noqa
-            else:
-                subprocess.Popen(["xdg-open", DIST])
-        elif what == "iso":
-            path = os.path.join(DIST, rec["iso"])
-            if not os.path.exists(path):
-                return {"ok": False, "error": f"{rec['iso']} is not in this folder"}
-            _reveal(path)
-        elif what == "utm":
-            webbrowser.open(UTM_PAGE)
-        elif what == "virtualbox":
-            webbrowser.open("https://www.virtualbox.org/wiki/Downloads")
-        elif what == "vm":
-            # The launcher in this folder is for Apple Silicon and needs QEMU; otherwise guide to a free app.
-            # (A .sh file double-clicked in Finder opens in a text editor, so it is started in Terminal here.)
-            if h["apple_silicon"] and h["qemu"]:
-                subprocess.Popen(["open", "-a", "Terminal", os.path.join(DIST, "run-llmos.sh")])
-                return {"ok": True, "message": "LLM OS is starting from a new Terminal window; its own window opens in a moment."}
-            if SYSTEM == "Darwin":
-                return {"ok": False, "guide": "utm", "error": (
-                    f"The easiest way: install the free app UTM (button below), then follow “Try it in a window” "
-                    f"with {rec['iso']}." + (" If you use Homebrew, `brew install qemu` and press this button again "
-                                             "to use the built-in launcher instead." if h["apple_silicon"] else ""))}
-            if SYSTEM == "Windows":
-                return {"ok": False, "guide": "virtualbox", "error": (
-                    f"Install the free VirtualBox (button below), then follow “Try it in a window” with {rec['iso']}.")}
-            return {"ok": False, "guide": "qemu", "error": (
-                f"Open {rec['iso']} in GNOME Boxes or virt-manager, or run: "
-                f"qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cdrom {rec['iso']}")}
-        elif what == "fda":
-            if SYSTEM != "Darwin":
-                return {"ok": False, "error": "Full Disk Access is a macOS setting"}
-            subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"])
-        else:
-            return {"ok": False, "error": "unknown action"}
-        return {"ok": True}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-# ----------------------------------------------------------------- http
 
 class Handler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, *a):
-        pass
-
-    # Security headers sent on every response. frame-ancestors / X-Frame-Options stop another site from
-    # framing this app (clickjacking); nosniff and no-store keep the token-bearing page out of caches and
-    # content-type guessing; the CSP pins the self-contained page to its own origin.
+    # Every response: no framing (clickjacking), no caching, no content sniffing, and a CSP that allows only this
+    # page's own inline script (by hash) and requests back to this server.
     SECURITY_HEADERS = {
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
         "Referrer-Policy": "no-referrer",
         "X-Frame-Options": "DENY",
-        "Content-Security-Policy": ("default-src 'none'; style-src 'unsafe-inline'; script-src %s; "
+        "Content-Security-Policy": ("default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src %s; "
                                     "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
     }
+
+    def log_message(self, *a):
+        pass
 
     def _secure(self):
         for k, v in self.SECURITY_HEADERS.items():
@@ -585,18 +897,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def authorized(self, need_token):
-        """CSRF / cross-origin gate. The Host must be our own loopback address (blocks DNS rebinding, where a
-        hostile domain resolves to 127.0.0.1). Any Origin/Referer that is present must be our own origin
-        (blocks a cross-site fetch, form or img). Every /api call must also carry the per-launch token in a
-        custom header: a cross-origin page cannot read the token (same-origin policy) and cannot set a custom
-        header without a CORS preflight this server never approves, so the token is the primary CSRF defense.
-        The compare is constant-time."""
+        """CSRF / cross-origin gate. The Host must be this loopback address (blocks DNS rebinding); any Origin or
+        Referer present must be this origin; every /api call must carry the per-launch token in a custom header,
+        which another site can neither read nor send without a CORS preflight this server never approves."""
         port = self.server.server_address[1]
-        host = self.headers.get("Host", "")
-        if host not in (f"127.0.0.1:{port}", f"localhost:{port}"):
+        host_hdr = self.headers.get("Host", "")
+        if host_hdr not in (f"127.0.0.1:{port}", f"localhost:{port}"):
             return False
         origin = self.headers.get("Origin") or self.headers.get("Referer") or ""
-        if origin and not (origin == f"http://{host}" or origin.startswith(f"http://{host}/")):
+        if origin and not (origin == f"http://{host_hdr}" or origin.startswith(f"http://{host_hdr}/")):
             return False
         if need_token:
             sent = self.headers.get("X-LLMOS-Token", "")
@@ -605,14 +914,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return True
 
     def do_OPTIONS(self):
-        # Refuse CORS preflight outright (no Access-Control-Allow-* headers), so any cross-origin call that
-        # would need one is blocked by the browser before it reaches an action.
-        self.send_json({"error": "forbidden"}, 403)
+        self.send_json({"error": "forbidden"}, 403)       # no CORS, ever
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
-        # the page itself carries no token (it reads it from the address's #fragment), so it needs only same-origin;
-        # every /api endpoint, read-only ones included, requires the token like the POST actions do.
         if path in ("/", "/index.html"):
             if not self.authorized(need_token=False):
                 return self.send_json({"error": "forbidden"}, 403)
@@ -628,17 +933,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not self.authorized(need_token=True):
             return self.send_json({"error": "forbidden"}, 403)
         if path == "/api/status":
-            self.send_json(read_release())
+            self.send_json(status())
         elif path == "/api/drives":
             self.send_json(list_drives())
         elif path == "/api/progress":
-            with LOCK:
-                st = dict(STATE)
-            st["elapsed"] = int(time.time() - st["started"]) if st["started"] else 0
-            self.send_json(st)
-        elif path == "/api/instructions":
-            with open(os.path.join(HERE, "instructions.json"), encoding="utf-8") as f:
-                self.send_json(json.load(f))
+            self.send_json(progress())
         else:
             self.send_json({"error": "not found"}, 404)
 
@@ -646,34 +945,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if not self.authorized(need_token=True):
             return self.send_json({"error": "forbidden"}, 403)
-        n = int(self.headers.get("Content-Length", 0))
         try:
-            data = json.loads(self.rfile.read(n) or b"{}")
+            length = min(int(self.headers.get("Content-Length", 0) or 0), 65536)
+            data = json.loads(self.rfile.read(length) or b"{}")
         except ValueError:
             data = {}
-        name = os.path.basename(str(data.get("file", "")))
-        if path in ("/api/save", "/api/write"):
-            if not name or not os.path.exists(os.path.join(DIST, name)) or not name.endswith((".iso", ".qcow2")):
-                return self.send_json({"ok": False, "error": "no such image in this folder"})
-            with LOCK:
-                busy = STATE["phase"] in ("copy", "verify", "write")
-            if busy:
-                return self.send_json({"ok": False, "error": "another job is still running"})
-            if path == "/api/save":
-                threading.Thread(target=job_save, args=(name,), daemon=True).start()
-            else:
-                drive = str(data.get("drive", ""))
-                if not drive:
-                    return self.send_json({"ok": False, "error": "pick a drive first"})
-                if not _has_full_disk_access():     # check before copying, unmounting or asking for a password
-                    return self.send_json({"ok": False, "need_fda": True, "error": (
-                        "macOS needs Full Disk Access to write a USB stick. Open System Settings > Privacy & "
-                        "Security > Full Disk Access, turn it on for Terminal (the app running LLM OS Setup), "
-                        "then quit and reopen Setup and write again.")})
-                threading.Thread(target=job_write, args=(name, drive), daemon=True).start()
-            return self.send_json({"ok": True})
+        if not isinstance(data, dict):
+            data = {}
+        if path == "/api/write":
+            why = start_write(str(data.get("drive", "")))
+            return self.send_json({"ok": not why, "error": why})
         if path == "/api/open":
-            return self.send_json(open_target(str(data.get("what", ""))))
+            return self.send_json(do_open(str(data.get("what", ""))))
         if path == "/api/quit":
             self.send_json({"ok": True})
             threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0)), daemon=True).start()
@@ -682,27 +965,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def main():
-    global _PROGRESS_FILE, TOKEN
-    import secrets
-    TOKEN = secrets.token_hex(16)
-    if len(sys.argv) >= 5 and sys.argv[1] == "--write":      # the elevated Windows writer
-        src, number, prog = sys.argv[2], sys.argv[3], sys.argv[4]
-        _PROGRESS_FILE = prog
-        try:
-            drive = next(d for d in list_drives().get("drives", []) if d["id"] == number)
-            write_windows(src, drive, os.path.getsize(src))
-            with open(prog, "w", encoding="utf-8") as f:
-                f.write("DONE")
-        except Exception as e:
-            with open(prog, "w", encoding="utf-8") as f:
-                f.write("ERROR " + str(e))
-        return
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    global TOKEN
+    if len(sys.argv) >= 6 and sys.argv[1] == "--write-helper":
+        sys.exit(helper_main(*sys.argv[2:6]))
+    TOKEN = secrets.token_urlsafe(24)
+    port = int(os.environ.get("LLMOS_SETUP_PORT", "0") or 0)
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{srv.server_address[1]}/#{TOKEN}"
-    print("LLM OS Setup is open in your web browser.")
-    print(f"  If it did not open, paste this into the browser: {url}")
-    print("  Keep this window open while you use it; close it (or press Ctrl+C) when you are done.")
-    threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+    print("\n  LLM OS Setup is open in your web browser.")
+    print("  Keep this window open while you use it. Close it when you're done.\n")
+    print(f"  (If the browser didn't open, paste this address into it: {url})\n", flush=True)
+    start_image_check()
+    if not os.environ.get("LLMOS_SETUP_NO_BROWSER"):
+        threading.Timer(0.3, lambda: webbrowser.open(url)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

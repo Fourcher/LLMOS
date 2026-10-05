@@ -52,6 +52,13 @@ on an end user's computer. The setup tool (`dist/setup/`) only *uses* an
 already‑built artifact — writing the ISO to a stick, or booting the qcow2 — it
 does not compile one.
 
+Giving LLM OS to someone: `tools/package.sh` makes `~/Desktop/LLM OS
+<version>.zip` (refusing if the images are stale): the three Start Here files
+and *Support files* with Setup, the two ISOs and their checksums.
+`tools/test-package.sh` unzips it the way Finder does and runs it;
+`tools/stick-boot-test.sh uefi|bios` has Setup write the real image onto a
+stand-in stick and boots a virtual PC from it as a USB stick.
+
 ## Build procedure
 
 1. Boot the official ISO under QEMU/HVF with an empty 16 GB qcow2 disk and

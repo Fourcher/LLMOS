@@ -4,6 +4,55 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## Unreleased — Setup rebuilt so anyone can make a working stick
+Handing someone the LLM OS folder now just works, on a Mac, a Windows PC or a
+Linux computer.
+
+- **The folder:** the top shows only *Start Here (Mac)*, *Start Here
+  (Windows)*, *Start Here (Linux)* and one folder, *Support files*, holding
+  everything else. `tools/package.sh` makes the zip to give someone (about
+  6 GB: Start Here, Setup and the two ISOs).
+- **Writing the stick works on macOS:** Setup now opens the stick through
+  Apple's `authopen` (macOS's own password prompt) and streams the image
+  itself. The old way (`osascript … with administrator privileges` + `dd`)
+  ran outside Terminal's privacy permissions, so macOS refused it with
+  "Operation not permitted" even with Full Disk Access. Windows and Linux
+  write through an elevated copy of Setup (the "Yes" prompt / polkit). Every
+  system writes the image's first 4 MiB last and reads the whole stick back
+  to compare.
+- **No choices to get wrong:** the stick always gets the x86-64 image, the one
+  every computer that can start from USB (Windows PCs, Intel Macs) needs; the
+  page no longer offers a list of files or assumes the stick is for the
+  computer running Setup. The processor is read from the hardware, so a Mac
+  with Apple silicon is recognised even when Python runs under Rosetta, and a
+  Windows PC on ARM as such.
+- **Safer drive list:** never the disk Setup runs from, a Time Machine
+  backup, an internal/system/boot disk, or (Linux) one holding the running
+  system. The old list offered an external drive holding both the LLM OS
+  folder and a Time Machine backup.
+- **The image is checked before anything is erased:** Setup verifies the ISO
+  against `SHA256SUMS` in the background; a damaged copy is refused with the
+  stick untouched.
+- **A new page:** two choices (make a USB stick, try it in a window), one
+  short step at a time, live stick detection, progress with time left,
+  boot-menu keys for the common makers when it's done. Light and dark,
+  phone-width safe.
+- **No Python install needed:** the Start Here files use a Python 3.8+ the
+  computer has, or fetch a private copy once (python.org's embeddable Python
+  on Windows, the python-build-standalone build on Mac/Linux), pinned and
+  checked against the publishers' SHA-256. On Windows, starting from inside a
+  zip that wasn't extracted says to extract it.
+- **Removed:** the save-the-ISO step, the per-machine instruction lists, the
+  Full Disk Access pre-check, and "2 - Set up with AI.md" (Setup now guides by
+  itself).
+- **Tests:** `test-setup-writer` (the write core, the authopen hand-off, the
+  drive filter on this Mac, whole jobs through Setup's API onto a raw block
+  device), `stick-boot-test.sh` (Setup writes the real image, then a virtual
+  PC starts from it as a USB stick under UEFI and BIOS), `test-start` (the
+  launchers, the private-Python fetch and its checksum), `test-package.sh`
+  (the zip as a recipient uses it), and a rewritten `test-setup-csrf`
+  (security, plus recognising every kind of computer).
+
 ## 1.5.0 — 2026-10-04
 A whole-OS review against the original brief (seven parallel reviewers, every
 finding checked against the code) found and fixed these. New host tests cover

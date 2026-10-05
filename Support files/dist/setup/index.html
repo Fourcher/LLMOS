@@ -5,178 +5,380 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LLM OS Setup</title>
 <style>
-  :root { --bg: #0b0d14; --fg: #e8e9ef; --accent: #7c5cff; --card: #141722; --line: #262a3a; --dim: #9aa0b4; --danger: #ef5a6f; --ok: #3ecf8e; --warn: #f2b84b; }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: radial-gradient(1100px 600px at 20% -10%, #241f4a 0%, var(--bg) 60%); color: var(--fg); font: 16px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; min-height: 100vh; }
-  header { display: flex; align-items: center; gap: 14px; padding: 22px 28px 6px; }
-  .orb { width: 34px; height: 34px; border-radius: 50%; background: radial-gradient(circle at 35% 32%, #c9bcff 0%, var(--accent) 42%, #3a2b8a 100%); box-shadow: 0 0 18px 6px rgba(124,92,255,.35); }
-  h1 { font-size: 22px; margin: 0; } .ver { color: var(--dim); font-size: 14px; }
-  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; padding: 16px 28px 40px; max-width: 1180px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
-  .card h2 { font-size: 16px; margin: 0 0 6px; } .card p { margin: 0 0 12px; color: var(--dim); font-size: 14.5px; }
-  .btn { border: 1px solid var(--line); background: #1d2130; color: var(--fg); border-radius: 9px; padding: 9px 16px; font: inherit; font-weight: 600; font-size: 15px; cursor: pointer; }
-  .btn:hover { background: #262b3d; } .btn.primary { background: var(--accent); border-color: transparent; color: #fff; } .btn.primary:hover { filter: brightness(1.08); }
-  .btn.danger { color: var(--danger); } .btn:disabled { opacity: .5; cursor: default; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
-  select, input[type=checkbox] { font: inherit; } select { background: #0f1119; color: var(--fg); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px; min-width: 260px; }
-  .img { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; } .img:last-child { border-bottom: 0; }
-  .img b { font-weight: 600; } .img .m { color: var(--dim); font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #1f2335; color: var(--dim); font-size: 12px; margin-left: 6px; }
-  .rec { background: #121626; border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; font-size: 14px; color: var(--dim); margin: 10px 0; }
-  .rec b { color: var(--fg); }
-  .warn { color: var(--warn); } .err { color: var(--danger); } .ok { color: var(--ok); }
-  #progress { grid-column: 1 / -1; display: none; position: sticky; top: 8px; z-index: 5; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
-  #progress.show { display: block; }
-  .bar { height: 10px; background: #1f2335; border-radius: 6px; overflow: hidden; margin: 10px 0 6px; } .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #4cc9f0); transition: width .4s; }
-  details { margin-top: 10px; } summary { cursor: pointer; font-weight: 600; } .steps { color: var(--dim); font-size: 14.5px; } .steps li { margin: 4px 0; }
-  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: #1f2335; padding: 1px 6px; border-radius: 6px; }
-  footer { padding: 0 28px 24px; color: var(--dim); font-size: 13px; }
-  .welcome { grid-column: 1 / -1; border-color: #3a3363; }
-  .welcome h2 { font-size: 19px; } .welcome #whead { color: var(--fg); font-size: 15.5px; }
-  .goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin: 14px 0 6px; }
-  .goal { text-align: left; background: #1a1d2b; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; color: var(--fg); font: inherit; cursor: pointer; display: grid; gap: 4px; }
-  .goal:hover { border-color: var(--accent); } .goal b { font-size: 15.5px; } .goal span { color: var(--dim); font-size: 13.5px; line-height: 1.4; }
-  .goal.best { border-color: var(--accent); background: #211c3d; } .goal.best b::after { content: "  · recommended"; color: #b9a9ff; font-weight: 600; font-size: 12.5px; }
-  .small { font-size: 13.5px; color: var(--dim); margin: 10px 0 0; }
-  .flash { animation: flash 1.2s ease-out; } @keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
+:root {
+  --bg: #f5f5f7; --surface: #ffffff; --text: #1c1c1e; --muted: #6c6c73; --line: #e3e3e8; --hover: #fafafc;
+  --accent: #6b4fd8; --accent-ink: #ffffff; --accent-weak: #efeaff; --ok: #1f8a3b; --ok-weak: #e7f6eb;
+  --danger: #d1182b; --danger-btn: #d1182b; --danger-weak: #fdecee; --warn: #8a5a00;
+  --shadow: 0 1px 2px rgba(20, 20, 30, .05), 0 6px 20px rgba(20, 20, 30, .06);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111114; --surface: #1b1b1f; --text: #f2f2f6; --muted: #9a9aa3; --line: #2c2c33; --hover: #222228;
+    --accent: #9b86ff; --accent-ink: #14111f; --accent-weak: #262040; --ok: #3ccf6a; --ok-weak: #15301d;
+    --danger: #ff6b74; --danger-btn: #d2303c; --danger-weak: #3a1a1e; --warn: #e3b341;
+    --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, "Helvetica Neue", sans-serif; -webkit-font-smoothing: antialiased; }
+.page { max-width: 600px; margin: 0 auto; padding: 32px 22px 28px; min-height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; align-items: center; gap: 10px; margin-bottom: 44px; }
+.orb { width: 30px; height: 30px; border-radius: 50%; flex: none;
+  background: radial-gradient(circle at 34% 30%, #e2d9ff 0, #9b86ff 42%, #5338b8 100%); box-shadow: 0 0 0 5px var(--accent-weak); }
+.brand { font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
+.ver { margin-left: auto; color: var(--muted); font-size: 13px; }
+main { flex: 1; }
+h1 { font-size: 30px; line-height: 1.15; letter-spacing: -.022em; margin: 0 0 8px; font-weight: 700; }
+.lead { color: var(--muted); font-size: 17px; margin: 0 0 26px; }
+.note { color: var(--muted); font-size: 15px; margin: -12px 0 22px; }
+.stack { display: grid; gap: 12px; }
+.choice { display: flex; align-items: center; gap: 16px; width: 100%; padding: 20px; text-align: left; font: inherit; color: inherit;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); cursor: pointer;
+  transition: border-color .15s, transform .15s; }
+.choice:hover { border-color: var(--accent); transform: translateY(-1px); }
+.choice .t { display: block; font-size: 18px; font-weight: 650; letter-spacing: -.01em; }
+.choice .d { display: block; color: var(--muted); font-size: 15px; margin-top: 1px; }
+.icon { flex: none; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-weak); color: var(--accent); }
+.icon svg { width: 24px; height: 24px; }
+.chev { margin-left: auto; color: var(--muted); flex: none; }
+.chev svg { width: 20px; height: 20px; display: block; }
+.back { display: inline-flex; align-items: center; gap: 4px; margin: -14px 0 18px -6px; padding: 6px 8px; border: 0; border-radius: 8px;
+  background: none; color: var(--muted); font: inherit; font-size: 15px; cursor: pointer; }
+.back:hover { color: var(--text); background: var(--surface); }
+.back svg { width: 18px; height: 18px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 6px; }
+.card-h { padding: 12px 14px 8px; font-weight: 650; display: flex; align-items: baseline; gap: 8px; }
+.card-h small { color: var(--muted); font-weight: 400; font-size: 14px; }
+.drive { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 1px solid transparent; border-radius: 11px;
+  background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.drive:hover:not(:disabled) { background: var(--hover); }
+.drive[aria-checked="true"] { border-color: var(--accent); background: var(--accent-weak); }
+.drive:disabled { cursor: default; opacity: .55; }
+.radio { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; }
+.drive[aria-checked="true"] .radio { border-color: var(--accent); }
+.drive[aria-checked="true"] .radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.drive .n { font-weight: 600; }
+.drive .m { color: var(--muted); font-size: 14px; }
+.badge { margin-left: auto; font-size: 12.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--danger-weak); color: var(--danger); white-space: nowrap; }
+.empty { display: flex; align-items: center; gap: 12px; padding: 16px 14px 18px; color: var(--muted); }
+.spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin .9s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.actions { margin-top: 20px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 20px; border-radius: 12px;
+  font: inherit; font-weight: 600; font-size: 16px; cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.07); }
+.btn.danger { background: var(--danger-btn); border-color: var(--danger-btn); color: #fff; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.small { min-height: 36px; padding: 0 14px; font-size: 14.5px; border-radius: 10px; }
+.fine { color: var(--muted); font-size: 14px; text-align: center; margin: 0; }
+.banner { padding: 12px 14px; border-radius: 12px; margin: 0 0 18px; font-size: 15px; background: var(--surface); border: 1px solid var(--line); }
+.banner.bad { background: var(--danger-weak); border-color: transparent; color: var(--danger); }
+.progress { padding: 22px 20px 20px; }
+.ptitle { font-weight: 650; font-size: 17px; margin-bottom: 14px; }
+.bar { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .5s ease; }
+.bar.wait i { width: 30%; animation: slide 1.4s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.pmeta { display: flex; justify-content: space-between; color: var(--muted); font-size: 14px; margin-top: 10px; min-height: 21px; }
+.hero { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; margin: 4px 0 20px; }
+.hero svg { width: 34px; height: 34px; }
+.hero.ok { background: var(--ok-weak); color: var(--ok); }
+.hero.bad { background: var(--danger-weak); color: var(--danger); }
+ol.steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: grid; gap: 2px; }
+ol.steps > li { counter-increment: s; position: relative; padding: 14px 14px 14px 52px; }
+ol.steps > li::before { content: counter(s); position: absolute; left: 14px; top: 13px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 14px; font-weight: 700; background: var(--accent-weak); color: var(--accent); }
+ol.steps .sub { display: block; margin-top: 8px; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.key { font-size: 13.5px; padding: 3px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); white-space: nowrap; }
+.key b { font-weight: 650; }
+kbd { font: inherit; font-weight: 650; }
+.ok-line { color: var(--ok); font-weight: 600; font-size: 15px; display: inline-flex; align-items: center; gap: 6px; }
+details { margin-top: 18px; color: var(--muted); font-size: 15px; }
+summary { cursor: pointer; color: var(--text); font-weight: 600; }
+details p { margin: 8px 0 0; }
+footer { display: flex; align-items: center; gap: 12px; margin-top: 36px; color: var(--muted); font-size: 13.5px; }
+footer .btn { margin-left: auto; }
+.modal { position: fixed; inset: 0; background: rgba(10, 10, 15, .45); display: grid; place-items: center; padding: 20px; z-index: 10; }
+.dialog { width: 100%; max-width: 420px; background: var(--surface); border-radius: 18px; padding: 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+.dialog h2 { margin: 0 0 8px; font-size: 20px; letter-spacing: -.01em; }
+.dialog p { margin: 0 0 8px; color: var(--muted); }
+.dialog .warn { color: var(--danger); font-weight: 600; }
+.row { display: flex; gap: 10px; margin-top: 18px; }
+.row .btn { flex: 1; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 480px) { h1 { font-size: 26px; } .page { padding-top: 22px; } header { margin-bottom: 32px; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation-duration: 0s !important; } .spin { animation: none; } }
 </style>
 </head>
 <body>
-<header><div class="orb"></div><div><h1>LLM OS Setup</h1><div class="ver" id="ver">reading this folder…</div></div></header>
-<main>
-  <section class="card" id="progress"><h2 id="ptitle">Working…</h2><div class="bar"><i id="pbar"></i></div><div id="pmsg" class="steps"></div></section>
-  <section class="card welcome" id="welcome"><h2>Welcome — let's get LLM OS running</h2>
-    <p id="whead">Looking at this computer…</p>
-    <p id="wnote" class="warn" style="display:none"></p>
-    <div class="goals">
-      <button class="goal" id="g-vm" data-do="vm"><b>Try it in a window</b><span>Runs inside this computer, like an app. Nothing is changed. Best first step.</span></button>
-      <button class="goal" id="g-usb" data-do="usb"><b>Make a USB stick</b><span>Start any PC from it to try LLM OS, and install it from there if you like.</span></button>
-      <button class="goal" id="g-install" data-do="install"><b>Install it on a computer</b><span>On its own or next to Windows / macOS, from the USB stick.</span></button>
-      <button class="goal" id="g-save" data-do="save-iso"><b>Just save the ISO</b><span>A copy in Downloads, checked against its fingerprint.</span></button>
-    </div>
-    <div id="wmsg" class="rec" style="display:none"></div>
-    <p class="small">Prefer to be guided step by step? Give the file <b>“2 - Set up with AI.md”</b> (next to the START HERE files) to an AI assistant such as Claude or ChatGPT and say: <i>“Read this and help me set up LLM OS.”</i></p></section>
-
-  <section class="card" id="images"><h2>In this folder</h2><p>The LLM OS files and their fingerprints (SHA-256), so you can tell they are intact. Everything stays on this computer.</p><div id="imglist"></div>
-    <div class="row"><button class="btn" data-do="show-folder">Show the folder</button><button class="btn" data-do="show-iso">Show the ISO this computer needs</button></div></section>
-
-  <section class="card" id="savecard"><h2>Save the ISO</h2><p>Copies the bootable ISO into your Downloads folder and verifies it against its checksum, so you can share it, archive it, or write it with any tool.</p>
-    <div class="row"><select id="saveSel"></select><button class="btn primary" data-do="save">Save to Downloads</button></div></section>
-
-  <section class="card" id="usbcard"><h2>Write to a USB stick</h2><p>Makes a stick that boots straight into LLM OS. From that desk, say <i>"install LLM OS alongside macOS"</i> (or Windows) to put it on the computer.</p>
-    <div class="rec"><b>Stick:</b> USB 3.0 or faster, <b>8 GB minimum, 16 GB recommended</b>. <b>Everything on it is erased.</b><br><b>Computer:</b> any 64‑bit PC or Intel Mac from the last ~10 years, 4 GB RAM (8 GB comfortable), 32 GB free on the internal disk for an install.</div>
-    <div class="row"><select id="driveSel"><option value="">no removable drive found</option></select><button class="btn" data-do="refresh">Refresh</button></div>
-    <div class="row"><select id="writeSel"></select><label><input type="checkbox" id="sure"> I understand the stick will be erased</label><button class="btn danger" id="writeBtn" data-do="write" disabled>Write</button></div>
-    <p class="mac-note" style="font-size:13px;color:var(--dim)">On macOS, writing a stick needs <b>Full Disk Access</b> for Terminal (System Settings → Privacy &amp; Security). Setup will tell you if it's missing before it starts.</p>
-    <p id="winnote" style="display:none">On Windows the write needs administrator rights; a prompt will appear. If it is refused, write the ISO with <a href="https://rufus.ie" style="color:#b9a9ff">Rufus</a> (DD image mode) or balenaEtcher instead.</p></section>
-
-  <section class="card" id="howto"><h2>Install, dual boot, first start</h2><p>Pick your machine.</p><div id="howlist"></div></section>
-
-</main>
-<footer>LLM OS Setup · runs only on this computer · <button class="btn" style="padding:4px 10px;font-size:13px" data-do="quit">Quit</button></footer>
+<div class="page">
+  <header><div class="orb" aria-hidden="true"></div><div class="brand">LLM OS</div><div class="ver" id="ver"></div></header>
+  <main id="app" aria-live="polite"></main>
+  <footer><span id="this"></span><button class="btn small" data-act="quit">Quit</button></footer>
+</div>
+<div id="modal"></div>
 <script>
-  const $ = (id) => document.getElementById(id);
-  const gb = (n) => (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + " GB";
-  let rel = null;
-  // the launch token arrives in the address's #fragment, which the browser never sends to a server: the page
-  // itself holds no secret, so nothing else on this computer can read one from it
-  const TOKEN = decodeURIComponent(location.hash.slice(1));
-  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  async function api(path, body) {
-    const opts = { headers: { "X-LLMOS-Token": TOKEN } };   // the token goes on every call; the server requires it on all /api endpoints
-    if (body) { opts.method = "POST"; opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
-    const r = await fetch(path, opts);
-    return r.json();
+const TOKEN = decodeURIComponent(location.hash.slice(1));
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const gb = (n) => (n >= 10e9 ? Math.round(n / 1e9) : (n / 1e9).toFixed(1)) + " GB";
+const svg = (d, w) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w || 1.9}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const I = {
+  usb: svg('<rect x="6.5" y="9.5" width="11" height="12" rx="2.5"/><path d="M8.5 9.5V3.5h7v6"/><path d="M10.6 6h.01M13.4 6h.01"/>'),
+  win: svg('<rect x="3" y="4" width="18" height="13.5" rx="2"/><path d="M3 8h18M8.5 21h7M12 17.5V21"/>'),
+  chev: svg('<path d="M9 6l6 6-6 6"/>', 2.2), back: svg('<path d="M15 6l-6 6 6 6"/>', 2.2),
+  ok: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 2.6), bad: svg('<path d="M12 6.5v7M12 17.5v.01"/>', 2.8),
+};
+let S = { st: null, view: "home", drives: [], derr: "", pick: "", notice: "", busy: false, samples: [], down: false, timer: null, launched: false };
+
+async function api(path, body) {
+  const o = { headers: { "X-LLMOS-Token": TOKEN }, cache: "no-store" };
+  if (body !== undefined) { o.method = "POST"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body); }
+  try {
+    const r = await fetch(path, o);
+    if (!r.ok) throw new Error(r.status);
+    S.down = false;
+    return await r.json();
+  } catch (e) {
+    if (!S.down) { S.down = true; closed("Setup isn't running any more.", "Start it again with Start Here in the LLM OS folder."); }
+    throw e;
   }
-  // a message in the welcome card (never an alert), with buttons for the next step when there is one
-  const GUIDE = { utm: ["Open the UTM download page", "utm"], virtualbox: ["Open the VirtualBox download page", "virtualbox"] };
-  function say(text, guide, ok) {
-    const box = $("wmsg"); box.style.display = "block"; box.innerHTML = "";
-    const p = document.createElement("div"); p.textContent = text; if (ok) p.className = "ok"; box.appendChild(p);
-    const row = document.createElement("div"); row.className = "row";
-    if (GUIDE[guide]) { const b = document.createElement("button"); b.className = "btn primary"; b.textContent = GUIDE[guide][0]; b.onclick = () => act("open", { what: GUIDE[guide][1] }); row.appendChild(b); }
-    if (guide) { const s = document.createElement("button"); s.className = "btn"; s.textContent = "Show the ISO to use"; s.onclick = () => act("open", { what: "iso" }); row.appendChild(s);
-                 const h = document.createElement("button"); h.className = "btn"; h.textContent = "Show the steps"; h.onclick = () => go("howto", true, "vm"); row.appendChild(h); }
-    if (row.children.length) box.appendChild(row);
+}
+
+const OS = () => (S.st && S.st.host.os) || "mac";
+const thisName = () => ({ mac: "Mac", windows: "PC" }[OS()] || "computer");
+
+function show(view) {
+  S.view = view; clearInterval(S.timer); S.timer = null;
+  render();
+  if (view === "usb") { pollDrives(); S.timer = setInterval(pollDrives, OS() === "windows" ? 3000 : 2000); }
+  if (view === "write") { pollJob(); S.timer = setInterval(pollJob, 600); }
+  window.scrollTo(0, 0);
+  const h = document.querySelector("main h1"); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); }
+}
+
+function render() {
+  const v = { home, usb, write, done, error, tryit }[S.view] || home;
+  $("app").innerHTML = v();
+}
+
+function home() {
+  return `<h1>Set up LLM OS</h1><p class="lead">What would you like to do?</p>
+  <div class="stack">
+    <button class="choice" data-go="usb"><span class="icon">${I.usb}</span><span><span class="t">Make a USB stick</span>
+      <span class="d">Start or install LLM OS on a PC or Intel Mac.</span></span><span class="chev">${I.chev}</span></button>
+    <button class="choice" data-go="tryit"><span class="icon">${I.win}</span><span><span class="t">Try it in a window</span>
+      <span class="d">Run LLM OS on this ${thisName()} without changing anything.</span></span><span class="chev">${I.chev}</span></button>
+  </div>`;
+}
+
+function usb() {
+  const h = S.st.host, img = S.st.usb.state;
+  const broken = img === "bad" || img === "missing";
+  return `<button class="back" data-go="home">${I.back}Back</button>
+  <h1>Make a USB stick</h1>
+  <p class="lead">For PCs (Dell, HP, Lenovo and others) and Intel Macs.</p>
+  ${h.boots_usb ? "" : `<p class="note">This ${thisName()} can't start from a USB stick, so use the stick on another computer.</p>`}
+  ${S.notice ? `<div class="banner">${esc(S.notice)}</div>` : ""}
+  ${broken ? `<div class="banner bad">${img === "missing" ? "This copy of LLM OS is missing its USB image." : "This copy of LLM OS is damaged."}
+     Get a fresh copy of the LLM OS folder, then try again.</div>` : ""}
+  <div class="card"><div class="card-h">Plug in a USB stick <small>8 GB or larger</small></div><div id="drives">${drivesHTML()}</div></div>
+  <div class="actions">
+    <button class="btn danger" id="go" data-act="erase" ${canWrite() && !broken ? "" : "disabled"}>Erase and write</button>
+    <p class="fine">Everything on the stick will be erased.</p>
+  </div>`;
+}
+
+function drivesHTML() {
+  if (S.derr && !S.drives.length) return `<div class="empty">${esc(S.derr)}</div>`;
+  if (!S.drives.length) return `<div class="empty"><span class="spin" aria-hidden="true"></span>Waiting for a USB stick…</div>`;
+  return `<div role="radiogroup" aria-label="USB sticks">` + S.drives.map((d) => {
+    const meta = [gb(d.size)].concat((d.labels || []).map((l) => `“${l}”`)).join(" · ");
+    const badge = d.too_small ? `<span class="badge">Too small</span>` : d.large ? `<span class="badge">Large drive</span>` : "";
+    return `<button class="drive" role="radio" aria-checked="${S.pick === d.id}" data-pick="${esc(d.id)}" ${d.too_small ? "disabled" : ""}>
+      <span class="radio" aria-hidden="true"></span><span><span class="n">${esc(d.name)}</span><br><span class="m">${esc(meta)}</span></span>${badge}</button>`;
+  }).join("") + `</div>`;
+}
+
+const picked = () => S.drives.find((d) => d.id === S.pick);
+const canWrite = () => !!picked() && !picked().too_small;
+
+async function pollDrives() {
+  if (S.view !== "usb") return;
+  let r; try { r = await api("/api/drives"); } catch (e) { return; }
+  const before = JSON.stringify([S.drives, S.derr]);
+  S.drives = r.drives || []; S.derr = r.error || "";
+  if (S.pick && !picked()) S.pick = "";
+  if (!S.pick) { const usable = S.drives.filter((d) => !d.too_small && !d.large); if (usable.length === 1) S.pick = usable[0].id; }
+  if (JSON.stringify([S.drives, S.derr]) !== before && $("drives")) { $("drives").innerHTML = drivesHTML(); syncGo(); }
+}
+function syncGo() { const b = $("go"); const broken = ["bad", "missing"].includes(S.st.usb.state); if (b) b.disabled = !canWrite() || broken; }
+
+function confirmErase() {
+  const d = picked(); if (!d) return;
+  $("modal").innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="dt"><div class="dialog">
+    <h2 id="dt">Erase “${esc(d.name)}”?</h2>
+    <p>Everything on this ${gb(d.size)} drive will be deleted.</p>
+    ${d.large ? `<p class="warn">That's bigger than most USB sticks. Make sure it's the right drive.</p>` : ""}
+    <div class="row"><button class="btn" data-act="cancel" id="cancel">Cancel</button><button class="btn danger" data-act="write">Erase and write</button></div>
+  </div></div>`;
+  $("cancel").focus();
+}
+const closeModal = () => { $("modal").innerHTML = ""; };
+
+async function startWrite() {
+  const d = picked(); closeModal(); if (!d) return;
+  let r; try { r = await api("/api/write", { drive: d.id }); } catch (e) { return; }
+  if (!r.ok) { S.notice = r.error; render(); return; }
+  S.notice = ""; S.samples = []; S.job = { drive: d, phase: "checking", done: 0, total: 0 };
+  show("write");
+}
+
+const PHASE = {
+  checking: ["Getting ready", "Checking the LLM OS image…"],
+  preparing: ["Getting ready", "Preparing the stick…"],
+  password: null,
+  writing: ["Writing LLM OS", ""],
+  verifying: ["Checking the stick", ""],
+  finishing: ["Almost done", "Ejecting the stick…"],
+};
+function passwordText() {
+  return { mac: ["Enter your Mac password", "macOS asks before anything is written."],
+           windows: ["Click Yes", "Windows asks before anything is written."] }[OS()] || ["Enter your password", "Linux asks before anything is written."];
+}
+function write() {
+  const d = S.job.drive;
+  return `<h1 id="ph">Getting ready</h1><p class="lead">${esc(d.name)} · ${gb(d.size)}</p>
+  <div class="card progress"><div class="ptitle" id="pt">Checking the LLM OS image…</div>
+    <div class="bar wait" id="bar"><i id="fill"></i></div><div class="pmeta"><span id="pct"></span><span id="eta"></span></div></div>
+  <p class="fine" style="margin-top:16px">Keep the stick plugged in.</p>`;
+}
+
+function eta(done, total, phase) {
+  const now = performance.now();
+  S.samples = S.samples.filter((s) => s.phase === phase && now - s.t < 10000);
+  S.samples.push({ t: now, done, phase });
+  if (S.samples.length < 3) return "";
+  const a = S.samples[0], b = S.samples[S.samples.length - 1];
+  const rate = (b.done - a.done) / ((b.t - a.t) / 1000);
+  if (rate <= 0) return "";
+  const left = (total - done) / rate;
+  return left < 60 ? "Less than a minute left" : `About ${Math.round(left / 60)} min left`;
+}
+
+async function pollJob() {
+  if (S.view !== "write") return;
+  let p; try { p = await api("/api/progress"); } catch (e) { return; }
+  if (p.phase === "done") { show("done"); return; }
+  if (p.phase === "error") { S.job.error = p.error; show("error"); return; }
+  if (p.phase === "cancelled") { S.notice = "Cancelled. Nothing was written."; show("usb"); return; }
+  const [title, sub] = p.phase === "password" ? passwordText() : (PHASE[p.phase] || PHASE.checking);
+  const measured = ["writing", "verifying", "checking"].includes(p.phase) && p.total > 0;
+  const pct = measured ? Math.min(100, Math.floor((p.done * 100) / p.total)) : 0;
+  $("ph").textContent = title;
+  $("pt").textContent = sub || (p.phase === "writing" ? "Copying LLM OS onto the stick…" : "Reading it back to make sure it's right…");
+  $("bar").classList.toggle("wait", !measured);
+  $("fill").style.width = measured ? pct + "%" : "";
+  $("pct").textContent = measured ? pct + "%" : "";
+  $("eta").textContent = measured && p.phase !== "checking" ? eta(p.done, p.total, p.phase) : "";
+}
+
+function done() {
+  const win = OS() === "windows";
+  return `<div class="hero ok">${I.ok}</div><h1>Your USB stick is ready</h1>
+  <p class="lead">${S.st.host.boots_usb ? "Use it on this computer or another one." : "Use it on a PC or an Intel Mac."}</p>
+  <div class="card"><ol class="steps">
+    <li>Plug the stick into the computer.</li>
+    <li>Turn it on and press its boot-menu key right away, then choose the USB stick.
+      <span class="keys">${[["Dell", "F12"], ["HP", "F9"], ["Lenovo", "F12"], ["ASUS", "F8"], ["Acer", "F12"], ["MSI", "F11"], ["Surface", "hold Volume −"], ["Intel Mac", "hold Option"]]
+        .map(([m, k]) => `<span class="key">${m} <b>${k}</b></span>`).join("")}</span></li>
+    <li>LLM OS starts. To keep it on that computer, say <b>“install LLM OS”</b>.</li>
+  </ol></div>
+  ${win ? `<p class="fine" style="margin-top:14px">If Windows offers to format the stick, click Cancel.</p>` : ""}
+  <details><summary>It doesn't start from the stick?</summary>
+    <p>In the boot menu, choose the entry that names the stick or says USB or UEFI.</p>
+    <p>If the computer says something about Secure Boot, open its settings (usually F2 or Del as it starts), turn Secure Boot off, and try again. On a Windows laptop, have your BitLocker recovery key handy first.</p>
+  </details>
+  <div class="actions"><button class="btn primary" data-go="home">Done</button></div>`;
+}
+
+function error() {
+  return `<div class="hero bad">${I.bad}</div><h1>The stick wasn't written</h1>
+  <p class="lead">${esc(S.job && S.job.error)}</p>
+  <div class="actions"><button class="btn primary" data-go="usb">Try again</button></div>`;
+}
+
+function tryit() {
+  const v = S.st.vm, h = S.st.host;
+  const mem = v.low_memory ? `<p class="note">This ${thisName()} has ${h.ram_gb} GB of memory. LLM OS needs 4 GB of it, so close other apps first.</p>` : "";
+  const head = `<button class="back" data-go="home">${I.back}Back</button><h1>Try it in a window</h1>`;
+  if (v.method === "launcher") {
+    return `${head}<p class="lead">LLM OS opens in its own window on this Mac.</p>${mem}
+    <div class="actions"><button class="btn primary" data-act="start">Start LLM OS</button>
+    ${S.launched ? `<p class="fine">Starting… its window opens in a moment.</p>` : ""}</div>`;
   }
-  async function act(what, body) { const r = await api("/api/" + what, body); if (r && (r.error || r.message)) say(r.error || r.message, r.guide, !r.error); return r; }
-  async function goVM() { await act("open", { what: "vm" }); }
-  function go(id, open, section) {
-    const el = $(id); el.scrollIntoView({ behavior: "smooth", block: "start" }); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
-    if (open) { const want = section || (rel && rel.recommend && rel.recommend.section);
-      document.querySelectorAll("#howlist details").forEach(d => { d.open = d.dataset.id === want; }); }
+  if (v.method === "none") {
+    return `${head}<p class="lead">This ${thisName()} can't run LLM OS in a window. Make a USB stick and use it on a PC instead.</p>
+    <div class="actions"><button class="btn primary" data-go="usb">Make a USB stick</button></div>`;
   }
-  async function load() {
-    rel = await api("/api/status");
-    const h = rel.host || {}, rec = rel.recommend || {};
-    const kind = h.apple_silicon ? "Mac with Apple Silicon" : rel.platform === "Darwin" ? "Intel Mac" : rel.platform === "Windows" ? "Windows PC" : "Linux computer";
-    $("ver").textContent = `Version ${rel.version || "?"}${rel.built ? " · built " + rel.built : ""} · this computer: ${kind}${h.ram_gb ? ", " + Math.round(h.ram_gb) + " GB memory" : ""}`;
-    $("whead").textContent = rec.headline || "";
-    if (rec.note) { $("wnote").textContent = rec.note; $("wnote").style.display = "block"; }
-    const best = { vm: "g-vm", usb: "g-usb" }[rec.goal]; if (best) $(best).classList.add("best");
-    const list = $("imglist"); list.innerHTML = "";
-    const isos = rel.images.filter(i => i.kind === "iso");
-    for (const i of rel.images) {
-      const d = document.createElement("div"); d.className = "img";
-      d.innerHTML = `<div><b>${esc(i.file)}</b><span class="tag">${i.kind === "iso" ? "bootable ISO" : "VM disk"}</span><span class="tag">${esc(i.arch)}</span><div class="m">${i.sha256 ? esc(i.sha256.slice(0, 16)) + "…" : "no checksum"} · ${esc(i.built)}</div></div><div>${gb(i.size)}</div>`;
-      list.appendChild(d);
-    }
-    for (const sel of [$("saveSel"), $("writeSel")]) {
-      sel.innerHTML = isos.length ? isos.map(i => `<option value="${esc(i.file)}"${rec.iso === i.file ? " selected" : ""}>${esc(i.file)} (${gb(i.size)})${rec.iso === i.file ? " — for this computer" : ""}</option>`).join("") : `<option value="">no ISO in this folder — this copy of LLM OS is incomplete</option>`;
-    }
-    $("winnote").style.display = rel.platform === "Windows" ? "block" : "none";
-    drives(); howto();
-  }
-  async function drives() {
-    const r = await api("/api/drives"); const sel = $("driveSel"); sel.innerHTML = "";
-    if (!r.drives || !r.drives.length) { sel.innerHTML = `<option value="">no removable drive found${r.error ? " (" + esc(r.error) + ")" : ""} — plug a stick in and refresh</option>`; }
-    for (const d of r.drives) { const o = document.createElement("option"); o.value = d.id; o.textContent = `${d.name || d.id} — ${gb(d.size)}${d.bus ? " · " + d.bus : ""}${d.label ? " · " + d.label : ""}${d.size && d.size < 8e9 ? " (too small)" : ""}`; sel.appendChild(o); }
-    gate();
-  }
-  function gate() { $("writeBtn").disabled = !($("sure").checked && $("driveSel").value && $("writeSel").value); }
-  $("sure").onchange = gate; $("driveSel").onchange = gate;
-  async function save() { const f = $("saveSel").value; if (!f) return; const r = await api("/api/save", { file: f }); if (r.error) return alert(r.error); watch("Saving the ISO"); }
-  async function write() {
-    const f = $("writeSel").value, d = $("driveSel").value, name = $("driveSel").selectedOptions[0].textContent;
-    if (!f || !d) return;
-    if (!confirm(`Erase "${name}" and write ${f} to it?\n\nThis cannot be undone.`)) return;
-    const r = await api("/api/write", { file: f, drive: d });
-    if (r.need_fda) { if (confirm(r.error + "\n\nOpen the Full Disk Access settings now?")) await act("open", { what: "fda" }); return; }
-    if (r.error) return alert(r.error);
-    watch("Writing the stick");
-  }
-  let timer = null;
-  function watch(title) {
-    $("progress").classList.add("show"); $("ptitle").textContent = title; window.scrollTo({ top: 0, behavior: "smooth" }); clearInterval(timer);
-    timer = setInterval(async () => {
-      const p = await api("/api/progress");
-      const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
-      $("pbar").style.width = pct + "%";
-      const rate = p.elapsed && p.done ? ` · ${(p.done / p.elapsed / 1e6).toFixed(0)} MB/s` : "";
-      if (p.phase === "error") { $("pmsg").innerHTML = `<span class="err">${esc(p.error)}</span>`; clearInterval(timer); }
-      else if (p.phase === "done") { $("pmsg").innerHTML = `<span class="ok">${esc(p.message)}</span>`; $("pbar").style.width = "100%"; clearInterval(timer); }
-      else $("pmsg").textContent = `${p.message} — ${pct}%${rate}`;
-    }, 800);
-  }
-  async function howto() {
-    const h = await api("/api/instructions"); const box = $("howlist"); box.innerHTML = "";
-    const want = (rel.recommend && rel.recommend.section) || h.default_for[rel.platform];
-    for (const sec of h.sections) {
-      const d = document.createElement("details"); d.dataset.id = sec.id; if (sec.id === want) d.open = true;
-      d.innerHTML = `<summary>${sec.title}</summary><ol class="steps">${sec.steps.map(s => `<li>${s}</li>`).join("")}</ol>${sec.note ? `<p class="steps warn">${sec.note}</p>` : ""}`;
-      box.appendChild(d);
-    }
-  }
-  const ACTIONS = { "vm": () => goVM(), "usb": () => go("usbcard"), "install": () => go("howto", true), "save-iso": () => go("savecard"),
-                    "show-folder": () => act("open", { what: "folder" }), "show-iso": () => act("open", { what: "iso" }),
-                    "save": () => save(), "refresh": () => drives(), "write": () => write(), "quit": () => act("quit", {}) };
-  document.querySelectorAll("[data-do]").forEach((b) => b.addEventListener("click", () => ACTIONS[b.dataset.do]()));
-  if (!TOKEN) {
-    document.querySelector("main").innerHTML = '<section class="card"><h2>Open LLM OS Setup from its launcher</h2><p>Start it with ' +
-      '"1 - START HERE" in the LLM OS folder; it opens this page with the key it needs.</p></section>';
-  } else {
-    load();
-  }
+  const app = { utm: "UTM", virtualbox: "VirtualBox", boxes: "Boxes" }[v.method];
+  const get = v.installed ? `<span class="sub"><span class="ok-line">${svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 2.6).replace("<svg", '<svg width="16" height="16"')} ${app} is installed</span>
+      <button class="btn small" data-act="open-app">Open ${app}</button></span>`
+    : `<span class="sub"><button class="btn small primary" data-act="get-app">Download ${app}</button></span>`;
+  const file = `<span class="sub"><button class="btn small" data-act="image">Show the LLM OS file</button></span>`;
+  const steps = {
+    utm: [`Get ${app}, the free app that runs it.${get}`,
+          `In UTM, click <kbd>+</kbd>, then <b>Virtualize</b> › <b>Linux</b>.`,
+          `For <b>Boot ISO Image</b>, click Browse and choose the LLM OS file.${file}`,
+          `Click Continue until <b>Save</b>, then press <b>▶</b>.`],
+    virtualbox: [`Get ${app}, the free app that runs it.${get}`,
+          `In VirtualBox, click <b>New</b>. For <b>ISO Image</b>, choose the LLM OS file.${file}`,
+          `Set <b>Base Memory</b> to 4096 MB.`,
+          `Click Next until <b>Finish</b>, then <b>Start</b>.`],
+    boxes: [`Get ${app}, the free app that runs it.${get}`,
+          `In Boxes, click <b>+</b> › <b>Install from File</b> and choose the LLM OS file.${file}`,
+          `Give it 4 GB of memory, then click <b>Create</b>.`],
+  }[v.method];
+  return `${head}<p class="lead">LLM OS runs inside the free app ${app}.</p>${mem}
+  <div class="card"><ol class="steps">${steps.map((s) => `<li>${s}</li>`).join("")}</ol></div>`;
+}
+
+function closed(title, sub) {
+  clearInterval(S.timer); closeModal();
+  $("app").innerHTML = `<h1>${esc(title)}</h1><p class="lead">${esc(sub)}</p>`;
+  document.querySelector("footer").style.visibility = "hidden";
+}
+
+document.addEventListener("click", async (e) => {
+  const el = e.target.closest("[data-go],[data-act],[data-pick]"); if (!el || el.disabled) return;
+  if (el.dataset.go) { if (el.dataset.go !== "usb") S.notice = ""; show(el.dataset.go); return; }
+  if (el.dataset.pick !== undefined) { S.pick = el.dataset.pick; $("drives").innerHTML = drivesHTML(); syncGo();
+    const again = document.querySelector(`[data-pick="${CSS.escape(S.pick)}"]`); if (again) again.focus(); return; }
+  const a = el.dataset.act;
+  if (a === "erase") confirmErase();
+  else if (a === "cancel") closeModal();
+  else if (a === "write") startWrite();
+  else if (a === "quit") { try { await api("/api/quit", {}); } catch (x) {} S.down = true; closed("Setup is closed", "You can close this tab."); }
+  else { let r; try { r = await api("/api/open", { what: a }); } catch (x) { return; }
+         if (a === "start" && r.ok) { S.launched = true; render(); }
+         else if (!r.ok && r.error) alert(r.error); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("modal").innerHTML) closeModal(); });
+
+(async function boot() {
+  if (!TOKEN) { closed("Open LLM OS Setup from its Start Here file", "In the LLM OS folder, open Start Here for your computer."); return; }
+  try { S.st = await api("/api/status"); } catch (e) { return; }
+  const h = S.st.host;
+  $("ver").textContent = S.st.version ? "Version " + S.st.version : "";
+  $("this").textContent = ["This " + thisName(), h.chip, h.ram_gb ? h.ram_gb + " GB memory" : ""].filter(Boolean).join(" · ");
+  show("home");
+})();
 </script>
 </body>
 </html>

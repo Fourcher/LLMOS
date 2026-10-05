@@ -6,41 +6,22 @@ source.
 
 ## Start here
 
-**Double-click the "1 - START HERE" file for your computer.** It's at the top
-of this folder:
+Open **Start Here** for your computer. It's at the top of the LLM OS folder:
+**Start Here (Mac)**, **Start Here (Windows)** or **Start Here (Linux)**.
 
-| Your computer | Double-click |
-|---|---|
-| Mac | **1 - START HERE (Mac).command** |
-| Windows | **1 - START HERE (Windows).bat** |
-| Linux | **1 - START HERE (Linux).sh** |
+LLM OS Setup opens in your web browser. Choose **Make a USB stick** to start or
+install LLM OS on a PC or an Intel Mac (it picks the right image by itself), or
+**Try it in a window** on the computer you have.
 
-That opens **LLM OS Setup** in your web browser. It recognises your computer
-and recommends the easiest way in:
-
-- **Try it in a window** — runs inside the computer you have, like an app.
-  Nothing changes. The best first step. (On a Mac with Apple Silicon, this is
-  the only way for now.)
-- **Make a USB stick** — start any PC from it to try LLM OS.
-- **Install it** — on its own or next to Windows or macOS.
-- **Just save the ISO** — to keep or share.
-
-**Want to be guided?** Give the file **"2 - Set up with AI.md"** to an AI
-assistant (Claude, ChatGPT, …) and say *"Read this and help me set up LLM
-OS."* It walks you through everything and asks before changing anything.
-
-If the folder is a .zip, unzip it first (Windows: right-click → **Extract
-All**).
-
-**The first time you open START HERE**, your computer may be cautious:
+The first time, your computer may ask you to confirm:
 
 | You see | Do this |
 |---|---|
-| Mac: "cannot be opened" or "Apple could not verify…" | Right-click (Control-click) the file → **Open** → **Open**. |
-| Mac: "install the command line developer tools?" | Click **Install** (Apple's free Python), wait, then open START HERE again. |
-| Windows: "Windows protected your PC" | Click **More info** → **Run anyway**. |
-| Windows: Python isn't installed | START HERE offers to install it; then open START HERE again. |
-| The browser didn't open | Copy the `http://127.0.0.1:…` address from the small text window into your browser. |
+| Mac: "Apple could not verify…" | Open **System Settings › Privacy & Security**, scroll down, click **Open Anyway**. |
+| Windows: "Windows protected your PC" | Click **More info**, then **Run anyway**. |
+| Linux: the file opens as text | Right-click it and choose **Run as a Program**. |
+
+If you got LLM OS as a .zip file, unzip it first.
 
 ---
 
