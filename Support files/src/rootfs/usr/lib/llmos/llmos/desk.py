@@ -2076,7 +2076,7 @@ class Desk:
 
     def _instant(self, text):
         low = intent.plain(text).lower().strip()
-        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|from (?:my |the )?(?:phone|camera|iphone|android))\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
+        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|from (?:my |the )?(?:phone|camera|iphone|android))\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
                 any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
                 any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
                                                                             r"(?:extend|mirror) the displays|use only the main display|use only the (?:projector|tv|second (?:screen|display))|projector only|"
@@ -2352,6 +2352,26 @@ class Desk:
             home = config.home().rstrip("/")
             self.instant_reply(line, ("Saved " + " and ".join(("~" + p[len(home):]) if p.startswith(home) else p for _, p in done) + ".")
                                if done else "Nothing was being recorded.")
+            return True
+        if re.fullmatch(r"what(?:'s| is) (?:my |the |this computer'?s? )?(?:ip|ip address|address on the network|local ip|public ip)|(?:show|tell me) (?:my )?ip(?: address)?|my ip", l2):
+            def ip():
+                local = ""
+                try:
+                    out = subprocess.run(["ip", "-4", "-o", "addr", "show", "scope", "global"], capture_output=True, text=True, timeout=5).stdout
+                    local = ", ".join(re.findall(r"inet (\d+\.\d+\.\d+\.\d+)", out))
+                except (OSError, subprocess.SubprocessError):
+                    pass
+                public = ""
+                if config.settings.get("internet") != "no":
+                    try:
+                        from . import web
+                        public = web.fetch("https://api.ipify.org", max_bytes=100, timeout=6)[3].decode("ascii", "replace").strip()[:45]
+                    except Exception:
+                        public = ""
+                self.instant_reply(line, (f"On your network: {local or 'not connected'}." if local else "Not connected to a network.") +
+                                   (f" To the internet: {public}." if re.fullmatch(r"[\d.:a-f]+", public or "x") else ""))
+            threading.Thread(target=ip, daemon=True).start()
+            self._said = "(checking)"
             return True
         how = self._howto(l2)
         if how:
@@ -3572,8 +3592,9 @@ class Desk:
                 for wid in list(self.windows):
                     self.close_window(wid)
                 for k, v in (("autonomy", "balanced"), ("internet", "yes"), ("brain", "local"), ("guidance", "owner"), ("tor", False),
-                             ("screen_off", 0), ("do_not_disturb", False)):
+                             ("screen_off", 0), ("do_not_disturb", False), ("language", "English")):
                     config.settings.set(k, v)
+                self.apply_theme()            # (a test that changed the language must not leave the next one in Spanish)
                 self.start_idle()             # tests drive the desk without touching the keyboard: the screen must stay on
                 system.apply_firewall("yes")
                 if self.screen == "lock":
