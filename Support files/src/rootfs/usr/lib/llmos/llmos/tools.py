@@ -1913,7 +1913,9 @@ def open_file(a, ctx):
     if ext in _IMAGE_EXT:
         show(ctx, {"id": "file:" + path, "replace": True, "title": name, "kind": "image", "size": "l",
                    "blocks": [{"type": "image", "src": path, "caption": f"{path} · {_human_size(size)}"},
-                              {"type": "buttons", "items": [{"label": "Set as wallpaper", "say": f"set {path} as my wallpaper"},
+                              {"type": "buttons", "items": [{"label": "Make smaller", "say": f"make {path} smaller"},
+                                                            {"label": "Rotate", "say": f"rotate {path} right"},
+                                                            {"label": "Set as wallpaper", "say": f"set {path} as my wallpaper"},
                                                             {"label": "Print", "say": f"print the file {path}"},
                                                             {"label": i18n.t("d_delete"), "say": f"delete the file {path}", "danger": True}]}]})
         return f"{name} is shown on the owner's screen. Say one sentence at most."
@@ -2113,6 +2115,41 @@ def check_site(a, ctx):
     except OSError:
         notes.append("it could not be reached on a secure connection")
     return f"{host}: " + "; ".join(notes) + ". Done: tell the owner plainly, in one or two sentences, and call no other tool."
+
+
+@tool("edit_image", "Change a picture: make it smaller (for email), rotate it, crop it to a square, or make it black and white. "
+      "A new copy is saved next to it; the original stays.",
+      {"path": STR, "action": {"type": "string", "enum": ["smaller", "rotate left", "rotate right", "square", "black and white"]}},
+      ["path", "action"], risk=CHANGE)
+def edit_image(a, ctx):
+    path = os.path.abspath(_path(a.get("path", "")))
+    if not os.path.isfile(path) or os.path.splitext(path)[1].lower() not in _IMAGE_EXT:
+        return f"error: {a.get('path')} is not a picture"
+    tool_ = shutil.which("magick") or shutil.which("convert")
+    if not tool_:
+        return "there is no picture editor here (say 'install imagemagick')"
+    act = str(a.get("action", "smaller")).lower()
+    ops = {"smaller": ["-resize", "1600x1600>", "-quality", "82"], "rotate left": ["-rotate", "-90"], "rotate right": ["-rotate", "90"],
+           "square": ["-gravity", "center", "-extent", "%[fx:min(w,h)]x%[fx:min(w,h)]"], "black and white": ["-colorspace", "Gray"]}.get(act)
+    if ops is None:
+        return "error: unknown change"
+    stem, ext = os.path.splitext(path)
+    suffix = {"smaller": "small", "rotate left": "rotated", "rotate right": "rotated", "square": "square", "black and white": "bw"}[act]
+    dest = f"{stem}-{suffix}{'.jpg' if act == 'smaller' else ext}"
+    if act == "square":           # (extent takes plain numbers)
+        p0 = subprocess.run([shutil.which("identify") or "identify", "-format", "%w %h", path], capture_output=True, text=True, timeout=30)
+        try:
+            w, h = (int(x) for x in p0.stdout.split()[:2])
+            ops = ["-gravity", "center", "-extent", f"{min(w, h)}x{min(w, h)}"]
+        except ValueError:
+            return "error: could not read the picture's size"
+    p = subprocess.run([tool_, path] + ops + [dest], capture_output=True, text=True, timeout=120)
+    if p.returncode or not os.path.exists(dest):
+        return f"could not change it: {(p.stderr or p.stdout).strip()[:200]}"
+    open_file({"path": dest}, ctx) if hasattr(ctx, "show_ui") else None
+    home = config.home().rstrip("/")
+    shown = "~" + dest[len(home):] if dest.startswith(home) else dest
+    return f"saved {shown} ({_human_size(os.path.getsize(dest))}); the original is unchanged. Done: tell the owner in one sentence and call no other tool."
 
 
 @tool("remove_software", "Uninstall a program the owner installed (an Alpine package or a Flathub app). Never the system's own parts.",
@@ -2924,6 +2961,6 @@ def which_file(a, ctx):
         return ("which one? Say what to play (for example 'play the moon landing video' or 'play some jazz'), "
                 "or 'show my videos' to pick one of yours")
     v = (re.match(r"\s*(?:please\s+)?(\w+)", req) or [None, "open"])[1].lower()
-    v = v if v in ("open", "print", "copy", "move", "rename", "send", "email", "attach", "delete", "show", "zip", "compress", "convert", "put") else "open"
+    v = v if v in ("open", "print", "copy", "move", "rename", "send", "email", "attach", "delete", "show", "zip", "compress", "convert", "put", "crop", "rotate") else "open"
     return (f"which file? Say its name (for example '{v} recipe.pdf'), or say 'find my recipe' to look for it, "
             "or open your files and use the buttons there")

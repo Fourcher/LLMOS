@@ -406,6 +406,7 @@ def run(ctx, user_text, history):
     # improvises (searching the web for the person named) instead of saying so.
     if re.search(r"\b(e-?mails?|inbox|mailbox|unread mail|my mail)\b|^\s*(?:reply|respond|answer)\s+(?:back\s+)?to\b",
                  user_text, re.I) and mail.account() is None \
+            and not re.search(r"\b(picture|photo|image|pic|file|pdf|document|video|smaller|resize|zip)\b", user_text, re.I) \
             and not re.search(r"\b(set ?up|configure|add|connect|log ?in)\b", user_text, re.I):
         web = config.settings.get("mail_web")
         writing = re.search(r"\b(write|draft|compose|send|reply|respond|answer|tell)\b", user_text, re.I)

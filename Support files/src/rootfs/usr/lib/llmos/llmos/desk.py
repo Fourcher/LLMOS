@@ -31,7 +31,7 @@ import sys
 import threading
 import time
 
-from . import clip, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line
+from . import clip, record, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
@@ -2076,7 +2076,7 @@ class Desk:
 
     def _instant(self, text):
         low = intent.plain(text).lower().strip()
-        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
+        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|from (?:my |the )?(?:phone|camera|iphone|android))\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
                 any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
                 any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
                                                                             r"(?:extend|mirror) the displays|use only the main display|use only the (?:projector|tv|second (?:screen|display))|projector only|"
@@ -2201,6 +2201,8 @@ class Desk:
             self.instant_reply(line, "Airplane mode is on: Wi-Fi and Bluetooth are off." if v == "on" else "Airplane mode is off.")
             self.push_status()
             return True
+        if re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) and _wifi_now():
+            line = "forget wifi " + _wifi_now()
         m = re.fullmatch(r"forget (?:the )?wi-?fi(?: network)? (?P<s>.+)|(?P<dis>disconnect (?:from )?(?:the )?wi-?fi)", line.strip().rstrip(".!"), re.I)
         if m and shutil.which("iwctl"):
             dev = _wifi_device()
@@ -2334,6 +2336,22 @@ class Desk:
         if re.fullmatch(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail(?: account)?(?: (?:in an app|here|on this computer|in the os|properly))?", l2):
             self.mail_form()
             self.last_reply = self._said = "Type your email address and password in the window."
+            return True
+        m = re.fullmatch(r"(?:please )?(?:start )?(?:record|recording|capture) (?:my |the |a )?(?P<k>screen|desktop|video of (?:my |the )?screen|voice|audio|microphone|mic|sound|voice (?:memo|note)|memo|me talking)(?: recording)?|"
+                         r"(?:start )?(?:a )?(?P<k2>screen|voice|audio) recording|(?:make|start) a (?P<k3>voice memo|voice note)", l2)
+        if m:
+            k = (m.group("k") or m.group("k2") or m.group("k3") or "")
+            kind = "screen" if re.search(r"screen|desktop", k) else "voice"
+            ok, note = record.start(kind)
+            self.instant_reply(line, ("Recording the screen now. Say \u201cstop recording\u201d when you're done; it's saved in Videos." if kind == "screen"
+                                      else "Recording from the microphone now. Say \u201cstop recording\u201d when you're done; it's saved in Music.")
+                               if ok else note[:1].upper() + note[1:] + ".")
+            return True
+        if re.fullmatch(r"(?:please )?(?:stop|end|finish) (?:the )?(?:recording|record(?:ing)? (?:my |the )?(?:screen|voice|audio)|screen recording|voice recording)", l2):
+            done = record.stop()
+            home = config.home().rstrip("/")
+            self.instant_reply(line, ("Saved " + " and ".join(("~" + p[len(home):]) if p.startswith(home) else p for _, p in done) + ".")
+                               if done else "Nothing was being recorded.")
             return True
         how = self._howto(l2)
         if how:
@@ -2596,7 +2614,8 @@ class Desk:
                     r"(?:my )?computer is (?:so )?(?:slow|laggy))[?.!]*"), "processes"),
         (re.compile(r"(?:open (?:my |the )?)?(?:drives|usb|usb drives?|my usb|my stick|usb stick|flash drive|external drives?|whats on the (?:stick|usb)|"
                     r"what'?s on (?:the|my) (?:stick|usb(?: stick| drive)?|flash ?drive|memory stick|thumb ?drive|sd card)|open (?:the |my )?(?:usb(?: stick| drive)?|flash ?drive))[?.!]*"), "drives"),
-        (re.compile(r"(?:open (?:the )?)?(?:displays?|monitors?|screens|display settings|second (?:monitor|screen)|use both screens|projector)[?.!]*"), "displays"),
+        (re.compile(r"(?:open (?:the )?)?(?:displays?|monitors?|screens|display settings|second (?:monitor|screen)|use both screens|projector|"
+                    r"(?:change|set|adjust) (?:the |my )?(?:screen |display )?resolution|screen resolution|resolution)[?.!]*"), "displays"),
         (re.compile(r"(?:open (?:the )?)?(?:bluetooth|bluetooth settings|pair (?:a |my )?(?:device|headphones|mouse|keyboard|speaker)s?|"
                     r"connect (?:my )?bluetooth(?: \w+)*)[?.!]*"), "bluetooth"),
         (re.compile(r"(?:open (?:the )?)?(?:printers?|printer settings|add (?:a |my )?printer|set up (?:a |my )?printer|print(?:ing)? (?:is ?n'?t|not) working)[?.!]*"), "printers"),
@@ -2703,6 +2722,13 @@ class Desk:
     _TILE = re.compile(r"(?:put|move|snap) (?:the )?(?P<w>[\w ]+?) (?:on|to) the (?P<side>left|right)(?: side| half)?")
 
     _HOWTO = [
+        (r"(?:recover|get back|restore|find) (?:my |an? |the )?(?:unsaved|lost) (?:document|file|work|essay|changes)|i (?:forgot|didn'?t) (?:to )?save(?: it)?",
+         "Open the same program again: the word processor and the text editor offer to bring back what they saved automatically. "
+         "Also try \u201cfind my files called \u2026\u201d with a word from its name, and \u201cshow the trash\u201d."),
+        (r"(?:import|copy|get|transfer|move) (?:my )?(?:photos|pictures|videos|files)(?: and videos)? (?:from|off) (?:my |the )?(?:phone|camera|iphone|android|sd card)(?:/(?:phone|camera))?|"
+         r"(?:connect|plug in) (?:my )?(?:phone|camera|iphone|android)",
+         "Plug the phone or camera in with its USB cable and unlock it; on Android choose \u201cFile transfer\u201d, on an iPhone press Trust. It then appears "
+         "in Files (say \u201copen the file manager\u201d) on the left; open its DCIM folder and drag the photos into Pictures. A camera's memory card works the same."),
         (r"(?:check|fix|correct) (?:my |the )?spelling(?: and grammar)?|spell ?check|is this spelled (?:right|correctly)",
          "Paste the text here after \u201ccheck the spelling of:\u201d and I'll correct it. In the word processor or text editor, misspelled words are "
          "underlined in red; right-click one for suggestions."),

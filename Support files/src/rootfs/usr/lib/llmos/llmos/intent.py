@@ -936,6 +936,17 @@ def _files(text):
     m = re.match(r"^\s*(?:is|check\s+(?:if|whether)?)\s*(?:the\s+(?:site|website)\s+)?(?P<d>(?:https?://)?[\w.-]+\.[a-z]{2,}(?:/\S*)?)\s*(?:is\s+)?(?:safe|legit|real|a\s+scam|trustworthy|secure|ok)?\s*[?.!]*\s*$", text, re.I)
     if m and re.search(r"\b(?:safe|legit|real|scam|trustworthy|secure|check|ok)\b", text, re.I):
         return ("check_site", {"address": m.group("d")})
+    m = re.match(r"^\s*(?:please\s+)?(?:make|shrink|resize|rotate|turn|crop|make)\s+(?P<p>(?:~|/)\S.*?|this(?:\s+(?:picture|photo|image|pic))?|that(?:\s+(?:picture|photo|image))?)\s+"
+                 r"(?P<a>smaller(?:\s+(?:to|for)\s+(?:email|e-mail|send(?:ing)?))?|(?:to\s+the\s+)?(?:left|right)|square|(?:to\s+)?(?:a\s+)?square|black\s+and\s+white|grey(?:scale)?|gray(?:scale)?)\s*[.!]?\s*$", text, re.I)
+    if m:
+        a = m.group("a").lower()
+        act = ("smaller" if "small" in a else "rotate left" if "left" in a else "rotate right" if "right" in a else
+               "square" if "square" in a else "black and white")
+        if m.group("p")[0] not in "~/":
+            return ("which_file", {"request": text.strip()})
+        return ("edit_image", {"path": m.group("p"), "action": act})
+    if re.match(r"^\s*(?:please\s+)?crop\s+(?:this|that|the)\s+(?:photo|picture|image|pic)\s*[.!]?\s*$", text, re.I):
+        return ("which_file", {"request": text.strip()})
     m = _UNZIP.match(text)
     if m:
         return ("extract_archive", {"path": m.group("p")})
@@ -1056,14 +1067,14 @@ _TERMINAL = re.compile(r"^\s*(?:please\s+)?(?:open|show|give me|start|launch|bri
 # "play some lofi hip hop" / "pull up a YouTube video of X and play it on the
 # screen": unambiguous when media words are present; small models otherwise
 # search, pause, replay and show pictures around a request that is just "play".
-_PLAY = re.compile(r"^\s*(?:please\s+)?(?:play|put on|pull up|start)\s+(?:me\s+)?(?:a|an|some|the)?\s*"
+_PLAY = re.compile(r"^\s*(?:please\s+)?(?:play|put on|pull up|start|listen\s+to|i\s+want\s+to\s+(?:listen\s+to|hear|watch))\s+(?:me\s+)?(?:a|an|some|the)?\s*"
                    r"(?P<q>.+?)(?:\s+(?:and\s+)?(?:play\s+it)?(?:\s+(?:on|in)\s+(?:the\s+)?(?:screen|window|background)))?"
                    r"(?:\s+please)?\s*[.!]?\s*$", re.I)
 _MEDIA_WORDS = re.compile(r"\b(video|youtube|music|song|songs|stream|album|podcast|playlist|radio|mix|lofi|lo-fi|live|concert|trailer|movie|clip|"
                           r"jazz|rock|pop|classical|hip hop|hip-hop|rap|country|blues|reggae|metal|edm|techno|house|ambient|r&b|soul|funk|"
                           r"disco|punk|indie|folk|opera|piano|guitar|beats|tunes)\b", re.I)
 # "music", "play something", "some tunes": a request for music with nothing named -- a real mix, not a site's front page
-_ANY_MUSIC = re.compile(r"^\s*(?:please\s+)?(?:(?:play|put\s+on)\s+)?(?:me\s+)?(?:some\s+|a\s+(?:little\s+)?bit\s+of\s+)?"
+_ANY_MUSIC = re.compile(r"^\s*(?:please\s+)?(?:(?:play|put\s+on|listen\s+to|i\s+want\s+to\s+(?:listen\s+to|hear))\s+)?(?:me\s+)?(?:some\s+|a\s+(?:little\s+)?bit\s+of\s+)?"
                         r"(?:music|songs|tunes|something(?:\s+(?:to\s+listen\s+to|nice|good))?|a\s+song|anything)\s*[.!]?\s*$", re.I)
 DEFAULT_MUSIC = "chill instrumental music mix"
 
@@ -1081,7 +1092,9 @@ def _play(text):
         return ("browse", {"site": "zoom" if "zoom" in k else ("https://teams.live.com" if "teams" in k else "https://meet.google.com/new")})
     if re.search(r"\b(video|zoom|teams)\s+(?:call|chat|meeting)s?\b|\bcall\b", text, re.I):
         return None          # about a call, not something to play
-    if _ANY_MUSIC.match(text) and re.search(r"\b(music|songs|tunes|song|play|put on)\b", text, re.I):
+    if re.match(r"^\s*(?:please\s+)?(?:play|put\s+on|listen\s+to|turn\s+on)\s+(?:the\s+|some\s+)?radio\s*[.!]?\s*$", text, re.I):
+        return ("play_media", {"query": "live radio music stream", "audio_only": True})
+    if _ANY_MUSIC.match(text) and re.search(r"\b(music|songs|tunes|song|play|put on|listen)\b", text, re.I):
         return ("play_media", {"query": DEFAULT_MUSIC})
     m = _PLAY.match(text)
     if not m or not _MEDIA_WORDS.search(text) or _QUESTION.search(text):
