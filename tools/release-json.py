@@ -2,6 +2,9 @@
 """Write dist/RELEASE.json: the version, build date and every image/ISO in dist with size and checksum.
 Run after the builds (the build and ISO scripts call it)."""
 import json, os, time
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import buildstamp
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DIST = os.path.join(ROOT, "dist")
 ver = open(os.path.join(ROOT, "VERSION")).read().strip()
@@ -20,9 +23,10 @@ for name in sorted(os.listdir(DIST)):
         images.append({"file": name, "arch": "x86_64" if "x86" in name else "arm64", "kind": "iso" if name.endswith(".iso") else "vm",
                        "size": os.path.getsize(path), "sha256": sums.get(name, ""),
                        "built": time.strftime("%Y-%m-%d %H:%M", time.localtime(os.path.getmtime(path)))})
-rel = {"name": "LLM OS", "version": ver, "built": time.strftime("%Y-%m-%d"), "images": images}
+rel = {"name": "LLM OS", "version": ver, "built": time.strftime("%Y-%m-%d"),
+       "source_commit": buildstamp.source_commit(), "source_hash": buildstamp.source_hash(), "images": images}
 with open(os.path.join(DIST, "RELEASE.json"), "w") as f:
     json.dump(rel, f, indent=2)
 with open(os.path.join(DIST, "VERSION"), "w") as f:
     f.write(ver + "\n")
-print(f"RELEASE.json: {ver}, {len(images)} image(s)")
+print(f"RELEASE.json: {ver} from {rel['source_commit']}, {len(images)} image(s)")

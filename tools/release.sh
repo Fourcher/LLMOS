@@ -1,0 +1,32 @@
+#!/bin/bash
+# Build a complete, current release into dist/ — the one way to make dist/ match the OS source.
+#   tools/release.sh            build both images, both ISOs, checksums, RELEASE.json
+#   tools/release.sh --smoke    also run the dictation + live-ISO smokes on the fresh artifacts
+#
+# After this, `tools/check-fresh.py` reports FRESH. Run it whenever the OS source (src/) changes; changes under
+# dist/setup/ or tools/ do not need it. The images/ISOs are build outputs, not source (they are gitignored).
+set -euo pipefail
+cd "/Volumes/Files/Claude Work Area/LLMOS"
+SMOKE=0; [ "${1:-}" = "--smoke" ] && SMOKE=1
+step() { printf '\n==== %s (%s) ====\n' "$1" "$(date +%H:%M:%S)"; }
+
+step "arm64 image";  tools/build-image.sh
+step "x86-64 image"; tools/build-image-x86.sh
+step "arm64 ISO";    tools/build-iso.sh arm64
+step "x86-64 ISO";   tools/build-iso.sh x86
+
+step "checksums + manifest (authoritative, after all four are built)"
+( cd dist && shasum -a 256 llmos-arm64.qcow2 llmos-x86_64.qcow2 llmos-arm64.iso llmos-x86_64.iso models/*.gguf > SHA256SUMS )
+python3 tools/release-json.py
+( cd dist && shasum -a 256 -c SHA256SUMS )
+
+if [ "$SMOKE" = 1 ]; then
+    step "dictation smoke (arm64)"; tools/dictate-smoke.sh arm64 | tail -3
+    python3 -c "import socket;s=socket.socket(socket.AF_UNIX);s.connect('run/tmon.sock');s.recv(999);s.sendall(b'quit\n')" 2>/dev/null || true
+    step "live-ISO smoke (arm64)";  tools/isosmoke.sh arm64 | tail -4
+    python3 -c "import socket;s=socket.socket(socket.AF_UNIX);s.connect('run/tmon.sock');s.recv(999);s.sendall(b'quit\n')" 2>/dev/null || true
+fi
+
+step "freshness"; python3 tools/check-fresh.py
+step "done"; tools/cleanup.sh >/dev/null 2>&1 || true
+echo "dist/ is current. (tools/check-fresh.py confirms; run it any time.)"

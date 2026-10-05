@@ -22,6 +22,28 @@ itself is `src/rootfs/` (≈2 000 lines of Python, no third‑party libraries).
 
 No package was built by hand; there are no binaries in `src/`.
 
+## Keeping dist/ current (and how to prove it)
+
+The images and ISOs in `dist/` are build **outputs**, not source: they are
+gitignored and exist only where they were built. They are current only when
+they were last built from the OS source (`src/`). Two rules keep that honest:
+
+- **One command rebuilds everything:** `tools/release.sh` builds both images
+  and both ISOs, then writes `dist/SHA256SUMS` and `dist/RELEASE.json` as the
+  single authoritative step, and finishes by printing the freshness result.
+  `tools/release.sh --smoke` also runs the dictation and live‑ISO smokes on
+  the fresh artifacts. Run it whenever `src/` changes.
+- **Staleness is detectable:** every build records, in `dist/RELEASE.json`, the
+  commit and a content digest of `src/` it was built from (`tools/buildstamp.py`).
+  `tools/check-fresh.py` recomputes the current digest and prints **FRESH** or
+  **STALE** (listing the `src/` files that changed), exiting non‑zero when
+  stale — so it can gate a commit or a release. Run it any time to answer
+  "do the images match the source?".
+
+Only `src/` goes into an image, so only changes there require a rebuild.
+Changes under `dist/setup/` (the setup tool) and `tools/` (tests) ship or run
+as‑is and do **not** make the images stale — `check-fresh.py` ignores them.
+
 ## Build procedure
 
 1. Boot the official ISO under QEMU/HVF with an empty 16 GB qcow2 disk and
@@ -72,6 +94,15 @@ forever: every test or build VM gets a hard lifetime from
 `vm-lifetime.sh` (3 h for tests, 2 h for builds, `LLMOS_VM_LIFETIME`
 overrides), every console step has a timeout, and the waiters in the test
 scripts are counted loops; `cleanup.sh` quits whatever is left.
+
+Disk hygiene: `tools/cleanup.sh` (run by `release.sh` at the end) stops test
+VMs and helpers and drops scratch disks and test artifacts (overlays,
+screenshots, serial logs) — everything that regenerates on the next run; it
+keeps the git remote (`run/origin.git`) and the shipped `dist/` images.
+`tools/cleanup.sh --models` additionally removes model files kept only for
+evaluation (large and re‑downloadable), keeping the default model the build and
+smokes need; `--cache` empties `build/cache` (the Alpine ISOs and model fetch
+cache, re‑downloaded on the next build); `--all` does both.
 
 ## Design in one page
 
