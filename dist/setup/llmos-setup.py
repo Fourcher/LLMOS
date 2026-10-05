@@ -20,6 +20,7 @@ import plistlib
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -308,6 +309,46 @@ def job_save(name):
         set_state(phase="error", error=str(e))
 
 
+def _staged_source(src):
+    """macOS blocks a root process (the privileged `dd`) from reading files on an external/removable volume, even
+    when a normal read works -- "Operation not permitted". When the ISO is on a volume other than the startup disk,
+    copy it to a temp file on the startup disk first and write from there. Returns (path, temp_or_None); the caller
+    deletes the temp. Elsewhere, or when the ISO is already on the startup disk, nothing is copied."""
+    if SYSTEM != "Darwin":
+        return src, None
+    try:
+        if os.stat(src).st_dev == os.stat("/").st_dev:
+            return src, None
+    except OSError:
+        return src, None
+    need = os.path.getsize(src)
+    st = os.statvfs("/private/tmp")
+    if st.f_bavail * st.f_frsize < need + (256 << 20):
+        raise RuntimeError("the ISO is on an external drive macOS won't let the writer read, and there isn't room "
+                           "to copy it to the startup disk first. Move the LLM OS folder onto this Mac's own disk "
+                           "(not Downloads/Desktop/Documents), or grant Terminal Full Disk Access in System "
+                           "Settings > Privacy & Security, then try again.")
+    set_state(phase="write", done=0, total=need, message="Preparing the image (copying it to the startup disk)...", error="", started=time.time())
+    fd, tmp = tempfile.mkstemp(prefix="llmos-write-", suffix=".iso", dir="/private/tmp")
+    try:
+        with os.fdopen(fd, "wb") as out, open(src, "rb") as f:
+            done = 0
+            while True:
+                chunk = f.read(16 << 20)
+                if not chunk:
+                    break
+                out.write(chunk)
+                done += len(chunk)
+                set_state(done=done)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return tmp, tmp
+
+
 def job_write(name, drive_id):
     set_state(phase="write", done=0, total=0, message="Checking the drive…", error="", started=time.time())
     src = os.path.join(DIST, name)
@@ -321,35 +362,48 @@ def job_write(name, drive_id):
         set_state(phase="error", error=f"{drive['name']} is too small ({drive['size'] // 10**9} GB) for this image")
         return
     try:
-        set_state(phase="write", done=0, total=size, message=f"Writing {name} to {drive['name']} ({drive['id']})", error="", started=time.time())
-        if SYSTEM == "Darwin":
-            cmd = (f"diskutil unmountDisk force {drive['id']} && dd if={shlex_q(src)} of={drive['raw']} bs=4m && sync && diskutil eject {drive['id']}")
-            r = subprocess.run(["osascript", "-e", f'do shell script "{cmd}" with administrator privileges'], capture_output=True, text=True)
-            if r.returncode != 0:
-                raise RuntimeError(r.stderr.strip()[-300:] or "the write was cancelled")
-        elif SYSTEM == "Linux":
-            busy = _linux_in_use(os.path.basename(drive["id"]))
-            if busy:
-                raise RuntimeError(f"{drive['name']} is not written: {busy}")
-            cmd = f"for p in {drive['id']}?*; do umount $p 2>/dev/null; done; if grep -q '^{drive['id']}' /proc/mounts; then echo 'still mounted' >&2; exit 3; fi; dd if={shlex_q(src)} of={drive['raw']} bs=4M conv=fsync status=progress"
-            runner = "pkexec" if shutil.which("pkexec") else "sudo"
-            p = subprocess.Popen([runner, "sh", "-c", cmd], stderr=subprocess.PIPE, text=True)
-            buf = ""
-            while True:
-                ch = p.stderr.read(1)
-                if not ch:
-                    break
-                buf += ch
-                if ch in "\r\n":
-                    m = buf.strip().split(" bytes")[0]
-                    if m.isdigit():
-                        set_state(done=min(int(m), size))
-                    buf = ""
-            if p.wait() != 0:
-                raise RuntimeError("the write failed or was cancelled (is the stick still plugged in?)")
-        elif SYSTEM == "Windows":
-            write_windows(src, drive, size)
-        set_state(phase="done", done=size, total=size, message=f"Done. {drive['name']} now boots LLM OS; you can unplug it.")
+        read_from, staged = _staged_source(src)
+        try:
+            set_state(phase="write", done=0, total=size, message=f"Writing {name} to {drive['name']} ({drive['id']})", error="", started=time.time())
+            if SYSTEM == "Darwin":
+                cmd = (f"diskutil unmountDisk force {drive['id']} && dd if={shlex_q(read_from)} of={drive['raw']} bs=4m && sync && diskutil eject {drive['id']}")
+                r = subprocess.run(["osascript", "-e", f'do shell script "{cmd}" with administrator privileges'], capture_output=True, text=True)
+                if r.returncode != 0:
+                    err = r.stderr.strip()
+                    if "not permitted" in err.lower():
+                        err = ("macOS blocked reading the image. Move the LLM OS folder onto this Mac's own disk "
+                               "(not Downloads/Desktop/Documents), or grant Terminal Full Disk Access in System "
+                               "Settings > Privacy & Security, then try again.")
+                    raise RuntimeError(err[-300:] or "the write was cancelled")
+            elif SYSTEM == "Linux":
+                busy = _linux_in_use(os.path.basename(drive["id"]))
+                if busy:
+                    raise RuntimeError(f"{drive['name']} is not written: {busy}")
+                cmd = f"for p in {drive['id']}?*; do umount $p 2>/dev/null; done; if grep -q '^{drive['id']}' /proc/mounts; then echo 'still mounted' >&2; exit 3; fi; dd if={shlex_q(read_from)} of={drive['raw']} bs=4M conv=fsync status=progress"
+                runner = "pkexec" if shutil.which("pkexec") else "sudo"
+                p = subprocess.Popen([runner, "sh", "-c", cmd], stderr=subprocess.PIPE, text=True)
+                buf = ""
+                while True:
+                    ch = p.stderr.read(1)
+                    if not ch:
+                        break
+                    buf += ch
+                    if ch in "\r\n":
+                        m = buf.strip().split(" bytes")[0]
+                        if m.isdigit():
+                            set_state(done=min(int(m), size))
+                        buf = ""
+                if p.wait() != 0:
+                    raise RuntimeError("the write failed or was cancelled (is the stick still plugged in?)")
+            elif SYSTEM == "Windows":
+                write_windows(src, drive, size)
+            set_state(phase="done", done=size, total=size, message=f"Done. {drive['name']} now boots LLM OS; you can unplug it.")
+        finally:
+            if staged:
+                try:
+                    os.unlink(staged)
+                except OSError:
+                    pass
     except Exception as e:
         set_state(phase="error", error=str(e))
 

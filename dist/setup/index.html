@@ -25,7 +25,8 @@
   .rec { background: #121626; border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 8px; font-size: 14px; color: var(--dim); margin: 10px 0; }
   .rec b { color: var(--fg); }
   .warn { color: var(--warn); } .err { color: var(--danger); } .ok { color: var(--ok); }
-  #progress { grid-column: 1 / -1; display: none; } #progress.show { display: block; }
+  #progress { grid-column: 1 / -1; display: none; position: sticky; top: 8px; z-index: 5; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+  #progress.show { display: block; }
   .bar { height: 10px; background: #1f2335; border-radius: 6px; overflow: hidden; margin: 10px 0 6px; } .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #4cc9f0); transition: width .4s; }
   details { margin-top: 10px; } summary { cursor: pointer; font-weight: 600; } .steps { color: var(--dim); font-size: 14.5px; } .steps li { margin: 4px 0; }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: #1f2335; padding: 1px 6px; border-radius: 6px; }
@@ -43,6 +44,7 @@
 <body>
 <header><div class="orb"></div><div><h1>LLM OS Setup</h1><div class="ver" id="ver">reading this folder…</div></div></header>
 <main>
+  <section class="card" id="progress"><h2 id="ptitle">Working…</h2><div class="bar"><i id="pbar"></i></div><div id="pmsg" class="steps"></div></section>
   <section class="card welcome" id="welcome"><h2>Welcome — let's get LLM OS running</h2>
     <p id="whead">Looking at this computer…</p>
     <p id="wnote" class="warn" style="display:none"></p>
@@ -69,7 +71,6 @@
 
   <section class="card" id="howto"><h2>Install, dual boot, first start</h2><p>Pick your machine.</p><div id="howlist"></div></section>
 
-  <section class="card" id="progress"><h2 id="ptitle">Working…</h2><div class="bar"><i id="pbar"></i></div><div id="pmsg" class="steps"></div></section>
 </main>
 <footer>LLM OS Setup · runs only on this computer · <button class="btn" style="padding:4px 10px;font-size:13px" data-do="quit">Quit</button></footer>
 <script>
@@ -142,7 +143,7 @@
   }
   let timer = null;
   function watch(title) {
-    $("progress").classList.add("show"); $("ptitle").textContent = title; clearInterval(timer);
+    $("progress").classList.add("show"); $("ptitle").textContent = title; window.scrollTo({ top: 0, behavior: "smooth" }); clearInterval(timer);
     timer = setInterval(async () => {
       const p = await api("/api/progress");
       const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
