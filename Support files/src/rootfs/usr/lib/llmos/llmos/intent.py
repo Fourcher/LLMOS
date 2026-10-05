@@ -911,9 +911,37 @@ def _files(text):
         sub = {"documents": "Documents", "docs": "Documents", "downloads": "Downloads", "pictures": "Pictures", "photos": "Pictures",
                "music": "Music", "videos": "Videos", "desktop": "Desktop"}.get(f, "")
         return ("delete_file", {"path": "~/" + sub if sub else "~", "contents": True})
+    m = re.match(r"^\s*(?:please\s+)?(?:sort|order|arrange)\s+(?:them|it|these|the\s+files|my\s+files|files)?\s*(?:by\s+)?(?P<o>date|newest|latest|recent|name|alphabetical(?:ly)?|size|biggest|largest)(?:\s+first)?\s*[.!]?\s*$", text, re.I)
+    if m:
+        o = m.group("o").lower()
+        return ("show_files", {"sort": "date" if o in ("date", "newest", "latest", "recent") else "size" if o in ("size", "biggest", "largest") else "name"})
+    m = re.match(r"^\s*(?:please\s+)?(?:convert|turn|save|export|make)\s+(?P<p>(?:~|/)\S.*?|this|that|it)\s+(?:to|into|as)\s+(?:a\s+)?pdf\s*[.!]?\s*$", text, re.I)
+    if m:
+        return ("convert_to_pdf", {"path": m.group("p")}) if m.group("p")[0] in "~/" else ("which_file", {"request": text.strip()})
+    m = re.match(r"^\s*(?:please\s+)?(?:connect\s+(?:to\s+)?|open\s+|sync\s+(?:with\s+)?|set\s+up\s+|use\s+)(?:my\s+)?(?P<s>google\s+drive|one\s*drive|dropbox|icloud(?:\s+drive)?)\b.*$", text, re.I)
+    if m:
+        site = {"googledrive": "google drive", "onedrive": "https://onedrive.live.com", "dropbox": "https://www.dropbox.com/home",
+                "icloud": "https://www.icloud.com/iclouddrive", "iclouddrive": "https://www.icloud.com/iclouddrive"}[re.sub(r"\s+", "", m.group("s").lower())]
+        return ("browse", {"site": site})
+    if re.match(r"^\s*(?:please\s+)?(?:put|place|drop|send)\s+(?:this|that|it|these)\s+(?:on|onto|in|into|to)\b", text, re.I):
+        return ("which_file", {"request": text.strip()})
+    if re.match(r"^\s*(?:what(?:'s|\s+is)|tell\s+me\s+about)\s+(?:this|that)\s+(?:file|document|thing)\s*[?.!]*\s*$", text, re.I):
+        return ("which_file", {"request": text.strip()})
+    m = re.match(r"^\s*(?:is|check\s+(?:if|whether)?)\s*(?:the\s+(?:site|website)\s+)?(?P<d>(?:https?://)?[\w.-]+\.[a-z]{2,}(?:/\S*)?)\s*(?:is\s+)?(?:safe|legit|real|a\s+scam|trustworthy|secure|ok)?\s*[?.!]*\s*$", text, re.I)
+    if m and re.search(r"\b(?:safe|legit|real|scam|trustworthy|secure|check|ok)\b", text, re.I):
+        return ("check_site", {"address": m.group("d")})
     m = _UNZIP.match(text)
     if m:
         return ("extract_archive", {"path": m.group("p")})
+    if re.match(r"^\s*(?:please\s+)?(?:zip|compress)\s+(?:up\s+)?(?:this|these|that|those|them|it)(?:\s+(?:up|files?|folder))?\s*[.!]?\s*$", text, re.I):
+        return ("which_file", {"request": text.strip()})
+    m = re.match(r"^\s*(?:please\s+)?(?:zip|compress|make\s+a\s+zip\s+of)\s+(?:up\s+)?(?:the\s+(?:file|folder)\s+)?(?P<p>(?:~|/)\S.*?)\s*$|"
+                 r"^\s*(?:please\s+)?(?:zip|compress|make\s+a\s+zip\s+of)\s+(?:up\s+)?my\s+(?P<f>documents|downloads|pictures|photos|music|videos|desktop)(?:\s+folder)?\s*[.!]?\s*$", text, re.I)
+    if m:
+        f = (m.group("f") or "").lower()
+        sub = {"documents": "Documents", "downloads": "Downloads", "pictures": "Pictures", "photos": "Pictures", "music": "Music",
+               "videos": "Videos", "desktop": "Desktop"}.get(f)
+        return ("compress_files", {"path": m.group("p") if m.group("p") else "~/" + sub})
     m = _EDIT_FILE.match(text)
     if m:
         return ("open_file", {"path": m.group("p"), "edit": True})
@@ -1143,6 +1171,8 @@ def _everyday(text):
         args = {"what": m.group("what").strip(), "to": to, "copy": bool(re.match(r"copy|put a copy|back up", m.group("op"), re.I)) or to == "usb"}
         if m.group("frm"):
             args["from"] = m.group("frm").lower()
+        if str(args.get("what", "")).lower().strip() in ("this", "that", "it", "these", "those", "them"):
+            return ("which_file", {"request": text.strip()})
         return ("move_files", args)
     m = _WEB_SEARCH.match(text)
     if m and not _FILEISH.search(m.group("q")):

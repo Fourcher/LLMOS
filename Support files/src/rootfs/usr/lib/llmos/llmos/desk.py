@@ -522,7 +522,8 @@ class DeskCtx:
                                             {"name": "p2", "label": T("ask_passphrase_again"), "kind": "password"},
                                             {"name": "nonce", "kind": "hidden", "value": self.d.vault_nonce}],
                  "submit": {"label": "Change it", "post": "vault.change"}}]})
-            return "a form to change the passphrase is on the owner's screen; they type it there. Say one sentence at most."
+            return ("nothing is changed yet: a window is open where the owner types the passphrase they use now and the new one. "
+                    "Tell them that in one sentence; do not say it is changed.")
         self.d.vault_nonce = secrets.token_hex(12)
         self.d.open_window({"id": "vault-form", "replace": True, "title": T("passphrase"), "size": "s", "slot": "cascade", "blocks": [
             {"type": "text", "text": T("ask_passphrase")},
@@ -531,7 +532,8 @@ class DeskCtx:
                                         {"name": "nonce", "kind": "hidden", "value": self.d.vault_nonce}],
              "submit": {"label": T("d_set_passphrase"), "post": "vault.create"}},
             {"type": "text", "text": T("w_pass_hint"), "dim": True}]})
-        return "a passphrase form is on the owner's screen; they type it there. Say one sentence at most."
+        return ("nothing is set yet: a window is open where the owner types a new passphrase twice. "
+                "Tell them that in one sentence; do not say it is set.")
 
     def show_ui(self, spec):
         return self.d.open_window(spec)
@@ -1072,6 +1074,25 @@ class Desk:
                     except Exception:
                         self.emit({"t": "toast", "text": "Not changed: the passphrase you use now was not right.", "long": True})
                 threading.Thread(target=change, daemon=True).start()
+        elif t == "mail.form":
+            if not getattr(self, "mail_nonce", None) or msg.get("nonce") != self.mail_nonce:
+                sys.stderr.write("desk: ignored a mail.form that did not come from the email form\n")
+            else:
+                self.mail_nonce = None
+                addr, pw = str(msg.get("address", "")).strip(), str(msg.get("password", ""))
+                self.close_window("mail-form")
+
+                def setup(addr=addr, pw=pw):
+                    self.emit({"t": "toast", "text": "Checking your email account…", "sticky": "mail"})
+                    self.ctx.current_request = "set up my email"
+                    out = agent.execute(self.ctx, "mail_setup", {"address": addr, "password": pw})
+                    self.emit({"t": "toast", "text": "", "sticky": "mail"})
+                    ok = not re.match(r"(?i)(error|could not|failed|not done|login failed|authentication)", out)
+                    self.instant_reply("set up my email", ("Your email is set up: say \u201ccheck my email\u201d." if ok else
+                                                           agent._cap(agent.scrub(out))))
+                    if not ok:
+                        self.mail_form()
+                threading.Thread(target=setup, daemon=True).start()
         elif t == "wifi.join":
             if not getattr(self, "wifi_nonce", None) or msg.get("nonce") != self.wifi_nonce:
                 sys.stderr.write("desk: ignored a wifi.join that did not come from the Wi-Fi form\n")
@@ -1444,6 +1465,21 @@ class Desk:
                                         {"name": "ssid", "kind": "hidden", "value": ssid},
                                         {"name": "nonce", "kind": "hidden", "value": self.wifi_nonce}],
              "submit": {"label": T("d_connect"), "post": "wifi.join"}}]})
+
+    def mail_form(self):
+        """Email set up here (to read and answer it on this computer): a form, nothing typed into the request box."""
+        import secrets
+        self.mail_nonce = secrets.token_hex(12)
+        self.open_window({"id": "mail-form", "replace": True, "title": "Set up email", "size": "s", "slot": "cascade", "blocks": [
+            {"type": "text", "text": "Your email address and its password. Gmail, Outlook, Yahoo and iCloud want an \u201capp password\u201d "
+                                     "here instead of your normal one: make one in your account's security settings (the button opens it).", "dim": True},
+            {"type": "form", "fields": [{"name": "address", "label": "Email address", "kind": "text"},
+                                        {"name": "password", "label": "Password (or app password)", "kind": "password"},
+                                        {"name": "nonce", "kind": "hidden", "value": self.mail_nonce}],
+             "submit": {"label": "Set up", "post": "mail.form"}},
+            {"type": "buttons", "items": [{"label": "Gmail app password", "say": "open https://myaccount.google.com/apppasswords"},
+                                          {"label": "Outlook app password", "say": "open https://account.live.com/proofs/AppPassword"},
+                                          {"label": "Just use webmail instead", "say": "check my email"}]}]})
 
     def sound_panel(self):
         v = self._volume_pct()
@@ -2040,7 +2076,7 @@ class Desk:
 
     def _instant(self, text):
         low = intent.plain(text).lower().strip()
-        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
+        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
                 any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
                 any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
                                                                             r"(?:extend|mirror) the displays|use only the main display|use only the (?:projector|tv|second (?:screen|display))|projector only|"
@@ -2230,6 +2266,74 @@ class Desk:
             self.close_window("mail-pick")
             out = agent.execute(self.ctx, "browse", {"site": site})
             self.instant_reply(line, f"Opened {name}. From now on, \u201ccheck my email\u201d opens it." if not out.startswith("error") else out)
+            return True
+        # the browser's own keys, by name: zoom the page, bookmark it, clear its history
+        m = re.fullmatch(r"(?P<zin>(?:make )?(?:the )?(?:text|page|words|font) bigger on (?:this|the) (?:page|website|site)|zoom in(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
+                         r"(?P<zout>(?:make )?(?:the )?(?:text|page|words|font) smaller on (?:this|the) (?:page|website|site)|zoom out(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
+                         r"(?P<bm>bookmark (?:this|it|this page|the page|this site)|add (?:this|it|this page) to (?:my )?(?:bookmarks|favou?rites)|save this page)", l2)
+        if m and shutil.which("wtype"):
+            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmark"
+            ok, note = wm.browser_key(k)
+            self.instant_reply(line, ({"zoom in": "Made the page bigger (Ctrl+0 puts it back).", "zoom out": "Made the page smaller.",
+                                       "bookmark": "The bookmark window is open in the browser: press Save."}[k]) if ok
+                               else note[:1].upper() + note[1:] + ".")
+            return True
+        if re.fullmatch(r"(?:this |the |a |my )?(?:website|site|web ?page|page|web ?site) (?:won'?t|wont|doesn'?t|does not|isn'?t|is not|will not|can'?t|cannot) (?:load|work|open|come up|connect)(?:ing)?|"
+                        r"(?:this |the )?(?:page|website|site) (?:is )?(?:not loading|stuck loading|broken)|(?:websites?|pages?|the internet) (?:are|is) not loading", l2):
+            def diagnose():
+                if config.settings.get("internet") == "no":
+                    return self.instant_reply(line, "The internet is turned off in Settings, so no site loads. Say \u201cturn the internet on\u201d.")
+                if not _online():
+                    threading.Thread(target=self.network_panel, daemon=True).start()
+                    return self.instant_reply(line, "This computer isn't connected to the internet right now. Here are the networks: pick yours.")
+                ok = wm.browser_key("reload")[0] if shutil.which("wtype") else False
+                self.instant_reply(line, ("Your connection works, so I reloaded the page. " if ok else "Your connection works. ") +
+                                   "If it still doesn't load, the site itself is probably down or busy: try again in a few minutes.")
+            threading.Thread(target=diagnose, daemon=True).start()
+            self._said = "(checking the connection)"
+            return True
+        if re.fullmatch(r"(?:save|print|export|turn) (?:this|the) (?:web ?)?page (?:as|to|into) (?:a )?pdf|save (?:this|the) (?:web ?)?page|print (?:this|the) (?:web ?)?page", l2) and shutil.which("wtype"):
+            ok, note = wm.browser_key("print")
+            self.instant_reply(line, ("The print window is open in the browser" + (": choose \u201cSave to PDF\u201d as the printer and press Save; it goes to Downloads."
+                                                                                     if "pdf" in l2 or l2.startswith("save") else ": press Print.")) if ok
+                               else note[:1].upper() + note[1:] + ".")
+            return True
+        if re.fullmatch(r"(?:remember|save|store) (?:my |the |this )?(?:password|login|sign[- ]in)(?: for (?:this|the) (?:site|website|page))?|(?:where are|show me) my (?:saved )?passwords", l2):
+            self.instant_reply(line, "Firefox remembers it: after you sign in on the site it asks \u201cSave login?\u201d, press Save. "
+                               "To see saved ones, open the browser menu (\u2630) and choose Passwords.")
+            return True
+        if re.fullmatch(r"translate (?:this|the) (?:web ?)?(?:page|site|website)(?: (?:to|into) \w+)?", l2):
+            self.instant_reply(line, "Firefox translates pages on this computer, privately: press the translate icon (\u6587A) at the right of the "
+                               "address bar, or in the menu (\u2630) choose Translate page. To translate some text, paste it here and say \u201ctranslate this to Spanish\u201d.")
+            return True
+        if re.fullmatch(r"is (?:this|the|that) (?:site|website|web ?page|page|link) (?:safe|legit|real|trustworthy|a scam|secure)", l2):
+            self.instant_reply(line, "Tell me its address and I'll check it (for example \u201cis paypa1.com safe?\u201d). Meanwhile: the address must be "
+                               "exactly the company's own (watch for swapped letters), and never type a password on a page you reached from an email or an ad.")
+            return True
+        if re.fullmatch(r"(?:block|stop|remove|get rid of|no) (?:the )?(?:ads|adverts|advertisements|pop-?ups)(?: in the browser| on websites)?|(?:is there an |install an? )?ad ?blocker", l2):
+            self.instant_reply(line, "Ads are already blocked: Firefox here comes with uBlock Origin (the red shield at the top right). "
+                               "If a site still shows some, press the shield to block more.")
+            return True
+        if re.fullmatch(r"(?:clear|delete|erase|wipe) (?:my |the |all )?(?:browsing |search |web |browser |chat |conversation )?history", l2):
+            web = re.search(r"brows|search|web", l2)
+            chat = re.search(r"chat|conversation", l2)
+            if web and not chat:
+                ok, note = wm.browser_key("clear history") if shutil.which("wtype") else (False, "the browser is not open")
+                self.instant_reply(line, "The browser's Clear history window is open: choose how far back and press Clear." if ok
+                                   else "Open the browser first (\u201copen the browser\u201d), then say \u201cclear my browsing history\u201d.")
+            elif chat and not web:
+                self.act("conversations")
+                self.last_reply = self._said = "Here are your conversations: press Forget on the ones to remove."
+            else:
+                self.open_window({"id": "clear-history", "replace": True, "title": "Clear history", "size": "s", "blocks": [
+                    {"type": "text", "text": "Which history?", "dim": True},
+                    {"type": "buttons", "items": [{"label": "The browser's (sites visited)", "say": "clear my browsing history"},
+                                                  {"label": "Our conversations", "say": "clear my chat history"}]}]})
+                self.last_reply = self._said = "Which history: the browser's, or our conversations?"
+            return True
+        if re.fullmatch(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail(?: account)?(?: (?:in an app|here|on this computer|in the os|properly))?", l2):
+            self.mail_form()
+            self.last_reply = self._said = "Type your email address and password in the window."
             return True
         how = self._howto(l2)
         if how:

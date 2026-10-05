@@ -702,7 +702,10 @@ def _shortcut_words(name, args, out):
     if name == "note_remove":
         return "Removed." if low.startswith("removed") else out
     if name == "set_passphrase":
-        return "Type it in the window and press the button." if "form is on" in low else out
+        if "window is open" in low:
+            return ("Type the passphrase you use now and the new one in the window." if "use now" in low
+                    else "Type your new passphrase twice in the window.")
+        return out
     if name in ("set_brightness", "set_volume"):
         return out
     if name == "manage_models":

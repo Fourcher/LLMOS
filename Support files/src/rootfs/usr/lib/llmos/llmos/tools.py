@@ -1771,6 +1771,9 @@ def _human_size(n):
         n /= 1024
 
 
+_LAST_FOLDER = None
+
+
 def _friendly_when(ts):
     """'Today 2:25 PM', 'Yesterday', 'Mon 3 Oct', '12 Mar 2024': how people read dates."""
     t, now = time.localtime(ts), time.localtime()
@@ -1786,15 +1789,32 @@ def _friendly_when(ts):
 
 @tool("show_files", "Show the owner's files as a window: a folder listing with open/delete buttons. The home folder is "
       "/root (~). Use for 'show my files', 'open my documents folder', 'what's in ~/projects'.",
-      {"path": {"type": "string", "description": "folder to show (default: the home folder)"}}, [], risk=READ)
+      {"path": {"type": "string", "description": "folder to show (default: the home folder)"},
+       "sort": {"type": "string", "enum": ["name", "date", "size"], "description": "order (default name; date = newest first)"}}, [], risk=READ)
 def show_files(a, ctx):
-    path = _path(a.get("path") or "~")
+    global _LAST_FOLDER
+    # "sort by date" with no folder named: the folder last shown
+    path = _path(a.get("path") or (_LAST_FOLDER if a.get("sort") and _LAST_FOLDER else "~"))
+    _LAST_FOLDER = path
     if path.rstrip("/") == _trash():
         os.makedirs(path, exist_ok=True)       # nothing deleted yet: an empty trash, not an error
     if not os.path.isdir(path):
         return f"error: {path} is not a folder"
     try:
-        names = sorted(os.listdir(path), key=lambda n: (not os.path.isdir(os.path.join(path, n)), n.lower()))
+        order = str(a.get("sort") or "name")
+
+        def _key(n):
+            p_ = os.path.join(path, n)
+            try:
+                st_ = os.stat(p_)
+            except OSError:
+                return (1, 0, n.lower())
+            if order == "date":
+                return (0, -st_.st_mtime, n.lower())
+            if order == "size":
+                return (0, -st_.st_size, n.lower())
+            return (not os.path.isdir(p_), 0, n.lower())
+        names = sorted(os.listdir(path), key=_key)
     except OSError as e:
         return f"error: {e.strerror}: {path}"
     names = [n for n in names if not n.startswith(".") and n != "lost+found"]   # (the vault's ext4 housekeeping dir)
@@ -1826,7 +1846,9 @@ def show_files(a, ctx):
     parent = os.path.dirname(path.rstrip("/")) or "/"
     up = i18n.t("d_home") if parent == home else (os.path.basename(parent) or "/")
     nav = ([{"label": "↑ " + up, "say": f"show my files in {parent}"}] if path.rstrip("/") not in ("", "/") else []) + \
-        ([{"label": "Open in Files", "say": f"open {path} in files"}] if shutil.which("thunar") and not is_trash else [])
+        ([{"label": "Open in Files", "say": f"open {path} in files"}] if shutil.which("thunar") and not is_trash else []) + \
+        [{"label": lab, "say": f"sort by {o}", "primary": str(a.get("sort") or "name") == o}
+         for lab, o in (("A–Z", "name"), ("Newest", "date"), ("Biggest", "size"))]
     blocks = [{"type": "buttons", "items": nav}] if nav else []
     if is_trash:
         blocks.insert(0, {"type": "text", "text": "Deleted files wait here until you empty the trash. Press Restore to put one back where it was."
@@ -1993,6 +2015,104 @@ def extract_archive(a, ctx):
                 return "error: the archive tried to write outside its folder; stopped"
     show_files({"path": dest}, ctx)
     return f"unpacked {os.path.basename(path)} into {dest} and showed it. Done: tell the owner in one sentence and call no other tool."
+
+
+@tool("compress_files", "Make a .zip of a file or folder (next to it, same name), e.g. to email or put on a USB stick.",
+      {"path": STR}, ["path"], risk=CHANGE)
+def compress_files(a, ctx):
+    path = os.path.abspath(_path(a.get("path", "")))
+    if not path or not os.path.exists(path):
+        return f"error: there is no file or folder {a.get('path')}"
+    base = path.rstrip("/")
+    dest, n = base + ".zip", 1
+    while os.path.exists(dest):
+        n += 1
+        dest = f"{base} ({n}).zip"
+    import zipfile
+    count = 0
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+        if os.path.isdir(path):
+            for d, dirs, files in os.walk(path):
+                for f in files:
+                    full = os.path.join(d, f)
+                    z.write(full, os.path.relpath(full, os.path.dirname(base)))
+                    count += 1
+        else:
+            z.write(path, os.path.basename(path))
+            count = 1
+    size = os.path.getsize(dest)
+    home = config.home().rstrip("/")
+    shown = "~" + dest[len(home):] if dest.startswith(home) else dest
+    return f"made {shown} ({count} file(s), {_human_size(size)}). Done: tell the owner in one sentence and call no other tool."
+
+
+@tool("convert_to_pdf", "Make a PDF copy of a document (Word, LibreOffice, text, RTF) next to it.", {"path": STR}, ["path"], risk=CHANGE)
+def convert_to_pdf(a, ctx):
+    path = os.path.abspath(_path(a.get("path", "")))
+    if not os.path.isfile(path):
+        return f"error: there is no file {a.get('path')}"
+    if not shutil.which("abiword"):
+        return "there is no program here that makes PDFs from documents (say 'install abiword')"
+    dest = os.path.splitext(path)[0] + ".pdf"
+    p = subprocess.run(["abiword", "--to=pdf", "-o", dest, path], capture_output=True, text=True, timeout=180)
+    if p.returncode or not os.path.exists(dest):
+        return f"could not convert it: {(p.stderr or p.stdout).strip()[:200] or 'this kind of file is not supported'}"
+    home = config.home().rstrip("/")
+    return f"made {('~' + dest[len(home):]) if dest.startswith(home) else dest}. Done: tell the owner in one sentence and call no other tool."
+
+
+_KNOWN_SITES = ("google.com", "gmail.com", "youtube.com", "facebook.com", "instagram.com", "whatsapp.com", "amazon.com", "paypal.com",
+                "apple.com", "icloud.com", "microsoft.com", "outlook.com", "live.com", "netflix.com", "ebay.com", "chase.com",
+                "bankofamerica.com", "wellsfargo.com", "citi.com", "capitalone.com", "irs.gov", "usps.com", "ups.com", "fedex.com",
+                "dhl.com", "walmart.com", "target.com", "linkedin.com", "twitter.com", "x.com", "tiktok.com", "spotify.com",
+                "dropbox.com", "coinbase.com", "binance.com", "venmo.com", "zelle.com", "yahoo.com", "aol.com", "bbc.co.uk",
+                "hsbc.co.uk", "barclays.co.uk", "santander.co.uk", "wikipedia.org", "zoom.us", "steampowered.com", "roblox.com")
+
+
+def _edit(a, b):
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+@tool("check_site", "Check whether a web address looks safe: a lookalike of a well-known site, whether it exists, and its "
+      "secure certificate.", {"address": STR}, ["address"], risk=READ, network=True)
+def check_site(a, ctx):
+    import socket
+    import ssl
+    import urllib.parse
+    raw = str(a.get("address", "")).strip().lower()
+    host = urllib.parse.urlparse(raw if "://" in raw else "https://" + raw).hostname or ""
+    if not host or "." not in host:
+        return "error: that doesn't look like a web address"
+    base = ".".join(host.split(".")[-3:]) if host.endswith((".co.uk", ".com.au")) else ".".join(host.split(".")[-2:])
+    notes = []
+    if base in _KNOWN_SITES:
+        notes.append(f"{base} is the real, well-known site")
+    else:
+        near = min(_KNOWN_SITES, key=lambda k: _edit(base, k))
+        name, near_name = base.split(".")[0], near.split(".")[0]
+        if _edit(base, near) <= 2 or (near_name in name and name != near_name):
+            notes.append(f"WARNING: {base} looks like an imitation of {near} (spelled differently); the real one is {near}")
+    try:
+        socket.getaddrinfo(host, 443)
+    except OSError:
+        return f"{host} does not exist (no such address). " + " ".join(notes)
+    try:
+        with socket.create_connection((host, 443), timeout=8) as sock:
+            with ssl.create_default_context().wrap_socket(sock, server_hostname=host) as tls:
+                cert = tls.getpeercert()
+        issuer = dict(x[0] for x in cert.get("issuer", ())).get("organizationName", "a certificate authority")
+        notes.append(f"its secure connection is valid (certified by {issuer})")
+    except ssl.SSLError:
+        notes.append("WARNING: its secure connection is NOT valid -- don't type passwords or card numbers there")
+    except OSError:
+        notes.append("it could not be reached on a secure connection")
+    return f"{host}: " + "; ".join(notes) + ". Done: tell the owner plainly, in one or two sentences, and call no other tool."
 
 
 @tool("remove_software", "Uninstall a program the owner installed (an Alpine package or a Flathub app). Never the system's own parts.",
@@ -2804,6 +2924,6 @@ def which_file(a, ctx):
         return ("which one? Say what to play (for example 'play the moon landing video' or 'play some jazz'), "
                 "or 'show my videos' to pick one of yours")
     v = (re.match(r"\s*(?:please\s+)?(\w+)", req) or [None, "open"])[1].lower()
-    v = v if v in ("open", "print", "copy", "move", "rename", "send", "email", "attach", "delete", "show") else "open"
+    v = v if v in ("open", "print", "copy", "move", "rename", "send", "email", "attach", "delete", "show", "zip", "compress", "convert", "put") else "open"
     return (f"which file? Say its name (for example '{v} recipe.pdf'), or say 'find my recipe' to look for it, "
             "or open your files and use the buttons there")
