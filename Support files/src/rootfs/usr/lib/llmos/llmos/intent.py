@@ -414,7 +414,15 @@ def _guard(text):
     return ("change_setting", {"setting": "guard_untrusted", "value": "off" if off else "on"})
 
 
+_LANG_SET = re.compile(r"^\s*(?:please\s+)?(?:change|set|switch|put)\s+(?:the\s+|my\s+)?(?:system\s+|os\s+|computer'?s?\s+)?language\s+(?:to|into)\s+(?P<l>[a-zA-Z\u00c0-\u024f\u4e00-\u9fff\u3040-\u30ff]+)\s*[.!]?\s*$", re.I)
+
+
 def _screen_power(text):
+    m = _LANG_SET.match(text)
+    if m:
+        return ("set_appearance", {"language": m.group("l")})
+    if re.match(r"^\s*(?:please\s+)?(?:don'?t|do\s+not|never)\s+(?:go\s+to\s+)?sleep|^\s*(?:please\s+)?(?:stay|keep\s+(?:it|yourself))\s+awake|^\s*no\s+sleep(?:ing)?\b", text, re.I):
+        return ("change_setting", {"setting": "sleep_after", "value": "never"})
     g = _guard(text)
     if g:
         return g

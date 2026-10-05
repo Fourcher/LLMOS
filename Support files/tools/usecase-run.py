@@ -55,6 +55,8 @@ def run_one(case, phrase, yes, timeout):
     # a clean desk for each request: unlocked, no windows, nothing playing
     kill = "" if KEEP else "pkill -x mpv; pkill -f firefox; pkill -x thunar; "
     tsh(f"llmos desk-ctl testreset >/dev/null; {kill}rm -f /tmp/uc.json", 60)
+    if state().get("screen") == "lock":            # a task locked the screen: the test VM's passphrase opens it
+        tsh(f"llmos desk-ctl unlock {os.environ.get('LLMOS_TEST_PASS', 'correct horse battery')} >/dev/null", 60)
     t0 = time.time()
     tsh(f"( llmos say '{q}' > /tmp/uc.json 2>&1 & )", 20)
     answered, dialogs = [], []
