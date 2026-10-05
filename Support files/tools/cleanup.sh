@@ -10,7 +10,7 @@
 #                               rebuilds them). The small tracked files (RELEASE.json, catalog, setup) stay.
 #   tools/cleanup.sh --all      --models, --cache and --dist together.
 set -u
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 MODELS=0; CACHE=0; DIST=0
 for a in "$@"; do case "$a" in
   --models) MODELS=1 ;; --cache) CACHE=1 ;; --dist) DIST=1 ;; --all) MODELS=1; CACHE=1; DIST=1 ;;

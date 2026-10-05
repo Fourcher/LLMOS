@@ -1,8 +1,8 @@
 # built images, models, scratch and VM state are not source
-dist/*.qcow2
-dist/*.iso
-dist/*.raw
-dist/models/
+Support files/dist/*.qcow2
+Support files/dist/*.iso
+Support files/dist/*.raw
+Support files/dist/models/
 run/
 build/
 __pycache__/

@@ -7,7 +7,7 @@
 # After this, `tools/check-fresh.py` reports FRESH. Run it whenever the OS source (src/) changes; changes under
 # dist/setup/ or tools/ do not need it. The images/ISOs are build outputs, not source (they are gitignored).
 set -euo pipefail
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 SMOKE=0; ARCH=all
 for a in "$@"; do case "$a" in
   --smoke) SMOKE=1 ;; arm64|x86|all) ARCH="$a" ;;

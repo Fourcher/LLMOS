@@ -7,7 +7,7 @@
 #   phase 2 (model inside the VM, 6 GB): the owner downloads and switches to a
 #           different model from the catalog (verified official release)
 # Output: run/spec-check.log, frames run/shot-spec-*.png.
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 V="python3 tools/vmctl.py"; S=run/tser.sock; L=run/boot-serial.log
 IMG=${1:-dist/llmos-arm64.qcow2}; PHASES=${2:-12}
 sh() { tools/tsh "$1" "${2:-120}" | grep -vE '^\s*$|^\[vmctl|^# $|^~ # $|^llmos |^"import|^\(sys|^"\]\)|^chr\('; }

@@ -5,7 +5,7 @@
 # At the LLM OS console a command needs the "!" escape; at the plain test
 # shell (LLMOS_TESTSHELL boots, prompt "llmos:/#") it does not: whichever
 # prompt appeared last in the log decides.
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 N=$RANDOM$RANDOM
 P=$(tail -c 4000 run/boot-serial.log 2>/dev/null | tr -d '\r' | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' | grep -aoE 'llmos:[^ ]*# |› ' | tail -1)
 case "$P" in llmos:*) P='' ;; *) P='!' ;; esac

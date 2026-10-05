@@ -1,7 +1,7 @@
 #!/bin/bash
 # Push the current src/rootfs into the running arm64 test VM (over the host
 # HTTP server) and restart what changed. usage: tools/push.sh [desk|console|all]
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 python3 -m compileall -q src/rootfs/usr/lib/llmos/llmos || exit 1
 find src/rootfs -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null
 chmod 0755 src/rootfs/usr/bin/llmos src/rootfs/usr/bin/llmos-model-run src/rootfs/usr/libexec/llmos-login src/rootfs/usr/libexec/llmos-desk src/rootfs/etc/init.d/llmos-*

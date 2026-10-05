@@ -5,7 +5,7 @@
 # is driven through its control socket (`llmos say`, `llmos desk-ctl`) and
 # photographed with QEMU's screendump after each step (run/shot-desk-*.png).
 #   usage: tools/desk-smoke.sh [image] [ram_mb]     (LLMOS_HOSTGPU_URL optional)
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 V="python3 tools/vmctl.py"; S=run/tser.sock; L=run/boot-serial.log
 RC=0
 IMG=${1:-dist/llmos-arm64.qcow2}; RAM=${2:-4096}

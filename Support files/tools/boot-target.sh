@@ -3,7 +3,7 @@
 # devices the user's launcher provides (virtio-gpu, virtio-sound, fw_cfg time
 # zone) but no window and no host audio. Console on run/tser.sock, log in
 # run/boot-serial.log.  usage: tools/boot-target.sh [image] [ram_mb]
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 IMG=${1:-build/work/target.qcow2}
 RAM=${2:-4096}
 CPUS=${LLMOS_CPUS:-4}

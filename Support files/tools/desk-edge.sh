@@ -5,7 +5,7 @@
 # recovery, cancelling, odd input, many windows, a non-Latin interface
 # language, no-account email, focus mode, and persistence across a reboot.
 #   usage: tools/desk-edge.sh [image] [ram_mb]   (LLMOS_HOSTGPU_URL makes it fast)
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 V="python3 tools/vmctl.py"; S=run/tser.sock; L=run/boot-serial.log
 IMG=${1:-dist/llmos-arm64.qcow2}; RAM=${2:-4096}
 sh() { tools/tsh "$1" "${2:-120}" | grep -vE '^\s*$|^\[vmctl|^# $|^~ # $|^llmos |^"import|^\(sys|^"\]\)|^chr\(' ; }

@@ -1,6 +1,6 @@
 #!/bin/bash
 # make sure the arm64 test console is idle at its prompt (interrupt whatever runs)
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 pkill -f "tools/trun" 2>/dev/null; pkill -f "tools/tsh" 2>/dev/null
 M=$(python3 tools/vmctl.py mark run/boot-serial.log)
 python3 tools/vmctl.py send run/tser.sock $'\x03' --raw; sleep 2

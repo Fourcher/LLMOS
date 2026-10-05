@@ -5,7 +5,7 @@
 #   power off -> compact the disk into dist/ -> write SHA256SUMS.
 # Takes ~10 minutes; most of it is apk downloads and copying the model.
 set -eu
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 FW=/opt/homebrew/share/qemu
 ISO=build/cache/alpine-virt-3.24.2-aarch64.iso
 DISK=build/work/build-disk.qcow2

@@ -6,7 +6,7 @@
 # back. Leaves the VM running (quit via its monitor socket: run/tmon.sock, or run/ymon.sock for x86).
 #   usage: tools/dictate-smoke.sh [arm64|x86] [image]   (needs run/dict-speech.wav: 16 kHz mono speech)
 # x86 runs under emulation: everything is slower, so the waits are longer.
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 A=arm64; case "${1:-}" in arm64|x86) A=$1; shift ;; esac
 if [ "$A" = x86 ]; then
     IMG=${1:-dist/llmos-x86_64.qcow2}; SER=run/yser.sock; LOG=run/x86-boot.log; MON=run/ymon.sock; SLOW=4

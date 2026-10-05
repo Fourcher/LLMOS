@@ -4,7 +4,7 @@
 # emulated inference): boot with SeaBIOS or UEFI, take the serial console,
 # go through the first-run wizard, time two requests, inspect the system.
 #   usage: tools/x86smoke.sh [bios|uefi]
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 V="python3 tools/vmctl.py"; S=run/yser.sock; L=run/x86-boot.log
 MODE=${1:-bios}
 printf '\n======== x86-64 image: %s boot, host-GPU mode, 3 GB VM ========\n' "$MODE"

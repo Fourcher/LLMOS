@@ -8,7 +8,7 @@
 #   tools/install-test.sh arm64    "whole disk": the arm64 image installs itself
 #                                  onto a blank second disk, then boots from it
 # The serial line is the test shell; requests go through the desk's control socket.
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 ARCH=${1:-x86}
 V="python3 tools/vmctl.py"; FW=/opt/homebrew/share/qemu
 sh() { tools/tsh "$1" "${2:-120}" | grep -vE '^\s*$|^\[vmctl|^# $|^~ # $'; }

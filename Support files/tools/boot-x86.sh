@@ -2,7 +2,7 @@
 # Boot the x86-64 image under QEMU's emulation for testing, either with
 # SeaBIOS (default) or UEFI (OVMF).  usage: tools/boot-x86.sh [bios|uefi] [image]
 # Console on run/yser.sock, monitor on run/ymon.sock, log run/x86-boot.log.
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 MODE=${1:-bios}
 IMG=${2:-dist/llmos-x86_64.qcow2}
 FW=/opt/homebrew/share/qemu

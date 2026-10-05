@@ -16,7 +16,7 @@
 #   tools/acceptance.sh video      YouTube video on the screen (framebuffer dump)
 #   tools/acceptance.sh gui        terminal window, then a web browser on the screen
 #   tools/acceptance.sh email      test mail server in the VM: setup, inbox, inbox zero, reply by name
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 V="python3 tools/vmctl.py"
 S=run/tser.sock; L=run/boot-serial.log
 say() { $V send $S "$1"; }

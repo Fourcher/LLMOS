@@ -4,7 +4,7 @@
 # $LLMOS_VM_LIFETIME). A test that hangs, or a harness timeout that killed
 # the driving script, can then never leave a VM running for days.
 #   usage: tools/vm-lifetime.sh run/target.pid [seconds]
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 pidfile=$1; secs=${2:-${LLMOS_VM_LIFETIME:-10800}}
 pid=$(cat "$pidfile" 2>/dev/null) || exit 0
 ( sleep "$secs"

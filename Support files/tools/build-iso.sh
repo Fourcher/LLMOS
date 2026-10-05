@@ -6,7 +6,7 @@
 # emulated and takes longer.
 #   usage: tools/build-iso.sh [arm64|x86]      (default arm64)
 set -eu
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 A=${1:-arm64}; VER=$(cat VERSION)
 case "$A" in
     arm64) IMG=dist/llmos-arm64.qcow2; ARCH=aarch64; OUT=dist/llmos-arm64.iso; SER=run/tser.sock; LOG=run/boot-serial.log; MON=run/tmon.sock ;;

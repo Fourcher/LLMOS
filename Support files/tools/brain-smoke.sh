@@ -5,7 +5,7 @@
 # audit trail of what left the computer, routines (a repeated request replayed without the model), the
 # settings panel's new sections and the three desk layouts. Every step is photographed
 # (run/shot-brain-*.png). Leaves the VM running.  usage: tools/brain-smoke.sh
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 ctl() { tools/tsh "llmos desk-ctl $1" "${2:-60}"; }
 say() { tools/tsh "llmos say \"$1\" | python3 -c 'import json,sys; s=json.load(sys.stdin); print(\"reply:\", s[\"reply\"][:240].replace(chr(10),\" \")); print(\"windows:\", [w[\"title\"] for w in s[\"windows\"]], \"dialogs:\", len(s[\"dialogs\"]))'" "${2:-300}"; }
 state() { tools/tsh "llmos desk-state | python3 -c 'import json,sys; s=json.load(sys.stdin); print(\"screen\", s[\"screen\"], \"busy\", s[\"busy\"], \"dialogs\", [d[\"title\"] for d in s[\"dialogs\"]], [w[\"title\"] for w in s[\"windows\"]])'" 30; }

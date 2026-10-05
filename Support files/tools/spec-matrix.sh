@@ -4,7 +4,7 @@
 # whether the model loads, free memory afterwards, and the model's own
 # prompt/generation speed (llama-server timings). Results -> run/spec-matrix.txt
 #   usage: tools/spec-matrix.sh ["2048 3072 4096 6144 8192"] ["2 4 8"]
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 V="python3 tools/vmctl.py"; L=run/boot-serial.log
 RAMS=${1:-"2048 3072 4096 6144 8192"}; CPUS_LIST=${2:-"2 4 8"}
 OUT=run/spec-matrix.txt

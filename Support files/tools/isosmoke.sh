@@ -5,7 +5,7 @@
 # bind-mounted from the ISO, the desk socket. Leaves the VM running on the usual
 # sockets (quit it with tools/cleanup.sh).  usage: tools/isosmoke.sh [arm64|x86 [bios|uefi]]
 set -u
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 A=${1:-arm64}; MODE=${2:-uefi}; FW=/opt/homebrew/share/qemu
 V="python3 tools/vmctl.py"
 tools/vm-lifetime.sh run/isotest.pid 7200 2>/dev/null || true

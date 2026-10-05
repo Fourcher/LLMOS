@@ -5,7 +5,7 @@
 #   x86:   BIOS + UEFI boot smoke (host-GPU) -> dual-boot installer
 # Needs a Metal llama-server on the Mac for the host-GPU legs
 # (LLMOS_HOSTGPU_URL, default http://10.0.2.2:8080). Logs in run/final-*.log.
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 export LLMOS_HOSTGPU_URL=${LLMOS_HOSTGPU_URL:-http://10.0.2.2:8080}
 t0=$(date +%s)
 step() { printf '\n#### %s (%s)\n' "$1" "$(date +%H:%M:%S)"; }

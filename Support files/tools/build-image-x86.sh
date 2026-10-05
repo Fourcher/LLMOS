@@ -4,7 +4,7 @@
 # Slow (~30-60 min) because every guest instruction is emulated; the result is
 # what an ordinary PC or laptop boots. Same flow as build-image.sh otherwise.
 set -eu
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 ISO=build/cache/alpine-virt-3.24.2-x86_64.iso
 KERNEL=build/cache/x86iso/boot/vmlinuz-virt
 INITRD=build/cache/x86iso/boot/initramfs-virt

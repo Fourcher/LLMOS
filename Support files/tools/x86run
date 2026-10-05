@@ -1,4 +1,4 @@
 #!/bin/bash
 # usage: x86run "command" [timeout] [regex]  -- run a console command on the delivered x86 VM
-cd "/Volumes/Files/Claude Work Area/LLMOS"
+cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 python3 tools/vmctl.py run run/x86ser.sock delivered/serial.log "$1" "${3:-llm> \$}" "${2:-60}" | sed -e 's/\x1b\[[0-9;]*m//g' -e 's/\r//g'
