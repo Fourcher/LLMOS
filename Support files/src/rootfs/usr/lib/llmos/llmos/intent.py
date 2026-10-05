@@ -904,6 +904,13 @@ def _files(text):
     if re.match(r"^\s*(?:please\s+)?(?:where\s+(?:did|do|does|is|are)\s+(?:that|the|my|it|this|these|those)?\s*(?:download(?:ed)?(?:\s+(?:file|files|things))?|file\s+i\s+(?:just\s+)?downloaded|downloads?)"
                 r"(?:\s+(?:go|end\s+up|get\s+saved|saved|save|go\s+to|land))?|where\s+(?:do|did)\s+(?:my\s+)?downloads\s+go|(?:show|open)\s+(?:me\s+)?(?:my\s+|the\s+)?downloads(?:\s+folder)?)\s*[?.!]*\s*$", text, re.I):
         return ("show_files", {"path": "~/Downloads"})
+    m = re.match(r"^\s*(?:please\s+)?(?:delete|remove|trash|get\s+rid\s+of|clear\s+out|empty|wipe)\s+(?:all\s+(?:of\s+)?|everything\s+in\s+|every\s+file\s+in\s+)?"
+                 r"(?:my|the)\s+(?P<f>files|documents|docs|downloads|pictures|photos|music|videos|desktop|stuff)(?:\s+folder)?\s*[.!]?\s*$", text, re.I)
+    if m and (re.search(r"\b(all|everything|every|clear\s+out|empty|wipe)\b", text, re.I) or m.group("f").lower() in ("files", "stuff")):
+        f = m.group("f").lower()
+        sub = {"documents": "Documents", "docs": "Documents", "downloads": "Downloads", "pictures": "Pictures", "photos": "Pictures",
+               "music": "Music", "videos": "Videos", "desktop": "Desktop"}.get(f, "")
+        return ("delete_file", {"path": "~/" + sub if sub else "~", "contents": True})
     m = _UNZIP.match(text)
     if m:
         return ("extract_archive", {"path": m.group("p")})

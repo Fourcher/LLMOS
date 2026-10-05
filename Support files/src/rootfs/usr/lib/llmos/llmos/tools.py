@@ -30,7 +30,10 @@ def show(ctx, spec):
 
 def _path(p):
     """A path the owner or the model gave: ~ expanded, relative ones inside the home folder."""
-    p = os.path.expanduser(str(p or "").strip())
+    p = str(p or "").strip()
+    # "~" is the OS's own home folder (config.home), never whatever $HOME a caller happens to have
+    if p == "~" or p.startswith("~/"):
+        p = config.home().rstrip("/") + p[1:]
     if p and not os.path.isabs(p):
         p = os.path.join(config.home(), p)
     return os.path.normpath(p) if p else p
@@ -2046,8 +2049,9 @@ def print_file(a, ctx):
 
 
 @tool("delete_file", "Move one of the owner's files or folders (anywhere; system files too when the owner asks) to the trash (~/.Trash), "
-      "where it can be put back later; a file that is already in the trash is deleted for good.",
-      {"path": STR}, ["path"], risk=DESTRUCTIVE)
+      "where it can be put back later; a file that is already in the trash is deleted for good. contents=true moves "
+      "everything inside the folder (\"delete all my files\" is the home folder with contents=true).",
+      {"path": STR, "contents": {"type": "boolean"}}, ["path"], risk=DESTRUCTIVE)
 def delete_file(a, ctx):
     path = os.path.abspath(_path(a.get("path", "")))
     if not os.path.lexists(path):
@@ -2065,6 +2069,22 @@ def delete_file(a, ctx):
         if hasattr(ctx, "close_ui"):
             ctx.close_ui("file:" + path)
         return f"deleted {os.path.basename(path)} for good (it was in the trash). Say one sentence at most."
+    if a.get("contents") and os.path.isdir(path) and path.rstrip("/") not in ("", trash):
+        # "delete all my files", "clear out my downloads": everything in the folder goes to the trash (restorable)
+        names = [n for n in sorted(os.listdir(path)) if not n.startswith(".")]
+        moved = 0
+        for n in names:
+            sub = os.path.join(path, n)
+            if path.rstrip("/") == home and n in ("Documents", "Downloads", "Pictures", "Music", "Videos", "Desktop") and os.path.isdir(sub):
+                inner = [x for x in os.listdir(sub) if not x.startswith(".")]     # the usual folders stay, emptied
+                for x in inner:
+                    moved += delete_file({"path": os.path.join(sub, x)}, ctx).startswith("moved")
+                continue
+            out = delete_file({"path": sub}, ctx)
+            moved += out.startswith("moved")
+        where = "~" + path[len(home):] if path.startswith(home) else path
+        return (f"moved {moved} item(s) from {where} to the trash; they can be put back from there. Say one sentence at most."
+                if moved else f"{where} has nothing in it to delete")
     if path.rstrip("/") in ("", home, trash):
         return "that is the whole disk, the home folder or the trash itself: name what inside it to delete"
     os.makedirs(trash, exist_ok=True)
