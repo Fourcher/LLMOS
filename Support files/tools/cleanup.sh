@@ -4,7 +4,7 @@
 #                               logs, overlays). Safe and fast; everything here regenerates on the next run.
 #   tools/cleanup.sh --models   also remove model files kept only for evaluation (big, re-downloadable),
 #                               keeping the default model the build and smokes need.
-#   tools/cleanup.sh --cache    also empty build/cache (the Alpine ISOs + model fetch cache); the next build
+#   tools/cleanup.sh --cache    also empty build/cache (Alpine ISOs, models, Secure Boot chain); the next build
 #                               re-downloads them.
 #   tools/cleanup.sh --dist     also drop the built images/ISOs in dist/ (reclaimable; tools/release.sh
 #                               rebuilds them). The small tracked files (RELEASE.json, catalog, setup) stay.
@@ -47,7 +47,8 @@ if [ "$DIST" = 1 ]; then
   echo "dropped the built images/ISOs from dist/ (rebuild with tools/release.sh)"
 fi
 if [ "$CACHE" = 1 ]; then
-  rm -f build/cache/*.iso build/cache/*.gguf build/cache/*.bin build/cache/x86iso build/cache/*.sha256
+  rm -f build/cache/*.iso build/cache/*.gguf build/cache/*.bin build/cache/*.deb build/cache/*.sha256
+  rm -rf build/cache/x86iso build/cache/ovmf
   echo "emptied build/cache (re-downloaded on the next build)"
 fi
 

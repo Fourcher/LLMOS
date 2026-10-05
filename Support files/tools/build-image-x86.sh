@@ -12,6 +12,9 @@ DISK=build/work/build-x86.qcow2
 LOG=build/work/build-x86-serial.log
 V="python3 tools/vmctl.py"
 
+echo "==> Secure Boot boot chain (Debian's signed shim, GRUB, kernel; verified)"
+tools/fetch-secureboot.sh
+
 echo "==> payload"
 python3 -m compileall -q src/rootfs/usr/lib/llmos/llmos
 find src/rootfs -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true

@@ -18,7 +18,8 @@ itself is `src/rootfs/` (≈2 000 lines of Python, no third‑party libraries).
 | Other catalog models | official repos of Google (`google/gemma-4-*-gguf`, `ggml-org/gemma-4-E4B-it-GGUF`), IBM (`ibm-granite/*-GGUF`), Mistral AI, Liquid AI | per‑file SHA‑256 pinned in `src/rootfs/usr/share/llmos/catalog.json` (taken from each repo's LFS metadata) |
 | Media | `yt-dlp` 2026.08.19, `mpv` 0.41.0, `quickjs-ng` (Alpine packages) | apk signature |
 | Privacy | `tor` 0.4.9.13, `nftables` 1.1.6, `cryptsetup` 2.8.6 (Alpine packages) | apk signature |
-| Host tooling | QEMU 11.1.1 (Homebrew) | — |
+| x86‑64 boot chain and kernel (Secure Boot) | Debian 13 from deb.debian.org: `shim-signed` 1.51 (shim 16.1, signed by Microsoft's UEFI CA 2011 *and* UEFI CA 2023), `shim-helpers-amd64-signed` 16.1 (MokManager), `grub-efi-amd64-signed` 2.12 (GRUB signed by Debian), `linux-image-6.12.111+deb13-amd64` (kernel and every module signed by Debian) | SHA‑256 of each `.deb` pinned in `src/rootfs/usr/share/llmos/secureboot.env` (from Debian's signed package index), checked by the installer before use; `tools/fetch-secureboot.sh` fetches them |
+| Host tooling | QEMU 11.1.1 (Homebrew); Debian's OVMF 2025.02 (Secure Boot firmware with Microsoft's keys, for the tests only) | OVMF `.deb` SHA‑256 pinned in `tools/fetch-secureboot.sh` |
 
 No package was built by hand; there are no binaries in `src/`.
 
@@ -83,9 +84,11 @@ the x86‑64 ISO under QEMU's emulation (TCG, direct kernel boot). Because
 `setup-disk` cannot lay out a disk that boots on both firmware types, that
 branch bootstraps by hand: GPT with a 2 MB BIOS‑boot partition, a 256 MB EFI
 system partition and the ext4 root; `apk --initdb` for the base system; the
-`linux-lts` kernel, Intel/AMD microcode and the firmware subsets; an
-`mkinitfs` with `nvme mmc kms`; `grub-install` for `i386-pc` and for
-`x86_64-efi --removable` (`BOOTX64.EFI`, no NVRAM entry needed).
+Debian's signed kernel and modules (in place of Alpine's `linux-lts`, so the PC can keep Secure Boot on), Intel/AMD microcode and the firmware subsets; an
+`mkinitfs` with `nvme mmc kms`; `grub-install` for `i386-pc` (BIOS), and for UEFI the signed chain on the
+removable path: `EFI/BOOT/BOOTX64.EFI` is Microsoft‑signed shim, which starts
+Debian‑signed GRUB beside it, which reads `EFI/debian/grub.cfg` (pointing at the
+root by UUID) and boots the Debian‑signed kernel (no NVRAM entry needed).
 
 Final images were built from the frozen sources on 2026‑10‑01 (see the
 last "Final verification" row of the test table for the exact times; arm64

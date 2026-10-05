@@ -4,9 +4,37 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
-## Unreleased — Setup rebuilt so anyone can make a working stick
-Handing someone the LLM OS folder now just works, on a Mac, a Windows PC or a
-Linux computer.
+## 1.6.0 — 2026-10-05
+Hand someone the LLM OS folder and it just works: they open Start Here on
+their Mac, Windows PC or Linux computer, make a USB stick, and that stick
+starts an ordinary PC with Secure Boot left on.
+
+### Starts with Secure Boot on (x86-64)
+Nearly every Windows PC ships with Secure Boot on, and it refused the old
+stick ("Access Denied"); turning Secure Boot off meant firmware menus and, on
+encrypted Windows laptops, a BitLocker recovery prompt. Now the x86-64 image
+and ISO boot the chain such PCs already trust, from Debian 13:
+
+- **shim 16.1, signed by Microsoft** with both the UEFI CA 2011 and the UEFI
+  CA 2023 (old and new PCs accept it) → **GRUB 2.12 signed by Debian** (the
+  removable-media build on the stick, the disk build when installed) →
+  **Linux 6.12.111 signed by Debian**, with every module signed, so the
+  kernel runs locked down as Secure Boot requires.
+- No firmware settings, no key to enroll, no BitLocker prompt. BIOS-only PCs
+  still start Alpine's GRUB as before. Each `.deb` is pinned by SHA-256 in
+  `secureboot.env` and checked by the build (`tools/fetch-secureboot.sh`
+  fetches them).
+- Installing keeps it: on UEFI the installer puts the same signed chain in
+  `EFI/llmos` (with a firmware boot entry) and, on a whole disk or a free
+  removable path, `EFI/BOOT`; a Windows fallback is never overwritten.
+- The ISO is assembled with the same xorriso layout `grub-mkrescue` used (CD
+  and USB, BIOS and UEFI), with the signed EFI image and `/.disk/info`.
+- Tests: `stick-boot-test.sh secureboot` (Setup writes the real image; a PC
+  with Secure Boot enforced and Microsoft's keys starts it) and
+  `secureboot-test.sh` (that PC installs LLM OS on a blank disk in words and
+  restarts from it, Secure Boot still on).
+
+### Setup rebuilt so anyone can make a working stick
 
 - **The folder:** the top shows only *Start Here (Mac)*, *Start Here
   (Windows)*, *Start Here (Linux)* and one folder, *Support files*, holding

@@ -9,11 +9,14 @@
 
 Everything the owner has already set up (name, settings, memory, the
 encrypted vault) is carried over: the installed system continues exactly
-where the live one was. Partitioning uses sfdisk, copying uses rsync, the
-bootloader is GRUB installed for UEFI (and BIOS on x86 when the machine was
-booted that way). On Apple firmware the removable path (EFI/BOOT/BOOTX64.EFI)
-is what the Option-key Startup Manager shows as "EFI Boot", so it is always
-written there when that path is free.
+where the live one was. Partitioning uses sfdisk, copying uses rsync. The
+bootloader on x86 UEFI is the Secure Boot chain the system came with
+(Microsoft-signed shim, Debian-signed GRUB and kernel, from
+/usr/share/llmos/secureboot), so the computer keeps Secure Boot on; elsewhere
+it is GRUB (and BIOS GRUB on x86 when the machine was booted that way). On
+Apple firmware the removable path (EFI/BOOT/BOOTX64.EFI) is what the Option-key
+Startup Manager shows as "EFI Boot", so it is always written there when that
+path is free.
 """
 import json
 import os
@@ -36,11 +39,41 @@ KNOWN = {"7c3457ef-0000-11aa-aa11-00306543ecac": "macOS (APFS)", "48465300-0000-
          "0657fd6d-a4ab-43c4-84e5-0933c84b4f4f": "Linux swap", "e6d6d379-f507-44c2-a23c-238f2a3df928": "Linux LVM"}
 MIN_ROOT_GB = 12
 TARGET = "/mnt/llmos-install"
+SECUREBOOT = "usr/share/llmos/secureboot"       # inside the installed tree: shimx64.efi grubx64.efi mmx64.efi
+_SIGNED = ("shimx64.efi", "grubx64.efi", "mmx64.efi")
 _plans = {}
 
 
 class InstallError(Exception):
     pass
+
+
+def _signed_chain_ready(esp, notes):
+    """Can the Secure Boot chain go on this EFI system partition? It needs the signed files in the copied system,
+    and EFI/debian/grub.cfg (where Debian's signed GRUB always looks) must be free or LLM OS's own."""
+    src = os.path.join(TARGET, SECUREBOOT)
+    if not all(os.path.isfile(os.path.join(src, f)) for f in _SIGNED):
+        return False
+    cfg = os.path.join(esp, "EFI/debian/grub.cfg")
+    if os.path.exists(cfg) and not _read(cfg).startswith("# LLM OS"):
+        notes.append("another Linux on this computer already uses EFI/debian, so LLM OS starts with its own GRUB: "
+                     "turn Secure Boot off in the firmware to start LLM OS")
+        return False
+    return True
+
+
+def _put_signed_chain(esp, dirname, root_uuid):
+    """Microsoft-signed shim -> Debian-signed GRUB (next to it) -> EFI/debian/grub.cfg -> /boot/grub/grub.cfg."""
+    src = os.path.join(TARGET, SECUREBOOT)
+    d = os.path.join(esp, "EFI", dirname)
+    os.makedirs(d, exist_ok=True)
+    shutil.copyfile(os.path.join(src, "shimx64.efi"), os.path.join(d, "BOOTX64.EFI" if dirname == "BOOT" else "shimx64.efi"))
+    for f in ("grubx64.efi", "mmx64.efi"):
+        shutil.copyfile(os.path.join(src, f), os.path.join(d, f))
+    os.makedirs(os.path.join(esp, "EFI/debian"), exist_ok=True)
+    with open(os.path.join(esp, "EFI/debian/grub.cfg"), "w") as f:
+        f.write(f"# LLM OS\nsearch --no-floppy --fs-uuid --set=root {root_uuid}\nset prefix=($root)/boot/grub\n"
+                "configfile $prefix/grub.cfg\n")
 
 
 def _sh(cmd, check=True, input=None, timeout=3600):
@@ -336,17 +369,25 @@ def run(token, status=lambda s: None):
             efivars = os.path.join(TARGET, "sys/firmware/efi/efivars")
             if os.path.isdir("/sys/firmware/efi/efivars"):
                 subprocess.run(["mount", "-t", "efivarfs", "efivarfs", efivars], capture_output=True)
-            _sh(chroot + ["grub-install", f"--target={efi_target}", "--efi-directory=/boot/efi", "--bootloader-id=llmos",
-                          "--no-nvram", "--boot-directory=/boot"])
-            boot_dir = os.path.join(TARGET, "boot/efi/EFI/BOOT")
-            fallback = os.path.join(boot_dir, "BOOTAA64.EFI" if p["arch"] == "aarch64" else "BOOTX64.EFI")
-            if p["mode"] == "whole" or not os.path.exists(fallback) or p["apple"]:
-                _sh(chroot + ["grub-install", f"--target={efi_target}", "--efi-directory=/boot/efi", "--removable",
+            esp = os.path.join(TARGET, "boot/efi")
+            signed = p["arch"] == "x86_64" and _signed_chain_ready(esp, notes)
+            if signed:
+                _put_signed_chain(esp, "llmos", root_uuid)
+                loader = "\\EFI\\llmos\\shimx64.efi"
+            else:
+                _sh(chroot + ["grub-install", f"--target={efi_target}", "--efi-directory=/boot/efi", "--bootloader-id=llmos",
                               "--no-nvram", "--boot-directory=/boot"])
+                loader = "\\EFI\\llmos\\grubaa64.efi" if p["arch"] == "aarch64" else "\\EFI\\llmos\\grubx64.efi"
+            fallback = os.path.join(esp, "EFI/BOOT", "BOOTAA64.EFI" if p["arch"] == "aarch64" else "BOOTX64.EFI")
+            if p["mode"] == "whole" or not os.path.exists(fallback) or p["apple"]:
+                if signed:
+                    _put_signed_chain(esp, "BOOT", root_uuid)
+                else:
+                    _sh(chroot + ["grub-install", f"--target={efi_target}", "--efi-directory=/boot/efi", "--removable",
+                                  "--no-nvram", "--boot-directory=/boot"])
                 notes.append("EFI/BOOT (the removable path) points to LLM OS")
             if shutil.which("efibootmgr") and not p["apple"]:
                 m = re.search(r"(\d+)$", esp_node)
-                loader = "\\EFI\\llmos\\grubaa64.efi" if p["arch"] == "aarch64" else "\\EFI\\llmos\\grubx64.efi"
                 r = subprocess.run(["efibootmgr", "-c", "-d", dev, "-p", m.group(1) if m else "1", "-L", "LLM OS", "-l", loader],
                                    capture_output=True, text=True)
                 notes.append("firmware boot entry 'LLM OS' added" if r.returncode == 0 else "no firmware boot entry could be added (use the boot menu / EFI Boot)")
@@ -354,7 +395,11 @@ def run(token, status=lambda s: None):
             r = subprocess.run(chroot + ["grub-install", "--target=i386-pc", "--boot-directory=/boot", dev], capture_output=True, text=True)
             notes.append("BIOS bootloader written to the disk's MBR" if r.returncode == 0 else f"BIOS bootloader not written: {r.stderr.strip()[:120]}")
         _sh(chroot + ["grub-mkconfig", "-o", "/boot/grub/grub.cfg"])
-        subprocess.run(chroot + ["sh", "-c", "command -v mkinitfs >/dev/null && mkinitfs $(ls /lib/modules | head -1)"], capture_output=True)
+        kver = _read(os.path.join(TARGET, SECUREBOOT, "kernel-version")).strip() or \
+            next(iter(sorted(os.listdir(os.path.join(TARGET, "lib/modules")))), "")
+        flavor = next((n[len("vmlinuz-"):] for n in sorted(os.listdir(os.path.join(TARGET, "boot"))) if n.startswith("vmlinuz-")), "")
+        if kver and flavor and shutil.which("mkinitfs"):     # same file name GRUB starts (initramfs-lts / -virt)
+            subprocess.run(chroot + ["mkinitfs", "-o", f"/boot/initramfs-{flavor}", kver], capture_output=True)
         status("finishing")
         _sh(["sync"])
     finally:

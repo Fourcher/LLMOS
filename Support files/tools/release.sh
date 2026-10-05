@@ -20,7 +20,7 @@ if [ "$ARCH" = all ] || [ "$ARCH" = arm64 ]; then
     step "arm64 ISO";   tools/build-iso.sh arm64
 fi
 if [ "$ARCH" = all ] || [ "$ARCH" = x86 ]; then
-    step "x86-64 image"; tools/build-image-x86.sh
+    step "x86-64 image"; tools/build-image-x86.sh   # fetches + verifies the signed boot chain first
     step "x86-64 ISO";   tools/build-iso.sh x86
 fi
 

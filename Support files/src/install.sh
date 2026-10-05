@@ -9,10 +9,12 @@
 # Two targets:
 #   aarch64  a virtual-machine image (Apple Silicon Macs / arm64 hosts):
 #            Alpine's virt kernel, UEFI + GRUB, serial console preferred.
-#   x86_64   a real-computer image for ordinary (older) PCs and laptops:
-#            Alpine's full "lts" kernel, Wi-Fi/GPU/sound firmware, CPU
-#            microcode, NVMe-capable initramfs, GRUB for both BIOS and UEFI,
-#            iwd for Wi-Fi, screen console preferred. Also boots in QEMU.
+#   x86_64   a real-computer image for ordinary PCs and laptops: Wi-Fi/GPU/
+#            sound firmware, CPU microcode, NVMe-capable initramfs, iwd for
+#            Wi-Fi, screen console preferred. It starts with Secure Boot on:
+#            UEFI boots Debian's Microsoft-signed shim, Debian's signed GRUB
+#            and Debian's signed kernel (secureboot.env pins them); BIOS boots
+#            Alpine's GRUB. Also boots in QEMU.
 #
 # PAYLOAD (env) is where src/ and the model cache are served from.
 set -eu
@@ -84,7 +86,7 @@ features="ata base ide scsi usb virtio ext4 nvme mmc kms"
 EOF
   # firmware for the usual laptop Wi-Fi (Intel iwlwifi is inside -intel),
   # Bluetooth and graphics; ~250 MB in total
-  apk add --root $TARGET -q linux-lts intel-ucode amd-ucode grub-bios grub-efi \
+  apk add --root $TARGET -q intel-ucode amd-ucode grub-bios grub-efi \
       linux-firmware-intel linux-firmware-i915 linux-firmware-amdgpu linux-firmware-radeon \
       linux-firmware-ath9k_htc linux-firmware-ath10k linux-firmware-ath11k linux-firmware-ath12k \
       linux-firmware-qca linux-firmware-rtlwifi linux-firmware-rtw88 linux-firmware-rtw89 \
@@ -221,13 +223,45 @@ GRUB_DISABLE_SUBMENU=y
 GRUB_DISABLE_RECOVERY=true
 GRUB_CMDLINE_LINUX_DEFAULT="modules=sd-mod,usb-storage,nvme,ext4 quiet loglevel=3 net.ifnames=0 console=$SERIAL console=tty1"
 EOF
-  KVER=$(ls $TARGET/lib/modules | head -1)
-  chroot $TARGET mkinitfs -c /etc/mkinitfs/mkinitfs.conf "$KVER" >/dev/null
+  # The kernel and the UEFI boot chain come from Debian, signed, so the computer starts with Secure Boot on
+  # (secureboot.env pins each package's SHA-256). The kernel keeps the "lts" file names the rest expects.
+  log "kernel + Secure Boot boot chain (Debian: Microsoft-signed shim, signed GRUB, signed kernel; verified)"
+  . $TARGET/usr/share/llmos/secureboot.env          # SB_KVER SB_DEBS
+  apk add -q binutils xz >/dev/null                  # ar + xz to unpack .deb files (this live system only)
+  SB=/tmp/secureboot; rm -rf $SB; mkdir -p $SB/root
+  set -- $SB_DEBS
+  while [ $# -ge 2 ]; do
+    deb=$SB/$(basename "$1")
+    fetch_verify "$PAYLOAD/build/cache/$(basename "$1")" "$deb" "$2"
+    (cd $SB && ar x "$deb" data.tar.xz && xz -dc data.tar.xz | tar -x -C $SB/root && rm -f data.tar.xz "$deb")
+    shift 2
+  done
+  cp $SB/root/boot/vmlinuz-$SB_KVER $TARGET/boot/vmlinuz-lts
+  cp $SB/root/boot/config-$SB_KVER $TARGET/boot/config-lts
+  mkdir -p $TARGET/lib/modules
+  cp -a $SB/root/usr/lib/modules/$SB_KVER $TARGET/lib/modules/
+  chroot $TARGET depmod -a $SB_KVER
+  SBD=$TARGET/usr/share/llmos/secureboot; mkdir -p $SBD
+  cp $SB/root/usr/lib/shim/shimx64.efi.signed $SBD/shimx64.efi
+  cp $SB/root/usr/lib/shim/mmx64.efi.signed $SBD/mmx64.efi
+  cp $SB/root/usr/lib/grub/x86_64-efi-signed/grubx64.efi.signed $SBD/grubx64.efi
+  cp $SB/root/usr/lib/grub/x86_64-efi-signed/gcdx64.efi.signed $SBD/gcdx64.efi
+  echo "$SB_KVER" > $SBD/kernel-version
+  rm -rf $SB
+  chroot $TARGET mkinitfs -c /etc/mkinitfs/mkinitfs.conf -o /boot/initramfs-lts "$SB_KVER" >/dev/null
+  # BIOS: Alpine's GRUB in the BIOS boot partition (BIOS has no Secure Boot)
   chroot $TARGET grub-install --target=i386-pc --boot-directory=/boot "$DISK" >/dev/null 2>&1
-  chroot $TARGET grub-install --target=x86_64-efi --efi-directory=/boot/efi --boot-directory=/boot \
-      --removable --no-nvram >/dev/null 2>&1
+  # UEFI: the removable path EFI/BOOT/BOOTX64.EFI is the signed shim, which starts the signed GRUB next to it;
+  # that GRUB reads EFI/debian/grub.cfg (its built-in place), which hands over to /boot/grub/grub.cfg
+  ESP=$TARGET/boot/efi; mkdir -p $ESP/EFI/BOOT $ESP/EFI/debian
+  cp $SBD/shimx64.efi $ESP/EFI/BOOT/BOOTX64.EFI
+  cp $SBD/grubx64.efi $ESP/EFI/BOOT/grubx64.efi
+  cp $SBD/mmx64.efi $ESP/EFI/BOOT/mmx64.efi
+  printf '# LLM OS\nsearch --no-floppy --fs-uuid --set=root %s\nset prefix=($root)/boot/grub\nconfigfile $prefix/grub.cfg\n' \
+      "$(blkid -s UUID -o value "$ROOTDEV")" > $ESP/EFI/debian/grub.cfg
   chroot $TARGET grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1
   grep -q 'vmlinuz-lts' $TARGET/boot/grub/grub.cfg || { echo "GRUB config has no kernel entry"; exit 1; }
+  [ -s $TARGET/boot/initramfs-lts ] && [ -f $TARGET/lib/modules/$SB_KVER/modules.dep ] || { echo "ERROR: kernel install incomplete"; exit 1; }
 fi
 umount $TARGET/dev $TARGET/proc $TARGET/sys
 

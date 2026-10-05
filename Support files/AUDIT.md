@@ -32,6 +32,13 @@ take it on trust.
    `apk list -I` inside it — every package and version, all from Alpine's
    signed repositories. Read it with `cat /etc/llmos/packages.txt` in a
    running image and compare against the Alpine 3.24 package index.
+   The x86‑64 kernel and UEFI boot chain are not Alpine packages: they are
+   Debian 13's signed shim, GRUB and kernel, listed with each `.deb`'s SHA‑256
+   in `/usr/share/llmos/secureboot.env` (the build refuses a mismatch). The
+   signatures can be checked on the files themselves:
+   `/usr/share/llmos/secureboot/*.efi` (and `/boot/vmlinuz-lts`) carry
+   Authenticode signatures — Microsoft's on shim, Debian's on GRUB and the
+   kernel — that `sbverify --list` or `osslsigncode verify` will show.
 3. **The model**: `dist/catalog.json` pins each model file's SHA‑256; the OS
    refuses a download whose hash differs (`models.py`). The default model is
    fetched from the publisher's own repository, named in `BUILD.md`.

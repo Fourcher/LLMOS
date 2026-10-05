@@ -302,8 +302,8 @@ function done() {
   </ol></div>
   ${win ? `<p class="fine" style="margin-top:14px">If Windows offers to format the stick, click Cancel.</p>` : ""}
   <details><summary>It doesn't start from the stick?</summary>
-    <p>In the boot menu, choose the entry that names the stick or says USB or UEFI.</p>
-    <p>If the computer says something about Secure Boot, open its settings (usually F2 or Del as it starts), turn Secure Boot off, and try again. On a Windows laptop, have your BitLocker recovery key handy first.</p>
+    <p>In the boot menu, choose the entry that names the stick or says USB or UEFI. Secure Boot can stay on.</p>
+    <p>A few newer laptops (Microsoft Surface, some Lenovo) trust only Windows at first. In their settings (Surface: hold Volume + while starting), allow the “Microsoft and third-party” certificates under Secure Boot, then try again.</p>
   </details>
   <div class="actions"><button class="btn primary" data-go="home">Done</button></div>`;
 }

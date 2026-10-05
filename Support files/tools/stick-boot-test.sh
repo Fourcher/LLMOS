@@ -5,7 +5,9 @@
 #      macOS password prompt), checking the image against dist/SHA256SUMS first and the stick afterwards
 #   3. a virtual PC (QEMU, x86-64, UEFI or BIOS firmware) starts from that disk plugged in as a USB stick, and
 #      the test checks LLM OS came up running live from the USB medium
-# usage: tools/stick-boot-test.sh [uefi|bios]
+#   secureboot: UEFI with Secure Boot enforced and Microsoft's keys enrolled (Debian's OVMF build), as on an
+#   ordinary Windows PC; the test also checks the kernel came up locked down by Secure Boot.
+# usage: tools/stick-boot-test.sh [uefi|bios|secureboot]
 set -u
 cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 MODE=${1:-uefi}; FW=/opt/homebrew/share/qemu; V="python3 tools/vmctl.py"
@@ -49,11 +51,17 @@ hdiutil detach "$RAM" -quiet; RAM=""
 
 echo "==> a virtual PC ($MODE firmware) starts from it as a USB stick"
 rm -f "$LOG"; FWARGS=""
+MACHINE=q35
 if [ "$MODE" = uefi ]; then
   rm -f run/stick-vars.fd; cp $FW/edk2-i386-vars.fd run/stick-vars.fd
   FWARGS="-drive if=pflash,format=raw,readonly=on,file=$FW/edk2-x86_64-code.fd -drive if=pflash,format=raw,file=run/stick-vars.fd"
+elif [ "$MODE" = secureboot ]; then
+  [ -f build/cache/ovmf/OVMF_CODE_4M.secboot.fd ] || tools/fetch-secureboot.sh >/dev/null
+  rm -f run/stick-vars.fd; cp build/cache/ovmf/OVMF_VARS_4M.ms.fd run/stick-vars.fd
+  MACHINE=q35,smm=on
+  FWARGS="-global driver=cfi.pflash01,property=secure,value=on -drive if=pflash,format=raw,unit=0,readonly=on,file=build/cache/ovmf/OVMF_CODE_4M.secboot.fd -drive if=pflash,format=raw,unit=1,file=run/stick-vars.fd"
 fi
-qemu-system-x86_64 -machine q35 -accel tcg,thread=multi -cpu max -smp 4 -m 3072 $FWARGS \
+qemu-system-x86_64 -machine $MACHINE -accel tcg,thread=multi -cpu max -smp 4 -m 3072 $FWARGS \
   -device qemu-xhci,id=xhci -drive if=none,id=stick,file="$IMG",format=raw -device usb-storage,bus=xhci.0,drive=stick,bootindex=1 \
   -nic user,model=virtio-net-pci -device virtio-vga -audiodev none,id=snd0 \
   -fw_cfg name=opt/llmos/tz,string=America/Phoenix -fw_cfg name=opt/llmos/testshell,string=1 \
@@ -63,7 +71,7 @@ qemu-system-x86_64 -machine q35 -accel tcg,thread=multi -cpu max -smp 4 -m 3072 
 t0=$(date +%s)
 $V wait "$LOG" 'LLM OS test shell' 1200 >/dev/null || { tail -c 2000 "$LOG" | tr -d '\r' | tail -15; fail "no LLM OS within 1200 s"; }
 echo "==> LLM OS up after $(( $(date +%s) - t0 )) s"
-$V run "$SER" "$LOG" 'echo "live medium: $(grep " /run/live " /proc/mounts | cut -d" " -f1-3)"; echo "medium bus: $(for d in /sys/block/sd*; do [ -e "$d" ] && echo "$(basename $d) $(readlink -f $d | grep -o usb[0-9]* | head -1)"; done | tr "\n" " ")"; grep -E "^(VERSION|MEDIUM)=" /etc/llmos-release; echo "firmware: $([ -d /sys/firmware/efi ] && echo UEFI || echo BIOS)"; echo STICK_""CHECK' '^STICK_CHECK' 240 --quiet 1 \
-  | tr -d '\r' | grep -E '^(live medium|medium bus|firmware):|^(VERSION|MEDIUM)='
+$V run "$SER" "$LOG" 'echo "live medium: $(grep " /run/live " /proc/mounts | cut -d" " -f1-3)"; echo "medium bus: $(for d in /sys/block/sd*; do [ -e "$d" ] && echo "$(basename $d) $(readlink -f $d | grep -o usb[0-9]* | head -1)"; done | tr "\n" " ")"; grep -E "^(VERSION|MEDIUM)=" /etc/llmos-release; echo "firmware: $([ -d /sys/firmware/efi ] && echo UEFI || echo BIOS)"; echo "secure boot: $(dmesg | grep -o "Secure boot enabled" | head -1 || true)$(dmesg | grep -qi "secure boot disabled" && echo disabled)"; echo "lockdown: $(cat /sys/kernel/security/lockdown 2>/dev/null)"; echo "kernel: $(uname -r)"; echo STICK_""CHECK' '^STICK_CHECK' 240 --quiet 1 \
+  | tr -d '\r' | grep -E '^(live medium|medium bus|firmware|secure boot|lockdown|kernel):|^(VERSION|MEDIUM)='
 cleanup
 echo "==> done"
