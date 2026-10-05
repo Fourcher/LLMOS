@@ -309,12 +309,28 @@ def job_save(name):
         set_state(phase="error", error=str(e))
 
 
+def _has_full_disk_access():
+    """macOS only: can the app running Setup read a Full-Disk-Access-gated file? On recent macOS that access is
+    what lets the privileged writer reach a USB device (and read an external volume). True off macOS."""
+    if SYSTEM != "Darwin":
+        return True
+    for path in ("/Library/Application Support/com.apple.TCC/TCC.db",
+                 os.path.expanduser("~/Library/Application Support/com.apple.TCC/TCC.db")):
+        try:
+            with open(path, "rb") as f:
+                f.read(1)
+            return True
+        except OSError:
+            continue
+    return False
+
+
 def _staged_source(src):
     """macOS blocks a root process (the privileged `dd`) from reading files on an external/removable volume, even
     when a normal read works -- "Operation not permitted". When the ISO is on a volume other than the startup disk,
     copy it to a temp file on the startup disk first and write from there. Returns (path, temp_or_None); the caller
     deletes the temp. Elsewhere, or when the ISO is already on the startup disk, nothing is copied."""
-    if SYSTEM != "Darwin":
+    if SYSTEM != "Darwin" or _has_full_disk_access():
         return src, None
     try:
         if os.stat(src).st_dev == os.stat("/").st_dev:
@@ -371,9 +387,9 @@ def job_write(name, drive_id):
                 if r.returncode != 0:
                     err = r.stderr.strip()
                     if "not permitted" in err.lower():
-                        err = ("macOS blocked reading the image. Move the LLM OS folder onto this Mac's own disk "
-                               "(not Downloads/Desktop/Documents), or grant Terminal Full Disk Access in System "
-                               "Settings > Privacy & Security, then try again.")
+                        err = ("macOS blocked the write. Grant Full Disk Access to the app running LLM OS Setup "
+                               "(Terminal) in System Settings > Privacy & Security > Full Disk Access, then quit "
+                               "and reopen Setup and try again.")
                     raise RuntimeError(err[-300:] or "the write was cancelled")
             elif SYSTEM == "Linux":
                 busy = _linux_in_use(os.path.basename(drive["id"]))
@@ -527,6 +543,10 @@ def open_target(what):
             return {"ok": False, "guide": "qemu", "error": (
                 f"Open {rec['iso']} in GNOME Boxes or virt-manager, or run: "
                 f"qemu-system-x86_64 -enable-kvm -m 4096 -smp 4 -cdrom {rec['iso']}")}
+        elif what == "fda":
+            if SYSTEM != "Darwin":
+                return {"ok": False, "error": "Full Disk Access is a macOS setting"}
+            subprocess.Popen(["open", "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"])
         else:
             return {"ok": False, "error": "unknown action"}
         return {"ok": True}
@@ -645,6 +665,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 drive = str(data.get("drive", ""))
                 if not drive:
                     return self.send_json({"ok": False, "error": "pick a drive first"})
+                if not _has_full_disk_access():     # check before copying, unmounting or asking for a password
+                    return self.send_json({"ok": False, "need_fda": True, "error": (
+                        "macOS needs Full Disk Access to write a USB stick. Open System Settings > Privacy & "
+                        "Security > Full Disk Access, turn it on for Terminal (the app running LLM OS Setup), "
+                        "then quit and reopen Setup and write again.")})
                 threading.Thread(target=job_write, args=(name, drive), daemon=True).start()
             return self.send_json({"ok": True})
         if path == "/api/open":

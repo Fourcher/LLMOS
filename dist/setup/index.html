@@ -67,6 +67,7 @@
     <div class="rec"><b>Stick:</b> USB 3.0 or faster, <b>8 GB minimum, 16 GB recommended</b>. <b>Everything on it is erased.</b><br><b>Computer:</b> any 64‑bit PC or Intel Mac from the last ~10 years, 4 GB RAM (8 GB comfortable), 32 GB free on the internal disk for an install.</div>
     <div class="row"><select id="driveSel"><option value="">no removable drive found</option></select><button class="btn" data-do="refresh">Refresh</button></div>
     <div class="row"><select id="writeSel"></select><label><input type="checkbox" id="sure"> I understand the stick will be erased</label><button class="btn danger" id="writeBtn" data-do="write" disabled>Write</button></div>
+    <p class="mac-note" style="font-size:13px;color:var(--dim)">On macOS, writing a stick needs <b>Full Disk Access</b> for Terminal (System Settings → Privacy &amp; Security). Setup will tell you if it's missing before it starts.</p>
     <p id="winnote" style="display:none">On Windows the write needs administrator rights; a prompt will appear. If it is refused, write the ISO with <a href="https://rufus.ie" style="color:#b9a9ff">Rufus</a> (DD image mode) or balenaEtcher instead.</p></section>
 
   <section class="card" id="howto"><h2>Install, dual boot, first start</h2><p>Pick your machine.</p><div id="howlist"></div></section>
@@ -139,7 +140,10 @@
     const f = $("writeSel").value, d = $("driveSel").value, name = $("driveSel").selectedOptions[0].textContent;
     if (!f || !d) return;
     if (!confirm(`Erase "${name}" and write ${f} to it?\n\nThis cannot be undone.`)) return;
-    const r = await api("/api/write", { file: f, drive: d }); if (r.error) return alert(r.error); watch("Writing the stick");
+    const r = await api("/api/write", { file: f, drive: d });
+    if (r.need_fda) { if (confirm(r.error + "\n\nOpen the Full Disk Access settings now?")) await act("open", { what: "fda" }); return; }
+    if (r.error) return alert(r.error);
+    watch("Writing the stick");
   }
   let timer = null;
   function watch(title) {
