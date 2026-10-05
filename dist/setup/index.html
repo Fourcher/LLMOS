@@ -47,36 +47,39 @@
     <p id="whead">Looking at this computer…</p>
     <p id="wnote" class="warn" style="display:none"></p>
     <div class="goals">
-      <button class="goal" id="g-vm" onclick="goVM()"><b>Try it in a window</b><span>Runs inside this computer, like an app. Nothing is changed. Best first step.</span></button>
-      <button class="goal" id="g-usb" onclick="go('usbcard')"><b>Make a USB stick</b><span>Start any PC from it to try LLM OS, and install it from there if you like.</span></button>
-      <button class="goal" id="g-install" onclick="go('howto', true)"><b>Install it on a computer</b><span>On its own or next to Windows / macOS, from the USB stick.</span></button>
-      <button class="goal" id="g-save" onclick="go('savecard')"><b>Just save the ISO</b><span>A copy in Downloads, checked against its fingerprint.</span></button>
+      <button class="goal" id="g-vm" data-do="vm"><b>Try it in a window</b><span>Runs inside this computer, like an app. Nothing is changed. Best first step.</span></button>
+      <button class="goal" id="g-usb" data-do="usb"><b>Make a USB stick</b><span>Start any PC from it to try LLM OS, and install it from there if you like.</span></button>
+      <button class="goal" id="g-install" data-do="install"><b>Install it on a computer</b><span>On its own or next to Windows / macOS, from the USB stick.</span></button>
+      <button class="goal" id="g-save" data-do="save-iso"><b>Just save the ISO</b><span>A copy in Downloads, checked against its fingerprint.</span></button>
     </div>
     <div id="wmsg" class="rec" style="display:none"></div>
     <p class="small">Prefer to be guided step by step? Give the file <b>“2 - Set up with AI.md”</b> (next to the START HERE files) to an AI assistant such as Claude or ChatGPT and say: <i>“Read this and help me set up LLM OS.”</i></p></section>
 
   <section class="card" id="images"><h2>In this folder</h2><p>The LLM OS files and their fingerprints (SHA-256), so you can tell they are intact. Everything stays on this computer.</p><div id="imglist"></div>
-    <div class="row"><button class="btn" onclick="act('open',{what:'folder'})">Show the folder</button><button class="btn" onclick="act('open',{what:'iso'})">Show the ISO this computer needs</button></div></section>
+    <div class="row"><button class="btn" data-do="show-folder">Show the folder</button><button class="btn" data-do="show-iso">Show the ISO this computer needs</button></div></section>
 
   <section class="card" id="savecard"><h2>Save the ISO</h2><p>Copies the bootable ISO into your Downloads folder and verifies it against its checksum, so you can share it, archive it, or write it with any tool.</p>
-    <div class="row"><select id="saveSel"></select><button class="btn primary" onclick="save()">Save to Downloads</button></div></section>
+    <div class="row"><select id="saveSel"></select><button class="btn primary" data-do="save">Save to Downloads</button></div></section>
 
   <section class="card" id="usbcard"><h2>Write to a USB stick</h2><p>Makes a stick that boots straight into LLM OS. From that desk, say <i>"install LLM OS alongside macOS"</i> (or Windows) to put it on the computer.</p>
     <div class="rec"><b>Stick:</b> USB 3.0 or faster, <b>8 GB minimum, 16 GB recommended</b>. <b>Everything on it is erased.</b><br><b>Computer:</b> any 64‑bit PC or Intel Mac from the last ~10 years, 4 GB RAM (8 GB comfortable), 32 GB free on the internal disk for an install.</div>
-    <div class="row"><select id="driveSel"><option value="">no removable drive found</option></select><button class="btn" onclick="drives()">Refresh</button></div>
-    <div class="row"><select id="writeSel"></select><label><input type="checkbox" id="sure"> I understand the stick will be erased</label><button class="btn danger" id="writeBtn" onclick="write()" disabled>Write</button></div>
+    <div class="row"><select id="driveSel"><option value="">no removable drive found</option></select><button class="btn" data-do="refresh">Refresh</button></div>
+    <div class="row"><select id="writeSel"></select><label><input type="checkbox" id="sure"> I understand the stick will be erased</label><button class="btn danger" id="writeBtn" data-do="write" disabled>Write</button></div>
     <p id="winnote" style="display:none">On Windows the write needs administrator rights; a prompt will appear. If it is refused, write the ISO with <a href="https://rufus.ie" style="color:#b9a9ff">Rufus</a> (DD image mode) or balenaEtcher instead.</p></section>
 
   <section class="card" id="howto"><h2>Install, dual boot, first start</h2><p>Pick your machine.</p><div id="howlist"></div></section>
 
   <section class="card" id="progress"><h2 id="ptitle">Working…</h2><div class="bar"><i id="pbar"></i></div><div id="pmsg" class="steps"></div></section>
 </main>
-<footer>LLM OS Setup · runs only on this computer · <button class="btn" style="padding:4px 10px;font-size:13px" onclick="act('quit',{})">Quit</button></footer>
+<footer>LLM OS Setup · runs only on this computer · <button class="btn" style="padding:4px 10px;font-size:13px" data-do="quit">Quit</button></footer>
 <script>
   const $ = (id) => document.getElementById(id);
   const gb = (n) => (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + " GB";
   let rel = null;
-  const TOKEN = "__TOKEN__";
+  // the launch token arrives in the address's #fragment, which the browser never sends to a server: the page
+  // itself holds no secret, so nothing else on this computer can read one from it
+  const TOKEN = decodeURIComponent(location.hash.slice(1));
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   async function api(path, body) {
     const opts = { headers: { "X-LLMOS-Token": TOKEN } };   // the token goes on every call; the server requires it on all /api endpoints
     if (body) { opts.method = "POST"; opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
@@ -113,18 +116,18 @@
     const isos = rel.images.filter(i => i.kind === "iso");
     for (const i of rel.images) {
       const d = document.createElement("div"); d.className = "img";
-      d.innerHTML = `<div><b>${i.file}</b><span class="tag">${i.kind === "iso" ? "bootable ISO" : "VM disk"}</span><span class="tag">${i.arch}</span><div class="m">${i.sha256 ? i.sha256.slice(0, 16) + "…" : "no checksum"} · ${i.built}</div></div><div>${gb(i.size)}</div>`;
+      d.innerHTML = `<div><b>${esc(i.file)}</b><span class="tag">${i.kind === "iso" ? "bootable ISO" : "VM disk"}</span><span class="tag">${esc(i.arch)}</span><div class="m">${i.sha256 ? esc(i.sha256.slice(0, 16)) + "…" : "no checksum"} · ${esc(i.built)}</div></div><div>${gb(i.size)}</div>`;
       list.appendChild(d);
     }
     for (const sel of [$("saveSel"), $("writeSel")]) {
-      sel.innerHTML = isos.length ? isos.map(i => `<option value="${i.file}"${rec.iso === i.file ? " selected" : ""}>${i.file} (${gb(i.size)})${rec.iso === i.file ? " — for this computer" : ""}</option>`).join("") : `<option value="">no ISO in this folder — this copy of LLM OS is incomplete</option>`;
+      sel.innerHTML = isos.length ? isos.map(i => `<option value="${esc(i.file)}"${rec.iso === i.file ? " selected" : ""}>${esc(i.file)} (${gb(i.size)})${rec.iso === i.file ? " — for this computer" : ""}</option>`).join("") : `<option value="">no ISO in this folder — this copy of LLM OS is incomplete</option>`;
     }
     $("winnote").style.display = rel.platform === "Windows" ? "block" : "none";
     drives(); howto();
   }
   async function drives() {
     const r = await api("/api/drives"); const sel = $("driveSel"); sel.innerHTML = "";
-    if (!r.drives || !r.drives.length) { sel.innerHTML = `<option value="">no removable drive found${r.error ? " (" + r.error + ")" : ""} — plug a stick in and refresh</option>`; }
+    if (!r.drives || !r.drives.length) { sel.innerHTML = `<option value="">no removable drive found${r.error ? " (" + esc(r.error) + ")" : ""} — plug a stick in and refresh</option>`; }
     for (const d of r.drives) { const o = document.createElement("option"); o.value = d.id; o.textContent = `${d.name || d.id} — ${gb(d.size)}${d.bus ? " · " + d.bus : ""}${d.label ? " · " + d.label : ""}${d.size && d.size < 8e9 ? " (too small)" : ""}`; sel.appendChild(o); }
     gate();
   }
@@ -145,8 +148,8 @@
       const pct = p.total ? Math.round(p.done * 100 / p.total) : 0;
       $("pbar").style.width = pct + "%";
       const rate = p.elapsed && p.done ? ` · ${(p.done / p.elapsed / 1e6).toFixed(0)} MB/s` : "";
-      if (p.phase === "error") { $("pmsg").innerHTML = `<span class="err">${p.error}</span>`; clearInterval(timer); }
-      else if (p.phase === "done") { $("pmsg").innerHTML = `<span class="ok">${p.message}</span>`; $("pbar").style.width = "100%"; clearInterval(timer); }
+      if (p.phase === "error") { $("pmsg").innerHTML = `<span class="err">${esc(p.error)}</span>`; clearInterval(timer); }
+      else if (p.phase === "done") { $("pmsg").innerHTML = `<span class="ok">${esc(p.message)}</span>`; $("pbar").style.width = "100%"; clearInterval(timer); }
       else $("pmsg").textContent = `${p.message} — ${pct}%${rate}`;
     }, 800);
   }
@@ -159,7 +162,16 @@
       box.appendChild(d);
     }
   }
-  load();
+  const ACTIONS = { "vm": () => goVM(), "usb": () => go("usbcard"), "install": () => go("howto", true), "save-iso": () => go("savecard"),
+                    "show-folder": () => act("open", { what: "folder" }), "show-iso": () => act("open", { what: "iso" }),
+                    "save": () => save(), "refresh": () => drives(), "write": () => write(), "quit": () => act("quit", {}) };
+  document.querySelectorAll("[data-do]").forEach((b) => b.addEventListener("click", () => ACTIONS[b.dataset.do]()));
+  if (!TOKEN) {
+    document.querySelector("main").innerHTML = '<section class="card"><h2>Open LLM OS Setup from its launcher</h2><p>Start it with ' +
+      '"1 - START HERE" in the LLM OS folder; it opens this page with the key it needs.</p></section>';
+  } else {
+    load();
+  }
 </script>
 </body>
 </html>

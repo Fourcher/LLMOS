@@ -86,7 +86,7 @@ class ConsoleCtx:
 
     def setup_cloud(self, provider=None):
         return ("From this console, say it in one line, for example: \"set up the online model: provider claude, "
-                "model claude-sonnet-5, key sk-ant-…\" or \"… provider openai, url https://…/v1, model NAME, key …\". "
+                "model claude-opus-5-5, key sk-ant-…\" or \"… provider openai, url https://…/v1, model NAME, key …\". "
                 "The key is checked with one tiny request and kept inside the vault. On the desk a form opens instead.")
 
     def setup_connector(self):
@@ -575,6 +575,17 @@ class Console:
                 return False
         return False
 
+    def _locked_elsewhere(self):
+        """The vault was locked by another session while this console was open: nothing typed here runs until
+        the passphrase is given here too."""
+        if not (config.settings.get("vault") and not vault.unlocked()):
+            return False
+        self.history.clear()
+        if not self.unlock_screen():
+            self.shutdown("poweroff")
+        self.redraw()
+        return True
+
     def run(self):
         ui.query_size()
         ui.reload_theme()
@@ -595,6 +606,8 @@ class Console:
             self.warm_up()
         while True:
             ui.query_size()
+            if self._locked_elsewhere():
+                continue
             self.show_unseen()  # results of background tasks, as they arrive
             try:
                 line = input(ui.prompt_str())
@@ -605,6 +618,8 @@ class Console:
                 ui.write("\n")
                 continue
             line = line.strip()
+            if self._locked_elsewhere():   # the desk (or the automatic lock) locked while this prompt waited
+                continue
             if not line:
                 continue
             if self.shortcut(line):

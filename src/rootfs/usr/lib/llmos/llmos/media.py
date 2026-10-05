@@ -58,12 +58,15 @@ def desk_env():
 
 
 def _proxy_args():
-    return ["--proxy", "socks5://127.0.0.1:9050"] if config.settings.get("tor") else []
+    return ["--proxy", "socks5h://127.0.0.1:9050"] if config.settings.get("tor") else []   # h: names resolved by Tor, no DNS leak
 
 
 def find(query):
     """Return a dict (url, title, channel, duration, thumbnail, live) for a
     URL or a search phrase."""
+    from . import system
+    if re.match(r"^https?://", query) and system.is_blocked(query):
+        raise MediaError("that site is blocked while focus mode is on; turn focus off to play from it")
     target = query if re.match(r"^https?://", query) else f"ytsearch1:{query}"
     cmd = ["yt-dlp", "--no-warnings", "--no-playlist", "--js-runtimes", "quickjs",
            *_proxy_args(), "--skip-download",
@@ -88,7 +91,7 @@ def _common_args():
     common = ["--no-terminal", "--really-quiet", "--keep-open=no",
               "--ytdl-format=bv*[height<=720]+ba/b[height<=720]/b",
               "--script-opts=ytdl_hook-ytdl_path=yt-dlp",
-              "--ytdl-raw-options=js-runtimes=quickjs" + (",proxy=socks5://127.0.0.1:9050" if config.settings.get("tor") else "")]
+              "--ytdl-raw-options=js-runtimes=quickjs" + (",proxy=socks5h://127.0.0.1:9050" if config.settings.get("tor") else "")]
     if not has_audio():
         common.append("--ao=null")
     return common
@@ -125,7 +128,8 @@ def kiosk_launch(argv, log_path):
     except OSError:
         pass
     env = dict(os.environ, WLR_RENDERER=os.environ.get("WLR_RENDERER", "pixman"), XDG_RUNTIME_DIR=config.RUN,
-               HOME=config.home(), MOZ_ENABLE_WAYLAND="1")
+               MOZ_ENABLE_WAYLAND="1")
+    env.update(config.personal_env())
     return subprocess.Popen(["seatd-launch", "--", "cage", "--", *argv], stdin=subprocess.DEVNULL,
                             stdout=log, stderr=log, start_new_session=True, env=env)
 

@@ -12,9 +12,12 @@ take it on trust.
   the autonomy policy enforced around every tool call in `execute()`),
   `tools.py` (every action the model can take; each is a plain function with
   a declared risk level), `system.py` (firewall, Tor, time zone, focus
-  mode), `vault.py` (the LUKS2 vault), `web.py` and `mail.py` (the only two
-  modules that talk to the internet), `llm.py` (the only module that talks
-  to the model server, on 127.0.0.1 or the VM's host link).
+  mode), `vault.py` (the LUKS2 vault). The modules that can reach the network
+  are `web.py` (search, pages, images, quotes), `mail.py` (IMAP/SMTP),
+  `mcp.py` (http connectors), `models.py` and `voice.py` (model downloads),
+  and `llm.py` (the on-device model on 127.0.0.1 or the VM's host link, and,
+  only when the owner adds an account, the online model). Each download is
+  SHA-256 pinned; every request obeys the internet setting and the audit log.
 - `src/rootfs/etc/nftables.nft` and `system.apply_firewall()` are the
   network policy: with internet "no" every outgoing packet is dropped except
   the model link; with "ask" nothing is fetched without a dialog.
@@ -25,9 +28,10 @@ take it on trust.
 
 1. **Images and ISOs**: `cd dist && shasum -a 256 -c SHA256SUMS`.
    `RELEASE.json` names the version and lists the same checksums.
-2. **Packages**: each image ships `dist/packages-<arch>.txt`, the output of
+2. **Packages**: each image carries `/etc/llmos/packages.txt`, the output of
    `apk list -I` inside it — every package and version, all from Alpine's
-   signed repositories. Compare against the Alpine 3.24 package index.
+   signed repositories. Read it with `cat /etc/llmos/packages.txt` in a
+   running image and compare against the Alpine 3.24 package index.
 3. **The model**: `dist/catalog.json` pins each model file's SHA‑256; the OS
    refuses a download whose hash differs (`models.py`). The default model is
    fetched from the publisher's own repository, named in `BUILD.md`.
@@ -36,9 +40,12 @@ take it on trust.
    on the shipped image).
 5. **No telemetry**: `grep -rn "http" src/rootfs/usr/lib/llmos/llmos/` shows
    every URL the OS can contact: the Alpine package CDN (installs), the
-   model publishers (downloads), DuckDuckGo/Brave (search), Wikimedia
-   Commons and Wikiquote (photos and quotes), and whatever you ask it to
-   read. Nothing else.
+   model publishers and Hugging Face (model downloads and the new-model
+   search), DuckDuckGo/Brave (search), Wikimedia Commons and Wikiquote
+   (photos and quotes), `check.torproject.org` (only when you turn Tor on,
+   to confirm it is working), the online model's own service (only when you
+   add an account — `api.anthropic.com`, or the address you give an
+   OpenAI-compatible service), and whatever you ask it to read. Nothing else.
 6. **The audit log**: everything the model did is in the *Recent actions*
    window (`store.audit`), with passwords redacted (`agent._redacted`).
 
@@ -47,7 +54,7 @@ take it on trust.
 `tools/build-image.sh` (arm64) and `tools/build-image-x86.sh` produce the
 images from the official Alpine ISO; `tools/build-iso.sh` the live ISOs. The
 build is deterministic in its inputs (pinned ISO hash, pinned model hash,
-Alpine's signed packages at the versions recorded in `packages-*.txt`),
+Alpine's signed packages at the versions recorded in `/etc/llmos/packages.txt`),
 though not bit‑for‑bit reproducible: package builds and filesystem
 timestamps vary between runs.
 
@@ -73,9 +80,10 @@ timestamps vary between runs.
 - The model's output is not trusted: every tool call passes the autonomy
   policy (`needs_confirm`), network use passes the internet setting, window
   specs pass `uispec.normalize` (only `http(s)`, `file` and absolute paths;
-  no scripts; images only from local files; only two form actions may post
-  to the OS directly, the passphrase form and the online-model account form,
-  each carrying a nonce the OS issued).
+  no scripts; images only from local files; only four form actions may post
+  to the OS directly — the passphrase form, the online-model account form,
+  the connector form and the conduct editor — each carrying a nonce the OS
+  issued that is never shown to the model).
 - Web pages, search results and emails are untrusted input to the model;
   the policy layer, not the model, decides what may run.
 - Nothing in the OS can be reached from the network: no services listen,

@@ -30,6 +30,7 @@ cp "$(dirname "$0")/init" "$W/ird/init"; chmod 0755 "$W/ird/init"
 rm -rf "$W/ird" "$W/initramfs.gz"
 echo "==> release stamp"
 printf 'VERSION=%s\nBUILD=%s\nARCH=%s\nMEDIUM=live\n' "$VER" "$(date +%Y-%m-%d)" "$ARCH" > /etc/llmos-release
+mkdir -p /etc/llmos; apk list -I 2>/dev/null | sort > /etc/llmos/packages.txt || true
 echo "==> system squashfs (the model is stored beside it, uncompressed)"
 MODELS=/var/lib/llmos/models
 if [ -d "$MODELS" ]; then for f in "$MODELS"/*.gguf; do [ -f "$f" ] && { ln "$f" "$ISO/llmos/models/" 2>/dev/null || cp "$f" "$ISO/llmos/models/"; }; done; fi

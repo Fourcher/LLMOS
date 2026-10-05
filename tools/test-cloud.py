@@ -46,15 +46,27 @@ class Fake(BaseHTTPRequestHandler):
         if self.path == "/v1/messages":
             if self.headers.get("x-api-key") != "sk-ant-test":
                 return self._json(401, {"type": "error", "error": {"type": "authentication_error", "message": "invalid x-api-key"}})
-            ev = [{"type": "message_start"}, {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}},
-                  {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hello "}},
-                  {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "there."}},
-                  {"type": "content_block_stop", "index": 0}]
+            last = json.dumps(body.get("messages", [])[-1:])
+            if "REFUSE" in last:            # the service's safety check declines (HTTP 200, stop_reason refusal)
+                ev = [{"type": "message_start"}, {"type": "message_delta", "delta": {"stop_reason": "refusal"}}, {"type": "message_stop"}]
+                return self._sse([f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in ev])
+            k = 0
+            ev = [{"type": "message_start"}]
+            if "THINK" in last:             # current models think first: a thinking block with a signature
+                ev += [{"type": "content_block_start", "index": 0, "content_block": {"type": "thinking", "thinking": ""}},
+                       {"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "Add them."}},
+                       {"type": "content_block_delta", "index": 0, "delta": {"type": "signature_delta", "signature": "sig-abc"}},
+                       {"type": "content_block_stop", "index": 0}]
+                k = 1
+            ev += [{"type": "content_block_start", "index": k, "content_block": {"type": "text", "text": ""}},
+                   {"type": "content_block_delta", "index": k, "delta": {"type": "text_delta", "text": "Hello "}},
+                   {"type": "content_block_delta", "index": k, "delta": {"type": "text_delta", "text": "there."}},
+                   {"type": "content_block_stop", "index": k}]
             if body.get("tools"):
-                ev += [{"type": "content_block_start", "index": 1, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "calculate", "input": {}}},
-                       {"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "{\"expression\": "}},
-                       {"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": "\"2+2\"}"}},
-                       {"type": "content_block_stop", "index": 1}]
+                ev += [{"type": "content_block_start", "index": k + 1, "content_block": {"type": "tool_use", "id": "toolu_1", "name": "calculate", "input": {}}},
+                       {"type": "content_block_delta", "index": k + 1, "delta": {"type": "input_json_delta", "partial_json": "{\"expression\": "}},
+                       {"type": "content_block_delta", "index": k + 1, "delta": {"type": "input_json_delta", "partial_json": "\"2+2\"}"}},
+                       {"type": "content_block_stop", "index": k + 1}]
             ev += [{"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 9}}, {"type": "message_stop"}]
             return self._sse([f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in ev])
         if self.path.endswith("/chat/completions"):
@@ -100,15 +112,15 @@ except llm.CloudError as e:
     check("no online model" in str(e), f"cloud_chat without an account raises: {e}")
 
 print("Claude: the Messages API")
-ok, note = llm.cloud_setup({"provider": "Claude", "model": "claude-sonnet-5", "url": base, "key": "bad"})
+ok, note = llm.cloud_setup({"provider": "Claude", "model": "claude-opus-5-5", "url": base, "key": "bad"})
 check(not ok and "invalid x-api-key" in note, f"a wrong key is refused in plain words: {note}")
 check(config.cloud() is None, "a refused key is not kept")
-ok, note = llm.cloud_setup({"provider": "claude", "model": "claude-sonnet-5", "url": base, "key": "sk-ant-test"})
-check(ok and "Claude Sonnet 5" in note, f"a working key is kept: {note}")
+ok, note = llm.cloud_setup({"provider": "claude", "model": "claude-opus-5-5", "url": base, "key": "sk-ant-test"})
+check(ok and "Claude Opus 5.5" in note, f"a working key is kept: {note}")
 check(config.cloud()["key"] == "sk-ant-test" and config.cloud()["provider"] == "anthropic", "the account is stored in the vault dir")
 check(config.settings.get("brain") == "ask", "adopting an account turns 'local' into 'ask'")
 check(oct(os.stat(config.data("cloud.json")).st_mode)[-3:] == "600", "cloud.json is 0600")
-check(llm.cloud_label() == "Claude Sonnet 5", "cloud_label() names the model")
+check(llm.cloud_label() == "Claude Opus 5.5", "cloud_label() names the model")
 pieces = []
 r = llm.cloud_chat(HISTORY, tools=TOOLS, on_text=pieces.append)
 check(r["content"] == "Hello there." and pieces == ["Hello ", "there."], f"text streams in pieces: {pieces}")
@@ -124,7 +136,29 @@ check(tr == [{"type": "tool_result", "tool_use_id": "call_0_0", "content": "4"}]
 check(tu == [{"type": "tool_use", "id": "call_0_0", "name": "calculate", "input": {"expression": "2+2"}}], f"tool calls become tool_use blocks: {tu}")
 check(not any(b.get("type") == "text" and not b.get("text", "").strip() for m in body["messages"] for b in m["content"]), "no empty text blocks")
 check(body["tools"][0]["input_schema"]["type"] == "object" and body["tools"][0]["name"] == "calculate", "tools carry input_schema")
-check(body["max_tokens"] == 1200 and body["stream"] is True, "max_tokens and stream set")
+check(body["max_tokens"] >= 16000 and body["stream"] is True, f"room to think (max_tokens {body['max_tokens']}) and streamed")
+check(not {"temperature", "top_p", "top_k"} & set(body), "no sampling settings (current Claude models reject them with a 400)")
+
+print("Claude thinks before answering: its blocks go back unchanged")
+think = HISTORY[:-1] + [{"role": "user", "content": "THINK: what is 2+2"}]
+r = llm.cloud_chat(think, tools=TOOLS)
+raw = r.get("raw") or []
+check([b.get("type") for b in raw] == ["thinking", "text", "tool_use"], f"the response's own blocks are kept in order: {[b.get('type') for b in raw]}")
+check(raw and raw[0].get("signature") == "sig-abc" and raw[0].get("thinking") == "Add them.", "the thinking block keeps its text and signature")
+nxt = think + [{"role": "assistant", "content": r["content"], "_anthropic": raw,
+                "tool_calls": [{"id": "toolu_1", "type": "function", "function": {"name": "calculate", "arguments": "{\"expression\": \"2+2\"}"}}]},
+               {"role": "tool", "tool_call_id": "toolu_1", "content": "4"}]
+llm.cloud_chat(nxt, tools=TOOLS)
+sent = SEEN[-1][2]["messages"]
+check(sent[-2]["role"] == "assistant" and sent[-2]["content"] == raw, "the next step replays that assistant turn exactly as received")
+check(sent[-1]["content"][0] == {"type": "tool_result", "tool_use_id": "toolu_1", "content": "4"}, "followed by the tool's result")
+
+print("a refusal from the service is answered on this computer instead")
+try:
+    llm.cloud_chat([{"role": "user", "content": "REFUSE this"}])
+    check(False, "a refusal raises CloudError (the agent then answers locally)")
+except llm.CloudError as e:
+    check("declined" in str(e), f"a refusal raises CloudError (the agent then answers locally): {e}")
 
 print("an OpenAI-compatible service")
 ok, note = llm.cloud_setup({"provider": "OpenAI-compatible", "model": "some-model", "url": base + "/v1", "key": "sk-test"})
@@ -138,9 +172,12 @@ check(path == "/v1/chat/completions" and hdr.get("authorization") == "Bearer sk-
 check("max_tokens" in body and "max_completion_tokens" not in body and body["messages"] == HISTORY, "plain chat-completions body for a non-OpenAI host")
 ok, note = llm.cloud_setup({"provider": "openai", "model": "x", "url": base + "/v1", "key": "wrong"})
 check(not ok and "Incorrect API key" in note, f"a refused key is explained: {note}")
+llm.cloud_chat([{"role": "user", "content": "hi"}, {"role": "assistant", "content": "x", "_anthropic": [{"type": "text", "text": "x"}]},
+                {"role": "user", "content": "again"}])
+check(not any(k.startswith("_") for m in SEEN[-1][2]["messages"] for k in m), "this OS's private keys never reach another service")
 
 print("failures are explained")
-ok, note = llm.cloud_setup({"provider": "claude", "model": "claude-sonnet-5", "url": "http://127.0.0.1:1", "key": "sk-ant-test"})
+ok, note = llm.cloud_setup({"provider": "claude", "model": "claude-opus-5-5", "url": "http://127.0.0.1:1", "key": "sk-ant-test"})
 check(not ok and ("could not connect" in note or "refused" in note), f"a closed port: {note}")
 ok, note = llm.cloud_setup({"provider": "claude", "model": "", "url": base, "key": ""})
 check(not ok and "no API key" in note, f"missing key: {note}")

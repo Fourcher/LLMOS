@@ -3,21 +3,26 @@
   "id": "tiny",
   "name": "Whisper Tiny",
   "file": "ggml-tiny.bin",
-  "repo": "ggml-org/whisper.cpp",
+  "repo": "ggerganov/whisper.cpp",
   "size": 77691713,
-  "sha256": "",
+  "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
   "ram_gb": 1,
   "speed": "fastest",
   "accuracy": "basic",
   "langs": "99+",
-  "good_at": ["the smallest and fastest", "fine on a very old laptop"],
-  "limits": ["least accurate; stumbles on accents, names and noise"]
+  "good_at": [
+   "the smallest and fastest",
+   "fine on a very old laptop"
+  ],
+  "limits": [
+   "least accurate; stumbles on accents, names and noise"
+  ]
  },
  {
   "id": "base",
   "name": "Whisper Base",
   "file": "ggml-base.bin",
-  "repo": "ggml-org/whisper.cpp",
+  "repo": "ggerganov/whisper.cpp",
   "size": 147951465,
   "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
   "ram_gb": 1,
@@ -25,35 +30,51 @@
   "accuracy": "ok",
   "langs": "99+",
   "shipped": true,
-  "good_at": ["ships with the OS, ready at once", "quick, light, 99+ languages"],
-  "limits": ["makes more mistakes than the bigger models on hard audio"]
+  "good_at": [
+   "ships with the OS, ready at once",
+   "quick, light, 99+ languages"
+  ],
+  "limits": [
+   "makes more mistakes than the bigger models on hard audio"
+  ]
  },
  {
   "id": "small",
   "name": "Whisper Small",
   "file": "ggml-small.bin",
-  "repo": "ggml-org/whisper.cpp",
+  "repo": "ggerganov/whisper.cpp",
   "size": 487601967,
-  "sha256": "",
+  "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
   "ram_gb": 2,
   "speed": "medium",
   "accuracy": "good",
   "langs": "99+",
-  "good_at": ["clearly better than base", "still light enough for most machines"],
-  "limits": ["about half a gigabyte to download"]
+  "good_at": [
+   "clearly better than base",
+   "still light enough for most machines"
+  ],
+  "limits": [
+   "about half a gigabyte to download"
+  ]
  },
  {
   "id": "turbo",
   "name": "Whisper Large v3 Turbo",
   "file": "ggml-large-v3-turbo-q5_0.bin",
-  "repo": "ggml-org/whisper.cpp",
+  "repo": "ggerganov/whisper.cpp",
   "size": 574041195,
-  "sha256": "",
+  "sha256": "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
   "ram_gb": 3,
   "speed": "medium",
   "accuracy": "excellent",
   "langs": "99+",
-  "good_at": ["the best dictation here: near large-v3 accuracy, much faster", "handles accents, names and noise well", "99+ languages"],
-  "limits": ["about 0.6 GB to download; wants a few GB of memory"]
+  "good_at": [
+   "the best dictation here: near large-v3 accuracy, much faster",
+   "handles accents, names and noise well",
+   "99+ languages"
+  ],
+  "limits": [
+   "about 0.6 GB to download; wants a few GB of memory"
+  ]
  }
 ]

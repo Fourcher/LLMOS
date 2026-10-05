@@ -127,8 +127,13 @@ def download(mid, progress=None):
     if not m:
         raise ValueError(f"unknown model '{mid}'")
     if os.path.exists(path_of(m)):
-        return m
+        if verified(path_of(m), m["sha256"], progress):
+            return m
+        os.unlink(path_of(m))           # a damaged or replaced file is never used: it is fetched again
     need = m["size"] / 1024 ** 3 + 0.5
+    if _read_only(config.MODELS):
+        raise ValueError("this is the live USB/DVD, whose models can't be changed; say \"install LLM OS\" first, "
+                         "then models can be added and switched")
     if free_disk_gb() < need:
         raise ValueError(f"not enough disk space: {m['name']} needs {need:.1f} GB free")
     os.makedirs(config.MODELS, exist_ok=True)
@@ -152,9 +157,49 @@ def download(mid, progress=None):
         os.unlink(part)
         raise RuntimeError(f"checksum mismatch for {m['file']}: file deleted, nothing was loaded")
     os.replace(part, path_of(m))
+    _mark_verified(path_of(m), m["sha256"])
     if m.get("draft_file"):
         _download_draft(m, progress)
     return m
+
+
+def _read_only(path):
+    """True when nothing new can be written here (the live medium bind-mounts the models folder read-only)."""
+    d = path if os.path.isdir(path) else os.path.dirname(path) or "/"
+    try:
+        probe = os.path.join(d, ".llmos-wtest")
+        fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        os.close(fd)
+        os.unlink(probe)
+        return False
+    except OSError:
+        return os.path.isdir(d)        # exists but cannot be written to
+
+
+def _stamp(path, sha):
+    st = os.stat(path)
+    return f"{st.st_size}:{int(st.st_mtime)}:{sha}"
+
+
+def _mark_verified(path, sha):
+    try:
+        with open(path + ".verified", "w") as f:
+            f.write(_stamp(path, sha))
+    except OSError:
+        pass                            # a read-only medium (the live ISO): it is simply checked again next time
+
+
+def verified(path, sha, progress=None):
+    """Does a model file on disk match its pinned SHA-256? Hashed once per version of the file (size and time)."""
+    try:
+        if open(path + ".verified").read().strip() == _stamp(path, sha):
+            return True
+    except OSError:
+        pass
+    if sha256_file(path, progress) != sha:
+        return False
+    _mark_verified(path, sha)
+    return True
 
 
 def draft_path(m):

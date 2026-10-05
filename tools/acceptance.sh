@@ -103,7 +103,11 @@ lock)
   M=$($V mark $L)
   say "lock"
   $V wait $L 'Passphrase' 60 --from $M | grep -vE '^\s*$' | tail -4
+  # the vault must actually be unmounted + closed while locked
+  $V run $S $L 'echo "LOCKCHECK mounted=$(mount | grep -c " /root ") crypt=$(cryptsetup status llmos-vault >/dev/null 2>&1 && echo active || echo inactive)"' '^LOCKCHECK' 30 --quiet 1 | tr -d "\r" | grep -q "LOCKCHECK mounted=0 crypt=inactive" && echo "  vault closed while locked: OK" || echo "  !! FAIL: vault still open while locked"
   say "wrong one"; sleep 6
+  # a wrong passphrase must NOT unlock: the prompt is still the lock screen, not the desk's "›"
+  $V run $S $L 'if [ -S /run/llmos/desk.sock ]; then llmos desk-state | grep -o "\"screen\": \"[a-z]*\""; else echo "console-locked"; fi' '^' 20 --quiet 1 | tr -d "\r" | grep -Eq 'screen": "lock|console-locked' && echo "  wrong passphrase stayed locked: OK" || echo "  !! FAIL: wrong passphrase got in"
   say "correct horse battery"
   $V wait $L '› $' 90 --from $M | grep -vE '^\s*$' | tail -8
   ;;

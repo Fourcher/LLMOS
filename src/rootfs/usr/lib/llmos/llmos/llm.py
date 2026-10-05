@@ -55,6 +55,28 @@ def health():
         return False
 
 
+_ctx_cache = [0.0, None]
+
+
+def context_size():
+    """The model server's context window in tokens (from llama-server's /props), or None if it cannot say.
+    Checked at most once a minute: switching models restarts the server, possibly with another size."""
+    if time.time() - _ctx_cache[0] < 60:
+        return _ctx_cache[1]
+    n = None
+    try:
+        c = _conn(3)
+        c.request("GET", "/props")
+        r = c.getresponse()
+        d = json.loads(r.read() or b"{}") if r.status == 200 else {}
+        c.close()
+        n = int((d.get("default_generation_settings") or {}).get("n_ctx") or d.get("n_ctx") or 0) or None
+    except (OSError, ValueError):
+        n = None
+    _ctx_cache[:] = [time.time(), n]
+    return n
+
+
 def wait_ready(timeout=600, tick=None):
     t0 = time.time()
     while time.time() - t0 < timeout:
@@ -108,13 +130,18 @@ def _read_stream(lines, on_text):
     return content, [calls[i] for i in sorted(calls)], timings, "\n".join(other)
 
 
+def _plain(messages):
+    """Messages without this OS's private bookkeeping keys (such as the online model's own blocks)."""
+    return [{k: v for k, v in m.items() if not str(k).startswith("_")} for m in messages]
+
+
 def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
          json_schema=None, think=None):
     """Stream one completion from the on-device model. Returns {"content", "tool_calls", "timings"}.
     Tool calls are accumulated from streamed deltas."""
     if think is None:
         think = bool(config.settings.get("think"))
-    body = {"messages": messages, "stream": True, "temperature": temperature,
+    body = {"messages": _plain(messages), "stream": True, "temperature": temperature,
             "top_p": 0.95, "max_tokens": max_tokens, "cache_prompt": True,
             "chat_template_kwargs": {"enable_thinking": think}}
     if tools:
@@ -153,7 +180,7 @@ def decide(messages, labels, question=None, prefill="", tools=None, top=20):
     prompt cache already holds everything up to the owner's words, so only the question is new, and the reply
     that follows reuses the cache. question is appended to the last user message; prefill starts the answer.
     Returns ({label: probability, renormalised over the labels}, timings), or (None, {}) when it cannot say."""
-    msgs = [dict(m) for m in messages]
+    msgs = [dict(m) for m in _plain(messages)]
     if question:
         msgs[-1]["content"] = (msgs[-1].get("content") or "") + "\n\n" + question
     if prefill:
@@ -214,13 +241,16 @@ CLOUD_PROVIDERS = {
     "anthropic": {
         "name": "Claude", "url": "https://api.anthropic.com", "key_hint": "sk-ant-…",
         "console": "console.anthropic.com",
-        "models": [{"id": "claude-sonnet-5", "name": "Claude Sonnet 5", "note": "fast and capable; the usual choice",
-                    "speed": "fast", "cost": "moderate", "good_at": ["coding, analysis and writing", "the everyday online choice"], "limits": ["not the very strongest for the hardest problems"]},
-                   {"id": "claude-opus-5-5", "name": "Claude Opus 5.5", "note": "stronger and slower; costs more",
-                    "speed": "slower", "cost": "high", "good_at": ["the hardest reasoning and long code"], "limits": ["slower and more expensive per use"]},
+        "models": [{"id": "claude-opus-5-5", "name": "Claude Opus 5.5", "note": "strong and thorough; the usual choice",
+                    "speed": "moderate", "cost": "moderate", "good_at": ["hard reasoning, long code and writing", "the everyday online choice"],
+                    "limits": ["thinks before answering, so a reply takes a little longer"]},
+                   {"id": "claude-sonnet-5-5", "name": "Claude Sonnet 5.5", "note": "fast and capable; half the price of Opus",
+                    "speed": "fast", "cost": "lower", "good_at": ["everyday coding, analysis and writing", "quick replies"],
+                    "limits": ["not the strongest for the hardest problems"]},
                    {"id": "claude-fable-5-1", "name": "Claude Fable 5.1", "note": "the most capable",
-                    "speed": "slower", "cost": "high", "good_at": ["the most capable model here", "the toughest tasks"], "limits": ["the most expensive; slower"]},
-                   {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5", "note": "fastest and cheapest",
+                    "speed": "slower", "cost": "high", "good_at": ["the most capable model here", "the toughest, longest tasks"],
+                    "limits": ["the most expensive; long requests can take minutes"]},
+                   {"id": "claude-haiku-4-5", "name": "Claude Haiku 4.5", "note": "fastest and cheapest",
                     "speed": "fastest", "cost": "low", "good_at": ["quick answers", "cheapest per use"], "limits": ["least capable of the four"]}]},
     # any service speaking the chat-completions API: OpenAI, Mistral, Groq, OpenRouter, a bigger computer at home…
     "openai": {"name": "OpenAI-compatible", "url": "https://api.openai.com/v1", "key_hint": "sk-…", "console": "",
@@ -348,6 +378,11 @@ def _anthropic_messages(messages):
                 system.append(str(content))
         elif role == "tool":
             add("user", {"type": "tool_result", "tool_use_id": str(m.get("tool_call_id") or "call"), "content": str(content or "")})
+        elif role == "assistant" and m.get("_anthropic"):
+            # Claude's own blocks for this turn, sent back unchanged: current models think before answering, and
+            # a tool-use turn replayed without its thinking blocks (or with them edited) is rejected
+            for b in m["_anthropic"]:
+                add("assistant", b)
         elif role == "assistant":
             text = str(content or "").strip()
             blocks = [{"type": "text", "text": text}] if text else []
@@ -372,8 +407,11 @@ def _anthropic_messages(messages):
 
 
 def _anthropic(c, messages, tools, on_text, max_tokens, temperature):
+    # Current Claude models think before they answer (thinking is on by default and counts toward max_tokens) and
+    # reject sampling settings (temperature/top_p/top_k), so none is sent and real requests get room to think.
     system, msgs = _anthropic_messages(messages)
-    body = {"model": c["model"], "max_tokens": max_tokens, "messages": msgs, "stream": True, "temperature": temperature}
+    body = {"model": c["model"], "max_tokens": max_tokens if max_tokens < 256 else max(max_tokens, 16000),
+            "messages": msgs, "stream": True}
     if system:
         body["system"] = system
     if tools:
@@ -383,7 +421,7 @@ def _anthropic(c, messages, tools, on_text, max_tokens, temperature):
     if not url.endswith("/v1/messages"):
         url += "/v1/messages"
     s = _Stream(url, {"x-api-key": c["key"], "anthropic-version": "2023-06-01"}, body)
-    content, calls, other = "", {}, []
+    content, calls, other, blocks, refused = "", {}, [], {}, False
     try:
         for raw in s:
             line = raw.decode("utf-8", "replace").strip()
@@ -397,31 +435,57 @@ def _anthropic(c, messages, tools, on_text, max_tokens, temperature):
                 continue
             typ = ev.get("type")
             if typ == "content_block_start":
-                blk = ev.get("content_block") or {}
+                blk = dict(ev.get("content_block") or {})
+                i = ev.get("index", 0)
                 if blk.get("type") == "tool_use":
-                    calls[ev.get("index", 0)] = {"id": str(blk.get("id") or ""), "name": str(blk.get("name") or ""), "arguments": ""}
+                    calls[i] = {"id": str(blk.get("id") or ""), "name": str(blk.get("name") or ""), "arguments": ""}
+                blocks[i] = blk
             elif typ == "content_block_delta":
                 d = ev.get("delta") or {}
+                i = ev.get("index", 0)
+                b = blocks.get(i)
                 if d.get("type") == "text_delta" and d.get("text"):
                     content += d["text"]
+                    if b is not None:
+                        b["text"] = b.get("text", "") + d["text"]
                     if on_text:
                         on_text(d["text"])
                 elif d.get("type") == "input_json_delta":
-                    e = calls.get(ev.get("index", 0))
+                    e = calls.get(i)
                     if e is not None:
                         e["arguments"] += d.get("partial_json", "")
+                elif d.get("type") == "thinking_delta" and b is not None:
+                    b["thinking"] = b.get("thinking", "") + d.get("thinking", "")
+                elif d.get("type") == "signature_delta" and b is not None:
+                    b["signature"] = b.get("signature", "") + d.get("signature", "")
+            elif typ == "message_delta":
+                if (ev.get("delta") or {}).get("stop_reason") == "refusal":
+                    refused = True
             elif typ == "error":
                 raise CloudError(str((ev.get("error") or {}).get("message") or ev)[:200])
     finally:
         rc, err = s.finish()
     if rc != 0 and not content and not calls:
         raise CloudError(_explain(rc, err, "\n".join(other)))
-    out = []
+    if refused:
+        # the service's own safety check declined: the request is answered on this computer instead
+        raise CloudError("the online model declined this request")
+    out, raw = [], []
     for i in sorted(calls):
         e = calls[i]
         e["arguments"] = e["arguments"].strip() or "{}"
         out.append(e)
-    return {"content": content, "tool_calls": out, "timings": {}}
+    for i in sorted(blocks):
+        b = blocks[i]
+        if b.get("type") == "tool_use":
+            try:
+                b["input"] = json.loads(calls[i]["arguments"])
+            except (ValueError, KeyError):
+                b["input"] = {}
+        if b.get("type") == "text" and not b.get("text"):
+            continue                          # the API rejects empty text blocks
+        raw.append(b)
+    return {"content": content, "tool_calls": out, "timings": {}, "raw": raw}
 
 
 def _openai(c, messages, tools, on_text, max_tokens, temperature):
@@ -429,7 +493,7 @@ def _openai(c, messages, tools, on_text, max_tokens, temperature):
     if not url.endswith("/chat/completions"):
         url += "/chat/completions"
     official = urllib.parse.urlparse(url).hostname == "api.openai.com"
-    body = {"model": c["model"], "messages": messages, "stream": True}
+    body = {"model": c["model"], "messages": _plain(messages), "stream": True}
     body["max_completion_tokens" if official else "max_tokens"] = max_tokens   # OpenAI's newer models reject the old name
     if not official:
         body["temperature"] = temperature

@@ -71,6 +71,8 @@ def setup(address, password, imap_host="", smtp_host="", imap_port=0, smtp_port=
 def _smtp_check(acct):
     """Connect to the SMTP server (and log in where it takes credentials) so a
     wrong host is caught at setup, not at the first send."""
+    if config.settings.get("tor"):
+        raise MailError(_TOR_BLOCKS)
     sec = acct.get("smtp_security", "starttls")
     try:
         if sec == "ssl":
@@ -88,10 +90,22 @@ def _smtp_check(acct):
         raise MailError(f"IMAP is fine but SMTP at {acct['smtp_host']}:{acct['smtp_port']} failed: {e}")
 
 
+_TOR_BLOCKS = ("Tor is on, and email cannot be carried through it, so it is blocked to keep this computer's address "
+               "private. Turn Tor off to use email.")
+
+
+def _q(name):
+    """A mailbox name or search text as an IMAP quoted string: "[Gmail]/All Mail" has a space and brackets, and a
+    quote in the text must not end the command."""
+    return '"' + str(name).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
 def _imap(acct=None):
     acct = acct or account()
     if not acct:
         raise MailError("no email account is set up yet")
+    if config.settings.get("tor"):
+        raise MailError(_TOR_BLOCKS)
     try:
         if acct["imap_ssl"]:
             conn = imaplib.IMAP4_SSL(acct["imap_host"], acct["imap_port"], ssl_context=ssl.create_default_context(), timeout=30)
@@ -157,16 +171,16 @@ def _folder_name(conn, kind):
         if any(w in low for w in wanted):
             return name
     if kind == "archive":
-        conn.create("Archive")
+        conn.create(_q("Archive"))
         return "Archive"
-    conn.create("Trash")
+    conn.create(_q("Trash"))
     return "Trash"
 
 
 def unread(limit=20, folder="INBOX"):
     conn = _imap()
     try:
-        conn.select(folder, readonly=True)
+        conn.select(_q(folder), readonly=True)
         typ, data = conn.uid("search", None, "UNSEEN")
         uids = (data[0].split() if data and data[0] else [])[-limit:]
         out = []
@@ -192,7 +206,7 @@ def unread(limit=20, folder="INBOX"):
 def count_unread(folder="INBOX"):
     conn = _imap()
     try:
-        conn.select(folder, readonly=True)
+        conn.select(_q(folder), readonly=True)
         typ, data = conn.uid("search", None, "UNSEEN")
         return len(data[0].split()) if data and data[0] else 0
     finally:
@@ -202,7 +216,7 @@ def count_unread(folder="INBOX"):
 def read(uid, folder="INBOX", mark_seen=True):
     conn = _imap()
     try:
-        conn.select(folder, readonly=not mark_seen)
+        conn.select(_q(folder), readonly=not mark_seen)
         typ, d = conn.uid("fetch", str(uid), "(RFC822)")
         raw = next((item[1] for item in d or [] if isinstance(item, tuple)), None)
         if not raw:
@@ -218,17 +232,19 @@ def read(uid, folder="INBOX", mark_seen=True):
 def move(uids, kind="archive", folder="INBOX"):
     conn = _imap()
     try:
-        conn.select(folder)
+        conn.select(_q(folder))
         dest = _folder_name(conn, kind)
         done = []
         for uid in uids:
             uid = str(uid)
-            typ, _ = conn.uid("copy", uid, dest)
+            typ, _ = conn.uid("copy", uid, _q(dest))
             if typ == "OK":
                 conn.uid("store", uid, "+FLAGS", "(\\Deleted)")
                 done.append(uid)
         conn.expunge()
         return done, dest
+    except imaplib.IMAP4.error as e:
+        raise MailError(f"the mail server refused: {e}")
     finally:
         conn.logout()
 
@@ -247,6 +263,8 @@ def send(to, subject, body, in_reply_to=None, references=None):
         msg["In-Reply-To"] = in_reply_to
         msg["References"] = (references or in_reply_to)
     msg.set_content(body)
+    if config.settings.get("tor"):
+        raise MailError(_TOR_BLOCKS)
     sec = acct.get("smtp_security", "starttls")
     try:
         if sec == "ssl":
@@ -300,10 +318,10 @@ def find(query, limit=5):
         except Exception:
             pass
         for folder in folders:
-            typ, _ = conn.select(folder, readonly=True)
+            typ, _ = conn.select(_q(folder), readonly=True)
             if typ != "OK":
                 continue
-            crit = f'(OR FROM "{q}" SUBJECT "{q}")'
+            crit = f"(OR FROM {_q(q)} SUBJECT {_q(q)})"
             typ, data = conn.uid("search", None, crit)
             uids = data[0].split() if typ == "OK" and data and data[0] else []
             for uid in reversed(uids[-limit:]):
@@ -315,6 +333,8 @@ def find(query, limit=5):
             if out:
                 break
         return out
+    except imaplib.IMAP4.error as e:
+        raise MailError(f"the mail server refused the search: {e}")
     finally:
         conn.logout()
 

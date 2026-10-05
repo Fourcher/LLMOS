@@ -8,6 +8,8 @@ Returns a (tool_name, args) pair to run directly, or None to defer to the model.
 """
 import re
 
+from . import i18n
+
 # "remember (that) X", "don't forget (that) X", "keep in mind (that) X",
 # "make a note (that) X", "note (that) X". The connector is captured: a "to"
 # connector ("remember to buy milk") is a reminder/task, not a fact, so we
@@ -92,7 +94,8 @@ def _schedule(text):
 # message. Only when a mail account exists; small models otherwise read the
 # time words in the text as a scheduling request.
 _REPLY = re.compile(
-    r"^\s*(?:please\s+)?(?:reply|respond|answer)\s+(?:back\s+)?to\s+(?P<who>[A-Za-z][\w.'\- ]{0,40}?)"
+    r"^\s*(?:please\s+)?(?:reply|respond|answer)\s+(?:back\s+)?to\s+"
+    r"(?P<who>(?!(?:the|a|an|this|that|these|those|my|our|your|his|her|their|its|it|him|them|me|us)\b)[A-Za-z][\w.'\- ]{0,40}?)"
     r"(?:'s\s+(?:e-?mail|message|mail))?\s*(?:,|:|that|saying|with|and say|and tell (?:him|her|them))\s+(?P<body>.+?)\s*$",
     re.I)
 
@@ -174,8 +177,9 @@ def _mail_setup(text):
 # named a colour the theme engine knows, so the change is exact (the model
 # once turned "everything green" into black text on white with green frames).
 # Anything vaguer about the look ("make it cosier") still goes to the model.
+# "no corners" is the brief's own example of rounding everything ("no corners and everything to be rounded")
 _CORNER_WORDS = {"square": "square", "sharp": "square", "rounded": "rounded", "round": "rounded",
-                 "double": "double", "heavy": "heavy", "no": "none", "none": "none"}
+                 "double": "double", "heavy": "heavy", "no": "rounded", "none": "none"}
 _LOOK = re.compile(
     r"^\s*(?:please\s+)?(?:make|turn|set|change|paint|colou?r)\s+"
     r"(?P<what>everything|it all|it|the\s+(?:whole\s+)?(?:screen|interface|ui|display|theme|look|console|terminal|colou?rs?)|"
@@ -335,9 +339,12 @@ _SPEAK = re.compile(r"^\s*(?:please\s+)?(?:(?P<on>(?:read|speak|say)\s+(?:your\s
                     r"|(?P<off>(?:stop|don'?t)\s+(?:reading|speaking|saying)\s+(?:your\s+|the\s+)?(?:replies|answers|responses)(?:\s+aloud|\s+out\s+loud)?|(?:be\s+)?quiet|stop\s+talking))\s*[.!]?\s*$", re.I)
 _FOCUS = re.compile(r"^\s*(?:please\s+)?(?:(?P<on>(?:turn\s+on|enable|start|begin)\s+focus(?:\s+mode)?|focus\s+mode(?:\s+on)?|focus)(?:\s+for\s+(?P<n>\d+)\s*(?P<u>minutes?|mins?|hours?|hrs?))?"
                     r"|(?P<off>(?:turn\s+off|disable|stop|end)\s+focus(?:\s+mode)?|focus\s+mode\s+off))\s*[.!]?\s*$", re.I)
-_LANGUAGE = re.compile(r"^\s*(?:please\s+)?(?:(?:put|switch|set|change|make|turn)\s+(?:everything|the\s+(?:whole\s+)?(?:interface|system|os|ui)|it|yourself|all\s+of\s+it)\s+(?:back\s+)?(?:in|to|into)\s+|speak\s+|talk\s+(?:to\s+me\s+)?in\s+|(?:use|switch\s+to)\s+)"
+_LANGUAGE = re.compile(r"^\s*(?:please\s+)?(?:(?:put|switch|set|change|make|turn)\s+(?:everything|the\s+(?:whole\s+)?(?:interface|system|os|ui)|it|yourself|all\s+of\s+it)\s+(?:back\s+)?(?:in|to|into)\s+|speak\s+(?:in\s+)?|talk\s+(?:to\s+me\s+)?in\s+|(?:use|switch\s+to)\s+)"
                        r"(?P<lang>[^\W\d_][^\W\d_ ]{1,20}(?:\s+\([^)]{2,20}\))?)\s*(?:from\s+now\s+on)?\s*[.!]?\s*$", re.I)
-_SPLIT_LANG = re.compile(r"^\s*(?:please\s+)?(?:put\s+|show\s+|make\s+)?(?:the\s+)?settings\s+in\s+(?P<sl>[^\W\d_]{2,20})(?:\s*,?\s*(?:but|and)\s+(?:keep\s+)?(?:everything\s+else|the\s+rest|all\s+else)\s+in\s+(?P<l>[^\W\d_]{2,20}))?\s*[.!]?\s*$", re.I)
+_SPLIT_LANG = re.compile(r"^\s*(?:please\s+)?(?:i\s+(?:want|would\s+like|'d\s+like)\s+)?(?:put\s+|show\s+|make\s+|set\s+)?(?:the\s+)?"
+                         r"settings\s+(?:in|to)\s+(?P<sl>[^\W\d_]{2,20})(?:\s*[,;]?\s*(?:but|and|with)?\s*(?:keep\s+)?"
+                         r"(?:everything\s+else|(?:the\s+)?rest(?:\s+of\s+(?:the\s+)?(?:os|system|interface|computer|ui|desk))?|all\s+else)"
+                         r"\s+(?:in|to)\s+(?P<l>[^\W\d_]{2,20}))?\s*[.!]?\s*$", re.I)
 _POWER = re.compile(r"^\s*(?:please\s+)?(?:(?P<off>shut\s*down|power\s+off|turn\s+off|switch\s+off|power\s+down)|(?P<re>restart|reboot))"
                     r"(?:\s+(?:the\s+|this\s+|my\s+)?(?:computer|machine|pc|system|laptop|it|yourself|llm\s*os))?(?:\s+now|\s+please)?\s*[.!]?\s*$", re.I)
 _NOT_A_LANGUAGE = {"purple", "green", "blue", "red", "black", "white", "dark", "light", "chinese food", "order", "half", "full", "focus"}
@@ -503,7 +510,7 @@ def _policy(text):
             args["minutes"] = n * 60 if m.group("u").lower().startswith("h") else n
         return ("change_setting", args)
     m = _SPLIT_LANG.match(text)
-    if m:
+    if m and i18n.is_language(m.group("sl")) and (not m.group("l") or i18n.is_language(m.group("l"))):
         args = {"settings_language": m.group("sl")}
         if m.group("l"):
             args["language"] = m.group("l")
@@ -511,7 +518,7 @@ def _policy(text):
     m = _LANGUAGE.match(text)
     if m:
         lang = m.group("lang").strip()
-        if lang.lower() not in _NOT_A_LANGUAGE and not _QUESTION.search(text):
+        if lang.lower() not in _NOT_A_LANGUAGE and not _QUESTION.search(text) and i18n.is_language(lang):
             from . import ui
             if ui.parse_color(lang) is None:
                 return ("set_appearance", {"language": lang})

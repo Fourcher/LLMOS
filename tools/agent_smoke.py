@@ -54,7 +54,7 @@ CASES = [
     ("every weekday at 8am give me a summary of my day", "schedule_task"),
     ("turn the brightness up to 70", "set_brightness"),
     ("switch to hands-on mode", "change_setting"),
-    ("write a file /tmp/hello.txt that says hi", "write_file"),
+    ("write a file hello.txt in my home folder that says hi", "write_file"),
     ("show me the settings screen", "show_panel"),
 ]
 
@@ -80,7 +80,8 @@ def main():
     print("tasks:", [t['desc'] for t in store.tasks()])
     print("appearance:", config.settings.get("appearance"))
     print("autonomy:", config.settings.get("autonomy"))
-    print("hello.txt:", open("/tmp/hello.txt").read().strip() if os.path.exists("/tmp/hello.txt") else "(missing)")
+    _hello = os.path.join(os.environ["LLMOS_HOME"], "hello.txt")
+    print("hello.txt:", open(_hello).read().strip() if os.path.exists(_hello) else "(missing)")
 
 if __name__ == "__main__":
     main()

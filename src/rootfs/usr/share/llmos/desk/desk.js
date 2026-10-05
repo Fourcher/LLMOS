@@ -45,7 +45,7 @@
     flush();
     return html;
   }
-  function say(text) { if (text && text.trim()) post({ t: "say", text: text.trim() }); }
+  function say(text) { if (!text || !text.trim()) return; if (text.trim().toLowerCase() === "lock") { post({ t: "lock" }); return; } post({ t: "say", text: text.trim() }); }
   document.addEventListener("click", (e) => {
     const a = e.target.closest("a[data-url]");
     if (a) { e.preventDefault(); say("open " + a.dataset.url + " in the browser"); }
@@ -132,7 +132,7 @@
     const g = full ? (0.25 + 0.75 * (1 - Math.cos(performance.now() / 4600 * 2 * Math.PI)) / 2).toFixed(2) : "0.3";
     if (g !== lastGlow) { lastGlow = g; for (const h of document.querySelectorAll(".screen:not(.hidden) .halo, #desk:not(.hidden) .halo")) h.style.opacity = g; }
     const thinking = document.querySelectorAll(".orb.thinking");
-    if (lvl !== "off" && thinking.length) { const a = Math.round(performance.now() / 125) * 45 % 360; if (a !== lastSpin) { lastSpin = a; thinking.forEach(o => o.style.setProperty("--spin", a + "deg")); } }
+    if (lvl === "full" && thinking.length) { const a = Math.round(performance.now() / 125) * 45 % 360; if (a !== lastSpin) { lastSpin = a; thinking.forEach(o => o.style.setProperty("--spin", a + "deg")); } }
     setTimeout(tick, software ? 250 : 100);
   }
   tick();
@@ -181,19 +181,19 @@
   function screen(m) {
     ["screen-boot", "screen-lock", "screen-wizard", "screen-bye", "desk"].forEach(id => $(id).classList.add("hidden"));
     $("boot-orb").classList.remove("thinking");
-    if (m.name === "lock") { $("screen-lock").classList.remove("hidden"); $("lock-error").textContent = ""; $("lock-note").textContent = (m.data || {}).note || ""; $("lock-pass").value = ""; setTimeout(() => $("lock-pass").focus(), 50); }
+    if (m.name === "lock") { $("lock-go").disabled = false; $("screen-lock").classList.remove("hidden"); $("lock-error").textContent = ""; $("lock-note").textContent = (m.data || {}).note || ""; $("lock-pass").value = ""; setTimeout(() => $("lock-pass").focus(), 50); }
     else if (m.name === "wizard") { $("screen-wizard").classList.remove("hidden"); wizard.start(m.data || {}); }
     else if (m.name === "bye") { $("screen-bye").classList.remove("hidden"); $("bye-text").textContent = (m.data || {}).text || ""; }
     else if (m.name === "desk") { $("desk").classList.remove("hidden"); wizard.active = false; if (!conv.length) $("hint").textContent = t("d_shortcuts"); setTimeout(() => $("in").focus(), 50); idle(); }
     else $("screen-boot").classList.remove("hidden");
   }
-  $("lock-go").onclick = () => { const p = $("lock-pass").value; if (p) { $("lock-busy").classList.remove("hidden"); post({ t: "unlock", passphrase: p }); } };
+  $("lock-go").onclick = () => { const p = $("lock-pass").value; if (p && !$("lock-go").disabled) { $("lock-go").disabled = true; $("lock-busy").classList.remove("hidden"); post({ t: "unlock", passphrase: p }); } };
   $("lock-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("lock-go").click(); });
 
   // ---------------------------------------------------------------- first-run set-up
   const wizard = {
     active: false, i: 0, data: {}, answers: {}, tz: null, wifiSel: null, nets: null, wifiNeeded: false, cloudNeeded: false, summary: null,
-    steps: ["welcome", "language", "name", "timezone", "profile", "wifi", "cloud", "passphrase", "done"],
+    steps: ["welcome", "language", "name", "timezone", "profile", "passphrase", "wifi", "cloud", "done"],
     start(data) { this.active = true; this.i = 0; this.data = data; this.answers = {}; this.tz = data.tz_label || null; this.wifiNeeded = false; this.cloudNeeded = false; this.summary = null; this.nets = null; if (data.lang_hint) this.answers.language = data.lang_hint; this.render(); },
     step() { return this.steps[this.i]; },
     hidden(s) { return (s === "wifi" && !this.wifiNeeded) || (s === "cloud" && !this.cloudNeeded); },
@@ -209,7 +209,7 @@
       const next = el("button", "btn primary", esc(t("d_next")));
       const back = el("button", "btn ghost", esc(t("d_back")));
       back.onclick = () => { if (this.i > 0) { this.i--; while (this.i > 0 && this.hidden(this.step())) this.i--; this.back = true; this.render(); } };
-      const submit = (value) => { if (st !== "cloud") this.answers[st] = value; post({ t: "wizard", step: st, value }); next.disabled = true; };
+      const submit = (value) => { if (!["cloud", "passphrase", "wifi"].includes(st)) this.answers[st] = value; post({ t: "wizard", step: st, value }); next.disabled = true; };
       const pickList = (box, items, key, render) => {
         for (const it of items) {
           const b = el("button", "opt" + (this.answers[key] === it.value ? " sel" : ""), render(it));
@@ -260,7 +260,7 @@
         const meaning = (q, v) => { if (q.k === "brain" && P.internet >= 67) return t("q_brain_offline"); const i = q.n === 2 ? (v < 50 ? 0 : 1) : (v < 34 ? 0 : v < 67 ? 1 : 2); return t(`q_${q.k}_${i}`); };
         const models = this.data.models || [], ram = this.data.ram_gb || 0;
         const pick = () => {
-          const fits = models.filter(x => x.ram_gb <= ram - 1).sort((a, b) => a.size_gb - b.size_gb);
+          const fits = models.filter(x => x.ram_gb <= ram - 1 && (P.internet < 67 || x.installed)).sort((a, b) => a.size_gb - b.size_gb);
           if (!fits.length) { $("wz-pick").textContent = ""; return; }
           const c = P.capability, x = c < 34 ? fits[0] : c < 67 ? fits[Math.floor(fits.length / 2)] : fits[fits.length - 1];
           $("wz-pick").textContent = fmt("w_quiz_model", { model: x.name + (x.installed ? "" : ` (${x.size_gb} GB, ${t("w_quiz_download")})`) }) + " · " + fmt("w_quiz_ram", { ram });
@@ -698,10 +698,17 @@
     const ov = $("overlay"); ov.innerHTML = ""; ov.classList.remove("hidden"); dialogOpen = true; presence();
     const d = el("div", "dlg" + (m.danger ? " danger" : ""), `<h3><i class="orb small attention"></i>${esc(m.title)}</h3><div class="body${m.mono ? " mono" : ""}">${esc(m.text)}</div>`);
     const row = el("div", "row");
-    for (const b of m.buttons) { const btn = el("button", "btn" + (b.primary ? " primary" : ""), esc(b.label)); btn.onclick = () => { dialogDone(ov); post({ t: "dialog", id: m.id, value: b.value }); }; row.append(btn); }
+    const shown = Date.now();
+    for (const b of m.buttons) {
+      const btn = el("button", "btn" + (b.primary ? " primary" : ""), esc(b.label));
+      btn.dataset.value = b.value;
+      btn.onclick = (e) => { if (e.detail === 0 && Date.now() - shown < 600) return; dialogDone(ov); post({ t: "dialog", id: m.id, value: b.value }); };
+      row.append(btn);
+    }
     d.append(row); ov.append(d);
     ov.dataset.id = m.id;
-    setTimeout(() => { const p = d.querySelector(".primary"); if (p) p.focus(); }, 30);
+    d.tabIndex = -1;
+    setTimeout(() => { const no = m.danger && d.querySelector('[data-value="no"]'); (no || d).focus(); }, 30);
   }
 
   // ---------------------------------------------------------------- input
@@ -729,7 +736,7 @@
       if (e.key === "Escape") { dialogDone(ov); post({ t: "dialog", id: ov.dataset.id, value: "no" }); }
       return;
     }
-    if (wizard.active) return;
+    if (wizard.active || $("desk").classList.contains("hidden")) return;
     if (e.key === "Escape") {
       if (document.activeElement === inp && inp.value) { inp.value = ""; return; }
       if (focused && wins.has(focused.dataset.id)) { closeWindow(focused.dataset.id, true); focused = null; return; }
@@ -738,7 +745,7 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "l") { e.preventDefault(); inp.focus(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "w" && focused && wins.has(focused.dataset.id)) { e.preventDefault(); closeWindow(focused.dataset.id, true); focused = null; }
     if (e.key === "F1") { e.preventDefault(); post({ t: "voice" }); }
-    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.tagName !== "SELECT") inp.focus();
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && !(e.key === " " && document.activeElement.tagName === "BUTTON") && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.tagName !== "SELECT") inp.focus();
   });
 
   // ---------------------------------------------------------------- dispatch
@@ -768,7 +775,7 @@
         case "wizard.error": return wizard.error(m);
         case "tz.results": if (wizard.active && wizard.onTz) wizard.onTz(m.items || []); return;
         case "wifi.list": wizard.nets = m.items || []; if (wizard.active && wizard.onWifi) wizard.onWifi(wizard.nets); return;
-        case "unlock.error": { $("lock-busy").classList.add("hidden"); $("lock-error").textContent = m.text; $("lock-pass").value = ""; $("lock-pass").focus();
+        case "unlock.error": { $("lock-go").disabled = false; $("lock-busy").classList.add("hidden"); $("lock-error").textContent = m.text; $("lock-pass").value = ""; $("lock-pass").focus();
           const c = $("lock-card"); c.classList.remove("shake"); void c.offsetWidth; c.classList.add("shake"); return; }
         case "speaking": speaking = !!m.on; presence(); return;
         case "unlock.busy": $("lock-busy").classList.remove("hidden"); return;

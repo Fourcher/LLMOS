@@ -231,6 +231,10 @@ EOF
 fi
 umount $TARGET/dev $TARGET/proc $TARGET/sys
 
+log "package manifest (for the auditor: every package and version, all from Alpine's signed repos)"
+mkdir -p $TARGET/etc/llmos
+chroot $TARGET apk list -I 2>/dev/null | sort > $TARGET/etc/llmos/packages.txt || true
+
 log "scrub build traces"
 rm -rf $TARGET/var/cache/apk/* $TARGET/root/.ash_history $TARGET/root/.cache $TARGET/tmp/* 2>/dev/null || true
 find $TARGET/var/log -type f -exec truncate -s 0 {} + 2>/dev/null || true

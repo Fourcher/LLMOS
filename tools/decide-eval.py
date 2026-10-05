@@ -110,7 +110,7 @@ def main():
             if name == "shipped":
                 p, info = agent.route_score(msgs)
             else:
-                p, info = llm.decide(msgs, labels, question=question, prefill=prefill, tools=tools.schemas())
+                p, info = llm.decide(msgs, labels, question=question, prefill=prefill, tools=agent.tool_schemas())
                 p = p.get(labels[1]) if p else None
             secs.append(time.time() - t0)
             toks.append((info or {}).get("prompt_n") or 0)

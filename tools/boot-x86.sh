@@ -15,6 +15,8 @@ HOST_ARGS=""
 [ -n "${LLMOS_HOSTGPU_URL:-}" ] && HOST_ARGS="-fw_cfg name=opt/llmos/model_url,string=$LLMOS_HOSTGPU_URL -fw_cfg name=opt/llmos/model_id,string=${LLMOS_HOSTGPU_ID:-ministral-3-3b}"
 # LLMOS_TESTSHELL=1: plain root shell on the serial line; LLMOS_EXTRA_DRIVE=file.qcow2: a second disk
 [ "${LLMOS_TESTSHELL:-0}" = 1 ] && HOST_ARGS="$HOST_ARGS -fw_cfg name=opt/llmos/testshell,string=1"
+# LLMOS_MIC=1: the launcher's microphone bridge is this computer's microphone (tools/fake-mic-bridge.py)
+[ "${LLMOS_MIC:-0}" = 1 ] && HOST_ARGS="$HOST_ARGS -fw_cfg name=opt/llmos/mic,string=1"
 [ -n "${LLMOS_EXTRA_DRIVE:-}" ] && HOST_ARGS="$HOST_ARGS -drive file=$LLMOS_EXTRA_DRIVE,format=qcow2,if=virtio"
 FWARGS=""
 if [ "$MODE" = uefi ]; then

@@ -23,6 +23,7 @@ vsh() {
         | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g' | grep -vE "^\s*$|DONE_|^llmos:[^ ]*# *$"
 }
 
+RC=0
 echo "### dictation smoke ($A) $(date '+%H:%M:%S') on $IMG"
 pkill -f "fake-mic-bridge.py" 2>/dev/null; sleep 0.5
 nohup python3 tools/fake-mic-bridge.py run/dict-speech.wav --port 8766 > run/fake-mic.log 2>&1 &
@@ -37,16 +38,19 @@ sleep 1; head -1 run/fake-mic.log
 
 OFF=$(python3 tools/vmctl.py mark "$LOG" 2>/dev/null || echo 0)
 if [ "$A" = x86 ]; then
-    LLMOS_TESTSHELL=1 LLMOS_HOSTGPU_URL=http://10.0.2.2:8081 tools/boot-x86.sh bios "$IMG" >/dev/null
+    LLMOS_TESTSHELL=1 LLMOS_MIC=1 LLMOS_HOSTGPU_URL=http://10.0.2.2:8081 tools/boot-x86.sh bios "$IMG" >/dev/null
     OFF=0      # boot-x86.sh starts a fresh log
 else
-    LLMOS_TESTSHELL=1 LLMOS_HOSTGPU_URL=http://10.0.2.2:8081 tools/boot-target.sh "$IMG" 4096 >/dev/null
+    LLMOS_TESTSHELL=1 LLMOS_MIC=1 LLMOS_HOSTGPU_URL=http://10.0.2.2:8081 tools/boot-target.sh "$IMG" 4096 >/dev/null
 fi
 # type nothing until this boot's own shell banner appears (the log keeps earlier boots too)
 python3 tools/vmctl.py wait "$LOG" 'LLM OS test shell' $((300 * SLOW)) --from "$OFF" >/dev/null && echo "--- test shell up"
 echo "--- waiting for the desk session"
 vsh 'for i in $(seq 1 300); do [ -S /run/llmos/desk.sock ] && [ -f /run/llmos/display.env ] && break; sleep 2; done; echo "desk: $([ -S /run/llmos/desk.sock ] && echo up || echo DOWN)"; cat /run/llmos/display.env; llmos version' $((300 * SLOW))
 echo "--- the dictation test inside the VM"
-vsh "cd /tmp && wget -qO dictate-test.sh http://10.0.2.2:8765/tools/dictate-test.sh && wget -qO dict-speech.wav http://10.0.2.2:8765/run/dict-speech.wav && SLOW=$SLOW sh /tmp/dictate-test.sh" $((300 * SLOW))
+out=$(vsh "cd /tmp && wget -qO dictate-test.sh http://10.0.2.2:8765/tools/dictate-test.sh && wget -qO dict-speech.wav http://10.0.2.2:8765/run/dict-speech.wav && SLOW=$SLOW sh /tmp/dictate-test.sh" $((300 * SLOW)))
+printf '%s\n' "$out"
+echo "$out" | grep -q DICTATE_OK || { echo "### FAIL: dictation did not type the spoken sentence"; RC=1; }
 python3 tools/screendump.py "$MON" run/shot-dictate-$A.png >/dev/null 2>&1 && echo "[shot run/shot-dictate-$A.png]"
-echo "### done $(date '+%H:%M:%S')"
+echo "### done $(date '+%H:%M:%S') (exit $RC)"
+exit $RC

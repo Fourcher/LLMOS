@@ -32,6 +32,9 @@ def fetch(url, max_bytes=3_000_000, timeout=25, data=None, dest=None):
     """GET/POST a URL. Returns (status, content_type, final_url, body_bytes)."""
     if not re.match(r"^https?://", url or ""):
         raise WebError("only http(s) URLs are supported")
+    from . import system
+    if system.is_blocked(url):
+        raise WebError("that site is blocked while focus mode is on; turn focus off to open it")
     if dest:
         tmp = dest
     else:

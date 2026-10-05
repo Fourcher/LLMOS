@@ -14,7 +14,14 @@ mount -t devtmpfs -o exec,nosuid,mode=0755,size=2M devtmpfs /dev 2>/dev/null || 
 mkdir -p /dev/pts /dev/shm
 mount -t devpts -o gid=5,mode=0620,noexec,nosuid devpts /dev/pts
 echo "LLM OS live: looking for the medium…" > /dev/kmsg
-for m in loop squashfs overlay isofs cdrom sr_mod sd_mod usb-storage uas nvme virtio_blk virtio_pci virtio_scsi ahci xhci-pci xhci-hcd ehci-pci ehci-hcd uhci-hcd ohci-pci vfat nls_cp437 nls_iso8859-1 ext4; do
+# drivers for whatever this machine has (its devices' modaliases), then the usual ones by name: IDE/PATA CD
+# drives (QEMU's default machine, VirtualBox), SATA, NVMe, USB, SD cards, and the common VM storage controllers
+for a in $(cat /sys/bus/*/devices/*/modalias 2>/dev/null | sort -u); do
+    modprobe -q "$a" 2>/dev/null
+done
+for m in loop squashfs overlay isofs cdrom sr_mod sd_mod usb-storage uas nvme virtio_blk virtio_pci virtio_scsi ahci \
+         ata_piix pata_acpi ata_generic mptspi vmw_pvscsi hv_storvsc sdhci-pci sdhci-acpi mmc_block \
+         xhci-pci xhci-hcd ehci-pci ehci-hcd uhci-hcd ohci-pci vfat nls_cp437 nls_iso8859-1 ext4; do
     modprobe -q "$m" 2>/dev/null
 done
 mdev -s 2>/dev/null

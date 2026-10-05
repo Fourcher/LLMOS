@@ -73,5 +73,5 @@ it writes, then install from the running desk by saying so). The user guide is
 
 Apache License 2.0 (see `LICENSE`). The base system is Alpine Linux and
 its packages under their own licenses (recorded per image in
-`dist/packages-*.txt`); llama.cpp and whisper.cpp are MIT; each model in
+`/etc/llmos/packages.txt` inside each image); llama.cpp and whisper.cpp are MIT; each model in
 `dist/catalog.json` carries its publisher's license.

@@ -65,18 +65,37 @@ def _vad_collect(read, max_s=15, silence_s=1.2, wait_s=6):
     return b"".join(frames) if speaking else b""
 
 
-def _alsa_capture_available():
+def _alsa_capture_device():
+    """The first card that can capture, as plughw:CARD,DEVICE -- `arecord` defaults to card 0, which on many
+    machines (HDMI-first laptops, a USB mic as card 1) has no microphone. None when nothing can capture."""
     if not shutil.which("arecord"):
-        return False
+        return None
     p = subprocess.run(["arecord", "-l"], capture_output=True, text=True)
-    return "card" in p.stdout
+    m = re.search(r"card (\d+):.*?device (\d+):", p.stdout)
+    return f"plughw:{m.group(1)},{m.group(2)}" if m else ("default" if "card" in p.stdout else None)
+
+
+def _alsa_capture_available():
+    return _alsa_capture_device() is not None
+
+
+def _read_deadline(stream, n, deadline):
+    """Read up to n bytes, giving up at the deadline so a stalled capture device never hangs the recording."""
+    import select
+    left = deadline - time.time()
+    if left <= 0:
+        return b""
+    r, _, _ = select.select([stream], [], [], min(left, 0.5))
+    return stream.read(n) if r else b" "      # a non-empty filler keeps the VAD loop ticking toward max_s
 
 
 def _record_alsa():
-    p = subprocess.Popen(["arecord", "-q", "-f", "S16_LE", "-r", str(RATE), "-c", "1", "-t", "raw"],
+    dev = _alsa_capture_device() or "default"
+    p = subprocess.Popen(["arecord", "-q", "-D", dev, "-f", "S16_LE", "-r", str(RATE), "-c", "1", "-t", "raw"],
                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     try:
-        return _vad_collect(lambda: p.stdout.read(CHUNK * 2))
+        deadline = time.time() + 20
+        return _vad_collect(lambda: _read_deadline(p.stdout, CHUNK * 2, deadline))
     finally:
         p.terminate()
 
@@ -88,7 +107,9 @@ def _record_bridge():
         return None
     try:
         s.settimeout(3)
-        s.sendall(b"START\n")
+        from . import system
+        secret = system.launcher_value("mic")
+        s.sendall(b"START " + secret.encode() + b"\n" if secret else b"START\n")
 
         def read():
             data = b""
@@ -183,9 +204,14 @@ def download_voice(vid, progress=None):
     m = voice_by_id(vid)
     if not m:
         raise ValueError(f"unknown voice model '{vid}'")
-    if os.path.exists(voice_path(m)):
-        return m
     sha = (m.get("sha256") or "").lower() or _hf_sha(m["repo"], m["file"])
+    if os.path.exists(voice_path(m)):
+        from . import models
+        if models.verified(voice_path(m), sha, progress):
+            return m
+        if not voice_path(m).startswith(VOICE_DIR_DL):
+            raise RuntimeError(f"the {m['name']} file that came with the system is damaged (its SHA-256 does not match)")
+        os.unlink(voice_path(m))        # a damaged or replaced download is never used: it is fetched again
     need = m["size"] / 1024 ** 3 + 0.3
     os.makedirs(VOICE_DIR_DL, exist_ok=True)
     st = os.statvfs(VOICE_DIR_DL)
@@ -219,6 +245,8 @@ def download_voice(vid, progress=None):
         os.unlink(part)
         raise RuntimeError(f"checksum mismatch for {m['file']}: the file was deleted and nothing was used")
     os.replace(part, dest)
+    from . import models
+    models._mark_verified(dest, sha)
     return m
 
 
@@ -251,6 +279,11 @@ def available():
 
 
 def _bridge_available():
+    """The VM launcher's microphone bridge, only when this boot was given one (fw_cfg opt/llmos/mic): on real
+    hardware or in another VM, whatever answers at that address is not this computer's microphone."""
+    from . import system
+    if not system.launcher_says("mic"):
+        return False
     try:
         socket.create_connection(BRIDGE, timeout=0.5).close()
         return True

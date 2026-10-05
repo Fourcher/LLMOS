@@ -36,7 +36,12 @@ def check(n):
     assert len(n["blocks"]) <= uispec.MAX_BLOCKS and len(n["title"]) <= 80
     for b in n["blocks"]:
         assert b["type"] in uispec.BLOCK_TYPES
-        for k in ("src", "link", "thumbnail", "source"):
+        # what the page fetches by itself (images, thumbnails) must be a local file -- never a remote URL that
+        # could track the owner or leak that the OS opened a window; links the owner clicks may be http(s)
+        for k in ("src", "thumbnail"):
+            if b.get(k):
+                assert b[k].startswith(("file:///", "/")) and not b[k].startswith("//"), f"local-only {k}: {b[k]}"
+        for k in ("link", "source"):
             if b.get(k):
                 assert b[k].startswith(("http://", "https://", "file:///", "/")), b[k]
         for it in (b.get("items") or []):

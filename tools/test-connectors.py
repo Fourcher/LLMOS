@@ -74,6 +74,21 @@ check(isinstance(res.get("broken"), str) and res["broken"].startswith("error"), 
 check(isinstance(tools.schemas(), list), "schemas() still works with a broken connector present")
 mcp.remove("broken")
 
+print("a connector that stalls half-way through a line cannot hang the request")
+import time  # noqa: E402
+mcp.add("slow", "stdio", command=f'"{sys.executable}" "{SERVER}" --stall')
+c = mcp._client(mcp.get("slow"))
+t0 = time.time()
+try:
+    c.call_tool("stall", {}, timeout=2)
+    stalled = "answered"
+except mcp.McpError as e:
+    stalled = str(e)
+took = time.time() - t0
+check("timed out" in stalled and took < 6, f"the call gives up at its deadline ({took:.1f} s): {stalled}")
+check(mcp.call("slow", "echo", {"text": "back"}) == "echo: back", "the connector is started afresh and answers the next call")
+mcp.remove("slow")
+
 mcp.shutdown()
 print(f"\n{'all good' if not fails else str(fails) + ' failure(s)'}")
 sys.exit(1 if fails else 0)

@@ -1,6 +1,7 @@
 """Private stores in ~/.llmos (inside the encrypted vault when enabled):
 memory, audit log, notification inbox, scheduled tasks."""
 import datetime as dt
+import functools
 import json
 import os
 import re
@@ -8,6 +9,16 @@ import time
 import uuid
 
 from . import config
+
+
+def _locked(fn):
+    """Each change to a data file is a read-modify-write: one at a time across the desk, the console and the
+    scheduler, so that none of them overwrites what another just saved."""
+    @functools.wraps(fn)
+    def wrap(*a, **k):
+        with config.data_lock():
+            return fn(*a, **k)
+    return wrap
 
 
 # ------------------------------------------------------------------ memory
@@ -25,6 +36,7 @@ def _names():
     return {w.rstrip("s") for w in re.findall(r"\w{3,}", name.lower())}
 
 
+@_locked
 def remember(fact):
     fact = " ".join(str(fact).split())
     if not fact:
@@ -49,6 +61,7 @@ def remember(fact):
     return True
 
 
+@_locked
 def forget(query):
     q = str(query).lower().strip()
     cur = facts()
@@ -75,6 +88,7 @@ def audit(tool, args, result, allowed=True, who="agent"):
            "args": args, "allowed": allowed, "result": str(result)[:300]}
     path = config.data("audit.log")
     try:
+        config.guard_write(path)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         with os.fdopen(fd, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -108,6 +122,7 @@ def routine(text):
     return routines().get(_routine_key(text))
 
 
+@_locked
 def save_routine(text, calls):
     r = routines()
     key = _routine_key(text)
@@ -120,6 +135,7 @@ def save_routine(text, calls):
     config.save_json(config.data("routines.json"), r)
 
 
+@_locked
 def routine_used(text, ok):
     r = routines()
     key = _routine_key(text)
@@ -154,6 +170,7 @@ def list_name(name):
     return n[:40]
 
 
+@_locked
 def add_note(text, lst="notes"):
     n = {"id": uuid.uuid4().hex[:6], "text": " ".join(str(text).split())[:300], "list": list_name(lst),
          "added": time.strftime("%Y-%m-%d %H:%M"), "done": False}
@@ -177,6 +194,7 @@ def find_note(ref, lst=None):
     return hit[0] if hit else None
 
 
+@_locked
 def set_note_done(ref, done=True, lst=None):
     n = find_note(ref, lst)
     if not n:
@@ -189,6 +207,7 @@ def set_note_done(ref, done=True, lst=None):
     return n
 
 
+@_locked
 def remove_note(ref, lst=None):
     """Remove one item (by id or words); ref 'all' clears the list (or every list)."""
     cur = notes()
@@ -207,6 +226,7 @@ def lists():
     return sorted({n["list"] for n in notes()})
 
 
+@_locked
 def notify(title, text):
     path = config.data("inbox.json")
     cur = config.load_json(path, [])
@@ -219,6 +239,7 @@ def unseen():
     return [m for m in config.load_json(config.data("inbox.json"), []) if not m.get("seen")]
 
 
+@_locked
 def mark_seen(ids):
     path = config.data("inbox.json")
     cur = config.load_json(path, [])
@@ -402,6 +423,7 @@ def _save_tasks(ts):
     config.save_json(config.data("tasks.json"), ts)
 
 
+@_locked
 def add_task(when, task, kind="agent"):
     """kind: "agent" (the model carries the task out), "timer" (task = its length, e.g. "10 minutes"),
     "reminder" (task = the words to show); timers and reminders are delivered as they are, no model."""
@@ -415,6 +437,7 @@ def add_task(when, task, kind="agent"):
     return t
 
 
+@_locked
 def cancel_task(ref):
     ref = str(ref).lower().strip()
     cur = tasks()
@@ -430,6 +453,7 @@ def due(now=None):
     return [t for t in tasks() if t["next"] <= now]
 
 
+@_locked
 def finished(task_id, result):
     cur = tasks()
     for t in cur:

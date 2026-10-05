@@ -5,6 +5,7 @@ switching and removing, and cleaning whisper's non-speech tags out of dictated t
 network. Run: python3 tools/test-voice.py"""
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -35,7 +36,8 @@ def check(cond, what):
 print("the catalogue")
 cat = voice.voice_catalog()
 check([m["id"] for m in cat] == ["tiny", "base", "small", "turbo"], f"four whisper models, smallest to best: {[m['id'] for m in cat]}")
-check(all(m["repo"] == "ggml-org/whisper.cpp" and m["file"].endswith(".bin") for m in cat), "all from ggml-org/whisper.cpp, ggml files")
+check(all(m["repo"] == "ggerganov/whisper.cpp" and m["file"].endswith(".bin") for m in cat), "all from ggerganov/whisper.cpp, ggml files")
+check(all(re.fullmatch(r"[0-9a-f]{64}", m.get("sha256") or "") for m in cat), "every voice model's SHA-256 is pinned in the catalogue")
 base = voice.voice_by_id("base")
 check(base and base.get("shipped") and len(base["sha256"]) == 64, "Base ships with the OS and is pinned by SHA-256")
 check(json.load(open(os.path.join(SRC_SHARE, "voice-catalog.json")))[3]["file"] == "ggml-large-v3-turbo-q5_0.bin",

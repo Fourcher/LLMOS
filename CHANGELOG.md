@@ -4,6 +4,86 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.5.0 — 2026-10-04
+A whole-OS review against the original brief (seven parallel reviewers, every
+finding checked against the code) found and fixed these. New host tests cover
+each: `test-risk`, `test-installer`, `test-store`, `test-downloads`,
+`refusal-probe`, and additions to the voice, cloud, connector, uispec and
+setup suites.
+
+Safety and privacy (the core promises):
+- **The desk was unreadable and the lock screen leaked.** A stylesheet comment
+  left unclosed in 1.3.0 killed the colour, layout and `hidden` rules, so every
+  screen drew on top of the others and the lock screen no longer covered the
+  desk. Fixed, with a check that the base rules survive.
+- **Nothing typed or spoken reaches the assistant while locked.** Off the desk
+  (lock screen, first-run, boot) the page may only do what that screen is for;
+  the microphone and Super+D work on the desk alone; the compositor keeps no
+  shortcuts while locked (so no terminal over the lock screen), at boot too; a
+  text console and the desk now lock together; and one wrong passphrase at a
+  time no longer counts several failures toward the automatic power-off.
+- **The assistant cannot loosen its own leash.** Writing any of the OS's own
+  rules — its settings, the conduct text, the firewall, its code — is now a
+  security action that always asks, even hands-off, however the command is
+  written (`/bin/rm`, `sh -c …`, newlines, wrappers). Risk and
+  internet-use detection were rewritten to see through those disguises.
+- **The never-refuse promise is now measured.** `tools/refusal-probe.py` runs
+  real owner requests through the shipped prompt and tools; the release gate is
+  zero refusals on the default guidance.
+- **Installing next to another OS can no longer format the wrong partition.**
+  The new partition is identified by where it starts, never by a number that
+  can have gaps; anything uncertain is refused and nothing is written.
+- **Firewall and Tor fail closed.** With the internet off, connections open
+  before the switch are cut too; with Tor on, only Tor may reach the network,
+  so a program that does not use it fails instead of leaking (mail, http
+  connectors and the browser are covered, and media look-ups resolve names
+  through Tor). The launcher's host services are allowed only when this boot was
+  actually given them.
+- **The microphone bridge is trusted only from the launcher.** It takes a
+  per-launch secret, so no other program on the host — or on the network — can
+  open the Mac's microphone or feed the OS audio.
+- **Secrets stay secret.** Online-model keys and tokens are redacted from the
+  audit log and the screen (by name and by shape), credentials typed in a
+  request are not kept in the conversation sent to an online model, and the
+  online model's own blocks never carry the OS's private bookkeeping.
+- **Programs you run keep their data inside the vault**, not in the OS's cache
+  on the bare disk; while the vault is locked, nothing personal is written
+  outside it; and concurrent changes from the desk, console and scheduler no
+  longer overwrite each other.
+- **Downloads are verified every time**, including a file already on disk; a
+  changed file is fetched again.
+
+Works as described:
+- **Fits a 4 GB machine.** On a small model context the tool list is compact
+  and trimmed to leave room, so an ordinary request no longer overflows the
+  model's memory; the everyday tools always fit, the owner's connectors next.
+- **The online model works with current Claude models** (Opus 5.5, Sonnet 5.5,
+  Fable 5.1): no sampling settings are sent, thinking blocks are replayed
+  unchanged, room is left for the model to think, and a service refusal is
+  answered on the computer instead. The model list is current.
+- **Dictation can use better models:** the voice catalogue pointed at a repo
+  that no longer answers; it is corrected and every model's checksum pinned.
+- **The live ISO boots from an IDE/SATA CD** (QEMU's default machine,
+  VirtualBox), not only virtio.
+- **Inbox triage is honest:** it sorts the newest unread in batches and reports
+  how many remain, instead of claiming "inbox zero" after looking at 40.
+- **Email works with Gmail:** mailbox names are quoted, so archiving no longer
+  fails on folders like `[Gmail]/All Mail`.
+- **Connectors don't hang the OS:** a stalled one is given up on at its
+  deadline; http connectors keep their session and protocol headers.
+- **"No corners" rounds the corners** (the brief's example), themes keep text
+  readable, and a few command phrases ("use firefox", "speak up") no longer
+  switch the whole interface language.
+- Setup recognises an Apple Silicon Mac even when its Python runs under Rosetta;
+  it never lists a disk that holds the running system; its page carries no
+  secret (the launch key travels in the address fragment) and only its own
+  script may run; device names can't inject into it.
+- Clearer guidance: Secure Boot must be off (the boot loader is unsigned),
+  suspend BitLocker first, a T2 Mac needs "No Security"; the docs on
+  unattended tasks, the host list, the package manifest
+  (`/etc/llmos/packages.txt`), and local-by-default-with-optional-online now
+  match the code.
+
 ## 1.4.0 — 2026-10-04
 - System-wide dictation, free and on the machine: press **Super+D** anywhere,
   speak, pause, and the words are typed where the cursor is — a field on the

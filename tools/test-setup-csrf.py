@@ -54,11 +54,18 @@ ORIGIN = {"Origin": f"http://{HOST}"}
 
 print("the page")
 s, b, h = req("GET", "/")
-check(s == 200 and ex.TOKEN.encode() in b, "GET / serves the page with the per-launch token baked in")
+check(s == 200 and ex.TOKEN.encode() not in b, "GET / serves the page without the token (it comes in the #fragment, never sent to a server)")
+csp = h.get("content-security-policy", "")
+import base64, hashlib  # noqa: E401,E402
+script = b.decode("utf-8").split("<script>", 1)[1].split("</script>", 1)[0]
+want = "'sha256-" + base64.b64encode(hashlib.sha256(script.encode("utf-8")).digest()).decode() + "'"
+check("script-src " + want in csp and "script-src 'unsafe-inline'" not in csp,
+      "only the page's own script may run (CSP script-src by hash, no 'unsafe-inline')")
+check(" onclick=" not in b.decode("utf-8"), "no inline event handlers in the page (they would need 'unsafe-inline')")
 check(h.get("x-frame-options") == "DENY" and "frame-ancestors 'none'" in h.get("content-security-policy", ""),
       "the page refuses framing (X-Frame-Options + CSP frame-ancestors)")
 check(h.get("cache-control") == "no-store" and h.get("x-content-type-options") == "nosniff",
-      "the token-bearing page is no-store + nosniff")
+      "the page is no-store + nosniff")
 
 print("every /api endpoint requires the token (not only POST)")
 for ep in ("/api/status", "/api/drives", "/api/progress", "/api/instructions"):
@@ -134,5 +141,39 @@ check(open(os.path.join(ROOT, "dist", "1 - START HERE (Windows).bat"), "rb").rea
 check(os.access(os.path.join(ROOT, "dist", "1 - START HERE (Mac).command"), os.X_OK), "the Mac launcher is executable")
 
 srv.shutdown()
+
+print("Linux: never a disk that holds the running system")
+import json as _json, subprocess as _sp  # noqa: E401,E402
+_real_run = ex.subprocess.run
+
+
+def _fake_lsblk(tree):
+    class R:
+        stdout = _json.dumps({"blockdevices": [tree]})
+    return lambda *a, **k: R()
+
+
+cases = [({"name": "sdb", "type": "disk", "children": [{"name": "sdb1", "type": "part", "mountpoint": "/media/me/STICK"}]}, False,
+          "a stick the desktop mounted under /media can be written (it is unmounted first)"),
+         ({"name": "mmcblk0", "type": "disk", "children": [{"name": "mmcblk0p2", "type": "part", "mountpoint": "/"}]}, True,
+          "a disk holding / is never written"),
+         ({"name": "sdc", "type": "disk", "children": [{"name": "sdc1", "type": "part", "mountpoint": None,
+            "children": [{"name": "luks-x", "type": "crypt", "mountpoint": None}]}]}, True,
+          "a disk with an open LUKS volume is never written (even if nothing shows as mounted)"),
+         ({"name": "sdd", "type": "disk", "children": [{"name": "sdd2", "type": "part", "mountpoint": "[SWAP]"}]}, True,
+          "a disk used as swap is never written")]
+for tree, busy, what in cases:
+    ex.subprocess.run = _fake_lsblk(tree)
+    reason = ex._linux_in_use(tree["name"])
+    check(bool(reason) == busy, f"{what}: {reason or 'allowed'}")
+ex.subprocess.run = _real_run
+
+print("an Apple Silicon Mac is recognised even when Python runs under Rosetta")
+class _R:
+    stdout = "1\n"
+ex.subprocess.run = lambda *a, **k: _R()
+check(ex._apple_silicon() is True, "sysctl hw.optional.arm64 = 1 -> Apple Silicon")
+ex.subprocess.run = _real_run
+
 print(f"\n{'all good' if not fails else str(fails) + ' failure(s)'}")
 sys.exit(1 if fails else 0)

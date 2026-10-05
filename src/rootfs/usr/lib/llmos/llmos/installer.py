@@ -240,26 +240,40 @@ def run(token, status=lambda s: None):
         status(f"adding a partition to {dev}")
         start, size = p["start"], p["size"]
         script = ""
-        n = len(lay["parts"])
         esp_node = p["esp"]
         esp_new = False
+        esp_start = None
         if p["need_esp"]:
             script += f"start={start}, size={256 * 1024 * 1024 // sector}, type={ESP_GUID}, name=EFI\n"
+            esp_start = start
             start += 256 * 1024 * 1024 // sector
             size -= 256 * 1024 * 1024 // sector
-            n += 1
-            esp_node = _partnode(dev, n)
             esp_new = True
         if p.get("need_biosboot"):
             script += f"start={start}, size={2 * 1024 * 1024 // sector}, type={BIOSBOOT_GUID}, name=bios\n"
             start += 2 * 1024 * 1024 // sector
             size -= 2 * 1024 * 1024 // sector
-            n += 1
         script += f"start={start}, size={size}, type={LINUX_GUID}, name=llmos\n"
+        existing = {q["node"] for q in lay["parts"]}
         _sh(["sfdisk", "-q", "--append", dev], input=script)
-        root_node = _partnode(dev, n + 1)
-    subprocess.run(["blockdev", "--rereadpt", dev], capture_output=True)
-    subprocess.run(["partx", "-u", dev], capture_output=True)
+        subprocess.run(["blockdev", "--rereadpt", dev], capture_output=True)
+        subprocess.run(["partx", "-u", dev], capture_output=True)
+        # the new partitions are found by where they start, never by number: partition numbers can have gaps
+        # (one was deleted to make room), so "count + 1" may name the other system's partition
+        now = layout(dev)
+
+        def created_at(sector_start):
+            hit = [q["node"] for q in now["parts"] if q["start"] == sector_start]
+            if len(hit) != 1 or hit[0] in existing:
+                raise InstallError("the new partition could not be identified safely, so nothing was formatted; "
+                                   f"the other system's partitions on {dev} are untouched")
+            return hit[0]
+        root_node = created_at(start)
+        if esp_new:
+            esp_node = created_at(esp_start)
+    if p["mode"] == "whole":
+        subprocess.run(["blockdev", "--rereadpt", dev], capture_output=True)
+        subprocess.run(["partx", "-u", dev], capture_output=True)
     _wait_node(root_node)
 
     status(f"formatting {root_node}")

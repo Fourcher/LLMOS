@@ -383,7 +383,11 @@ only 3 GB).
 
 ## Privacy and security, concretely
 
-- All inference is local (llama.cpp bound to 127.0.0.1). No cloud, no keys.
+- Local by default: the on-device model (llama.cpp bound to 127.0.0.1)
+  answers everything, and nothing leaves the computer. An online model
+  (Claude, or any OpenAI-compatible service) is optional — off until you add
+  an account — and even then "where it thinks" stays yours: local, ask first,
+  or online. With the internet off, nothing goes online at all.
 - Inbound firewall drops everything; there are no services to log in to
   (root's password is locked; the screen and the serial console are the only
   doors).

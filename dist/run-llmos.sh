@@ -111,9 +111,13 @@ RAM=${LLMOS_RAM:-$([ -n "$HOST_ARGS" ] && echo 3072 || echo 6144)}
 # a tiny bridge that streams the Mac's microphone over the VM's private link
 # (push-to-talk only: the mic is open only while the OS is listening).
 MICPID=""
+MIC_ARGS=""
 if [ "$(uname -s)" = Darwin ] && [ -f mic-bridge.py ] && command -v ffmpeg >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
-    python3 mic-bridge.py > mic-bridge.log 2>&1 &
+    MIC_SECRET=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+    LLMOS_MIC_SECRET="$MIC_SECRET" python3 mic-bridge.py > mic-bridge.log 2>&1 &
     MICPID=$!
+    # tells the OS this bridge is its microphone, and the secret it must give: no other program can use it
+    MIC_ARGS="-fw_cfg name=opt/llmos/mic,string=$MIC_SECRET"
     echo "voice input: microphone bridge running (say 'voice' at the prompt)"
 elif [ "$(uname -s)" = Darwin ]; then
     echo "voice input needs ffmpeg:  brew install ffmpeg   (optional)"
@@ -130,6 +134,6 @@ qemu-system-aarch64 \
   -device virtio-gpu-pci,xres="${LLMOS_WIDTH:-1440}",yres="${LLMOS_HEIGHT:-900}" -device virtio-keyboard-pci -device virtio-tablet-pci \
   $AUDIO -device virtio-sound-pci,audiodev=snd0 \
   $DISPLAY_OPT \
-  -fw_cfg name=opt/llmos/tz,string="${TZNAME:-UTC}" -fw_cfg name=opt/llmos/lang,string="${LANGCODE:-en}" $HOST_ARGS \
+  -fw_cfg name=opt/llmos/tz,string="${TZNAME:-UTC}" -fw_cfg name=opt/llmos/lang,string="${LANGCODE:-en}" $HOST_ARGS $MIC_ARGS \
   -serial mon:stdio -monitor none \
   "$@"

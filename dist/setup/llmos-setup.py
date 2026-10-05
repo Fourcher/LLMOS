@@ -14,6 +14,7 @@ import hmac
 import http.server
 import json
 import os
+import re
 import platform
 import plistlib
 import shutil
@@ -28,11 +29,39 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.dirname(HERE)
 SYSTEM = platform.system()          # Darwin | Windows | Linux
 MACHINE = platform.machine().lower()  # arm64 / aarch64 on Apple Silicon and ARM PCs, x86_64 / amd64 otherwise
+
+
+def _apple_silicon():
+    """A Mac with Apple Silicon, even when this Python is an Intel build running under Rosetta (which reports
+    x86_64): the chip, not the program, decides which ISO the Mac can run."""
+    try:
+        return subprocess.run(["sysctl", "-n", "hw.optional.arm64"], capture_output=True, text=True, timeout=5).stdout.strip() == "1"
+    except Exception:
+        return False
+
+
+if SYSTEM == "Darwin" and MACHINE not in ("arm64", "aarch64") and _apple_silicon():
+    MACHINE = "arm64"
 ARM = MACHINE in ("arm64", "aarch64")
 UTM_PAGE = "https://mac.getutm.app/"   # UTM: free, open-source virtual machines for the Mac
 STATE = {"phase": "idle", "done": 0, "total": 0, "message": "", "error": "", "started": 0}
 LOCK = threading.Lock()
 TOKEN = ""     # per launch; the page sends it back with every request, so another site cannot drive this app
+
+
+def _page_script_hash():
+    """The CSP source for the page's one inline script (its SHA-256), so no other script can run in the page."""
+    import base64
+    import hashlib
+    try:
+        page = open(os.path.join(HERE, "index.html"), encoding="utf-8").read()
+        code = page.split("<script>", 1)[1].split("</script>", 1)[0]
+        return "'sha256-" + base64.b64encode(hashlib.sha256(code.encode("utf-8")).digest()).decode() + "'"
+    except (OSError, IndexError):
+        return "'none'"
+
+
+PAGE_SCRIPT_HASH = _page_script_hash()
 
 # ----------------------------------------------------------------- this computer
 
@@ -171,8 +200,10 @@ def list_drives():
             for d in json.loads(out or "{}").get("blockdevices", []):
                 if d.get("type") != "disk":
                     continue
-                removable = str(d.get("rm")) in ("1", "True", "true") or str(d.get("hotplug")) in ("1", "True", "true") or d.get("tran") == "usb"
-                if not removable:
+                # removable means a USB transport or the removable flag: "hotplug" alone is set for a laptop's
+                # built-in eMMC, which is often its system disk
+                removable = str(d.get("rm")) in ("1", "True", "true") or d.get("tran") == "usb"
+                if not removable or _linux_in_use(d["name"]):
                     continue
                 drives.append({"id": "/dev/" + d["name"], "raw": "/dev/" + d["name"], "name": (d.get("model") or d["name"]).strip(),
                                "size": int(d.get("size") or 0), "bus": d.get("tran") or "", "label": ""})
@@ -191,6 +222,42 @@ def list_drives():
     except Exception as e:  # listing must never crash the app
         return {"drives": [], "error": f"could not list drives: {e}"}
     return {"drives": drives}
+
+_SYSTEM_MOUNTS = ("/", "/boot", "/boot/efi", "/efi", "/home", "/usr", "/var", "/opt", "/srv", "/nix", "/gnu")
+
+
+def _linux_in_use(name):
+    """Why this disk must not be written, or "": it holds part of the running system (a system mount point,
+    swap) or an open encrypted / LVM / RAID volume. A stick the desktop mounted under /media or /run/media is
+    fine: it is unmounted before writing."""
+    try:
+        out = subprocess.run(["lsblk", "-J", "-o", "NAME,TYPE,MOUNTPOINT", "/dev/" + name], capture_output=True, text=True, timeout=20).stdout
+        tree = json.loads(out or "{}")
+    except Exception:
+        return "what is on it could not be checked"
+
+    def walk(n):
+        mp = n.get("mountpoint")
+        if mp and (mp in _SYSTEM_MOUNTS or mp == "[SWAP]"):
+            return f"it holds {mp} of this computer"
+        if str(n.get("type", "")) in ("crypt", "lvm", "dm") or str(n.get("type", "")).startswith("raid"):
+            return "it holds an open encrypted or LVM volume"
+        for c in n.get("children") or []:
+            r = walk(c)
+            if r:
+                return r
+        return ""
+    for d in tree.get("blockdevices", []):
+        r = walk(d)
+        if r:
+            return r
+    try:
+        with open("/proc/swaps") as f:
+            if re.search(r"^/dev/" + re.escape(name) + r"\S*\s", f.read(), re.M):
+                return "it is used as swap"
+    except OSError:
+        pass
+    return ""
 
 # ----------------------------------------------------------------- long jobs
 
@@ -261,6 +328,9 @@ def job_write(name, drive_id):
             if r.returncode != 0:
                 raise RuntimeError(r.stderr.strip()[-300:] or "the write was cancelled")
         elif SYSTEM == "Linux":
+            busy = _linux_in_use(os.path.basename(drive["id"]))
+            if busy:
+                raise RuntimeError(f"{drive['name']} is not written: {busy}")
             cmd = f"for p in {drive['id']}?*; do umount $p 2>/dev/null; done; if grep -q '^{drive['id']}' /proc/mounts; then echo 'still mounted' >&2; exit 3; fi; dd if={shlex_q(src)} of={drive['raw']} bs=4M conv=fsync status=progress"
             runner = "pkexec" if shutil.which("pkexec") else "sudo"
             p = subprocess.Popen([runner, "sh", "-c", cmd], stderr=subprocess.PIPE, text=True)
@@ -423,13 +493,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         "Cache-Control": "no-store",
         "Referrer-Policy": "no-referrer",
         "X-Frame-Options": "DENY",
-        "Content-Security-Policy": ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+        "Content-Security-Policy": ("default-src 'none'; style-src 'unsafe-inline'; script-src %s; "
                                     "connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"),
     }
 
     def _secure(self):
         for k, v in self.SECURITY_HEADERS.items():
-            self.send_header(k, v)
+            self.send_header(k, v % PAGE_SCRIPT_HASH if k == "Content-Security-Policy" else v)
 
     def send_json(self, obj, code=200):
         body = json.dumps(obj).encode()
@@ -467,13 +537,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
-        # the page itself carries no token yet (that is how it receives one), so it needs only same-origin;
+        # the page itself carries no token (it reads it from the address's #fragment), so it needs only same-origin;
         # every /api endpoint, read-only ones included, requires the token like the POST actions do.
         if path in ("/", "/index.html"):
             if not self.authorized(need_token=False):
                 return self.send_json({"error": "forbidden"}, 403)
             with open(os.path.join(HERE, "index.html"), "rb") as f:
-                body = f.read().replace(b"__TOKEN__", TOKEN.encode())
+                body = f.read()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -549,7 +619,7 @@ def main():
                 f.write("ERROR " + str(e))
         return
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    url = f"http://127.0.0.1:{srv.server_address[1]}/"
+    url = f"http://127.0.0.1:{srv.server_address[1]}/#{TOKEN}"
     print("LLM OS Setup is open in your web browser.")
     print(f"  If it did not open, paste this into the browser: {url}")
     print("  Keep this window open while you use it; close it (or press Ctrl+C) when you are done.")

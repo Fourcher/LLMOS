@@ -36,7 +36,7 @@ def serve(conn):
             if not part:
                 return
             line += part
-        if line.strip() != b"START":
+        if line.strip().split(b" ")[0] != b"START":
             return
         stream = room_noise(0.5) + SPEECH + bytes(16000 * 2 * 3)      # noise, speech, 3 s of silence
         for i in range(0, len(stream), CHUNK):

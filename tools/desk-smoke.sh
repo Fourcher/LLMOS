@@ -7,6 +7,7 @@
 #   usage: tools/desk-smoke.sh [image] [ram_mb]     (LLMOS_HOSTGPU_URL optional)
 cd "/Volumes/Files/Claude Work Area/LLMOS"
 V="python3 tools/vmctl.py"; S=run/tser.sock; L=run/boot-serial.log
+RC=0
 IMG=${1:-dist/llmos-arm64.qcow2}; RAM=${2:-4096}
 sh() { tools/tsh "$1" "${2:-120}"; }
 shot() { sleep "${2:-2}"; python3 tools/screendump.py run/tmon.sock "run/shot-desk-$1.png"; }
@@ -47,11 +48,15 @@ say "open the settings"; shot settings-2 1
 say "clear"; ctl "js \"document.getElementById('reply-close').click()\""; shot hero 2
 echo "--- lock / unlock"
 ctl "lock"; shot lock 2; state
-sh 'echo "vault mounted after lock: $(mount | grep -c " /root ")"; cryptsetup status llmos-vault 2>&1 | head -1' 30
+# the vault must really be unmounted and closed after locking, and the wrong passphrase must not get in
+sh 'm=$(mount | grep -c " /root "); c=$(cryptsetup status llmos-vault >/dev/null 2>&1 && echo active || echo inactive); echo "LOCKCHECK mounted=$m crypt=$c"' 30 | grep -q "LOCKCHECK mounted=0 crypt=inactive" || { echo "### FAIL: the vault is still open after lock"; RC=1; }
 ctl "unlock wrong one"; shot lock-wrong 2
+sh 'llmos desk-state | python3 -c "import json,sys; print(\"SCREEN\", json.load(sys.stdin)[\"screen\"])"' 30 | grep -q "SCREEN lock" || { echo "### FAIL: a wrong passphrase did not stay on the lock screen"; RC=1; }
 ctl "unlock correct horse battery"; sleep 3; state; shot unlocked 1
+sh 'llmos desk-state | python3 -c "import json,sys; print(\"SCREEN\", json.load(sys.stdin)[\"screen\"])"' 30 | grep -q "SCREEN desk" || { echo "### FAIL: the right passphrase did not unlock"; RC=1; }
 echo "--- waiting for the scheduled task and the timer to land in 'While you were away'"
 sleep 75; ctl "state" 30 >/dev/null; sleep 22; state; shot away 1
 sh 'llmos desk-state | python3 -c "import json,sys; s=json.load(sys.stdin); print([r for w in s[\"windows\"] if w[\"title\"].startswith(\"While\") for r in w.get(\"rows\", [])][:6])"' 30
 sh 'free -m | sed -n 2p; ps -o rss,comm | sort -rn | head -4' 30
-echo "======== desk smoke done $(date +%H:%M:%S) ========"
+echo "======== desk smoke done $(date +%H:%M:%S) (exit $RC) ========"
+exit $RC

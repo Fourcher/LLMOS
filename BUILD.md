@@ -203,7 +203,9 @@ scripts are counted loops; `cleanup.sh` quits whatever is left.
   10.0.2.2 stays reachable even with the internet set to *no* (found on this
   Mac, where a media player already held 8080).
 - **Scheduler** (`scheduler.py`, OpenRC service): runs due tasks headlessly
-  through the same agent and policy (never destructive unattended), drops
+  through the same agent and policy (under hands-off a scheduled task does
+  what it was set to, destructive steps included; under balanced or hands-on
+  anything that would have asked is left undone and reported), drops
   results in an inbox shown at the prompt; plain‑language times ("every
   weekday at 8", "in 20 minutes", "tomorrow 9am", cron) parsed in `store.py`.
 - **Vault** (`vault.py`): LUKS2/argon2id container mounted over `/root`,

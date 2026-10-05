@@ -12,6 +12,8 @@ OS), audio goes only to the guest over loopback, and nothing is recorded.
     brew install ffmpeg
     python3 mic-bridge.py        # leave it running while the VM runs
 """
+import hmac
+import os
 import shutil
 import socket
 import subprocess
@@ -19,6 +21,9 @@ import sys
 import threading
 
 HOST, PORT = "127.0.0.1", 8766
+# the launcher (run-llmos.sh) makes a secret for each start and hands it to the VM alone, through QEMU's
+# fw_cfg: any other program on this Mac that connects is refused, so it cannot open the microphone
+SECRET = os.environ.get("LLMOS_MIC_SECRET", "")
 
 
 def serve(conn):
@@ -26,7 +31,8 @@ def serve(conn):
     try:
         f = conn.makefile("rb")
         line = f.readline().strip()
-        if line != b"START":
+        word, _, given = line.partition(b" ")
+        if word != b"START" or (SECRET and not hmac.compare_digest(given, SECRET.encode())):
             return
         proc = subprocess.Popen(
             ["ffmpeg", "-loglevel", "error", "-f", "avfoundation", "-i", ":default",

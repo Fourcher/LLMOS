@@ -2,11 +2,13 @@
 class the user's autonomy setting is checked against, and an implementation
 that returns plain text (the only thing the model ever gets back)."""
 import ast
+import json
 import math
 import time
 import operator
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -58,32 +60,162 @@ _NETWORK = re.compile(r"(^|[;&|(]\s*|\s)(curl|wget|yt-dlp|git\s+clone|pip\s+inst
                       r"apk\s+(add|update|upgrade|fetch))(\s|$)")
 
 
-def classify_command(cmd):
-    c = cmd.strip()
-    if _DESTRUCTIVE.search(c):
-        return DESTRUCTIVE
-    if re.search(r"(^|[^>2&])>{1,2}\s*[^&\s]", c) or re.search(r"\bsed\b[^|;]*\s-i", c) or re.search(r"\btee\b", c):
-        return CHANGE
-    for seg in re.split(r"\|\||&&|[|;&]", c):
-        words = seg.strip().split()
-        while words and re.match(r"^\w+=", words[0]):
-            words.pop(0)
+# Command names are matched by their last path part, wherever a command can start: after a newline or ; & | && ||,
+# inside $( ), backticks, ( ) and { }, after shell keywords (if, then, do ...), after VAR=value, behind wrappers such
+# as sudo, xargs, timeout or busybox (every later word counts there), and inside sh -c / bash -c / eval strings.
+# So /bin/rm, "echo hi\n/sbin/mkfs.ext4 ...", sh -c 'rm ...' and sudo -u x rm ... are all seen for what they are.
+_DESTRUCTIVE_CMDS = {"rm", "rmdir", "shred", "wipefs", "dd", "fdisk", "sfdisk", "cfdisk", "parted", "sgdisk", "gdisk",
+                     "truncate", "mkswap", "cryptsetup", "blkdiscard", "reboot", "poweroff", "halt", "shutdown", "kill",
+                     "killall", "pkill", "deluser", "userdel", "delgroup", "groupdel", "swapoff", "unlink"}
+_NETWORK_CMDS = {"curl", "wget", "yt-dlp", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "netcat", "ftp", "telnet",
+                 "ping", "ping6", "traceroute", "nslookup", "dig", "host", "whois", "mpv"}
+_WRAPPERS = {"sudo", "doas", "busybox", "command", "builtin", "exec", "env", "nice", "nohup", "time", "timeout",
+             "stdbuf", "ionice", "chrt", "setsid", "xargs", "unbuffer", "watch", "flock", "chroot", "nsenter", "eval"}
+_SHELLS = {"sh", "ash", "bash", "dash", "zsh", "ksh", "su"}
+_KEYWORDS = {"if", "then", "else", "elif", "fi", "do", "done", "while", "until", "!", "{", "}", "case", "esac"}
+_SEPARATORS = set(";&|()`")
+# code run by an interpreter (python -c, perl -e ...) that reaches the network or deletes files
+_NET_CODE = re.compile(r"\b(?:urllib|urlopen|requests\.|http\.client|httplib|socket\.|create_connection|"
+                       r"LWP::|IO::Socket|Net::HTTP|fetch\(|XMLHttpRequest)|/dev/(?:tcp|udp)/")
+
+
+def _segments(cmd):
+    """The simple commands of a shell line, each as its words (quotes honoured)."""
+    try:
+        lex = shlex.shlex(cmd.replace("\n", " ; "), posix=True, punctuation_chars="();<>|&`")
+        lex.whitespace_split = True
+        toks = list(lex)
+    except ValueError:                      # unbalanced quotes: split on the operators and spaces
+        toks = re.sub(r"(\|\||&&|[;&|()`\n])", r" \1 ", cmd).split()
+    seg = []
+    for t in toks:
+        if t and set(t) <= _SEPARATORS:
+            if seg:
+                yield seg
+            seg = []
+        else:
+            seg.append(t)
+    if seg:
+        yield seg
+
+
+def _commands(cmd, depth=0):
+    """[(name, words, primary)] for every command a shell line can run (see above). primary: the first word of a
+    simple command; the others are candidates found behind a wrapper."""
+    out = []
+    for words in _segments(cmd):
+        while words and (words[0] in _KEYWORDS or re.match(r"^[A-Za-z_]\w*=", words[0])):
+            words = words[1:]
         if not words:
             continue
-        w = os.path.basename(words[0])
-        if w == "apk" and len(words) > 1 and words[1] in ("info", "search", "list", "policy", "version", "stats"):
+        name = os.path.basename(words[0])
+        out.append((name, words, True))
+        if name in _WRAPPERS:
+            out += [(os.path.basename(w), words[i:], False) for i, w in enumerate(words[1:], 1) if not w.startswith("-")]
+        if depth < 3 and (name in _SHELLS or name in _WRAPPERS):
+            if name == "eval":
+                out += _commands(" ".join(words[1:]), depth + 1)
+            for i, w in enumerate(words[:-1]):
+                if w == "-c":
+                    out += _commands(words[i + 1], depth + 1)
+    return out
+
+
+def _inner(words):
+    """The command a chain of wrappers runs: sudo nice -n 5 curl x -> curl x (best effort)."""
+    i = 0
+    while i < len(words) and os.path.basename(words[i]) in _WRAPPERS:
+        i += 1
+        while i < len(words) and (words[i].startswith("-") or re.match(r"^[\d.]+[smhd]?$", words[i])
+                                  or re.match(r"^[A-Za-z_]\w*=", words[i])):
+            i += 1
+    return words[i:]
+
+
+def classify_command(cmd):
+    c = str(cmd).strip()
+    if _DESTRUCTIVE.search(c):
+        return DESTRUCTIVE
+    cmds = _commands(c)
+    for name, words, _ in cmds:
+        if name in _DESTRUCTIVE_CMDS or name.startswith("mkfs"):
+            return DESTRUCTIVE
+        if name == "find" and any(w == "-delete" or (w in ("-exec", "-execdir", "-ok", "-okdir") and j + 1 < len(words)
+                                                     and os.path.basename(words[j + 1]) in _DESTRUCTIVE_CMDS)
+                                  for j, w in enumerate(words)):
+            return DESTRUCTIVE
+    if re.search(r"\b(?:shutil\.rmtree|os\.(?:remove|unlink|rmdir|removedirs)|rmtree\()", c):
+        return DESTRUCTIVE
+    risk = READ
+    if re.search(r"(^|[^>2&])>{1,2}\s*[^&\s]", c) or re.search(r"\bsed\b[^|;]*\s-i", c) or re.search(r"\btee\b", c):
+        risk = CHANGE
+    for name, words, primary in cmds:
+        if not primary or risk == CHANGE:
             continue
-        if w == "rc-service" and words[-1] == "status":
+        if name == "apk" and len(words) > 1 and words[1] in ("info", "search", "list", "policy", "version", "stats"):
             continue
-        if w in ("curl", "wget") and not re.search(r"\s(-o|-O|--output)\b", seg):
+        if name == "rc-service" and words[-1] == "status":
             continue
-        if w not in READ_ONLY:
-            return CHANGE
-    return READ
+        if name in ("curl", "wget") and not any(w in ("-o", "-O", "--output") or w.startswith("--output=") for w in words):
+            continue
+        if name not in READ_ONLY:
+            risk = CHANGE
+    # anything that changes the OS's own rules (its settings, conduct, code, firewall, lock-screen keys) or the
+    # online-model and connector accounts always asks: the assistant cannot loosen its own leash by itself
+    if risk == CHANGE and touches_policy(c):
+        return SECURITY
+    return risk
 
 
 def uses_network(cmd):
-    return bool(_NETWORK.search(cmd))
+    c = str(cmd)
+    if _NETWORK.search(c) or _NET_CODE.search(c):
+        return True
+    for name, words, primary in _commands(c):
+        if not primary:
+            continue
+        w = _inner(words) if name in _WRAPPERS else words
+        if not w:
+            continue
+        n, sub = os.path.basename(w[0]), (w[1] if len(w) > 1 else "")
+        if n in _NETWORK_CMDS or (n == "git" and sub in ("clone", "fetch", "pull", "push", "ls-remote", "submodule")) \
+                or (n in ("pip", "pip3") and sub in ("install", "download")) \
+                or (n == "apk" and sub in ("add", "update", "upgrade", "fetch")) \
+                or (n in ("npm", "npx", "pnpm", "yarn", "uvx") and sub not in ("--version", "-v")):
+            return True
+    return False
+
+
+# the OS's own rules and code: writing any of them is a SECURITY change, confirmed even under hands-off
+_POLICY_NAMES = ("settings.json", "conduct.txt", "cloud.json", "connectors.json")
+
+
+def _policy_roots():
+    return [config.ETC, "/usr/lib/llmos", "/usr/bin/llmos", "/usr/libexec/llmos", "/etc/init.d/llmos", "/etc/nftables",
+            "/etc/xdg/labwc", "/var/cache/llmos/labwc", "/etc/local.d"]
+
+
+def touches_policy(text):
+    """Does a path, or a shell command line, name one of the OS's own policy files or its code?"""
+    t = str(text)
+    return any(r in t for r in _policy_roots()) or any(n in t for n in _POLICY_NAMES)
+
+
+def _policy_path(path):
+    """Is this file one of the OS's own rules or its code (see touches_policy)? Symlinks are followed."""
+    try:
+        real = os.path.realpath(path)
+    except (OSError, ValueError):
+        real = path
+    for p in {path, real}:
+        if not p:
+            continue
+        if any(p.startswith(r) for r in _policy_roots()):
+            return True
+        if os.path.basename(p) in _POLICY_NAMES and (p.startswith(config.ETC) or "/.llmos/" in p
+                                                    or p.startswith(config.data(""))):
+            return True
+    return False
 
 
 # ------------------------------------------------------------ registry
@@ -94,16 +226,43 @@ class Tool:
         self.fn, self.risk, self.network = fn, risk, network
         self.available = available or (lambda: True)
 
-    def schema(self):
+    def schema(self, compact=False):
+        if not compact:
+            return {"type": "function", "function": {
+                "name": self.name, "description": self.desc,
+                "parameters": {"type": "object", "properties": self.params, "required": self.required}}}
+        # a small model context: the first sentence of the description and the parameters without theirs
+        props = {k: {kk: vv for kk, vv in v.items() if kk != "description"} if isinstance(v, dict) else v
+                 for k, v in self.params.items()}
         return {"type": "function", "function": {
-            "name": self.name, "description": self.desc,
-            "parameters": {"type": "object", "properties": self.params, "required": self.required}}}
+            "name": self.name, "description": _first_sentence(self.desc),
+            "parameters": {"type": "object", "properties": props, "required": self.required}}}
 
     def risk_for(self, args):
         return self.risk(args) if callable(self.risk) else self.risk
 
     def network_for(self, args):
         return self.network(args) if callable(self.network) else self.network
+
+
+def _first_sentence(text, n=110):
+    t = re.sub(r"\s+", " ", str(text)).strip()
+    m = re.match(r"(.+?[.!?])(\s|$)", t)
+    t = m.group(1) if m else t
+    return t if len(t) <= n else t[:n].rsplit(" ", 1)[0] + "…"
+
+
+# The order tools are offered in, most needed first. With a small model context (4 GB machines run a 6k-token
+# window, and the full list alone is ~6.5k tokens) the list is cut where the budget ends, so the everyday tools
+# always fit; the owner's connectors come right after them. The order never changes, so the prompt cache holds.
+PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpage", "real_quote", "calculate", "remember", "forget",
+            "show_screen", "schedule_task", "manage_tasks", "note_add", "notes_show", "note_done", "note_remove",
+            "set_appearance", "change_setting", "show_panel", "open_app", "play_media", "media_control", "set_volume",
+            "set_brightness", "show_files", "open_file", "delete_file", "restore_file", "empty_trash", "screenshot",
+            "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
+            "mail_delete", "mail_triage", "mail_setup", "show_image", "system_panel", "set_wallpaper",
+            "manage_models", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
+            "manage_connectors", "check_new_models", "add_model", "edit_conduct", "install_to_disk"]
 
 
 REGISTRY = {}
@@ -114,6 +273,12 @@ def tool(name, desc, params=None, required=None, risk=SAFE, network=False, avail
         REGISTRY[name] = Tool(name, desc, params or {}, required or [], fn, risk, network, available)
         return fn
     return deco
+
+
+def _has_wifi():
+    """Wi-Fi tools only on a machine with a wireless interface (iwd is installed everywhere; most VMs have none)."""
+    import glob
+    return shutil.which("iwctl") is not None and bool(glob.glob("/sys/class/net/*/wireless"))
 
 
 def active_tools():
@@ -135,11 +300,24 @@ def sync_connectors(log=None):
         return {}
 
 
-def schemas():
+def schemas(compact=False, budget=None):
+    """The tool list for the model: in PRIORITY order; compact descriptions and at most `budget` tokens of them
+    when the model's context is small (see agent.tool_schemas)."""
     # bring in the owner's connectors (MCP servers) once at first use; manage_connectors re-syncs on change
     if not _connectors_synced and config.load_json(config.data("connectors.json"), []):
         sync_connectors()
-    return [t.schema() for t in active_tools()]
+    rank = {n: i for i, n in enumerate(PRIORITY)}
+    core = rank["system_power"]
+    ts = sorted(active_tools(), key=lambda t: (rank.get(t.name, core + 0.5 if "__" in t.name else len(rank)), t.name))
+    out, used = [], 0.0
+    for t in ts:
+        sch = t.schema(compact)
+        cost = len(json.dumps(sch)) / 3.6            # about 3.6 characters of schema per token (measured)
+        if budget is not None and used + cost > budget:
+            continue
+        out.append(sch)
+        used += cost
+    return out
 
 
 STR = {"type": "string"}
@@ -183,7 +361,8 @@ def read_file(a, ctx):
 
 
 @tool("write_file", "Create or overwrite a text file (or append to it). The owner's home folder is /root (~).",
-      {"path": STR, "content": STR, "append": {"type": "boolean"}}, ["path", "content"], risk=CHANGE)
+      {"path": STR, "content": STR, "append": {"type": "boolean"}}, ["path", "content"],
+      risk=lambda a: SECURITY if _policy_path(_path(a.get("path", ""))) else CHANGE)
 def write_file(a, ctx):
     path = _path(a.get("path", ""))
     try:
@@ -587,7 +766,7 @@ def online_model(a, ctx):
             return note
         if hasattr(ctx, "setup_cloud"):
             return ctx.setup_cloud(a.get("provider"))
-        return "no screen to put a form on; say: set up the online model: provider claude, model claude-sonnet-5, key …"
+        return "no screen to put a form on; say: set up the online model: provider claude, model claude-opus-5-5, key …"
     if act in ("use", "switch", "select"):
         if not c:
             return "no online model is set up yet; say 'set up the online model' first"
@@ -1157,7 +1336,7 @@ def mail_triage(a, ctx):
     except mail.MailError as e:
         return f"error: {e}"
     if not items:
-        return "the inbox is already at zero: no unread mail"
+        return "no unread mail in the inbox: nothing new to sort"
     facts = "; ".join(f["fact"] for f in store.facts()[-20:]) or "nothing known"
     keep, noise = [], []
     for m in items:
@@ -1183,9 +1362,16 @@ def mail_triage(a, ctx):
                          "; ".join(f"{m['subject'][:40]}" for m, _ in noise[:6]) + (" …" if len(noise) > 6 else ""))
         except mail.MailError as e:
             lines.append(f"could not archive: {e}")
+    # what is really left: the sort looks at the newest 40 unread at a time, so say so rather than claim zero
+    try:
+        waiting = max(0, mail.count_unread() - len(keep))
+    except mail.MailError:
+        waiting = 0
+    if waiting:
+        lines.append(f"{waiting} more unread message(s) were not sorted this time; ask again to sort them.")
     if not keep:
-        lines.append("inbox zero.")
-        show(ctx, {"title": "Inbox zero", "size": "m", "blocks": [{"type": "text", "text": "\n".join(lines)}]})
+        lines.append("inbox zero: no unread mail is left." if not waiting else "nothing in this batch needs the owner.")
+        show(ctx, {"title": "Inbox zero" if not waiting else "Inbox", "size": "m", "blocks": [{"type": "text", "text": "\n".join(lines)}]})
     else:
         rows, items = [], []
         for m, d in sorted(keep, key=lambda x: not x[1].get("urgent")):
@@ -1763,7 +1949,7 @@ def install_to_disk(a, ctx):
             "Do not call this tool again yourself; say one sentence.")
 
 
-@tool("wifi_scan", "List Wi-Fi networks in range.", {}, [], risk=READ, available=lambda: shutil.which("iwctl") is not None)
+@tool("wifi_scan", "List Wi-Fi networks in range.", {}, [], risk=READ, available=lambda: _has_wifi())
 def wifi_scan(a, ctx):
     dev = _wifi_device()
     if not dev:
@@ -1775,7 +1961,7 @@ def wifi_scan(a, ctx):
 
 
 @tool("wifi_connect", "Connect to a Wi-Fi network (remembered for next time).",
-      {"ssid": STR, "password": STR}, ["ssid"], risk=CHANGE, available=lambda: shutil.which("iwctl") is not None)
+      {"ssid": STR, "password": STR}, ["ssid"], risk=CHANGE, available=lambda: _has_wifi())
 def wifi_connect(a, ctx):
     dev = _wifi_device()
     if not dev:

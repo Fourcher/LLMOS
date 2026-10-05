@@ -30,10 +30,18 @@ import sys
 import threading
 import time
 
-from . import agent, config, i18n, llm, media, models, store, system, ui, uispec, vault, voice, devices, version_line
+from . import agent, config, i18n, llm, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
+# what the page may send while each screen other than the desk is showing: nothing typed or spoken on the
+# lock screen, the first-run wizard or the boot screen may reach the assistant (anything else is dropped)
+SCREEN_MESSAGES = {
+    "boot": {"ready", "active"},
+    "bye": {"ready", "active"},
+    "lock": {"ready", "active", "unlock", "cancel"},
+    "wizard": {"ready", "active", "wizard", "tz.search", "wifi.scan", "dialog", "cancel"},
+}
 SOCK = os.path.join(config.RUN, "desk.sock")
 DISPLAY_ENV = os.path.join(config.RUN, "display.env")
 def _wallpaper():
@@ -327,6 +335,7 @@ class Desk:
         self.dialogs = {}            # id -> [Event, value]
         self.dialog_seq = 0
         self.requests = queue.Queue()
+        self._unlocking = threading.Lock()
         self.busy = False
         self.listening = False
         self.apps = {}               # pid -> {name, popen}
@@ -465,6 +474,9 @@ class Desk:
 
     def handle(self, msg):
         t = msg.get("t")
+        if self.screen != "desk" and t not in SCREEN_MESSAGES.get(self.screen, SCREEN_MESSAGES["boot"]):
+            sys.stderr.write(f"desk: ignored '{t}' from the page on the {self.screen} screen\n")
+            return
         if t == "ready":
             self.ready = True
             try:
@@ -622,12 +634,16 @@ class Desk:
         elif t == "app.focus":
             pass
         elif t == "lock":
-            self.lock()
+            if config.settings.get("vault"):
+                self.lock()             # at once, not queued behind a running request
+            else:
+                self.say("lock")        # nothing to lock with: the assistant says so (and how to set one up)
 
     # ---- screens
 
     def boot_screen(self):
         if config.settings.get("vault") and not vault.unlocked():
+            self._keybinds(False)       # the passphrase screen at start-up keeps no shortcuts either (no terminal)
             self.set_screen("lock")
             return
         if not config.settings.get("onboarded"):
@@ -686,8 +702,8 @@ class Desk:
         if th.acc:
             css["--accent"] = _hex(th.acc)
         corners = th.corners if th.corners in ("rounded", "square", "double", "heavy", "none") else "rounded"
-        css["--radius"] = {"rounded": "14px", "square": "0px", "none": "0px", "double": "6px", "heavy": "8px"}[corners]
-        css["--radius-sm"] = {"rounded": "9px", "square": "0px", "none": "0px", "double": "4px", "heavy": "5px"}[corners]
+        css["--radius"] = {"rounded": "14px", "square": "0px", "none": "24px", "double": "6px", "heavy": "8px"}[corners]
+        css["--radius-sm"] = {"rounded": "9px", "square": "0px", "none": "16px", "double": "4px", "heavy": "5px"}[corners]
         css["--border-w"] = {"double": "3px", "heavy": "2px"}.get(corners, "1px")
         css["--border-style"] = "double" if corners == "double" else "solid"
         css["--zoom"] = str(getattr(th, "scale", 100) / 100)
@@ -1034,7 +1050,10 @@ class Desk:
             elif self.screen == "wizard" and config.settings.get("onboarded"):
                 self.enter_desk()
             elif self.screen == "lock" and vault.unlocked() and not getattr(self, "lock_stuck", False):
+                self._keybinds(True)
                 self.enter_desk()   # another session (the console) opened the vault
+            if self.screen == "desk" and config.settings.get("vault") and not vault.unlocked():
+                threading.Thread(target=self.lock, daemon=True).start()   # ... or locked it: this screen must not stay open
         except Exception:
             pass
         return True
@@ -1240,7 +1259,7 @@ class Desk:
     # ---- voice
 
     def voice_turn(self):
-        if self.listening:
+        if self.listening or self.screen != "desk":
             return
         if not voice.available():
             self.emit({"t": "toast", "text": T("no_mic")})
@@ -1263,7 +1282,7 @@ class Desk:
                 self.listening = False
                 self.emit({"t": "listening", "on": False})
                 self.push_status()
-            if text:
+            if text and self.screen == "desk":
                 self.emit({"t": "heard", "text": text})
                 self.say(text)
         threading.Thread(target=go, daemon=True).start()
@@ -1306,8 +1325,10 @@ class Desk:
             else:
                 with open("/etc/xdg/labwc/rc.xml") as f:
                     xml = f.read()
-                xml = re.sub(r"<keyboard>.*?</keyboard>", "<keyboard></keyboard>", xml, flags=re.S)
-                xml = re.sub(r"<mouse>.*?</mouse>", "<mouse></mouse>", xml, flags=re.S)
+                xml = re.sub(r"<keyboard>.*?</keyboard>", '<keyboard><keybind key="W-A-C-S-F24"><action name="None"/></keybind></keyboard>',
+                             xml, flags=re.S)
+                xml = re.sub(r"<mouse>.*?</mouse>", '<mouse><context name="Root"><mousebind button="Right" action="Press"><action name="None"/>'
+                             '</mousebind></context></mouse>', xml, flags=re.S)
                 with open(rc, "w") as f:
                     f.write(xml)
             subprocess.run(["labwc", "--reconfigure"], capture_output=True, timeout=10, env=self._child_env())
@@ -1316,6 +1337,15 @@ class Desk:
 
     def lock(self):
         self.lock_stuck = False
+        self.ctx.cancel.set()               # a turn in progress stops; nothing queued runs behind the lock
+        self.decline_dialogs()
+        while True:
+            try:
+                _, done = self.requests.get_nowait()
+            except queue.Empty:
+                break
+            if done:
+                done.set()
         self._keybinds(False)
         # locking closes every program of this session (a browser with its profile in the vault, a terminal
         # sitting in the home folder, a player on a file in it would otherwise keep the vault open)
@@ -1358,14 +1388,20 @@ class Desk:
         self.push_status()
 
     def unlock(self, passphrase):
-        if not passphrase:
+        # only from the lock screen (a repeat that arrives after the desk opened is not a failed attempt), one at
+        # a time; vault.unlock checks the passphrase against the header even when the vault is still mounted
+        if not passphrase or self.screen != "lock":
             return
-        self.emit({"t": "unlock.busy"})
-        ok = False
+        if not self._unlocking.acquire(blocking=False):
+            return                          # already trying this passphrase (Enter pressed twice)
         try:
-            ok = vault.unlock(passphrase)
-        except Exception:
-            ok = False
+            self.emit({"t": "unlock.busy"})
+            try:
+                ok = vault.unlock(passphrase)
+            except Exception:
+                ok = False
+        finally:
+            self._unlocking.release()
         if ok:
             self.unlock_failures = 0
             self.lock_stuck = False
@@ -1460,7 +1496,7 @@ class Desk:
                 ram = models.ram_gb()
                 inst = {m["id"] for m in models.installed()}
                 fits = sorted([m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (net_pol != "no" or m["id"] in inst)],
-                              key=lambda m: m["size"])
+                              key=lambda m: round(m["size"] / 1e9, 1))
                 pick = None
                 if fits:
                     pick = fits[0] if cap < 34 else fits[len(fits) // 2] if cap < 67 else fits[-1]
@@ -1543,8 +1579,9 @@ class Desk:
     # ---- apps and terminals (windows in the compositor)
 
     def _child_env(self):
-        env = dict(os.environ, HOME=config.home(), MOZ_ENABLE_WAYLAND="1", GDK_BACKEND="wayland", QT_QPA_PLATFORM="wayland",
+        env = dict(os.environ, MOZ_ENABLE_WAYLAND="1", GDK_BACKEND="wayland", QT_QPA_PLATFORM="wayland",
                    SDL_VIDEODRIVER="wayland", XDG_SESSION_TYPE="wayland")
+        env.update(config.personal_env())
         return env
 
     def launch_app(self, argv, name=""):

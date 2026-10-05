@@ -868,6 +868,31 @@ _ALIASES = {
 }
 _ALIAS = {a: code for code, names in _ALIASES.items() for a in names}
 
+# names of languages (lower case; English and native), so that "speak spanish" is told apart from "speak louder"
+# and "use firefox". A language not listed still works by asking the assistant ("put everything in Klingon").
+LANGUAGE_NAMES = {a for a in _ALIAS if len(a) > 3} | set("""afrikaans albanian amharic arabic armenian assamese
+azerbaijani azeri basque belarusian bengali bosnian breton bulgarian burmese cantonese catalan cebuano cherokee chinese
+corsican croatian czech danish dari dutch english esperanto estonian faroese farsi fijian filipino finnish flemish french
+frisian galician georgian german greek greenlandic guarani gujarati haitian hausa hawaiian hebrew hindi hmong hungarian
+icelandic igbo indonesian inuktitut irish italian japanese javanese kannada kashmiri kazakh khmer kinyarwanda klingon
+korean kurdish kyrgyz lao latin latvian lingala lithuanian luxembourgish macedonian malagasy malay malayalam maltese
+mandarin manx maori marathi mongolian montenegrin nahuatl navajo nepali norwegian occitan odia oriya oromo pashto persian
+polish portuguese punjabi quechua romanian romansh russian samoan sanskrit scots serbian sesotho shona sindhi sinhala
+sinhalese slovak slovene slovenian somali sorani spanish sundanese swahili swedish tagalog tajik tamil tatar telugu thai
+tibetan tigrinya tongan turkish turkmen twi ukrainian urdu uyghur uzbek vietnamese welsh wolof xhosa yiddish yoruba zulu
+español français deutsch italiano português русский українська polski nederlands svenska norsk dansk suomi türkçe
+ελληνικά עברית العربية فارسی हिन्दी বাংলা 한국어 日本語 中文 普通话 粤语""".split())
+
+
+def is_language(name):
+    """Is this the name of a language ("Spanish", "español", "Chinese (Simplified)")?"""
+    n = re.sub(r"\s*\([^)]*\)\s*$", "", str(name or "").strip().lower())
+    return n in LANGUAGE_NAMES or str(name or "").strip().lower() in LANGUAGE_NAMES
+
+
+def _placeholders(text):
+    return set(re.findall(r"\{(\w+)\}", str(text)))
+
 
 def lang_code(name):
     n = (name or "").strip().lower()
@@ -896,6 +921,9 @@ def _generated(code, name):
         keys = list(EN)
         table = llm.translate_strings({k: EN[k] for k in keys}, name)
         if table and all(isinstance(table.get(k), str) and table[k].strip() for k in keys):
+            # a translation that renamed or dropped a {placeholder} would crash the screen that uses it:
+            # those few strings stay in English
+            table = {k: (table[k] if _placeholders(table[k]) == _placeholders(EN[k]) else EN[k]) for k in keys}
             config.save_json(path, table, mode=0o644)
             return table
     except Exception:
@@ -924,4 +952,9 @@ def table_for(language):
 
 def t(key, area=None, **fmt):
     s = table_for(config.llm_language(area)).get(key) or EN.get(key, key)
-    return s.format(**fmt) if fmt else s
+    if not fmt:
+        return s
+    try:
+        return s.format(**fmt)
+    except (KeyError, IndexError, ValueError):     # a stored translation with a broken placeholder: English
+        return EN.get(key, key).format(**fmt)

@@ -9,11 +9,18 @@ python3 -c "import sys; sys.path.insert(0,'/usr/lib/llmos'); from llmos import v
 echo "--- direct transcription of the test sentence (no typing)"
 python3 -c "import sys; sys.path.insert(0,'/usr/lib/llmos'); from llmos import voice; print('heard:', repr(voice.transcribe('/tmp/dict-speech.wav', keep=True)))"
 echo "--- dictation into a focused terminal"
-rm -f /tmp/typed.txt
+want="Please remember to water the plants on Thursday."
+rm -f /tmp/typed.txt /tmp/preenter.txt
 foot -a dictate-target sh -c 'read -r line; printf "%s\n" "$line" > /tmp/typed.txt' &
 sleep $((4 * ${SLOW:-1}))
 llmos dictate
 sleep ${SLOW:-1}
+# nothing must have run yet: dictation types the words but never presses Enter (so a terminal does not run them)
+cp -f /tmp/typed.txt /tmp/preenter.txt 2>/dev/null || true
+[ -s /tmp/preenter.txt ] && { echo "FAIL: a line was entered before Return was pressed"; exit 1; }
 wtype -k Return
 sleep $((2 * ${SLOW:-1}))
-echo "TYPED_INTO_TERMINAL: $(cat /tmp/typed.txt 2>/dev/null || echo NOTHING)"
+got=$(cat /tmp/typed.txt 2>/dev/null || echo NOTHING)
+echo "TYPED_INTO_TERMINAL: $got"
+[ "$got" = "$want" ] || { echo "FAIL: typed text does not match what was spoken (wanted: $want)"; exit 1; }
+echo "DICTATE_OK"

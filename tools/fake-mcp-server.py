@@ -4,6 +4,7 @@ add) and answers JSON-RPC 2.0 on stdin/stdout. Used by tools/test-connectors.py 
 connector: add a connector whose command is 'python3 .../tools/fake-mcp-server.py'."""
 import json
 import sys
+import time
 
 TOOLS = [
     {"name": "echo", "description": "Echo the given text back.",
@@ -12,6 +13,8 @@ TOOLS = [
     {"name": "add", "description": "Add two numbers.",
      "inputSchema": {"type": "object", "properties": {"a": {"type": "number"}, "b": {"type": "number"}}, "required": ["a", "b"]}},
 ]
+if "--stall" in sys.argv:       # tests: a tool that writes half a line and then never answers
+    TOOLS.append({"name": "stall", "description": "Stop responding (tests).", "inputSchema": {"type": "object", "properties": {}}})
 
 
 def send(obj):
@@ -44,6 +47,10 @@ def main():
             name, args = p.get("name"), p.get("arguments", {})
             if name == "echo":
                 send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": "echo: " + str(args.get("text", ""))}]}})
+            elif name == "stall" and "--stall" in sys.argv:
+                sys.stdout.write('{"jsonrpc": "2.0", "id": ' + json.dumps(mid))     # half a line, no newline
+                sys.stdout.flush()
+                time.sleep(3600)
             elif name == "add":
                 send({"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": str((args.get("a") or 0) + (args.get("b") or 0))}]}})
             else:

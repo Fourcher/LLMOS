@@ -224,7 +224,11 @@ def _block(b):
         return {"type": "form", "fields": fields, "submit": submit}
     if t == "quote":
         text = _s(b.get("text"), 1000).strip().strip('"\u201c\u201d\u2018\u2019\'').strip()
-        return {"type": "quote", "text": text, "author": _s(b.get("author"), 120), "source": _url(b.get("source"), 400)} if text else None
+        src = _url(b.get("source"), 400)
+        # a quotation is shown as sourced (author + "— quote marks") only with a real source URL; without one it
+        # is the model's own composition, rendered as plain text so it is never mistaken for a real human quote
+        return {"type": "quote", "text": text, "author": _s(b.get("author"), 120), "source": src} if (text and src) \
+            else ({"type": "text", "text": text} if text else None)
     if t == "code":
         text = _s(b.get("text") or b.get("content"))
         return {"type": "code", "text": text, "lang": _s(b.get("lang"), 20)} if text else None

@@ -13,6 +13,7 @@ Dependency-free: JSON-RPC 2.0 over a subprocess or over http.client. No third-pa
 import http.client
 import json
 import os
+import select
 import shlex
 import subprocess
 import threading
@@ -111,6 +112,9 @@ class Client:
         self._lock = threading.Lock()
         self.tools = []
         self.server_info = {}
+        self._buf = b""
+        self._session = None          # Streamable HTTP: the Mcp-Session-Id the server gave at initialize
+        self._protocol = None         # the protocol version agreed at initialize (sent on later HTTP requests)
 
     # ---- transport
 
@@ -119,18 +123,43 @@ class Client:
         env.update({str(k): str(v) for k, v in (self.spec.get("env") or {}).items()})
         argv = self.spec["command"] if isinstance(self.spec["command"], list) else shlex.split(self.spec["command"])
         self.proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.DEVNULL, env=env, text=True, bufsize=1)
+                                     stderr=subprocess.DEVNULL, env=env)
+        self._buf = b""
+
+    def _readline(self, deadline):
+        """One line from a stdio connector, giving up at the deadline. The pipe is read with select(), not a
+        blocking readline(): a connector that stalls (even half-way through a line) must not hang the turn."""
+        out = self.proc.stdout
+        while b"\n" not in self._buf:
+            left = deadline - time.time()
+            if left <= 0:
+                self.stop()                   # its state is unknown now; the next call starts it afresh
+                raise McpError("the connector timed out")
+            ready, _, _ = select.select([out], [], [], min(left, 1.0))
+            if not ready:
+                continue
+            chunk = os.read(out.fileno(), 65536)
+            if not chunk:
+                raise McpError("the connector stopped responding")
+            self._buf += chunk
+            if len(self._buf) > 32 << 20:
+                self.stop()
+                raise McpError("the connector sent too much without a line break")
+        line, _, self._buf = self._buf.partition(b"\n")
+        return line.decode("utf-8", "replace")
 
     def _rpc_stdio(self, msg, want_id, deadline):
-        self.proc.stdin.write(json.dumps(msg) + "\n")
-        self.proc.stdin.flush()
+        if self.proc is None or self.proc.poll() is not None:
+            raise McpError("the connector is not running")
+        try:
+            self.proc.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
+            self.proc.stdin.flush()
+        except (OSError, ValueError):
+            raise McpError("the connector stopped responding")
         if want_id is None:
             return None
-        while time.time() < deadline:
-            line = self.proc.stdout.readline()
-            if line == "":
-                raise McpError("the connector stopped responding")
-            line = line.strip()
+        while True:
+            line = self._readline(deadline).strip()
             if not line:
                 continue
             try:
@@ -140,7 +169,6 @@ class Client:
             if isinstance(obj, dict) and obj.get("id") == want_id:
                 return obj
             # notifications and other ids are ignored
-        raise McpError("the connector timed out")
 
     def _rpc_http(self, msg, want_id, deadline):
         u = urllib.parse.urlparse(self.spec["url"])
@@ -149,13 +177,23 @@ class Client:
         conn = (http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection)(
             u.hostname, u.port or (443 if u.scheme == "https" else 80), timeout=max(5, int(deadline - time.time())))
         headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+        if self._session:
+            headers["Mcp-Session-Id"] = self._session
+        if self._protocol:
+            headers["MCP-Protocol-Version"] = self._protocol
         headers.update({str(k): str(v) for k, v in (self.spec.get("headers") or {}).items()})
         try:
-            conn.request("POST", u.path or "/", json.dumps(msg), headers)
+            conn.request("POST", (u.path or "/") + (("?" + u.query) if u.query else ""), json.dumps(msg), headers)
             r = conn.getresponse()
             body = r.read().decode("utf-8", "replace")
         finally:
             conn.close()
+        if msg.get("method") == "initialize" and r.getheader("Mcp-Session-Id"):
+            self._session = r.getheader("Mcp-Session-Id")
+        if r.status == 404 and self._session:
+            # the server ended this session: the next call starts a new one (MCP Streamable HTTP)
+            self._session, self._protocol, self.ready = None, None, False
+            raise McpError("the connector's session ended; it reconnects on the next request")
         if want_id is None:
             return None
         if r.status >= 400:
@@ -199,11 +237,14 @@ class Client:
     def start(self):
         if self.transport == "stdio" and (self.proc is None or self.proc.poll() is not None):
             self._start_stdio()
+        self._session = self._protocol = None
         res = self._rpc("initialize", {"protocolVersion": PROTOCOL, "capabilities": {},
                                        "clientInfo": CLIENT_INFO}, timeout=30)
         self.server_info = res.get("serverInfo", {}) if isinstance(res, dict) else {}
+        self._protocol = (res.get("protocolVersion") if isinstance(res, dict) else None) or PROTOCOL
         self._rpc("notifications/initialized", notify=True)
         self.refresh_tools()
+        self.ready = True
         return self
 
     def refresh_tools(self):
@@ -278,7 +319,7 @@ def _client(spec):
     name = spec["name"]
     with _clients_lock:
         c = _clients.get(name)
-        if c and (c.transport != "stdio" or (c.proc and c.proc.poll() is None)):
+        if c and getattr(c, "ready", False) and (c.transport != "stdio" or (c.proc and c.proc.poll() is None)):
             return c
         c = Client(spec)
         _clients[name] = c

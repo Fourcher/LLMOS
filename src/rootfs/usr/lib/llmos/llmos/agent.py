@@ -105,10 +105,20 @@ ROUTE_QUESTION = ("[Routing question, answer with one letter: is this request (A
                   "stronger online model would do much better?]")
 
 
+def tool_schemas():
+    """The tools offered to the on-device model. With a context under 12k tokens (4 and 8 GB machines) the list
+    is compact and cut to what leaves room for the system prompt, the recent conversation, the request and the
+    answer; the same list every time, so the prompt cache holds."""
+    n = llm.context_size()
+    if not n or n >= 12000:
+        return tools.schemas()
+    return tools.schemas(compact=True, budget=max(1500, n - 3400))
+
+
 def route_score(msgs):
     """How likely this turn is 'a big one' for the online model, from one decision pass that shares the
     turn's prompt cache; (None, timings) when the model cannot say."""
-    p, info = llm.decide(msgs, ("A", "B"), question=ROUTE_QUESTION, prefill="(", tools=tools.schemas())
+    p, info = llm.decide(msgs, ("A", "B"), question=ROUTE_QUESTION, prefill="(", tools=tool_schemas())
     return (p["B"] if p else None), info
 
 
@@ -272,6 +282,8 @@ def _replay(ctx, user_text, rt):
     msgs += [{"role": "tool", "tool_call_id": f"call_r{i}", "content": o} for i, (_, _, o) in enumerate(outs)]
     msgs.append({"role": "user", "content": "Answer the request above from these results, in a sentence or two."})
     online = config.settings.get("brain", "local") == "cloud" and config.cloud() is not None and config.settings.get("internet") != "no"
+    if online:
+        _going_online(ctx, True)
     chat = llm.cloud_chat if online else llm.chat
     stream = ctx.new_stream()
     try:
@@ -320,7 +332,7 @@ def warm_up():
     try:
         llm.chat([{"role": "system", "content": system_prompt()},
                   {"role": "user", "content": "[context]\n[/context]\n\nhi"}],
-                 tools=tools.schemas(), max_tokens=1, think=False)
+                 tools=tool_schemas(), max_tokens=1, think=False)
     except Exception:
         pass
 
@@ -371,7 +383,7 @@ def run(ctx, user_text, history):
         st = ctx.new_stream()
         ctx.on_text(st, reply)
         ctx.end_stream(st)
-        history.append({"role": "user", "content": user_text})
+        history.append({"role": "user", "content": _for_history(user_text)})
         history.append({"role": "assistant", "content": reply})
         return reply
 
@@ -385,7 +397,7 @@ def run(ctx, user_text, history):
         st = ctx.new_stream()
         ctx.on_text(st, reply)
         ctx.end_stream(st)
-        history.append({"role": "user", "content": user_text})
+        history.append({"role": "user", "content": _for_history(user_text)})
         history.append({"role": "assistant", "content": reply})
         return reply
 
@@ -395,7 +407,7 @@ def run(ctx, user_text, history):
     if rt:
         reply = _replay(ctx, user_text, rt)
         if reply is not None:
-            history.append({"role": "user", "content": user_text})
+            history.append({"role": "user", "content": _for_history(user_text)})
             history.append({"role": "assistant", "content": reply})
             return reply
 
@@ -429,7 +441,7 @@ def run(ctx, user_text, history):
                 _ctx(ctx, "expect", est, step)
             t0 = time.time()
             try:
-                result = chat(msgs, tools=tools.schemas(),
+                result = chat(msgs, tools=tools.schemas() if where == "cloud" else tool_schemas(),
                               on_text=lambda t: ctx.on_text(stream, t))
             except llm.CloudError as e:
                 # the online model did not answer: say so and carry on here with the same messages
@@ -463,7 +475,7 @@ def run(ctx, user_text, history):
                 # honesty guard: the model narrated an action but ran no tool for it
                 if not tools_ran and not nudged and _CLAIM_RE.search(content):
                     nudged = True
-                    msgs.append({"role": "assistant", "content": content})
+                    msgs.append({"role": "assistant", "content": content, **({"_anthropic": result["raw"]} if result.get("raw") else {})})
                     msgs.append({"role": "user", "content":
                                  "You described that as done, but you did not call any tool, so nothing "
                                  "actually happened. If it needs a tool, call it now. If no tool fits, say "
@@ -475,6 +487,8 @@ def run(ctx, user_text, history):
                              "tool_calls": [{"id": c["id"] or f"call_{step}_{i}", "type": "function",
                                              "function": {"name": c["name"], "arguments": c["arguments"]}}
                                             for i, c in enumerate(calls)]}
+            if result.get("raw"):
+                assistant_msg["_anthropic"] = result["raw"]     # replayed unchanged on the next step (llm.py)
             msgs.append(assistant_msg)
             fresh = 0
             for i, call in enumerate(calls):
@@ -517,7 +531,7 @@ def run(ctx, user_text, history):
     if tool_steps == 1 and final and not nudged and not shrunk and not forced and not getattr(ctx, "after_turn", None):
         _maybe_save_routine(user_text, first_calls)
     # keep only the clean exchange in cross-turn history
-    history.append({"role": "user", "content": user_text})
+    history.append({"role": "user", "content": _for_history(user_text)})
     history.append({"role": "assistant", "content": final or "(done)"})
     return final
 
@@ -621,12 +635,37 @@ def _shortcut_reply(name, args, out):
     return out
 
 
+_SECRET_NAME = re.compile(r"pass|secret|token|credential|authori|cookie|^(?:api_?)?key$|_key$|apikey|private", re.I)
+_SECRET_VALUE = re.compile(r"\b(?:sk-[A-Za-z0-9_-]{12,}|sk-ant-[A-Za-z0-9_-]{8,}|xox[abp]-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{20,}|"
+                           r"hf_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,})")
+
+
 def _redacted(args):
-    """Tool arguments as shown on screen and kept in the audit log: secrets
-    the owner typed (an email password) are not echoed or stored."""
-    if not isinstance(args, dict):
-        return args
-    return {k: ("•••" if isinstance(v, str) and re.search(r"pass|secret|token", k, re.I) else v) for k, v in args.items()}
+    """Tool arguments as shown on screen and kept in the audit log: secrets the owner typed (an email or Wi-Fi
+    password, an API key, a token in a connector's environment or headers) are not echoed or stored -- by the
+    argument's name, inside nested settings, and by the look of the value (sk-..., tokens) wherever it is."""
+    if isinstance(args, dict):
+        return {k: ("•••" if isinstance(v, (str, int)) and _SECRET_NAME.search(str(k)) and str(v) else _redacted(v))
+                for k, v in args.items()}
+    if isinstance(args, list):
+        return [_redacted(v) for v in args]
+    if isinstance(args, str):
+        return _SECRET_VALUE.sub("•••", args)
+    return args
+
+
+# a request that carries a credential ("set up my email: ... password hunter2", "connect to Wi-Fi X with password
+# Y", "key sk-...") is kept in the conversation without it: the conversation is replayed to the model on later
+# turns, and to the online model when the owner's brain setting sends one there
+_CREDENTIAL_IN_TEXT = re.compile(r"(\b(?:pass(?:word|phrase|code)?|pwd|api[\s_-]?key|key|token|secret)(?:\s+is)?(?:\s*[=:]\s*|\s+))(\S{4,})", re.I)
+_PROVIDES_CREDENTIAL = re.compile(r"set ?up|connect|log ?in|sign ?in|account|wi-?fi|e-?mail|\bmail\b|online model|\bapi\b", re.I)
+
+
+def _for_history(text):
+    t = _SECRET_VALUE.sub("•••", text)
+    if _PROVIDES_CREDENTIAL.search(t):
+        t = _CREDENTIAL_IN_TEXT.sub(lambda m: m.group(1) + "•••", t)
+    return t
 
 
 # Irreversible actions that reach other people or end the session must be
@@ -673,7 +712,8 @@ def execute(ctx, name, arguments):
             store.audit(name, shown, "denied network", allowed=False)
             return "the owner declined internet access for this. Continue without it."
 
-    # unattended runs (the scheduler) never do anything irreversible on their own, whatever the autonomy level
+    # unattended runs (the scheduler) go through ctx.confirm_action for anything irreversible: it follows the owner's
+    # autonomy level (hands-off runs what was scheduled; balanced/hands-on leave it undone), and never a security change
     if needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
         if not ctx.confirm_action(tool, shown, risk):
             store.audit(name, shown, "denied", allowed=False)

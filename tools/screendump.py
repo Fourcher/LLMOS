@@ -2,6 +2,7 @@
 """Grab the guest's framebuffer through QEMU's monitor socket and save it as
 PNG (no third-party libraries).  usage: screendump.py MONITOR.sock OUT.png"""
 import os
+import tempfile
 import socket
 import struct
 import sys
@@ -61,8 +62,7 @@ def ppm_to_png(ppm_path, png_path):
 if __name__ == "__main__":
     sock, out = sys.argv[1], sys.argv[2]
     # QEMU's monitor splits arguments on spaces: dump into a space-free path
-    ppm = os.path.join("/private/tmp/claude-501/-Volumes-Files-Claude-Work-Area-LLMOS/86625566-deaf-4867-9565-8f3b6d502142/scratchpad",
-                       os.path.basename(out) + ".ppm")
+    ppm = os.path.join(tempfile.gettempdir(), os.path.basename(out) + ".ppm")
     if os.path.exists(ppm):
         os.unlink(ppm)
     monitor(sock, f"screendump {ppm}")

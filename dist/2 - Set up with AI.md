@@ -224,8 +224,12 @@ machine's CD drive in its settings.
    key while the maker's logo shows — usually **F12**, sometimes **F11**,
    **Esc**, **F8**, **F9** (HP) or **F10**; on some machines **Del/F2** opens
    the firmware where the stick is chosen under *Boot*. If the stick isn't
-   offered, turn off **Secure Boot** in the firmware. On an Intel Mac: hold
-   **Option (⌥)** while it starts and choose the orange **EFI Boot**.
+   offered, turn **Secure Boot off** in the firmware (LLM OS's boot loader is
+   unsigned, so it will not start with Secure Boot on). On Windows, suspend
+   BitLocker *before* changing Secure Boot, or Windows may demand its recovery
+   key next start. On an Intel Mac: hold **Option (⌥)** while it starts and
+   choose the orange **EFI Boot** (a T2 Mac needs **No Security** +
+   external-media boot in Startup Security Utility first).
 
 Starting from the stick changes nothing on that computer.
 
@@ -240,8 +244,9 @@ Only after they've tried it from a USB stick (b) and want to keep it.
    Windows partition → **Shrink Volume**, free at least **32 GB**, leave it
    unallocated. **Next to macOS (Intel Mac):** Disk Utility → Partition → add
    a partition of 32 GB+, apply, then remove that new partition so the space
-   is free. Macs with a T2 chip: allow booting from external media in Startup
-   Security Utility.
+   is free. Macs with a T2 chip: in **Startup Security Utility** (hold Cmd+R
+   at start → Utilities) set **No Security** and allow booting from external
+   media. On Windows, suspend BitLocker before any firmware change.
 3. Start from the USB stick, then inside LLM OS say **"install LLM OS
    alongside Windows"** (or "alongside macOS"), or **"erase the whole disk and
    install LLM OS"** if they want only LLM OS. It shows the exact plan and asks

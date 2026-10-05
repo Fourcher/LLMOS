@@ -253,6 +253,20 @@ CASES = {
     "ask me what I want": None,
     # replies need a mail account (none on the build host) -> model / no-account guard
     "reply to Alice that Friday at 7 works and I'll bring dessert": None,
+    # review 2026-10-04: words after "speak", "use" or "switch to" are a language only when they name one
+    "speak louder": None, "speak slower": None, "speak up": None, "use firefox": None, "switch to firefox": None,
+    "use python": None, "use gemma": None, "talk to me in riddles": None, "put everything in bold": None,
+    "speak spanish": ("set_appearance", {"language": "spanish"}),
+    "speak in spanish": ("set_appearance", {"language": "spanish"}),
+    "switch to german": ("set_appearance", {"language": "german"}),
+    # the brief's own example, in the ways people say it; "settings in order" is not a language
+    "settings in Chinese, rest in English": ("set_appearance", {"settings_language": "Chinese", "language": "English"}),
+    "put the settings in Chinese and the rest of the OS in English": ("set_appearance", {"settings_language": "Chinese", "language": "English"}),
+    "I want settings in Chinese and everything else in English": ("set_appearance", {"settings_language": "Chinese", "language": "English"}),
+    "put the settings in order": None,
+    # "no corners and everything to be rounded" (the brief): no corners means rounded
+    "no corners": ("set_appearance", {"corners": "rounded"}),
+    "make everything purple with no corners": ("set_appearance", {"color": "purple", "accent": "purple", "corners": "rounded"}),
 }
 
 bad = 0

@@ -1,7 +1,7 @@
 /* LLM OS desk — the generated interface, themed from the owner's preferences.
    Colours, corners and fonts come from CSS variables set by the OS.
    Motion: every duration is multiplied by --dur (1 = full, .5 = reduced, 0 = off), set from the owner's
-   "motion" setting; continuous motion is driven from desk.js at a few changes per second.
+   "motion" setting; continuous motion is driven from desk.js at a few changes per second. */
 :root {
   --bg: #0b0d14;
   --fg: #e8e9ef;
@@ -28,6 +28,10 @@ body.light { --shadow: 0 16px 40px rgba(0,0,0,.18); }
 :root[data-motion="reduced"] { --dur: .5; }
 :root[data-motion="off"] { --dur: 0; }
 :root[data-motion="off"] *, :root[data-motion="off"] *::before, :root[data-motion="off"] *::after { animation: none !important; transition: none !important; }
+/* "reduced" keeps one-off transitions but stops the continuous (ambient) animations, which never settle */
+:root[data-motion="reduced"] .orb.listening, :root[data-motion="reduced"] .orb.speaking, :root[data-motion="reduced"] .orb.attention,
+:root[data-motion="reduced"] .chip .dot.busy, :root[data-motion="reduced"] .mic.on, :root[data-motion="reduced"] .think i,
+:root[data-motion="reduced"] .caret { animation: none !important; }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; }

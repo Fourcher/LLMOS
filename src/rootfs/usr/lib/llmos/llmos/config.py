@@ -8,9 +8,13 @@ Two stores:
                                         audit log, mail account. Lives inside the
                                         encrypted vault when the user enabled one.
 """
+import contextlib
+import errno
+import fcntl
 import json
 import os
 import tempfile
+import threading
 
 ETC = os.environ.get("LLMOS_ETC", "/etc/llmos")
 LIB = os.environ.get("LLMOS_LIB", "/var/lib/llmos")
@@ -57,10 +61,63 @@ def home():
     return os.environ.get("LLMOS_HOME") or os.path.expanduser("~")
 
 
+def personal_env():
+    """For programs the owner runs (a browser, a terminal, a player): their caches and settings go to the home
+    folder -- inside the vault when there is one -- not to /var/cache/llmos, where the desk keeps its own (so that
+    locking can unmount the vault). Locking closes those programs first."""
+    h = home()
+    return {"HOME": h, "XDG_CACHE_HOME": os.path.join(h, ".cache"), "XDG_CONFIG_HOME": os.path.join(h, ".config")}
+
+
+def vault_closed():
+    """The owner has a vault and it is not open: nothing personal may be written to the bare disk below it
+    (a scheduled task still running when the screen locked, a console left open)."""
+    try:
+        if not settings.get("vault"):
+            return False
+        from . import vault
+        return not vault.unlocked()
+    except Exception:
+        return False
+
+
 def data_dir():
     d = os.path.join(home(), ".llmos")
-    os.makedirs(d, mode=0o700, exist_ok=True)
+    if not vault_closed():
+        os.makedirs(d, mode=0o700, exist_ok=True)
     return d
+
+
+def guard_write(path):
+    """Refuse to write personal data under the home folder while the vault is closed (fail closed)."""
+    if vault_closed() and os.path.abspath(path).startswith(home().rstrip("/") + "/"):
+        raise OSError(errno.EACCES, "the vault is locked: personal data is not written outside it", path)
+
+
+_lock_depth = threading.local()
+
+
+@contextlib.contextmanager
+def data_lock():
+    """Serialise a read-modify-write of the owner's data files across processes (the desk, the console and the
+    scheduler each run their own) and threads. Re-entrant within a thread."""
+    if getattr(_lock_depth, "n", 0):
+        _lock_depth.n += 1
+        try:
+            yield
+        finally:
+            _lock_depth.n -= 1
+        return
+    path = os.path.join(data_dir(), ".lock")
+    guard_write(path)
+    with open(path, "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        _lock_depth.n = 1
+        try:
+            yield
+        finally:
+            _lock_depth.n = 0
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def data(name):
@@ -105,6 +162,7 @@ def load_json(path, default):
 
 
 def save_json(path, obj, mode=0o600):
+    guard_write(path)
     d = os.path.dirname(path)
     os.makedirs(d, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-")
