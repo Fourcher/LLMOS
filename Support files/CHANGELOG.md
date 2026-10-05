@@ -34,6 +34,9 @@ computer, and connecting Claude or ChatGPT without typing a key.
   monitor, 200 % above): text was tiny on such screens. Text size now uses
   the page's own zoom, so layouts stay intact at any size.
 - The last page recaps the choices in the same words as the settings page.
+- Replies the OS gives itself no longer end with notes meant for the model
+  ("…Say one sentence at most."), and the activity line names the online-model
+  steps in words instead of raw arguments.
 - **Locking no longer freezes the screen.** Locking ends the session's
   programs but spares the desk's own page process; Linux cuts process names
   at 15 characters ("WebKitWebProces"), so that exception never matched and

@@ -114,5 +114,27 @@ check(opened == ["cloud-form"], "the panel's 'Another service (paste a key)' ope
 check(desk.DeskCtx._provider("Claude") == "anthropic" and desk.DeskCtx._provider("OpenAI") == "chatgpt" and desk.DeskCtx._provider("x") == "",
       "sign-in names: Claude -> anthropic, ChatGPT/OpenAI -> chatgpt")
 
+print("what the owner reads when the OS answers these itself (no notes meant for the model)")
+from llmos import agent  # noqa: E402
+R = agent._shortcut_reply
+opened.clear()
+sctx = types.SimpleNamespace(d=types.SimpleNamespace(GLib=types.SimpleNamespace(idle_add=lambda fn, pid: opened.append(("signin", pid))),
+                                                     _signin_open=None), _provider=desk.DeskCtx._provider)
+check(R("online_model", {}, desk.DeskCtx.signin(sctx, "chatgpt")) == "Sign in there, create a key and press Copy next to it; the window closes by itself."
+      and opened == [("signin", "chatgpt")], "sign in to ChatGPT: the window opens; the reply says what to do there")
+check(R("online_model", {}, desk.DeskCtx.setup_cloud(ctx, None)) == "Here it is.", "the connect panel: 'Here it is.'")
+check(R("online_model", {}, desk.DeskCtx.setup_cloud(ctx, "other")) == "Here it is.", "the other-service form: 'Here it is.'")
+for out in ("the trash is empty (2 item(s) deleted for good). Say one sentence at most.",
+            "3 item(s) in ~ are listed on the owner's screen; do not repeat them, say one sentence at most.",
+            "shown: the Alps (CC BY). Source: https://x. Say one sentence at most; do not describe the photo."):
+    check("sentence" not in R("anything", {}, out).lower(), f"no model note: {R('anything', {}, out)!r}")
+
+tool = types.SimpleNamespace(name="online_model")
+labels = [desk.Desk.describe_tool(None, tool, {"action": "sign in", "provider": "chatgpt"}),
+          desk.Desk.describe_tool(None, tool, {"action": "set up", "provider": "other"}),
+          desk.Desk.describe_tool(None, tool, {"action": "forget"}, confirm=True)]
+check(labels == ["sign in to ChatGPT", "connect an online model", "Forget the online model?"] and not any("{" in x for x in labels),
+      f"the activity line says it in words, not raw arguments {labels}")
+
 print(f"\n{'all good' if not fails else str(fails) + ' failure(s)'}")
 sys.exit(1 if fails else 0)

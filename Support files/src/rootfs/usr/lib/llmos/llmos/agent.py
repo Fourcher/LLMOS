@@ -540,7 +540,17 @@ def _cap(s):
     return s[:1].upper() + s[1:]
 
 
+# a tool's result ends with a note for the model ("Say one sentence at most.", "do not repeat them, ..."); when the
+# OS answers a shortcut itself, that note must not reach the owner
+_MODEL_NOTE = re.compile(r"(?:[.;]\s*|\s+)(?:do not (?:repeat|describe)[^.;]*[.;,]\s*)?say one sentence at most(?:[;,][^.]*)?\.?\s*$", re.I)
+
+
 def _shortcut_reply(name, args, out):
+    """What the owner reads when the OS ran a shortcut itself: the tool's result, in words for a person."""
+    return _MODEL_NOTE.sub(".", str(_shortcut_words(name, args, out))).strip()
+
+
+def _shortcut_words(name, args, out):
     low = str(out).lower()
     if low.startswith("error: "):
         return _cap(str(out)[7:].rstrip(".")) + "."
@@ -623,6 +633,12 @@ def _shortcut_reply(name, args, out):
         if m:
             return (f"Here is {m.group(2)} — {m.group(3)}." if name == "show_image"
                     else f"Wallpaper set: {m.group(2)} ({m.group(3)}).")
+        return out
+    if name == "online_model":
+        if "sign-in window" in low:
+            return "Sign in there, create a key and press Copy next to it; the window closes by itself."
+        if "panel is on" in low or "form is on" in low:
+            return "Here it is."
         return out
     if name == "mail_setup":
         if low.startswith("email set up"):

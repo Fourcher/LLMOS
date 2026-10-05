@@ -77,7 +77,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "q_guidance_0_s", "q_guidance_1_s", "q_motion_0_s", "q_motion_1_s", "q_motion_2_s",
               "w_sys", "w_sys_mem", "w_sys_cores", "w_sys_gpu", "w_sys_gpu_basic", "w_model_need", "w_model_ready", "w_model_dl",
               "w_rec_this", "w_rec_other", "w_model_none", "w_model_tight", "w_cloud_signin", "w_cloud_signin_how", "w_cloud_waiting", "w_cloud_none",
-              "w_cloud_ok", "w_cloud_paste", "w_cloud_done", "w_cloud_other",
+              "w_cloud_ok", "w_cloud_paste", "w_cloud_done", "w_cloud_other", "d_signin_none",
               "w_cloud_check", "w_cloud_checking", "w_cloud_key", "w_cloud_model", "w_cloud_url", "w_cloud_key_where", "w_cloud_none_note",
               "w_done_choices", "v_brain_local", "v_brain_ask", "v_brain_cloud", "v_guidance_owner", "v_guidance_standard", "v_not_set_up",
               "d_brain_chip_ask", "d_online_tag", "v_yes", "v_ask", "v_no", "v_hands-off", "v_balanced", "v_hands-on",
@@ -655,6 +655,8 @@ class Desk:
             m = re.search(pat, text) if pat else None
             if not m:
                 self.emit({"t": "signin.result", "ok": False, "none": True, "note": T("w_cloud_none")})
+                if self.screen != "wizard":
+                    self.emit({"t": "toast", "text": T("d_signin_none"), "long": True})
                 return
             threading.Thread(target=self._signin_check, args=(pid, m.group(0)), daemon=True).start()
         clip.read_text_async(None, got)
@@ -1416,6 +1418,18 @@ class Desk:
             return f"{what}: {'mute' if a.get('mute') else 'unmute'}"
         if n == "set_appearance":
             return "change the look"
+        if n == "online_model":
+            act = str(a.get("action", "")).lower()
+            who = {"claude": "Claude", "anthropic": "Claude", "chatgpt": "ChatGPT", "openai": "ChatGPT"}.get(str(a.get("provider", "")).lower(), "")
+            if act in ("sign in", "signin", "log in", "login"):
+                return f"sign in to {who or 'an online model'}"
+            if act == "forget":
+                return "Forget the online model?" if confirm else "forget the online model"
+            if act in ("use", "switch", "select"):
+                return f"online model: {a.get('model', '')}"
+            if act in ("set up", "setup", "add", "configure", "change", "replace"):
+                return "Connect an online model?" if confirm else "connect an online model"
+            return "the online model"
         if n == "play_media":
             return "play: " + str(a.get("query", ""))
         if n.startswith("mail_"):
