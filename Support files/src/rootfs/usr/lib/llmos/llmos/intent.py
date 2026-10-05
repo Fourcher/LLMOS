@@ -307,6 +307,12 @@ _RESET_LOOK = re.compile(r"^\s*(?:please\s+)?(?:(?:go\s+|switch\s+|change\s+(?:i
 
 def _look(text):
     t = text.strip().lower().rstrip(".!")
+    m = re.match(r"^(?:change|set|make|use)\s+(?:the\s+)?(?:font|typeface|text\s+font)\s+(?:to\s+|into\s+)?(?P<f>[a-z][a-z -]{1,24}?)(?:,?\s+(?:size\s+)?(?P<n>\d{1,2})(?:\s*(?:pt|px|points?))?)?$", t)
+    if m and m.group("f").strip() not in ("bigger", "smaller", "larger", "big", "small"):
+        args = {"font": m.group("f").strip()}
+        if m.group("n"):                       # "size 14": 14 point is the size desks use at about 117 %
+            args["scale"] = str(max(80, min(250, round(int(m.group("n")) / 12 * 100 / 5) * 5)))
+        return ("set_appearance", args)
     if t in ("high contrast", "more contrast", "higher contrast", "stronger colours", "stronger colors"):
         return ("set_appearance", {"theme": "high contrast"})
     if t in ("bigger", "even bigger", "larger", "smaller", "even smaller", "bigger please", "smaller please"):

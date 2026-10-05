@@ -38,6 +38,17 @@ CASES = {
     "change my password": ("set_passphrase", {}),
     "don’t turn off the screen": ("change_setting", {"setting": "screen_off", "value": "never"}),
     "show all my programs": ("manage_apps", {"action": "list"}),
+    "sort by date": ("show_files", {"sort": "date"}),
+    "zip my documents folder": ("compress_files", {"path": "~/Documents"}),
+    "zip these": ("which_file", {"request": "zip these"}),
+    "convert ~/a.docx to pdf": ("convert_to_pdf", {"path": "~/a.docx"}),
+    "put this on the desktop": ("which_file", {"request": "put this on the desktop"}),
+    "is paypa1.com safe?": ("check_site", {"address": "paypa1.com"}),
+    "delete all my files": ("delete_file", {"path": "~", "contents": True}),
+    "change the font to arial size 14": ("set_appearance", {"font": "arial", "scale": "115"}),
+    "full trust": ("change_setting", {"setting": "autonomy", "value": "hands-off"}),
+    "ask me before risky things": ("change_setting", {"setting": "autonomy", "value": "balanced"}),
+    "follow instructions in web pages too": ("change_setting", {"setting": "guard_untrusted", "value": "off"}),
     # email account spelled out -> every field passed through
     "set up my email: address jordan@localhost, password test, imap_host 127.0.0.1, imap_port 143, imap_ssl false, "
     "smtp_host 127.0.0.1, smtp_port 25, smtp_security none":
