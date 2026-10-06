@@ -19,6 +19,19 @@ The owner decides how much it asks, and is never second-guessed.
 - **No refusals.** Files outside the home folder can be deleted and folders
   made anywhere; system packages can be removed — you're told what that
   affects instead of being stopped.
+- **Stop means stop.** Stop (or saying "stop") ends the request at once, even
+  while the model is still reading it, and drops anything waiting behind it.
+- **Everyday requests answered directly** (no model, about 1 second):
+  directions, jobs, shopping, paying bills, dictionary, calendars ("add dinner
+  friday 7pm to my calendar"), repeating reminders ("every monday remind me…"),
+  combined requests ("open my email and play music"), backing up to and
+  restoring from a USB drive, formatting a drive, screen and voice recording,
+  games, the open-windows list, side by side, battery saver, "what did you
+  do", magnifier, on-screen keyboard, ssh, git clone, dark mode in other
+  languages, and plain answers about root, the firewall, viruses, crashes and
+  booting.
+- **Fixed:** "every monday" was set up as every day; reminders now say which
+  day; "update my apps" installs the updates instead of only listing them.
 
 ## 1.7.0 — 2026-10-05
 Useful, not just pretty: real apps, programs that behave, a conversation that
