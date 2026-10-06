@@ -1169,7 +1169,7 @@ _THIS_FILE = re.compile(r"^\s*(?:please\s+)?(?:delete|trash|remove|rename|open|p
 
 def _everyday(text):
     from . import tools as T
-    if _THIS_FILE.match(text) and not re.search(r"\b(?:to|as)\s+\S+\.\w{2,4}\b|\busb|stick|flash", text, re.I):
+    if _THIS_FILE.match(text) and not re.search(r"\b(?:to|as)\s+\S+\.\w{2,4}\b|\busb|stick|flash|monitor|screen|display|workspace|desktop \d", text, re.I):
         return ("which_file", {"request": text})
     m = re.match(r"^\s*show\s+the\s+folder\s+(?P<p>(?:~|/).*?)\s*$", text)
     if m:

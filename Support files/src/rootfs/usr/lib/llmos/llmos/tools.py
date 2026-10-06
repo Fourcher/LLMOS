@@ -2032,11 +2032,26 @@ def trim_video(a, ctx):
                      if os.path.isfile(os.path.join(_path(d), os.path.basename(a["path"])))), path)
     if not path or not os.path.isfile(path):
         return "there's no video to cut: name it, for example 'cut the first 10 seconds off holiday.mp4'"
-    try:
-        dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
-                                   capture_output=True, text=True, timeout=60).stdout.strip())
-    except (ValueError, OSError, subprocess.SubprocessError):
-        return f"error: {os.path.basename(path)} doesn't look like a video or sound file"
+    def _dur(p):
+        try:
+            return float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", p],
+                                        capture_output=True, text=True, timeout=60).stdout.strip())
+        except (ValueError, OSError, subprocess.SubprocessError):
+            return None
+    dur = _dur(path)
+    if dur is None and not a.get("path"):      # the newest one is unreadable (a recording cut off): the newest one that plays
+        cands = []
+        for d in ["~/Videos", "~/Downloads", "~/Desktop"] + (["~/Music"] if kind != "video" else []):
+            dd = _path(d)
+            if os.path.isdir(dd):
+                cands += [os.path.join(dd, n) for n in os.listdir(dd) if n.lower().endswith(exts)]
+        for c in sorted(cands, key=os.path.getmtime, reverse=True):
+            dur = _dur(c)
+            if dur is not None:
+                path = c
+                break
+    if dur is None:
+        return f"error: {os.path.basename(path)} doesn't look like a video or sound file (it may be damaged)"
     start = _secs(a.get("keep_from")) if a.get("keep_from") else (_secs(a.get("cut_start")) or 0.0)
     end = _secs(a.get("keep_to")) if a.get("keep_to") else dur - (_secs(a.get("cut_end")) or 0.0)
     if start is None or end is None or end - start < 0.5 or start >= dur:

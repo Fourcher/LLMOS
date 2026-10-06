@@ -34,7 +34,10 @@ MATCH = re.compile(
     r"on (?:my |the )?tv|chromecast|cast (?:to|this|my)|airplay|"
     r"colou?r ?blind|colou?r filter|deuteranop|protanop|tritanop|profile (?:picture|photo|pic)|avatar|screen ?saver|clock when idle|"
     r"\.exe\b|windows (?:program|app|software|game)s?|\.deb\b|appimage|"
-    r"(?:keep|stay|put) (?:this |it |the window )?(?:always )?on top|always on top|picture[- ]in[- ]picture|\bpip\b)", re.I)
+    r"(?:keep|stay|put) (?:this |it |the window )?(?:always )?on top|always on top|picture[- ]in[- ]picture|\bpip\b|"
+    r"(?:other|second|external|left|right) (?:monitor|screen|display)|new (?:workspace|desktop)|(?:game ?)?controller|gamepad|joystick|"
+    r"phone'?s? (?:internet|data|hotspot)|tether|hotspot|drawing tablet|wacom|pen tablet|touch ?screen|"
+    r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b)", re.I)
 
 
 def _say(desk, line, text):
@@ -731,10 +734,47 @@ HOWTO = [
      "Windows programs (.exe) and other Linux systems' packages (.deb, AppImage) are made for different systems and usually don't run here. "
      "Most programs have a version for this one: say \u201cinstall\u201d and the program's name (\u201cinstall vlc\u201d, \u201cinstall spotify\u201d) "
      "and I'll find it, from Alpine or Flathub. On a PC with an Intel or AMD processor, \u201cinstall wine\u201d lets some Windows programs run too."),
+    (r"(?:move|put|send|drag) (?:this|it|that|the \w+|the window)(?: window)? (?:to|onto|on) (?:my |the )?(?:other|second|external|left|right) (?:monitor|screen|display)",
+     "Click the window, then press Super+Shift+Right (or Left): it jumps to the other screen. You can also drag it there by its title bar."),
+    (r"new (?:workspace|desktop|virtual desktop)|(?:add|make|create) (?:a |another )?(?:workspace|virtual desktop)",
+     "There are four workspaces ready: Super+1 to 4 jumps to one (or “go to workspace 2”), Ctrl+Alt+Left/Right moves between them, and "
+     "Ctrl+Alt+Shift+Left/Right takes the window you're in along."),
+    (r"(?:game ?)?controller|gamepad|joystick",
+     "Plug it in with its USB cable and it works straight away in games and the browser. Wireless (Xbox, PlayStation, Switch Pro): hold its pairing "
+     "button until the light flashes, then say “bluetooth search” and press Connect next to it. Test it at gamepadtester.com."),
+    (r"phone'?s? (?:internet|data|hotspot)|tether|hotspot",
+     "On the phone, turn on its hotspot (iPhone: Settings → Personal Hotspot; Android: Settings → Network → Hotspot), then say “show wifi networks” "
+     "and pick the phone's name. Or connect an Android phone with a USB cable and turn on “USB tethering” on it."),
+    (r"drawing tablet|wacom|pen tablet",
+     "Plug it in: it works as a pen straight away, with pressure in drawing programs. Say “install krita” for a full painting program; "
+     "“make a sketch app” makes a simple one here."),
+    (r"touch ?screen",
+     "A touchscreen works without setup: tap to click, drag to scroll. If it doesn't respond, restart the computer with it plugged in (an external one "
+     "needs its USB cable as well as the video cable). If touches land on the wrong screen with two screens, say “use only the main display”."),
     (r"(?:keep|stay|put|make) (?:this |it |that |the \w+ )?(?:window )?(?:always )?on top|always on top|picture[- ]in[- ]picture|\bpip\b",
      "Click the window, then press Super+T: it stays above the others (Super+T again to undo). For a video in Firefox, hover over it and click the "
      "picture-in-picture button: it floats in a small window that stays on top while you work."),
 ]
+
+
+def share_app(desk, line, low):
+    m = re.search(r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?(?: (?:i|you|we) made| called (?P<n>[\w .-]+?))?"
+                  r"(?: (?:with|to) .+| as a file| to (?:a )?file)?$", low)
+    if not m:
+        return False
+    from . import apps
+    a = apps.find(m.group("n")) if m.group("n") else None
+    if not a:
+        made = apps.installed()
+        a = made[0] if made else None
+    if not a:
+        return _say(desk, line, "You haven't made an app yet: say “make me a …” first.")
+    dest_dir = os.path.join(config.home(), "Desktop")
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, re.sub(r'[/\\:*?"<>|]', "-", a["title"]).strip() + ".html")
+    shutil.copy(a["file"], dest)
+    return _say(desk, line, f"Saved “{a['title']}” as one file on your Desktop ({os.path.basename(dest)}). Send it like any file, by email or "
+                            "a USB stick: your friend opens it in any web browser, on a computer or phone. (What they do in it stays on their device.)")
 
 
 def howto(desk, line, low):
@@ -746,7 +786,7 @@ def howto(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, howto):
+    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, share_app, howto):
         try:
             if fn(desk, line, low):
                 return True
