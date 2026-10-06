@@ -1466,6 +1466,16 @@ class Desk:
                                         {"name": "nonce", "kind": "hidden", "value": self.wifi_nonce}],
              "submit": {"label": T("d_connect"), "post": "wifi.join"}}]})
 
+    def windows_panel(self):
+        items = [{"title": w.get("title") or "Window", "subtitle": "on the desk",
+                  "actions": [{"label": "Close", "say": f"close window {wid}"}]} for wid, w in self.windows.items() if wid != "panel-open"]
+        for aid in dict.fromkeys(wm.windows()) if shutil.which("lswt") else []:
+            nm = wm.NAMES.get(aid, aid)
+            items.append({"title": nm[:1].upper() + nm[1:], "subtitle": "a program",
+                          "actions": [{"label": "Show", "say": f"switch to {aid}", "primary": True}, {"label": "Close", "say": f"close {aid}"}]})
+        return {"id": "panel-open", "replace": True, "title": "Open now", "size": "s", "slot": "side",
+                "blocks": [{"type": "list", "items": items}] if items else [{"type": "text", "text": "Nothing is open.", "dim": True}]}
+
     def mail_form(self):
         """Email set up here (to read and answer it on this computer): a form, nothing typed into the request box."""
         import secrets
@@ -2076,7 +2086,7 @@ class Desk:
 
     def _instant(self, text):
         low = intent.plain(text).lower().strip()
-        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|from (?:my |the )?(?:phone|camera|iphone|android))\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
+        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S+$|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|from (?:my |the )?(?:phone|camera|iphone|android))\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
                 any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
                 any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
                                                                             r"(?:extend|mirror) the displays|use only the main display|use only the (?:projector|tv|second (?:screen|display))|projector only|"
@@ -2373,6 +2383,95 @@ class Desk:
             threading.Thread(target=ip, daemon=True).start()
             self._said = "(checking)"
             return True
+        m = re.fullmatch(r"close window (\S+)", l2)
+        if m and m.group(1) in self.windows:
+            self.close_window(m.group(1))
+            self.open_window(self.windows_panel())
+            self.last_reply = self._said = "Closed."
+            return True
+        m = re.fullmatch(r"(switch to|close) ([\w.-]+)", l2)
+        if m and shutil.which("lswt") and m.group(2) in wm.windows():
+            ok, note = wm.act("focus" if m.group(1) == "switch to" else "close", m.group(2))
+            if m.group(1) == "close":
+                time.sleep(0.4)
+                self.open_window(self.windows_panel())
+            self.last_reply = self._said = "Done." if ok else note
+            return True
+        if re.fullmatch(r"(?:let'?s )?play a game(?: with me)?|(?:show me |any )?games|i'?m bored|what games (?:are there|do you have|can i play)|play (?:solitaire|chess|minesweeper|sudoku)(?: / (?:solitaire|chess|minesweeper|sudoku))+", l2):
+            games = [("Tic-tac-toe", "play tic tac toe"), ("Snake", "play snake"), ("Minesweeper", "play minesweeper"), ("Sudoku", "play sudoku"),
+                     ("Flashcards", "open flashcards"), ("Chess (online)", "play chess"), ("Solitaire (online)", "play solitaire")]
+            self.open_window({"id": "games", "replace": True, "title": "Games", "size": "s", "blocks": [
+                {"type": "buttons", "items": [{"label": n, "say": sy, "primary": i == 0} for i, (n, sy) in enumerate(games)]},
+                {"type": "text", "text": "Or ask for one: \u201cmake a memory game for my kid\u201d.", "dim": True}]})
+            self.last_reply = self._said = "Pick a game."
+            return True
+        if re.fullmatch(r"(?:open |turn on |start |use )?(?:the )?(?:magnifier|magnifying glass|screen magnifier|zoom(?:ed)? (?:in )?on the screen)|magnify(?: the screen)?", l2):
+            if shutil.which("wtype"):
+                subprocess.run(["wtype", "-M", "logo", "-k", "equal", "-m", "logo"], capture_output=True, timeout=5, env=dict(os.environ, **(media.desk_env() or {})))
+            self.instant_reply(line, "Magnifier on. Super and + zooms in further, Super and - zooms out, Super+0 turns it off; "
+                               "it follows the pointer. For bigger text everywhere, say \u201cmake everything bigger\u201d.")
+            return True
+        m = re.fullmatch(r"(?:open |show |turn on |start |use )?(?:the |an? )?(?:on-?screen|virtual|touch(?:screen)?) keyboard(?: (?P<off>off))?|(?P<off2>(?:close|hide|turn off) (?:the )?(?:on-?screen|virtual) keyboard)", l2)
+        if m:
+            running = subprocess.run(["pgrep", "-f", "wvkbd"], capture_output=True).returncode == 0
+            if m.group("off") or m.group("off2") or running:
+                subprocess.run(["pkill", "-f", "wvkbd"], capture_output=True)
+                self.instant_reply(line, "The on-screen keyboard is closed.")
+            elif not shutil.which("wvkbd-mobintl"):
+                self.instant_reply(line, "The on-screen keyboard isn't installed yet: say \u201cinstall wvkbd\u201d.")
+            else:
+                subprocess.Popen(["wvkbd-mobintl", "-L", "260"], env=dict(os.environ, **(media.desk_env() or {})), stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, start_new_session=True)
+                self.instant_reply(line, "Here's the on-screen keyboard; it types wherever you click. Say \u201cclose the keyboard\u201d to hide it.")
+            return True
+        if re.fullmatch(r"(?:change|switch|pick|choose) (?:the |my )?(?:font|typeface|letters|writing style)", l2):
+            self.open_window({"id": "fonts", "replace": True, "title": "Font", "size": "s", "blocks": [
+                {"type": "buttons", "items": [{"label": "Modern (sans)", "say": "use a sans font", "primary": True}, {"label": "Classic (serif)", "say": "use a serif font"},
+                                              {"label": "Typewriter (mono)", "say": "use a mono font"}, {"label": "Pixel", "say": "use a pixel font"}]},
+                {"type": "buttons", "items": [{"label": "Bigger", "say": "bigger"}, {"label": "Smaller", "say": "smaller"}, {"label": "Normal size", "say": "normal text size"}]}]})
+            self.last_reply = self._said = "Pick a font."
+            return True
+        # what is on the screen: the desk's windows and the programs, each with Switch / Close
+        if re.fullmatch(r"what(?:'s| is) (?:open|running)(?: right now| now)?|(?:show|list) (?:me )?(?:my |all )?(?:open )?(?:windows|programs that are open)|"
+                        r"where (?:did|is|are) (?:my |the )?(?:window|windows|program|browser)(?: go| gone)?|i lost (?:my |a |the )?window|"
+                        r"something (?:just )?popped up(?: and i don'?t know what it is)?|what(?:'s| is) this (?:window|pop-?up|box)", l2):
+            self.open_window(self.windows_panel())
+            self.last_reply = self._said = "Here's everything that's open."
+            return True
+        if re.fullmatch(r"(?:put|show|place|arrange) (?:these|them|the two|both|my windows|the windows) side by side|side by side|split (?:the )?screen", l2) and shutil.which("wtype"):
+            ok, note = wm.side_by_side()
+            self.instant_reply(line, note[:1].upper() + note[1:] + ".")
+            return True
+        if re.fullmatch(r"(?:make|help) (?:the |my )?battery last longer|(?:save|saving) (?:the )?battery|battery saver(?: on)?|power sav(?:er|ing)(?: mode)?(?: on)?|low power mode", l2):
+            for k, v in (("screen_off", 3), ("sleep_after", 15)):
+                config.settings.set(k, v)
+            try:
+                agent.execute(self.ctx, "set_appearance", {"motion": "off"})
+            except Exception:
+                pass
+            self.start_idle()
+            self.instant_reply(line, "Battery saving on: the screen turns off after 3 minutes without use, the computer sleeps after 15, "
+                               "and the background stops moving. Lower brightness helps most: say \u201cdimmer\u201d.")
+            return True
+        if re.fullmatch(r"(?:delete|erase|clear|forget|wipe) (?:all )?(?:my |our )?(?:history|conversations?|chats?|messages) (?:with you|together)|forget everything (?:we|i) (?:said|talked about)|forget (?:all )?our conversations?", l2):
+            n = conversation.forget_all()
+            self.chats = {}
+            self.history = []
+            self.emit({"t": "clear"})
+            self.instant_reply(line, "Done: every conversation with me is deleted from this computer." if n else "There was no conversation history to delete.")
+            return True
+        if re.fullmatch(r"what did you (?:just )?do|what have you (?:just )?done|why did that happen|what happened just now|show me what you did", l2):
+            rows = [r for r in store.audit_tail(12) if r.get("tool") not in ("routine",)][-6:]
+            if not rows:
+                self.instant_reply(line, "I haven't done anything yet in this session.")
+            else:
+                lines_ = []
+                for r in rows:
+                    t_ = self.describe_tool(tools.REGISTRY[r["tool"]], r.get("args") or {}) if r.get("tool") in tools.REGISTRY else r.get("tool", "")
+                    ok_ = "" if r.get("allowed", True) else " (not done)"
+                    lines_.append(f"\u2022 {t_}{ok_}")
+                self.instant_reply(line, "Most recent first:\n" + "\n".join(reversed(lines_)) + "\n\nThe full record: say \u201caudit\u201d.")
+            return True
         how = self._howto(l2)
         if how:
             self.instant_reply(line, how)
@@ -2633,7 +2732,8 @@ class Desk:
                     r"what'?s using (?:my |the )?(?:memory|ram|cpu|processor)|why is (?:it|everything|my computer|the computer) (?:so )?(?:slow|laggy)|"
                     r"(?:my )?computer is (?:so )?(?:slow|laggy))[?.!]*"), "processes"),
         (re.compile(r"(?:open (?:my |the )?)?(?:drives|usb|usb drives?|my usb|my stick|usb stick|flash drive|external drives?|whats on the (?:stick|usb)|"
-                    r"what'?s on (?:the|my) (?:stick|usb(?: stick| drive)?|flash ?drive|memory stick|thumb ?drive|sd card)|open (?:the |my )?(?:usb(?: stick| drive)?|flash ?drive))[?.!]*"), "drives"),
+                    r"what'?s on (?:the|my) (?:stick|usb(?: stick| drive)?|flash ?drive|memory stick|thumb ?drive|sd card)|(?:read|open|show) (?:my |the )?(?:sd|memory) card|"
+                    r"open (?:the |my )?(?:usb(?: stick| drive)?|flash ?drive))[?.!]*"), "drives"),
         (re.compile(r"(?:open (?:the )?)?(?:displays?|monitors?|screens|display settings|second (?:monitor|screen)|use both screens|projector|"
                     r"(?:change|set|adjust) (?:the |my )?(?:screen |display )?resolution|screen resolution|resolution)[?.!]*"), "displays"),
         (re.compile(r"(?:open (?:the )?)?(?:bluetooth|bluetooth settings|pair (?:a |my )?(?:device|headphones|mouse|keyboard|speaker)s?|"
@@ -2644,7 +2744,7 @@ class Desk:
         (re.compile(r"(?:open (?:the )?)?(?:storage|disk space|disk usage|free (?:up )?(?:some )?space|(?:my )?disk is full|clean ?up(?: the computer| my computer| disk)?|"
                     r"what'?s (?:using|filling|taking up) (?:my |the )?(?:disk|space|storage)|running out of space|"
                     r"how much (?:free |disk |storage )?(?:space|storage)(?: do i have| is left| left| have i got)?|how full is (?:my |the )?(?:disk|computer|drive))[?.!]*"), "storage"),
-        (re.compile(r"(?:update (?:the )?(?:system|computer|os|llm os|everything)|are there (?:any )?updates|check for updates|any updates|updates|"
+        (re.compile(r"(?:update (?:the |my |all (?:my |the )?)?(?:system|computer|os|llm os|everything|apps|programs|software|applications)|are there (?:any )?updates|check for updates|any updates|updates|"
                     r"is (?:it|the system|everything) up to date)[?.!]*"), "updates"),
         (re.compile(r"(?:about this computer|what computer is this|system info(?:rmation)?|how much (?:ram|memory) do i have|"
                     r"what (?:processor|cpu) do i have|specs|my specs|computer specs)[?.!]*"), "about"),
@@ -2730,6 +2830,7 @@ class Desk:
         (re.compile(r"(?:mirror|duplicate|clone) (?:my |the )?(?:screen|display|displays|screens)(?: (?:to|on) (?:the )?(?:projector|tv|second screen|monitor))?|"
                     r"show (?:my |the )?screen on (?:the )?(?:projector|tv|big screen)|same picture on both screens"), "mirror the displays"),
         (re.compile(r"extend (?:my |the )?(?:screen|display|displays|desktop)(?: (?:to|onto) (?:the )?(?:second (?:screen|monitor)|monitor|tv))?|use both (?:screens|monitors) separately"), "extend the displays"),
+        (re.compile(r"(?:turn|switch) (?:off|on) (?:the )?bluetooth|(?:disable|enable) bluetooth|bluetooth (?:off|on)"), "__bt__"),
         (re.compile(r"(?:make )?(?:the )?key(?:board)? repeat(?: rate)? faster|keys repeat (?:too )?slow(?:ly)?"), "key repeat faster"),
         (re.compile(r"(?:make )?(?:the )?key(?:board)? repeat(?: rate)? slower|keys repeat (?:too )?(?:fast|quickly)"), "key repeat slower"),
     ]
@@ -2742,6 +2843,40 @@ class Desk:
     _TILE = re.compile(r"(?:put|move|snap) (?:the )?(?P<w>[\w ]+?) (?:on|to) the (?P<side>left|right)(?: side| half)?")
 
     _HOWTO = [
+        (r"give me root|(?:make me|am i|i want to be|run as) (?:an? )?(?:root|admin(?:istrator)?|superuser)|sudo|how do i get root",
+         "You already have it: everything on LLM OS runs as the computer's owner account, root. In a terminal (Ctrl+Alt+T) every command "
+         "works without sudo, and I can run any command for you: just say it."),
+        (r"(?:turn on|enable|is|check) (?:the |my )?firewall(?: on| working| running)?|do i have a firewall",
+         "The firewall is always on: nothing from the internet can reach this computer unless it answers something you started. "
+         "\u201cTurn the internet off\u201d blocks everything going out too."),
+        (r"(?:check|scan) (?:for|my computer for|this computer for) (?:viruses|malware)|(?:do i have|is there) (?:a |any )?(?:virus|viruses|malware)|antivirus|virus scan",
+         "Ordinary viruses are made for Windows and can't run here. To scan files you'll pass on to Windows users anyway, say "
+         "\u201cinstall clamav\u201d, then \u201cscan my downloads for viruses with clamscan\u201d."),
+        (r"which (?:apps|programs) (?:can|are allowed to) (?:use|access|see) (?:my )?(?:camera|mic|microphone|location)(?:/(?:camera|mic|microphone|location))*|(?:camera|microphone|location) permissions?",
+         "Programs here can use the camera and microphone once they're open; websites must ask you first (the browser shows Allow / Block), "
+         "and the browser's padlock menu lists what each site may use. Nothing here tracks your location."),
+        (r"can i (?:dual[- ]?boot|keep windows|have (?:both|windows too)|install (?:it )?next to windows)(?: with windows)?|dual[- ]?boot(?: with windows)?",
+         "Yes: say \u201cinstall LLM OS on this computer\u201d and choose \u201cnext to what's there\u201d. It shrinks the free space, keeps Windows "
+         "and its files, and you pick which one to start when the computer turns on."),
+        (r"(?:it|the computer|llm os) (?:won'?t|will not|doesn'?t|does not) (?:boot|start|turn on)|(?:my )?computer won'?t start",
+         "Plug the LLM OS USB stick in and start the computer from it (hold F12, F9 or Esc while it powers on and choose the USB). "
+         "From there, \u201cinstall LLM OS on this computer\u201d can repair it; your files on the disk are kept."),
+        (r"(?:an? |the |this |my )?(?:app|program|browser|firefox) keeps (?:crashing|closing|freezing|quitting)|(?:app|program) (?:crashes|closes) (?:all the time|a lot)",
+         "Say \u201cforce quit\u201d and its name when it hangs, then open it again. If it keeps happening, \u201cupdate the system\u201d often fixes it; "
+         "\u201cwhat's using my memory\u201d shows whether the computer is running short."),
+        (r"captions|subtitles|live captions|(?:turn on|show) (?:closed )?captions",
+         "For videos, press CC in the player (YouTube and most sites have it). To turn your own speech into text, press the Windows key + D and talk."),
+        (r"(?:move|put) (?:the )?(?:dock|taskbar|bar|menu bar) (?:to )?(?:the )?(?:left|right|bottom|top)|pin (?:the |my )?\w+ (?:to|on) the (?:dock|taskbar)",
+         "The bar sits at the top (Clean and Mac styles) or the bottom (\u201cWindows layout\u201d). Pinning programs isn't possible yet; "
+         "say a program's name to open it, or use the apps button at the top."),
+        (r"(?:set|change) (?:the )?default (?:browser|music player|pdf (?:app|reader|viewer)|apps?|programs?)(?:/(?:browser|music player|pdf app))*",
+         "Right now: web pages open in Firefox, PDFs in Firefox, documents in AbiWord, spreadsheets in Gnumeric, pictures here, music and video "
+         "in the player. To use another program for one file, open that program and open the file from it."),
+        (r"what(?:'s| does) this button do|what is this button|what does that button do",
+         "Point at it: most buttons show their name. Or tell me what it says and I'll explain."),
+        (r"(?:my )?(?:external|usb) (?:hard )?drive (?:isn'?t|is not|won'?t|doesn'?t) (?:showing up|show up|appear|work|mount)|(?:can'?t|cannot) see my (?:usb|external) drive",
+         "Unplug it, wait five seconds and plug it into a different USB port, straight into the computer (not a hub). Big drives need their own "
+         "power. Then say \u201cdrives\u201d: if it's listed but won't open, it may need repair on the computer that made it."),
         (r"(?:recover|get back|restore|find) (?:my |an? |the )?(?:unsaved|lost) (?:document|file|work|essay|changes)|i (?:forgot|didn'?t) (?:to )?save(?: it)?",
          "Open the same program again: the word processor and the text editor offer to bring back what they saved automatically. "
          "Also try \u201cfind my files called \u2026\u201d with a word from its name, and \u201cshow the trash\u201d."),
@@ -2795,6 +2930,8 @@ class Desk:
         low = low.rstrip("?.!")
         for rx, canon in self._CANON:
             if rx.fullmatch(low):
+                if canon == "__bt__":
+                    canon = "bluetooth off" if re.search(r"\b(?:off|disable)\b", low) else "bluetooth on"
                 low = line = canon
                 break
         said = {"mouse faster": "The pointer is faster.", "mouse slower": "The pointer is slower.", "mouse normal speed": "The pointer is at normal speed.",
@@ -2977,7 +3114,24 @@ class Desk:
         except OSError:
             pass
 
+    def _split_compound(self, text):
+        """'open my email and play music': two requests the OS knows by heart, done one after the other. Only when
+        every part is one it handles without the model, so 'rock and roll' or 'add milk and eggs' are left whole."""
+        parts = [p.strip(" ,.") for p in re.split(r"\s*(?:,\s*)?\b(?:and then|and also|then|and)\b\s*", text) if p.strip(" ,.")]
+        if len(parts) < 2 or len(parts) > 3:
+            return None
+        if all(self._instant(p) or intent.match(p) for p in parts):
+            return parts
+        return None
+
     def turn(self, text, chat="main"):
+        parts = self._split_compound(text) if chat == "main" else None
+        if parts:
+            for p in parts:
+                self.act(p)
+                time.sleep(0.3)
+            self.last_reply = self.__dict__.pop("_said", None) or "Done: " + "; ".join(parts) + "."
+            return
         if chat == "main" and self.shortcut(text):
             self.last_reply = self.__dict__.pop("_said", None) or "(done by the OS: " + text + ")"
             return

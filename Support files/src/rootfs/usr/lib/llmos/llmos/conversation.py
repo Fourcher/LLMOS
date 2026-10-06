@@ -237,3 +237,20 @@ def delete(cid):
             os.remove(os.path.join(_dir(), f"{cid}.{ext}"))
         except OSError:
             pass
+
+
+def forget_all():
+    """Every conversation, the main one and the side chats, gone from disk ("delete my history with you")."""
+    n = 0
+    try:
+        names = os.listdir(_dir())
+    except OSError:
+        return 0
+    for f in names:
+        if f.endswith((".json", ".jsonl")):
+            try:
+                os.remove(os.path.join(_dir(), f))
+                n += 1
+            except OSError:
+                pass
+    return n

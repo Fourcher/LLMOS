@@ -760,7 +760,7 @@ _SHOT = re.compile(r"^\s*(?:please\s+)?(?:take|grab|capture|make|do)\s+(?:a\s+|m
                    r"^\s*(?:take a picture of|capture) (?:the|my|this) screen\s*[.!]?\s*$", re.I)
 
 
-_UNZIP = re.compile(r"^\s*(?:please\s+)?(?:unzip|extract|unpack|open\s+up|decompress)\s+(?:the\s+)?(?:file\s+)?(?P<p>(?:~|/)\S.*?)\s*$", re.I)
+_UNZIP = re.compile(r"^\s*(?:please\s+)?(?:unzip|extract|unpack|open\s+up|decompress)\s+(?:the\s+)?(?:file\s+)?(?P<p>(?:~|/)\S.*?|this|that|it|these)\s*$", re.I)
 _UNINSTALL = re.compile(r"^\s*(?:please\s+)?(?:uninstall|remove\s+the\s+program|get\s+rid\s+of\s+the\s+program)\s+(?P<n>[a-z][a-z0-9 .+-]{1,30}?)\s*[.!]?\s*$", re.I)
 _WALL_THIS = re.compile(r"^\s*(?:please\s+)?(?:set|use|make)\s+(?:this|that|the)\s+(?:photo|picture|image|pic)\s+(?:as|my)\s+(?:my\s+|the\s+)?(?:wallpaper|background)\s*[.!]?\s*$", re.I)
 _EDIT_FILE = re.compile(r"^\s*(?:please\s+)?(?:edit|change|modify)\s+(?:the\s+)?(?:file\s+)?(?P<p>(?:~|/)\S.*?)\s*$", re.I)
@@ -957,7 +957,7 @@ def _files(text):
         return ("which_file", {"request": text.strip()})
     m = _UNZIP.match(text)
     if m:
-        return ("extract_archive", {"path": m.group("p")})
+        return ("extract_archive", {"path": m.group("p")}) if m.group("p")[0] in "~/" else ("which_file", {"request": text.strip()})
     if re.match(r"^\s*(?:please\s+)?(?:zip|compress)\s+(?:up\s+)?(?:this|these|that|those|them|it)(?:\s+(?:up|files?|folder))?\s*[.!]?\s*$", text, re.I):
         return ("which_file", {"request": text.strip()})
     m = re.match(r"^\s*(?:please\s+)?(?:zip|compress|make\s+a\s+zip\s+of)\s+(?:up\s+)?(?:the\s+(?:file|folder)\s+)?(?P<p>(?:~|/)\S.*?)\s*$|"
@@ -1205,7 +1205,7 @@ def _everyday(text):
     if m and not _FILEISH.search(m.group("q")):
         return ("browse", {"search": m.group("q")})
     m = _FIND_FILE.match(text)
-    if m and _FILEISH.search(text) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I):
+    if m and _FILEISH.search(text) and not re.search(r"\be-?mails?\b", text, re.I) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I):
         q = re.sub(r"\b(?:my|the|that|file|files|folder|folders|called|named|i|saved|downloaded|put|was|working|on|about|yesterday)\b", " ", m.group("q"), flags=re.I)
         if q.strip():
             return ("find_files", {"query": " ".join(q.split())})
@@ -1254,6 +1254,10 @@ def _apps(text):
                     if lead.strip() and _LOOKISH.search(lead):
                         look = lead.strip()
                 return ("make_app", {"what": what or rest, "look": look} if look else {"what": what or rest})
+    bare = text.strip().lower().rstrip(".!?")
+    if 1 <= len(bare.split()) <= 2 and apps.match_template(bare) and any(bare.replace(" ", "_") == w or bare == w.replace("_", " ")
+                                                                          for tt in apps.templates() for w in [tt["id"]] + tt["words"]):
+        return ("open_app", {"command": bare})
     m = re.match(r"^\s*(?:a\s+|an\s+|the\s+|my\s+)?(?P<n>[a-z][a-z -]{1,25}?)\s+app\s*[.!?]?\s*$", text, re.I)
     if m and (apps.find(m.group("n")) or apps.match_template(m.group("n"))):
         return ("open_app", {"command": m.group("n").strip()})
@@ -1274,6 +1278,100 @@ def plain(text):
     return str(text or "").translate({0x2019: "'", 0x2018: "'", 0x201C: '"', 0x201D: '"', 0x2032: "'"})
 
 
+# ------------------------------------------------------------------ everyday requests found by the use-case runs
+_DARK_WORDS = re.compile(r"^\s*(?:pon(?:er)?|activa(?:r)?|mets?|active|aktiviere|schalte?|开启|打开|切换到)?\s*(?:el\s+|le\s+|den\s+)?"
+                         r"(?P<d>modo\s+oscuro|mode\s+sombre|th[eè]me\s+sombre|dunkel(?:er)?\s*modus|dark\s*mode|深色模式|暗色模式|ダークモード)"
+                         r"|^\s*(?:pon(?:er)?|activa(?:r)?|mets?|aktiviere)?\s*(?:el\s+|le\s+)?(?P<l>modo\s+claro|mode\s+clair|hell(?:er)?\s*modus|浅色模式|ライトモード)", re.I)
+
+
+def _everyday2(text):
+    t = text.strip()
+    low = t.lower().rstrip(".!?")
+    import urllib.parse as _u
+    m = _DARK_WORDS.match(t)
+    if m and len(t.split()) <= 4:
+        return ("set_appearance", {"theme": "dark" if m.group("d") else "light"})
+    m = re.match(r"^(?:give\s+me\s+|get\s+|show\s+me\s+)?(?:the\s+)?(?:directions|route|way)\s+(?:to|for)\s+(?P<p>.+)$|^how\s+do\s+i\s+get\s+to\s+(?P<p2>.+)$|^(?:navigate|drive)\s+to\s+(?P<p3>.+)$", low)
+    if m:
+        place = (m.group("p") or m.group("p2") or m.group("p3")).strip()
+        return ("browse", {"site": "https://www.google.com/maps/dir/?api=1&destination=" + _u.quote_plus(place)})
+    if re.match(r"^(?:help\s+me\s+)?(?:apply\s+for|find|look\s+for|search\s+for)\s+(?:a\s+)?jobs?(?:\s+.*)?$|^job\s+search$", low):
+        q = re.sub(r"^(?:help\s+me\s+)?(?:apply\s+for|find|look\s+for|search\s+for)\s+(?:a\s+)?jobs?\s*", "", low).strip()
+        return ("browse", {"site": "https://www.indeed.com/jobs?q=" + _u.quote_plus(q) if q else "https://www.indeed.com"})
+    m = re.match(r"^(?:order|buy|get\s+me|reorder)\s+(?:some\s+)?(?:more\s+)?(?P<w>.+?)(?:\s+online)?$", low)
+    if m and not re.search(r"\b(app|program|software|pizza|food|uber|taxi|ride)\b", low):
+        return ("browse", {"site": "https://www.amazon.com/s?k=" + _u.quote_plus(m.group("w"))})
+    m = re.match(r"^pay\s+(?:my\s+|the\s+)?(?P<w>[\w\s]+?\s+)?bill(?:s)?(?:\s+online)?$", low)
+    if m:
+        return ("browse", {"search": f"pay {(m.group('w') or '').strip()} bill online".replace("  ", " ")})
+    m = re.match(r"^(?:book|make|schedule)\s+(?:a\s+|an\s+)?(?P<w>[\w'\s]+?)\s+appointment$", low)
+    if m:
+        return ("browse", {"search": f"book {m.group('w').strip()} appointment online near me"})
+    m = re.match(r"^(?:define|definition\s+of|what\s+does\s+(?P<w2>[\w'-]+)\s+mean|look\s+up\s+the\s+word|dictionary)\s*(?P<w>[\w'-]*)$", low)
+    if m and (m.group("w") or m.group("w2") or low == "dictionary"):
+        w = m.group("w") or m.group("w2")
+        return ("browse", {"site": f"https://www.merriam-webster.com/dictionary/{_u.quote(w)}" if w else "https://www.merriam-webster.com"})
+    m = re.match(r"^(?:connect|add|sync|open|set\s+up)\s+(?:my\s+)?(?P<w>google|outlook|icloud|apple)\s+calendar$", low)
+    if m:
+        return ("browse", {"site": {"google": "https://calendar.google.com", "outlook": "https://outlook.live.com/calendar",
+                                    "icloud": "https://www.icloud.com/calendar", "apple": "https://www.icloud.com/calendar"}[m.group("w")]})
+    m = re.match(r"^(?:add|put)\s+(?P<what>.+?)\s+(?:to|on|in)\s+(?:my\s+|the\s+)?calendar(?:\s+(?:for|on|at)\s+(?P<when2>.+))?$", low)
+    if m:
+        what, when = m.group("what"), m.group("when2") or ""
+        wm = re.search(r"\b((?:on\s+|this\s+|next\s+)?(?:mon|tues|wednes|thurs|fri|satur|sun)day(?:\s+(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?|tomorrow(?:\s+(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?|"
+                       r"(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)|\d{4}-\d\d-\d\d(?:\s+\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?)\b.*$", what)
+        if wm and not when:
+            when, what = wm.group(0), what[:wm.start()].strip()
+        if when:
+            return ("schedule_task", {"when": when.strip(), "task": what.strip(), "kind": "reminder"})
+    m = re.match(r"^(?P<when>every\s+(?:day|weekday|weekend|morning|evening|night|week|month|(?:mon|tues|wednes|thurs|fri|satur|sun)day)s?(?:\s+(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?)"
+                 r"\s*,?\s+remind\s+me\s+(?:to\s+)?(?P<what>.+)$", low)
+    if m:
+        return ("schedule_task", {"when": m.group("when"), "task": m.group("what"), "kind": "reminder"})
+    m = re.match(r"^(?:lock|auto-?lock)\s+(?:the\s+(?:screen|computer)\s+)?(?:automatically\s+)?after\s+(?P<n>\d+)\s*(?:minutes?|mins?)(?:\s+of\s+(?:inactivity|idle|not\s+using\s+it))?$", low)
+    if m:
+        return ("change_setting", {"setting": "autolock", "value": m.group("n")})
+    if re.match(r"^(?:turn\s+off|stop|disable|mute|silence|hide)\s+(?:all\s+)?(?:the\s+)?notifications$", low):
+        return ("change_setting", {"setting": "do_not_disturb", "value": "on"})
+    m = re.match(r"^(?:ssh|connect|log\s*in)\s+(?:in)?to\s+(?:my\s+)?(?:server\s+)?(?P<h>[\w.@-]+\.[\w.-]+|\d+\.\d+\.\d+\.\d+)$|^ssh\s+(?P<h2>[\w.@-]+)$", low)
+    if m:
+        import shlex as _sh
+        return ("open_app", {"command": "foot ssh " + _sh.quote(m.group("h") or m.group("h2")), "graphical": True})
+    m = re.match(r"^(?:clone|git\s+clone|download)\s+(?:this\s+|the\s+)?(?:repo(?:sitory)?\s+)?(?P<u>https?://\S+|git@\S+)$", t, re.I)
+    if m:
+        import shlex as _sh
+        return ("run_command", {"command": "mkdir -p ~/Projects && cd ~/Projects && git clone " + _sh.quote(m.group("u"))})
+    m = re.match(r"^(?:edit|open|change)\s+(?:my\s+|the\s+)?(?P<f>\.?(?:bashrc|profile|zshrc|ashrc|vimrc|gitconfig|bash_profile))(?:\s+file)?$", low)
+    if m:
+        f = m.group("f")
+        return ("open_file", {"path": "~/" + (f if f.startswith(".") else "." + f), "edit": True})
+    if re.match(r"^(?:open|show|go\s+to)\s+(?:the\s+)?(?:last|most\s+recent)\s+(?:thing|file|document)\s+(?:i\s+(?:was\s+)?(?:using|working\s+on|opened|had\s+open))?$", low):
+        return ("open_latest", {"where": "home"})
+    if re.match(r"^(?:back\s*up|backup|save\s+a\s+copy\s+of|copy)\s+(?:all\s+)?(?:my\s+)?(?:files|stuff|documents|photos|computer|everything)(?:\s+(?:to|onto)\s+(?:the\s+|my\s+)?(?:usb|stick|usb\s+stick|external\s+(?:drive|disk)|drive))?$|^make\s+a\s+backup$", low):
+        return ("backup_files", {})
+    if re.match(r"^(?:restore|bring\s+back|get\s+back)\s+(?:my\s+)?(?:files|stuff|everything)\s+from\s+(?:the\s+|my\s+)?(?:backup|usb|stick|drive)$|^restore\s+(?:my\s+|the\s+)?backup$", low):
+        return ("restore_backup", {})
+    if re.match(r"^(?:format|erase|wipe|reformat)\s+(?:this\s+|the\s+|my\s+)?(?:usb(?:\s+stick|\s+drive)?|stick|flash\s*drive|thumb\s*drive|sd\s+card|memory\s+card|external\s+(?:drive|disk))$", low):
+        return ("format_drive", {})
+    m = re.match(r"^(?:let'?s\s+)?(?:play|open|start)\s+(?:a\s+game\s+of\s+|some\s+)?(?P<g>chess|solitaire|minesweeper|sudoku|tic[- ]?tac[- ]?toe|noughts\s+and\s+crosses|snake)(?:\s+with\s+me)?$", low)
+    if m:
+        g = m.group("g").replace(" ", "").replace("-", "")
+        if g == "chess":
+            return ("browse", {"site": "https://lichess.org"})
+        if g == "solitaire":
+            return ("browse", {"site": "https://www.google.com/search?q=solitaire"})
+        return ("open_app", {"command": {"tictactoe": "tic-tac-toe", "noughtsandcrosses": "tic-tac-toe"}.get(g, g)})
+    # several programs at once: "install python / node / git", "install git and docker"
+    m = re.match(r"^(?:please\s+)?install\s+(?P<l>[\w.+-]+(?:\s*(?:/|,|\band\b|&)\s*[\w.+-]+)+)$", low)
+    if m:
+        from .tools import APP_NAMES
+        names = [n.strip() for n in re.split(r"\s*(?:/|,|\band\b|&)\s*", m.group("l")) if n.strip()]
+        pk = [APP_NAMES.get(n, n) for n in names]
+        if all(not str(p).startswith("flathub:") for p in pk):
+            return ("install_app", {"packages": " ".join(pk)})
+    return None
+
+
 def match(text):
     text = plain(text)
     t = text.strip()
@@ -1284,6 +1382,9 @@ def match(text):
         return ms
     if len(t) > 200:
         return None
+    ev2 = _everyday2(t)
+    if ev2:
+        return ev2
     ap = _apps(t)
     if ap:
         return ap

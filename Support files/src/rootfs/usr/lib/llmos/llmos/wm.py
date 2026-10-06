@@ -135,3 +135,15 @@ def key_to_front(action):
     time.sleep(0.3)
     rc, _ = _run(["wtype"] + KEYS[action])
     return rc == 0, NAMES.get(t, t)
+
+
+def side_by_side():
+    """The two most recent program windows, one on each half of the screen."""
+    ws = [w for w in dict.fromkeys(windows())]
+    if len(ws) < 2:
+        return False, "only one program window is open" if ws else "no program windows are open"
+    a, b = ws[-2], ws[-1]
+    tile(a, "left")
+    time.sleep(0.3)
+    tile(b, "right")
+    return True, f"{NAMES.get(a, a)} on the left, {NAMES.get(b, b)} on the right"

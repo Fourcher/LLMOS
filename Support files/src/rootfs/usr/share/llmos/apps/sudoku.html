@@ -1,0 +1,19 @@
+<!-- llmos-app: id=sudoku; title=Sudoku; size=m; words=sudoku number_puzzle -->
+<style>#g{display:grid;grid-template-columns:repeat(9,38px);gap:0;margin:8px auto;width:max-content;border:2px solid var(--fg)}
+#g input{width:38px;height:38px;text-align:center;font-size:19px;border-radius:0;border:1px solid var(--line);padding:0;background:var(--bg);color:var(--fg)}
+#g input.g{font-weight:700;background:var(--card)}#g input.bad{color:#e5484d}#g input.r{border-right:2px solid var(--fg)}#g input.b{border-bottom:2px solid var(--fg)}
+.top{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}.st{text-align:center;color:var(--dim);min-height:1.4em}</style>
+<div class="top"><button class="primary" id="nw">New puzzle</button><button id="lv">Easy</button><button id="ck">Check</button></div><div id="g"></div><div class="st" id="st"></div>
+<script>
+const $=id=>document.getElementById(id);let lv="Easy",sol,puz,cur;
+function ok(b,i,v){const r=i/9|0,c=i%9;for(let k=0;k<9;k++){if(b[r*9+k]===v||b[k*9+c]===v)return false}const br=r-r%3,bc=c-c%3;for(let y=0;y<3;y++)for(let x=0;x<3;x++)if(b[(br+y)*9+bc+x]===v)return false;return true}
+function fill(b){const i=b.indexOf(0);if(i<0)return true;const vs=[1,2,3,4,5,6,7,8,9].sort(()=>Math.random()-.5);for(const v of vs){if(ok(b,i,v)){b[i]=v;if(fill(b))return true;b[i]=0}}return false}
+function gen(){sol=Array(81).fill(0);fill(sol);puz=sol.slice();let rm={Easy:38,Medium:48,Hard:55}[lv];const idx=[...Array(81).keys()].sort(()=>Math.random()-.5);for(const i of idx){if(rm<=0)break;puz[i]=0;rm--}cur=puz.slice();save();draw()}
+function save(){LLMOS.save({sol,puz,cur,lv})}
+function draw(){const g=$("g");g.innerHTML="";cur.forEach((v,i)=>{const e=document.createElement("input");e.maxLength=1;e.inputMode="numeric";e.value=v||"";
+ const c=i%9,r=i/9|0;e.className=(puz[i]?"g ":"")+(c===2||c===5?"r ":"")+(r===2||r===5?"b":"");e.readOnly=!!puz[i];
+ e.oninput=()=>{const n=parseInt(e.value)||0;e.value=n||"";cur[i]=n;e.classList.remove("bad");save();if(cur.every((x,j)=>x===sol[j]))$("st").textContent="Solved! 🎉"};g.append(e)});$("lv").textContent=lv;$("st").textContent=""}
+$("ck").onclick=()=>{let wrong=0;[...$("g").children].forEach((e,i)=>{if(cur[i]&&cur[i]!==sol[i]){e.classList.add("bad");wrong++}});$("st").textContent=wrong?`${wrong} wrong (in red)`:"All correct so far"};
+$("nw").onclick=gen;$("lv").onclick=()=>{lv={Easy:"Medium",Medium:"Hard",Hard:"Easy"}[lv];gen()};
+LLMOS.load(s=>{if(s&&s.sol){({sol,puz,cur,lv}=s);draw()}else gen()});
+</script>

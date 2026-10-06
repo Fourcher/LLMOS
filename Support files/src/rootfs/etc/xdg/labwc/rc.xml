@@ -68,6 +68,11 @@
     <!-- the Super (Windows) key on its own, or Super+Space: back to LLM OS, ready to type -->
     <keybind key="Super_L" onRelease="yes"><action name="Execute" command="/usr/bin/llmos desk-ctl focus"/></keybind>
     <keybind key="W-space"><action name="Execute" command="/usr/bin/llmos desk-ctl focus"/></keybind>
+    <!-- magnifier: Super and + / - zoom into the part of the screen under the pointer, Super+0 back to normal -->
+    <keybind key="W-equal"><action name="ZoomIn"/></keybind>
+    <keybind key="W-plus"><action name="ZoomIn"/></keybind>
+    <keybind key="W-minus"><action name="ZoomOut"/></keybind>
+    <keybind key="W-0"><action name="ToggleMagnify"/></keybind>
     <keybind key="W-v"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'clipboard history'"/></keybind>
     <!-- system-wide dictation: speak, pause, and the words are typed wherever the cursor is -->
     <keybind key="W-d"><action name="Execute" command="/usr/bin/llmos dictate"/></keybind>

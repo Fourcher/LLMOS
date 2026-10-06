@@ -112,7 +112,7 @@ CASES = {
     "play some lofi hip hop": ("play_media", {"query": "lofi hip hop"}),
     "pull up a YouTube video of a lofi hip hop live stream and play it on the screen":
         ("play_media", {"query": "a lofi hip hop live stream"}),
-    "play chess with me": None,
+    "play chess with me": ("browse", {"site": "https://lichess.org"}),
     "open a terminal window on the screen": ("open_app", {"command": "foot", "graphical": True}),
     "open the settings": ("show_panel", {"panel": "settings"}),
     "show me my scheduled tasks": ("show_panel", {"panel": "tasks"}),
@@ -133,7 +133,7 @@ CASES = {
     "remove granite 3b": ("manage_models", {"action": "remove", "model": "granite-4.1-3b"}),
     "download gemma": None,
     "use the bathroom": None,
-    "install htop": None,
+    "install htop": ("install_app", {"packages": "htop"}),
     # files and screenshots
     "show my files": ("show_files", {"path": "~"}),
     "open my downloads folder": ("show_files", {"path": "~/Downloads"}),

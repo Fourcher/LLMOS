@@ -457,7 +457,12 @@ APP_NAMES = {"vs code": "flathub:com.visualstudio.code", "vscode": "flathub:com.
              "blender": "blender", "kdenlive": "kdenlive", "thunderbird": "thunderbird", "signal": "flathub:org.signal.Signal",
              "telegram": "telegram-desktop", "whatsapp": "flathub:com.rtosta.zapzap", "minecraft": "flathub:org.prismlauncher.PrismLauncher",
              "obsidian": "flathub:md.obsidian.Obsidian", "brave": "flathub:com.brave.Browser", "chromium": "chromium", "krita": "krita",
-             "transmission": "transmission-gtk", "torrent": "transmission-gtk", "calibre": "calibre", "kodi": "kodi"}
+             "transmission": "transmission-gtk", "torrent": "transmission-gtk", "calibre": "calibre", "kodi": "kodi",
+             "git": "git", "python": "python3", "python3": "python3", "node": "nodejs", "nodejs": "nodejs", "npm": "npm",
+             "docker": "docker", "vim": "vim", "neovim": "neovim", "nano": "nano", "htop": "htop", "ssh": "openssh-client",
+             "gcc": "build-base", "compiler": "build-base", "make": "make", "rust": "rust", "go": "go", "java": "openjdk21",
+             "pip": "py3-pip", "curl": "curl", "wget": "wget", "solitaire": "aisleriot", "chess": "gnome-chess",
+             "minesweeper": "gnome-mines", "sudoku": "gnome-sudoku", "audacity": "audacity", "obs studio": "obs-studio"}
 
 
 UNOFFICIAL = {"com.github.IsmaelMartinez.teams_for_linux": "an unofficial Teams app, not made by Microsoft; Teams also works in the browser",
@@ -1902,6 +1907,8 @@ def open_file(a, ctx):
         return "error: which file?"
     if os.path.isdir(path):
         return show_files({"path": path}, ctx)
+    if a.get("edit") and not os.path.exists(path) and os.path.isdir(os.path.dirname(path)):
+        open(path, "a").close()          # "edit my .bashrc" when there is none yet: start it
     if not os.path.isfile(path):
         return f"error: there is no file {path}"
     name = os.path.basename(path)
@@ -2150,6 +2157,90 @@ def edit_image(a, ctx):
     home = config.home().rstrip("/")
     shown = "~" + dest[len(home):] if dest.startswith(home) else dest
     return f"saved {shown} ({_human_size(os.path.getsize(dest))}); the original is unchanged. Done: tell the owner in one sentence and call no other tool."
+
+
+def _usb_target():
+    from . import syspanels
+    drives = syspanels.removable()
+    if not drives:
+        return None, "no USB stick or drive is plugged in"
+    d = drives[0]
+    ok, where = (True, d["mountpoint"]) if d["mountpoint"] else syspanels.mount(d["path"])
+    return (where, d) if ok else (None, f"the drive could not be opened: {where}")
+
+
+@tool("backup_files", "Copy the owner's files (Documents, Pictures, Music, Videos, Desktop, Downloads) to the plugged-in USB "
+      "drive, into a dated 'LLM OS backup' folder. Repeating it only copies what changed.", {}, [], risk=CHANGE)
+def backup_files(a, ctx):
+    where, d = _usb_target()
+    if not where:
+        return d
+    home = config.home()
+    dest = os.path.join(where, "LLM OS backup", time.strftime("%Y-%m-%d"))
+    os.makedirs(dest, exist_ok=True)
+    total = 0
+    for f in ("Documents", "Pictures", "Music", "Videos", "Desktop", "Downloads", "Apps"):
+        src = os.path.join(home, f)
+        if not os.path.isdir(src):
+            continue
+        if shutil.which("rsync"):
+            subprocess.run(["rsync", "-a", "--no-owner", "--no-group", src, dest], capture_output=True, timeout=7200)
+        else:
+            shutil.copytree(src, os.path.join(dest, f), dirs_exist_ok=True)
+        total += sum(len(fs) for _, _, fs in os.walk(src))
+    subprocess.run(["sync"], timeout=600)
+    return (f"backed up {total} file(s) to the USB drive, folder 'LLM OS backup/{os.path.basename(dest)}'; everything is written, "
+            "so it can be ejected. Done: tell the owner in one sentence.")
+
+
+@tool("restore_backup", "Bring files back from the newest 'LLM OS backup' on the plugged-in USB drive into the home folder. "
+      "Files that exist on this computer are kept as they are; only missing ones come back.", {}, [], risk=CHANGE)
+def restore_backup(a, ctx):
+    where, d = _usb_target()
+    if not where:
+        return d
+    root = os.path.join(where, "LLM OS backup")
+    dates = sorted(x for x in os.listdir(root) if os.path.isdir(os.path.join(root, x))) if os.path.isdir(root) else []
+    if not dates:
+        return "there is no LLM OS backup on that drive"
+    src = os.path.join(root, dates[-1])
+    n = 0
+    for f in os.listdir(src):
+        for dd, _, fs in os.walk(os.path.join(src, f)):
+            for name in fs:
+                rel = os.path.relpath(os.path.join(dd, name), src)
+                target = os.path.join(config.home(), rel)
+                if not os.path.exists(target):
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    shutil.copy2(os.path.join(dd, name), target)
+                    n += 1
+    return f"brought back {n} file(s) from the backup of {dates[-1]}; files already here were left as they are. Done: tell the owner in one sentence."
+
+
+@tool("format_drive", "Erase a USB stick or external drive and make it empty, readable by Windows, Mac and Linux (exFAT).",
+      {"name": {"type": "string", "description": "a label for the drive (optional)"}}, [], risk=DESTRUCTIVE)
+def format_drive(a, ctx):
+    from . import syspanels
+    drives = syspanels.removable()
+    if not drives:
+        return "no USB stick or drive is plugged in"
+    d = drives[0]
+    disk = d.get("disk") or d["path"]
+    label = re.sub(r"[^A-Za-z0-9 _-]", "", str(a.get("name") or "USB"))[:11] or "USB"
+    for x in drives:
+        if x.get("mountpoint"):
+            subprocess.run(["umount", x["mountpoint"]], capture_output=True, timeout=60)
+    tool_ = shutil.which("mkfs.exfat") or shutil.which("mkexfatfs")
+    if not tool_:
+        return "the formatting program is missing (say 'install exfatprogs')"
+    subprocess.run(["wipefs", "-a", disk], capture_output=True, timeout=60)
+    p = subprocess.run(["sh", "-c", f"printf 'label: dos\n,,7\n' | sfdisk -q {shlex.quote(disk)}"], capture_output=True, text=True, timeout=60)
+    part = disk + ("p1" if re.search(r"\d$", disk) else "1")
+    time.sleep(1.5)
+    p2 = subprocess.run([tool_, "-L" if "mkfs" in tool_ else "-n", label, part], capture_output=True, text=True, timeout=600)
+    if p.returncode or p2.returncode:
+        return f"could not format it: {(p.stderr or p2.stderr or p2.stdout).strip()[:200]}"
+    return f"the drive is empty and ready, named {label} (works on Windows, Mac and Linux). Done: tell the owner in one sentence."
 
 
 @tool("remove_software", "Uninstall a program the owner installed (an Alpine package or a Flathub app). Never the system's own parts.",
@@ -2730,7 +2821,8 @@ SITES = {"youtube": "https://www.youtube.com", "google": "https://www.google.com
          "whatsapp": "https://web.whatsapp.com", "duckduckgo": "https://duckduckgo.com", "yahoo": "https://www.yahoo.com",
          "yahoo mail": "https://mail.yahoo.com", "icloud": "https://www.icloud.com", "office": "https://www.office.com",
          "google docs": "https://docs.google.com", "google drive": "https://drive.google.com", "twitch": "https://www.twitch.tv",
-         "tiktok": "https://www.tiktok.com", "pinterest": "https://www.pinterest.com", "news": "https://news.google.com"}
+         "tiktok": "https://www.tiktok.com", "pinterest": "https://www.pinterest.com", "dictionary": "https://www.merriam-webster.com", "maps": "https://www.google.com/maps", "google maps": "https://www.google.com/maps",
+         "jobs": "https://www.indeed.com", "indeed": "https://www.indeed.com", "lichess": "https://lichess.org", "news": "https://news.google.com"}
 
 
 def _browser_open(ctx, url=None):

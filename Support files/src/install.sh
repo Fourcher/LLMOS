@@ -129,7 +129,7 @@ PKGS="
   mousepad ristretto abiword gnumeric xarchiver 7zip
   cups cups-filters avahi bluez
   pipewire wireplumber pipewire-pulse pipewire-alsa pavucontrol
-  wlr-randr wlrctl lswt wl-clipboard flatpak mako libnotify swayidle wlopm wlsunset slurp playerctl xdg-desktop-portal xdg-desktop-portal-wlr poppler-utils wf-recorder imagemagick gvfs-mtp gvfs-gphoto2 adwaita-icon-theme
+  wlr-randr wlrctl lswt wl-clipboard flatpak mako libnotify swayidle wlopm wlsunset slurp playerctl xdg-desktop-portal xdg-desktop-portal-wlr poppler-utils wf-recorder imagemagick gvfs-mtp gvfs-gphoto2 wvkbd openssh-client git rsync adwaita-icon-theme
 "
 # shellcheck disable=SC2086
 apk add --root $TARGET --no-cache -q $PKGS

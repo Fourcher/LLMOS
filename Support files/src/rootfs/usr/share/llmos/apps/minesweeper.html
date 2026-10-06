@@ -1,0 +1,21 @@
+<!-- llmos-app: id=minesweeper; title=Minesweeper; size=m; words=minesweeper mines mine_sweeper -->
+<style>.top{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}.top span{color:var(--dim)}
+#g{display:grid;gap:3px;margin:0 auto;width:max-content}#g button{width:30px;height:30px;padding:0;font-weight:700;font-size:15px;border-radius:5px}
+#g button.o{background:var(--card);border-color:var(--line)}#g button.f{color:#e5484d}</style>
+<div class="top"><button class="primary" id="nw">New game</button><button id="lv">Easy</button><span id="st"></span></div><div id="g"></div>
+<p style="color:var(--dim);font-size:13px;text-align:center">Click to open · right-click to flag</p>
+<script>
+const L={Easy:[9,9,10],Medium:[16,16,40]};let lv="Easy",W,H,N,B,open,flag,over,first,best={};
+const $=id=>document.getElementById(id),C=["","#3b82f6","#22a35a","#e5484d","#7c3aed","#b45309","#0891b2","#000","#666"];
+function nb(i){const x=i%W,y=(i/W)|0,r=[];for(let dy=-1;dy<2;dy++)for(let dx=-1;dx<2;dx++){if(!dx&&!dy)continue;const a=x+dx,b=y+dy;if(a>=0&&b>=0&&a<W&&b<H)r.push(b*W+a)}return r}
+function init(){[W,H,N]=L[lv];B=Array(W*H).fill(0);open=new Set;flag=new Set;over=false;first=true;$("lv").textContent=lv;draw()}
+function lay(safe){let k=0;const no=new Set([safe,...nb(safe)]);while(k<N){const i=Math.random()*W*H|0;if(B[i]===-1||no.has(i))continue;B[i]=-1;k++}for(let i=0;i<W*H;i++)if(B[i]!==-1)B[i]=nb(i).filter(j=>B[j]===-1).length}
+function reveal(i){if(open.has(i)||flag.has(i))return;open.add(i);if(B[i]===0)nb(i).forEach(reveal)}
+function click(i){if(over)return;if(first){lay(i);first=false;window.t0=Date.now()}if(flag.has(i))return;if(B[i]===-1){over=true;B.forEach((v,j)=>v===-1&&open.add(j));draw("Boom! Press New game.");return}reveal(i);
+ if(open.size===W*H-N){over=true;const s=Math.round((Date.now()-t0)/1000);if(!best[lv]||s<best[lv]){best[lv]=s;LLMOS.save({best})}draw(`You win in ${s}s! Best: ${best[lv]}s`);return}draw()}
+function draw(msg){const g=$("g");g.style.gridTemplateColumns=`repeat(${W},30px)`;g.innerHTML="";for(let i=0;i<W*H;i++){const b=document.createElement("button");
+ if(open.has(i)){b.className="o";if(B[i]===-1)b.textContent="💣";else if(B[i]){b.textContent=B[i];b.style.color=C[B[i]]}}else if(flag.has(i)){b.textContent="⚑";b.className="f"}
+ b.onclick=()=>click(i);b.oncontextmenu=e=>{e.preventDefault();if(over||open.has(i))return;flag.has(i)?flag.delete(i):flag.add(i);draw()};g.append(b)}
+ $("st").textContent=msg||`${N-flag.size} mines left`+(best[lv]?` · best ${best[lv]}s`:"")}
+$("nw").onclick=init;$("lv").onclick=()=>{lv=lv==="Easy"?"Medium":"Easy";init()};LLMOS.load(s=>{best=(s&&s.best)||{};init()});
+</script>
