@@ -1360,6 +1360,15 @@ def _everyday2(text):
             body += "."
         subject = " ".join(re.sub(r"[.!?]$", "", body).split()[:7])
         return ("mail_send", {"to": m.group("to"), "subject": subject, "body": body})
+    # email in plain words (only with an account; otherwise the agent says how to set one up)
+    if re.match(r"^(?:how many|do i have any|have i got any|any)\s+(?:new\s+|unread\s+)*(?:e-?mails?|mail|messages)(?:\s+do\s+i\s+have)?$", low):
+        return ("mail_inbox", {})
+    if re.match(r"^(?:read|open|show)\s+(?:me\s+)?(?:my\s+|the\s+)?(?:latest|newest|last|most recent|new)\s+(?:e-?mail|mail|message)$", low):
+        return ("mail_read", {"id": "latest"})
+    m = re.match(r"^(?:did|has)\s+(?P<w>[a-z][\w.@ -]*?)\s+(?:reply|replied|answer(?:ed)?|write back|written back|e-?mail(?:ed)?(?:\s+me)?|get back to me|respond(?:ed)?)$"
+                 r"|^(?:any|is there an?)\s+(?:new\s+)?(?:e-?mail|mail|message|reply)\s+from\s+(?P<w2>[\w.@ -]+)$", low)
+    if m:
+        return ("mail_read", {"id": (m.group("w") or m.group("w2")).strip()})
     # alarms and the list of what's scheduled
     m = re.match(r"^(?:please\s+)?(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)(?:\s+(?:to|and)\s+(?P<why>.+))?$"
                  r"|^wake\s+me\s+(?:up\s+)?(?:at|for)\s+(?P<w2>.+?)(?:\s+(?:to|and)\s+(?P<why2>.+))?$", low)

@@ -53,7 +53,7 @@ for q in ("start work timer", "track my hours", "clock out", "what's listening o
           "color blind mode", "change my profile picture", "set a screensaver", "show a clock when idle",
           "can i run this windows program (.exe)", "install this .deb/.appimage", "keep this on top", "picture in picture"):
     check(everyday.MATCH.search(q.lower()) is not None, f"{q!r} is instant")
-for q in ("turn the volume up", "open my documents", "what's the weather", "play some music"):
+for q in ("turn the volume up", "open my documents", "write me a poem", "play some music"):
     check(everyday.MATCH.search(q) is None, f"{q!r} is not")
 
 print("questions and commands that only look alike are left to the model")

@@ -705,6 +705,31 @@ def _shortcut_words(name, args, out):
         return _cap(out.split(". Say")[0]) + "." if not low.startswith("error") else out
     if name == "note_add":
         return "Added." if low.startswith("added") else ("That was already on the list." if "already" in low else out)
+    if name == "write_file":
+        mm = re.match(r"wrote (\d+) bytes to (.+)$", out)
+        if mm:
+            home = config.home().rstrip("/")
+            p = mm.group(2)
+            shown = ("~" + p[len(home):]) if p.startswith(home) else p
+            return f"Made {shown}." if mm.group(1) == "0" else f"Saved {shown}."
+        return out
+    if name == "mail_inbox":
+        if low.startswith("no unread"):
+            return "No unread email."
+        m = re.match(r"(\d+) unread message", out)
+        rows = re.findall(r"(?m)^\[\d+\][^|\n]*\|\s*(.+?)\s*\|\s*(.+)$", out)
+        lead = f"{m.group(1)} unread email{'s' if m and m.group(1) != '1' else ''}" if m else "Your unread email"
+        return lead + (": " + "; ".join(f"{re.sub(r'<.*', '', s).strip()} ({t.strip()[:60]})" for s, t in rows[:3]) if rows else "") + \
+            (" …" if len(rows) > 3 else "") + ". They're listed on the screen."
+    if name == "mail_read":
+        if low.startswith("error: no message matches"):
+            who = str(args.get("id", "")).strip()
+            return f"No email from {who} that I can find." if who else "I couldn't find that email."
+        mm = re.search(r"From: (.+)\nDate: .*\nSubject: (.*)\n\n(.*)", out, re.S)
+        if mm:
+            body = " ".join(mm.group(3).split())[:300]
+            return f"From {re.sub(r'<.*', '', mm.group(1)).strip()}: \u201c{mm.group(2).strip()}\u201d. {body}" + ("…" if len(mm.group(3)) > 300 else "")
+        return out
     if name == "notes_show":
         # the items themselves, said plainly (the window shows them too): "Shopping: bread, milk, eggs."
         lst = store.list_name(args.get("list")) if args.get("list") else None

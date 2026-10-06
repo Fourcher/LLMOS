@@ -1626,8 +1626,12 @@ def mail_inbox(a, ctx):
 
 
 def _mail_ref(a):
-    """Accept a message id or a sender/subject fragment."""
+    """Accept a message id or a sender/subject fragment ('latest' = the newest message)."""
     ref = str(a.get("id", "")).strip()
+    if ref.lower() in ("latest", "newest", "last", "most recent", "new"):
+        items = mail.unread(limit=1)
+        if items:
+            return "INBOX", items[0]["uid"]
     loc = mail.resolve(ref)
     if not loc:
         raise mail.MailError(f"no message matches '{ref}'. Use the numeric id shown by mail_inbox, or the "
@@ -3782,10 +3786,11 @@ def move_files(a, ctx):
         where = src_dir.replace(config.home(), "~")
         return (f"there are no {what.removeprefix('all ').removeprefix('my ').removeprefix('the ').strip()} in {where}" if kind
                 else f"error: nothing matching '{a.get('what')}' in {where}")
-    done, moves = 0, []
+    done, moves, already = 0, [], []
     for p in files:
         target = os.path.join(dest, os.path.basename(p))
         if os.path.exists(target):
+            already.append(os.path.basename(p))       # (said, not silently skipped)
             continue
         if copy:
             shutil.copy2(p, target) if os.path.isfile(p) else shutil.copytree(p, target)
@@ -3797,7 +3802,12 @@ def move_files(a, ctx):
         _undo_push("move", moves)
     if dest.startswith(("/media/", "/run/media/")):
         subprocess.run(["sync"], timeout=120)
-    return (f"{'copied' if copy else 'moved'} {done} file(s) to {dest.replace(config.home(), '~')}"
+    where_to = dest.replace(config.home(), "~")
+    if not done and already:
+        return (f"{', '.join(already[:5])} {'is' if len(already) == 1 else 'are'} already in {where_to} (a file of that name is there); "
+                "nothing was changed. Say one sentence at most.")
+    return (f"{'copied' if copy else 'moved'} {done} file(s) to {where_to}"
+            + (f"; already there, left as they are: {', '.join(already[:5])}" if already else "")
             + (" (and wrote everything to the stick; eject it before pulling it out)" if copy and dest.startswith(("/media/", "/run/media/")) else "")
             + ". Say one sentence at most.")
 

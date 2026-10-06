@@ -47,6 +47,10 @@ MATCH = re.compile(
     r"(?:what|which) (?:wi-?fi|network)|what(?:'s| is) (?:my |the )?(?:wi-?fi|network)|am i (?:on|connected to) (?:the )?wi-?fi|"
     r"what(?:'s| is) (?:this |the )?(?:playing|song|track)|what song is this|what am i listening to|now playing|"
     r"(?:open|show|view|play)(?: me)? (?:the |my )?(?:last|latest|newest|most recent|recent) (?:screenshot|photo|picture|image|download|pdf|document|video|song|recording)|"
+    r"\bweather\b|\bforecast\b|(?:will|is) it (?:going to )?(?:rain|snow|be (?:hot|cold|sunny|windy))|do i need an? (?:umbrella|coat|jacket)|how (?:hot|cold|warm) (?:is it|will it be)|"
+    r"internet (?:working|up|down|ok|on|connected)|am i (?:online|connected)|do i have (?:the )?internet|(?:wi-?fi|network) working|are we online|"
+    r"^what day (?:of the week )?(?:is|was|will be|falls on|does)\b|"
+    r"\.(?:txt|md|csv|log)$|"
     r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)", re.I)
 
 
@@ -80,7 +84,8 @@ def _thanksgiving(y):
 
 
 _HOLIDAYS = {"christmas": lambda y: dt.date(y, 12, 25), "xmas": lambda y: dt.date(y, 12, 25), "christmas eve": lambda y: dt.date(y, 12, 24),
-             "new year": lambda y: dt.date(y, 1, 1), "new years": lambda y: dt.date(y, 1, 1), "new year's": lambda y: dt.date(y, 1, 1),
+             "new year": lambda y: dt.date(y, 1, 1), "new years": lambda y: dt.date(y, 1, 1), "new year's": lambda y: dt.date(y, 1, 1), "new year's day": lambda y: dt.date(y, 1, 1),
+             "new years day": lambda y: dt.date(y, 1, 1), "christmas day": lambda y: dt.date(y, 12, 25), "boxing day": lambda y: dt.date(y, 12, 26),
              "new year's eve": lambda y: dt.date(y, 12, 31), "new years eve": lambda y: dt.date(y, 12, 31), "halloween": lambda y: dt.date(y, 10, 31),
              "valentine's day": lambda y: dt.date(y, 2, 14), "valentines day": lambda y: dt.date(y, 2, 14), "valentines": lambda y: dt.date(y, 2, 14),
              "the fourth of july": lambda y: dt.date(y, 7, 4), "fourth of july": lambda y: dt.date(y, 7, 4), "independence day": lambda y: dt.date(y, 7, 4),
@@ -1059,6 +1064,7 @@ def quick(desk, line, low):
     m = re.fullmatch(r"what(?:'s| is) (?:the )?time (?:is it )?in (?P<c>[a-z .'-]+)|what time is it in (?P<c2>[a-z .'-]+)|time in (?P<c3>[a-z .'-]+)", q)
     if m:
         from . import system
+        system.apply_timezone_env()           # (the owner may have changed this computer's zone since the desk started)
         place = (m.group("c") or m.group("c2") or m.group("c3")).strip()
         zone = system.find_timezone(place)
         if zone:
@@ -1205,9 +1211,126 @@ def files_and_status(desk, line, low):
     return False
 
 
+_WMO = {0: "clear", 1: "mostly clear", 2: "partly cloudy", 3: "cloudy", 45: "foggy", 48: "foggy", 51: "light drizzle", 53: "drizzle",
+        55: "heavy drizzle", 56: "freezing drizzle", 57: "freezing drizzle", 61: "light rain", 63: "rain", 65: "heavy rain", 66: "freezing rain",
+        67: "freezing rain", 71: "light snow", 73: "snow", 75: "heavy snow", 77: "snow grains", 80: "showers", 81: "showers",
+        82: "heavy showers", 85: "snow showers", 86: "snow showers", 95: "thunderstorms", 96: "thunderstorms with hail", 99: "thunderstorms with hail"}
+
+
+def _place():
+    """Where the owner is, for the weather: what they told us, else the city of this computer's time zone."""
+    from . import system
+    p = config.Profile().get("city") or config.Profile().get("location")
+    if p:
+        return str(p)
+    tz = system.timezone() or ""
+    return tz.split("/")[-1].replace("_", " ") if "/" in tz else ""
+
+
+def weather(desk, line, low):
+    q = low.strip().rstrip("?.!")
+    m = re.fullmatch(r"(?:what(?:'s| is| will be)|how(?:'s| is| will be)) (?:the )?weather(?: like| going to be(?: like)?| be like)?(?P<w> today| tomorrow| this weekend| tonight| on \w+day| this week)?(?: in (?P<p>[a-z .,'-]+?))?(?P<w2> today| tomorrow| this weekend| tonight| this week)?"
+                     r"|weather(?: today| tomorrow| forecast)?(?: in (?P<p2>[a-z .,'-]+))?|(?:the )?forecast(?: for (?P<p3>[a-z .,'-]+))?"
+                     r"|(?:will|is) it (?:going to )?(?P<r>rain|snow|be (?:hot|cold|sunny|windy))(?P<w3> today| tomorrow| tonight| this weekend)?(?: in (?P<p4>[a-z .,'-]+))?"
+                     r"|do i need an? (?P<u>umbrella|coat|jacket)(?P<w4> today| tomorrow)?(?: in (?P<p6>[a-z .,'-]+?))?(?P<w6> today| tomorrow)?|how (?:hot|cold|warm) (?:is it|will it be)(?P<w5> today| tomorrow)?(?: in (?P<p5>[a-z .,'-]+))?", q)
+    if not m:
+        return False
+    if config.settings.get("internet") == "no":
+        return _say(desk, line, "The internet is switched off in settings, so I can't get the forecast.")
+    gd = m.groupdict()
+    place = next((gd[k] for k in ("p", "p2", "p3", "p4", "p5", "p6") if gd.get(k)), None) or _place()
+    when = (next((gd[k] for k in ("w", "w2", "w3", "w4", "w5", "w6") if gd.get(k)), None) or " today").strip()
+    if not place:
+        return _say(desk, line, "Where are you? Say “the weather in Denver” (I'll remember it if you say “I live in Denver”).")
+    from . import web
+    try:
+        geo = json.loads(web.fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + urllib.parse.quote(place), max_bytes=100000, timeout=8)[3])
+        g = (geo.get("results") or [None])[0]
+        if not g:
+            return _say(desk, line, f"I couldn't find a place called {place}.")
+        us = g.get("country_code") in ("US", "LR", "MM")
+        url = (f"https://api.open-meteo.com/v1/forecast?latitude={g['latitude']}&longitude={g['longitude']}&timezone=auto&forecast_days=7"
+               "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+               + ("&temperature_unit=fahrenheit" if us else ""))
+        f = json.loads(web.fetch(url, max_bytes=200000, timeout=8)[3])
+    except Exception as e:
+        return _say(desk, line, f"I couldn't get the forecast just now ({e}).")
+    unit = "°F" if us else "°C"
+    d = f["daily"]
+    idx = 1 if "tomorrow" in when else 0
+    m2 = re.match(r"on (\w+day)", when)
+    if m2:
+        names = [dt.date.fromisoformat(x).strftime("%A").lower() for x in d["time"]]
+        idx = names.index(m2.group(1)) if m2.group(1) in names else 0
+    name = g["name"] + (f", {g.get('admin1')}" if g.get("admin1") and g.get("admin1") != g["name"] else "")
+    rain = d["precipitation_probability_max"][idx]
+    desc = _WMO.get(d["weather_code"][idx], "mixed")
+    hi, lo = round(d["temperature_2m_max"][idx]), round(d["temperature_2m_min"][idx])
+    day = "Today" if idx == 0 else "Tomorrow" if idx == 1 else dt.date.fromisoformat(d["time"][idx]).strftime("%A")
+    if "weekend" in when or "week" in when:
+        rows = []
+        for i, t in enumerate(d["time"]):
+            dd = dt.date.fromisoformat(t)
+            if "week" in when and "weekend" not in when or dd.weekday() >= 5:
+                rows.append(f"{dd.strftime('%a')} {_WMO.get(d['weather_code'][i], 'mixed')}, {round(d['temperature_2m_max'][i])}/{round(d['temperature_2m_min'][i])}{unit}")
+        return _say(desk, line, f"{name}: " + "; ".join(rows) + ".")
+    if gd.get("r") or gd.get("u"):
+        wet = rain >= 40 if rain is not None else d["weather_code"][idx] >= 51     # the chance decides; a code alone can mislead
+        if gd.get("u") in ("coat", "jacket"):
+            cold = lo < (50 if us else 10)
+            return _say(desk, line, f"{'Yes' if cold else 'Probably not'}: {day.lower()} in {name} goes down to {lo}{unit} ({desc}).")
+        return _say(desk, line, f"{'Yes, likely' if wet else 'Probably not'}: {rain if rain is not None else '?'}% chance of rain {day.lower()} in {name} ({desc}, {hi}/{lo}{unit}).")
+    now = f" Now {round(f['current']['temperature_2m'])}{unit}." if idx == 0 and f.get("current") else ""
+    return _say(desk, line, f"{day} in {name}: {desc}, high {hi}{unit}, low {lo}{unit}, {rain if rain is not None else '?'}% chance of rain.{now}")
+
+
+def net_and_dates(desk, line, low):
+    q = low.strip().rstrip("?.!")
+    if re.fullmatch(r"(?:is (?:the |my )?internet (?:working|up|down|ok|on|connected)|am i (?:online|connected(?: to the internet)?)|do i have (?:the )?internet|is (?:the )?(?:wi-?fi|network) working|are we online)", q):
+        if config.settings.get("internet") == "no":
+            return _say(desk, line, "The internet is switched off in settings (say “turn the internet on”).")
+        t0 = time.time()
+        try:
+            from . import web
+            web.fetch("https://www.google.com/generate_204", max_bytes=1000, timeout=6)
+            return _say(desk, line, f"Yes, the internet is working (answered in {int((time.time() - t0) * 1000)} ms).")
+        except Exception as e:
+            try:
+                import socket
+                socket.create_connection(("1.1.1.1", 443), timeout=4).close()
+                return _say(desk, line, "The network reaches the internet, but web pages aren't loading (names don't resolve): try again in a minute, or restart the router.")
+            except OSError:
+                return _say(desk, line, "No, there's no internet connection right now. Say “wifi” to check the network.")
+    m = re.fullmatch(r"what day (?:of the week )?(?:is|was|will be|falls on|does)\s+(?P<x>.+?)(?:\s+(?:fall on|land on|be))?(?:\s+(?:this year|next year|in (?P<y>\d{4})))?", q)
+    if m:
+        today = dt.date.today()
+        d, w = _date_of(m.group("x"), today if not m.group("y") else dt.date(int(m.group("y")), 1, 1))
+        if "next year" in q and d:
+            d = d.replace(year=d.year + 1) if d.year == today.year else d
+        if d:
+            if w in _HOLIDAYS:
+                return _say(desk, line, f"{' '.join(x[:1].upper() + x[1:] for x in w.split())} is on a {d.strftime('%A')} ({d.strftime('%d %B %Y').lstrip('0')}).")
+            return _say(desk, line, f"{d.strftime('%d %B %Y').lstrip('0')} is a {d.strftime('%A')}.")
+    # "add call the bank to todo.txt": a line at the end of that file, wherever it is
+    m = re.fullmatch(r"(?:add|append|write|put)\s+(?P<t>.+?)\s+(?:to|in|into|at the end of)\s+(?:my\s+|the\s+)?(?P<f>[\w .-]+\.(?:txt|md|csv|log))", q)
+    if m:
+        from . import tools
+        name = line.strip().rstrip("?.!")[m.start("f"):m.end("f")]
+        hits = [h for h in tools.find_paths(name) if os.path.basename(h).lower() == name.lower()]
+        path = hits[0] if hits else os.path.join(config.home(), "Documents", name)
+        text = line.strip().rstrip("?.!")[m.start("t"):m.end("t")].strip().strip("'\"")
+        with open(path, "a", encoding="utf-8") as fh:
+            if os.path.getsize(path) and not open(path, "rb").read()[-1:] == b"\n":
+                fh.write("\n")
+            fh.write(text + "\n")
+        home = config.home().rstrip("/")
+        return _say(desk, line, f"Added “{text}” to {('~' + path[len(home):]) if path.startswith(home) else path}.")
+    return False
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (quick, files_and_status, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (quick, files_and_status, weather, net_and_dates, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True
