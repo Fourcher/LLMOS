@@ -44,6 +44,8 @@
     <keybind key="W-Right"><action name="SnapToEdge" direction="right"/></keybind>
     <keybind key="W-f"><action name="ToggleFullscreen"/></keybind>
     <keybind key="W-t"><action name="ToggleAlwaysOnTop"/></keybind>
+    <!-- a look that made the screen hard to use: the default look back, whatever was asked -->
+    <keybind key="W-S-Escape"><action name="Execute" command="/usr/bin/llmos desk-ctl act 'back to the default look'"/></keybind>
     <keybind key="W-S-Left"><action name="MoveToOutput" direction="left" wrap="yes"/></keybind>
     <keybind key="W-S-Right"><action name="MoveToOutput" direction="right" wrap="yes"/></keybind>
     <keybind key="W-Return"><action name="Execute" command="foot"/></keybind>

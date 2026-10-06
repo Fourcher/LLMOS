@@ -68,6 +68,10 @@
     for (const k of ["--bg", "--fg", "--accent"]) root.removeProperty(k);
     for (const [k, v] of Object.entries(m.css || {})) root.setProperty(k, v);
     document.body.className = m.mode === "light" ? "light" : "dark";
+    let st = $("owner-style");
+    if (!st) { st = document.createElement("style"); st.id = "owner-style"; document.head.append(st); }
+    st.textContent = m.style || "";
+    ownerStyle();
     document.documentElement.dataset.motion = ["full", "reduced", "off"].includes(m.motion) ? m.motion : "full";
     const layout = ["windows", "mac"].includes(m.layout) ? m.layout : "clean";
     if (document.documentElement.dataset.layout !== layout) { document.documentElement.dataset.layout = layout; startMenu(false); dock(); }
@@ -210,8 +214,13 @@
   $("clock").addEventListener("click", () => act("open the clock"));
 
   // ---------------------------------------------------------------- screens
+  function ownerStyle() {           // the owner's own style applies to the desk only: never the lock screen or setup
+    const st = $("owner-style");
+    if (st) st.disabled = $("desk").classList.contains("hidden");
+  }
   function screen(m) {
     ["screen-boot", "screen-lock", "screen-wizard", "screen-bye", "desk"].forEach(id => $(id).classList.add("hidden"));
+    setTimeout(ownerStyle, 0);
     $("boot-orb").classList.remove("thinking");
     if (m.name === "lock") { lockOpen = !!(m.data || {}).open; $("lock-pass").classList.toggle("hidden", lockOpen); $("lock-go").disabled = false; $("screen-lock").classList.remove("hidden"); $("lock-error").textContent = ""; $("lock-note").textContent = (m.data || {}).note || ""; $("lock-pass").value = ""; setTimeout(() => (lockOpen ? $("lock-go") : $("lock-pass")).focus(), 50); }
     else if (m.name === "wizard") { $("screen-wizard").classList.remove("hidden"); wizard.start(m.data || {}); }

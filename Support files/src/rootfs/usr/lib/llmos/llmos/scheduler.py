@@ -53,8 +53,14 @@ class HeadlessCtx:
     def confirm_network(self, name, args):
         return config.settings.get("internet") == "yes"
 
+    approved = False         # the owner asked for this task in their own words: what it says to do was agreed then
+
     def confirm_action(self, tool, args, risk):
-        # unattended: nobody can answer, so only what the owner's autonomy level runs without asking
+        # unattended: nobody can answer. A task the owner set up themselves does what it says (that was the yes);
+        # anything else only what the owner's autonomy level runs without asking. Security changes never run unattended.
+        from . import tools
+        if self.approved and risk != tools.SECURITY:
+            return True
         return not agent.needs_confirm(risk)
 
     def confirm_online(self, text, reason):
@@ -107,6 +113,8 @@ def run_task(t):
         store.notify(direct[:80], direct)
         return direct
     ctx = HeadlessCtx()
+    ctx.approved = bool(t.get("approved"))
+    ctx.current_request = t["task"]          # what the owner asked for then is "the request" for the checks on what may run
     try:
         from . import tools
         tools.sync_connectors()        # pick up connectors added since this process last synced

@@ -4,6 +4,7 @@ SMTP for sending. The account (including its password) lives in the vault
 scheduled it. There is no provider integration and no OAuth: use an app
 password where the provider requires one (Gmail, Outlook, Yahoo, iCloud)."""
 import email
+import os
 import email.header
 import email.utils
 import html
@@ -249,7 +250,7 @@ def move(uids, kind="archive", folder="INBOX"):
         conn.logout()
 
 
-def send(to, subject, body, in_reply_to=None, references=None):
+def send(to, subject, body, in_reply_to=None, references=None, attachments=None):
     acct = account()
     if not acct:
         raise MailError("no email account is set up yet")
@@ -263,6 +264,12 @@ def send(to, subject, body, in_reply_to=None, references=None):
         msg["In-Reply-To"] = in_reply_to
         msg["References"] = (references or in_reply_to)
     msg.set_content(body)
+    import mimetypes
+    for path in attachments or []:              # files go along as attachments, under their own names
+        ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        maintype, subtype = ctype.split("/", 1)
+        with open(path, "rb") as f:
+            msg.add_attachment(f.read(), maintype=maintype, subtype=subtype, filename=os.path.basename(path))
     if config.settings.get("tor"):
         raise MailError(_TOR_BLOCKS)
     sec = acct.get("smtp_security", "starttls")

@@ -429,13 +429,13 @@ def _save_tasks(ts):
 
 
 @_locked
-def add_task(when, task, kind="agent"):
+def add_task(when, task, kind="agent", approved=False):
     """kind: "agent" (the model carries the task out), "timer" (task = its length, e.g. "10 minutes"),
     "reminder" (task = the words to show); timers and reminders are delivered as they are, no model."""
     first, spec = parse_when(when)
     t = {"id": uuid.uuid4().hex[:6], "task": task.strip(), "when": when, "kind": kind if kind in ("timer", "reminder") else "agent",
          "spec": spec, "next": first.timestamp(), "created": time.time(),
-         "desc": describe(spec, first)}
+         "desc": describe(spec, first), "approved": bool(approved)}
     cur = tasks()
     cur.append(t)
     _save_tasks(cur)

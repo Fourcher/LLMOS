@@ -123,5 +123,26 @@ asked, did, out = run("read_webpage", {"url": "https://example.com"}, "read exam
 check(asked == ["network:read_webpage"], "internet 'ask' still asks")
 config.settings.set("internet", "yes")
 
+print("a task the owner scheduled in their own words does what it says when it runs (nobody is there to ask)")
+from llmos import scheduler  # noqa: E402
+config.settings.set("autonomy", "balanced")
+for approved, want in ((True, True), (False, False)):
+    hc = scheduler.HeadlessCtx()
+    hc.approved, hc.current_request = approved, "email the report to ann@example.com"
+    ran.clear()
+    agent.execute(hc, "mail_send", {"to": "ann@example.com", "subject": "report", "body": "here"})
+    check(bool(ran) == want, ("owner-scheduled: sent" if approved else "not owner-scheduled (e.g. from a web page): left undone"))
+hc = scheduler.HeadlessCtx()
+hc.approved = True
+check(hc.confirm_action(tools.REGISTRY["change_setting"], {}, tools.SECURITY) is False, "a security change never runs unattended")
+ctx = Ctx()
+ctx.current_request = "remind me in an hour"
+tools.REGISTRY["schedule_task"].fn({"when": "in an hour", "task": "email craig"}, ctx)
+from llmos import store  # noqa: E402
+check(store.tasks()[-1].get("approved") is True, "scheduled from the owner's own words: marked so")
+ctx.tainted = True
+tools.REGISTRY["schedule_task"].fn({"when": "in an hour", "task": "email someone"}, ctx)
+check(store.tasks()[-1].get("approved") is False, "scheduled after reading a web page: not marked")
+
 print(f"\n{'all good' if not fails else str(fails) + ' failure(s)'}")
 sys.exit(1 if fails else 0)

@@ -1341,12 +1341,13 @@ class Desk:
         css["--font"] = themes.FONTS.get(appear.get("font") or "sans", themes.FONTS["sans"]) + \
             ', "Noto Sans CJK SC", "Noto Sans Arabic", "Noto Sans Hebrew", "Noto Sans Devanagari", "Noto Sans Thai", sans-serif'
         backdrop = appear.get("backdrop") or "living"
+        style = str(appear.get("style") or "")
         motion = getattr(th, "motion", "full")
         lang = i18n.lang_code(config.llm_language())
         strings = {k: T(k) for k in _PAGE_KEYS}
         strings.update({k: T(k, area="settings") for k in ("settings",)})
         mode = "light" if (th.bg and ui._lum(th.bg) > 0.4) else "dark"
-        return {"t": "theme", "css": css, "mode": mode, "corners": corners, "lang": lang, "motion": motion,
+        return {"t": "theme", "css": css, "mode": mode, "corners": corners, "lang": lang, "motion": motion, "style": style,
                 "layout": config.settings.get("appearance.layout") or "clean",
                 "software": os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1",
                 "dir": "rtl" if lang in ("ar", "he", "fa", "ur") else "ltr", "strings": strings,
