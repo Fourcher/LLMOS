@@ -1917,6 +1917,82 @@ def rename_series(a, ctx):
     return f"renamed {len(plan)} file(s) in {folder}: {plan[0][1]} … {plan[-1][1]}. Done: tell the owner in one sentence."
 
 
+def _newest(folders, exts):
+    best = None
+    for f in folders:
+        d = _path(f)
+        try:
+            for n in os.listdir(d):
+                p = os.path.join(d, n)
+                if n.lower().endswith(exts) and os.path.isfile(p) and (best is None or os.path.getmtime(p) > os.path.getmtime(best)):
+                    best = p
+        except OSError:
+            pass
+    return best
+
+
+@tool("merge_pdfs", "Join PDF files into one, in name order (or the order given). With no files named: every PDF in the folder last "
+      "shown (else Downloads, else Documents).",
+      {"files": {"type": "array", "items": {"type": "string"}, "description": "the PDFs, in order (optional)"},
+       "folder": STR, "name": {"type": "string", "description": "name of the joined file (default 'Merged')"}}, [], risk=CHANGE,
+      available=lambda: shutil.which("pdfunite") is not None or shutil.which("qpdf") is not None)
+def merge_pdfs(a, ctx):
+    files = [_path(f) for f in (a.get("files") or []) if str(f).strip()]
+    if not files:
+        for f in ([a["folder"]] if a.get("folder") else []) + ([_LAST_FOLDER] if _LAST_FOLDER else []) + ["~/Downloads", "~/Documents"]:
+            d = _path(f)
+            pdfs = sorted((os.path.join(d, n) for n in os.listdir(d) if n.lower().endswith(".pdf")), key=lambda p: os.path.basename(p).lower()) \
+                if os.path.isdir(d) else []
+            if len(pdfs) >= 2:
+                files = pdfs
+                break
+    files = [f for f in files if os.path.isfile(f)]
+    if len(files) < 2:
+        return "there are fewer than two PDFs to join here: open the folder they're in (\u201cshow my files in …\u201d) and say it again, or name them"
+    base = re.sub(r"[/\\\0]", "-", str(a.get("name") or "Merged").strip()) or "Merged"
+    out = os.path.join(os.path.dirname(files[0]), base if base.lower().endswith(".pdf") else base + ".pdf")
+    files = [f for f in files if os.path.abspath(f) != os.path.abspath(out)]
+    if os.path.exists(out):
+        stem = out[:-4]
+        out = next(f"{stem} {i}.pdf" for i in range(2, 999) if not os.path.exists(f"{stem} {i}.pdf"))
+    argv = ["pdfunite"] + files + [out] if shutil.which("pdfunite") else ["qpdf", "--empty", "--pages"] + files + ["--", out]
+    p = subprocess.run(argv, capture_output=True, text=True, timeout=600)
+    if p.returncode != 0 or not os.path.exists(out):
+        return f"error: could not join them: {(p.stderr or p.stdout).strip()[-200:]}"
+    home = config.home().rstrip("/")
+    short = lambda x: "~" + x[len(home):] if x.startswith(home) else x
+    return (f"joined {len(files)} PDFs ({', '.join(os.path.basename(f) for f in files[:6])}{'…' if len(files) > 6 else ''}) into {short(out)}. "
+            f"Done: tell the owner in one sentence; they can say 'open {os.path.basename(out)}'.")
+
+
+@tool("text_from_image", "Read the text in a picture or screenshot (OCR), show it and copy it to the clipboard. With no file named: the "
+      "newest picture or screenshot.", {"path": {"type": "string", "description": "the image (optional)"}}, [], risk=READ,
+      available=lambda: shutil.which("tesseract") is not None)
+def text_from_image(a, ctx):
+    from . import clip
+    path = _path(a["path"]) if a.get("path") else _newest(["~/Pictures", "~/Downloads", "~/Desktop", "~/Pictures/Screenshots"], _IMAGE_EXT)
+    if not path or not os.path.isfile(path):
+        return "there's no picture to read: take a screenshot first (\u201ctake a screenshot\u201d) or name the picture"
+    langs = "eng"
+    try:
+        have = subprocess.run(["tesseract", "--list-langs"], capture_output=True, text=True, timeout=20).stdout.split()
+        want = {"Spanish": "spa", "French": "fra", "German": "deu", "Italian": "ita", "Portuguese": "por"}.get(config.settings.get("language", "English"))
+        if want and want in have:
+            langs = want + "+eng"
+    except (OSError, subprocess.SubprocessError):
+        pass
+    p = subprocess.run(["tesseract", path, "-", "-l", langs], capture_output=True, text=True, timeout=300)
+    text = (p.stdout or "").strip()
+    if not text:
+        return f"no text could be read in {os.path.basename(path)}"
+    copied = clip.copy(text=text)
+    show(ctx, {"id": "ocr", "replace": True, "title": "Text in " + os.path.basename(path), "size": "m", "blocks": [
+        {"type": "text", "text": text[:6000]},
+        {"type": "text", "text": ("Copied: paste it anywhere with Ctrl+V." if copied else "Select it to copy it."), "dim": True}]})
+    return f"read {len(text.split())} word(s) from {os.path.basename(path)}; shown on the owner's screen" + (" and copied to the clipboard" if copied else "") + \
+        ". Done: tell the owner in one sentence; do not repeat the text."
+
+
 @tool("share_folder", "Share a folder with the owner's other computers and phones on the same network (read-only: they can open "
       "and save its files in a web browser), or stop sharing. The folder is the one last shown unless named.",
       {"path": {"type": "string", "description": "folder to share (default: the folder last shown, else the home folder)"},

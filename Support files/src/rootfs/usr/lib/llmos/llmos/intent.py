@@ -1288,6 +1288,21 @@ def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
     import urllib.parse as _u
+    m = re.match(r"^(?:merge|combine|join|put together)\s+(?:all\s+)?(?:of\s+)?(?:these|the|my|those|them|all)?\s*(?:the\s+)?pdfs?(?:\s+files)?"
+                 r"(?:\s+in\s+(?:my\s+)?(?P<f>[\w .~/-]+?))?(?:\s+(?:into|in|to|as)\s+(?:one(?:\s+(?:pdf|file))?|a\s+single\s+(?:pdf|file)|(?:a\s+(?:pdf|file)\s+called\s+)?(?P<n>[\w .-]+?)))?$", low)
+    if m:
+        args = {}
+        if m.group("f"):
+            f = m.group("f").strip()
+            args["folder"] = {"downloads": "~/Downloads", "documents": "~/Documents", "desktop": "~/Desktop"}.get(f, f)
+        if m.group("n") and m.group("n").strip() not in ("one", "one pdf", "one file"):
+            args["name"] = t[m.start("n"):m.end("n")].strip()
+        return ("merge_pdfs", args)
+    m = re.match(r"^(?:copy|get|read|grab|extract|pull|take)\s+(?:out\s+)?(?:the\s+|all\s+the\s+)?(?:text|words|writing)\s+(?:out\s+)?(?:from|of|in|off)\s+"
+                 r"(?:this|that|the|my|a)?\s*(?:last\s+|latest\s+|newest\s+)?(?P<w>image|picture|photo|screenshot|scan|pic|png|jpg)(?:\s*/\s*(?:image|screenshot|picture|photo))?$"
+                 r"|^(?:ocr|scan)\s+(?:this|that|the|my)?\s*(?:image|picture|screenshot)(?:\s+for\s+text)?$|^what\s+does\s+(?:this|that|the)\s+(?:screenshot|image|picture)\s+say$", low)
+    if m:
+        return ("text_from_image", {})
     m = re.match(r"^(?:share|send)\s+(?:this|that|the|my|a)?\s*(?P<f>[\w .~/-]+?)?\s*(?:folder|files?|photos|pictures|documents)?\s+"
                  r"(?:with|to)\s+(?:my\s+|the\s+|another\s+|other\s+)*(?:other\s+)?(?:computer|laptop|pc|mac|phone|tablet|ipad|devices?)s?(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$"
                  r"|^share\s+(?:this|that|the|my)?\s*(?P<f2>[\w .~/-]+?)?\s*folder(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$", low)
