@@ -1317,6 +1317,19 @@ def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
     import urllib.parse as _u
+    # alarms and the list of what's scheduled
+    m = re.match(r"^(?:please\s+)?(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)(?:\s+(?:to|and)\s+(?P<why>.+))?$"
+                 r"|^wake\s+me\s+(?:up\s+)?(?:at|for)\s+(?P<w2>.+?)(?:\s+(?:to|and)\s+(?P<why2>.+))?$", low)
+    if m:
+        why = (m.group("why") or m.group("why2") or "").strip()
+        return ("schedule_task", {"when": m.group("w") or m.group("w2"), "task": "Alarm" + (f": {why}" if why else ""), "kind": "reminder"})
+    if re.match(r"^(?:what|which)\s+(?:reminders|alarms|timers|tasks)\s+(?:do\s+i\s+have|are\s+(?:set|on|there))|^(?:show|list|see)\s+(?:me\s+)?(?:all\s+)?"
+                r"(?:my\s+|the\s+)?(?:reminders|alarms|timers)$|^what(?:'s|\s+is)\s+scheduled$|^my\s+(?:reminders|alarms|timers)$", low):
+        return ("manage_tasks", {"action": "list"})
+    m = re.match(r"^(?:please\s+)?(?:cancel|delete|remove|stop|turn\s+off)\s+(?:the\s+|my\s+)?(?:(?P<what>[\w: ]+?)\s+)?(?P<kind>alarm|reminder|timer)s?$", low)
+    if m and not re.search(r"\bevery\b", low):
+        return ("manage_tasks", {"action": "cancel", "which": ("all" if (m.group("what") or "").strip() in ("all", "all the", "all my", "every") else
+                                                                  (m.group("what") or "").strip() or m.group("kind"))})
     # notes first: "write down: dentist on friday at 3" is a note, not a task at 3
     m = re.match(r"^(?:please\s+)?(?:write|jot|put|get|note|scribble)\s+(?:this\s+|that\s+|it\s+)?down\s*:?\s+(?P<n>.+)$|^(?:take|make)\s+a\s+note\s*:?\s+(?P<n2>.+)$", t, re.I)
     if m:
