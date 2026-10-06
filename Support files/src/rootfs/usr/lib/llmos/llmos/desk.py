@@ -2321,6 +2321,29 @@ class Desk:
                                else "That device isn't available any more.")
             threading.Thread(target=self.sound_panel, daemon=True).start()
             return True
+        m = re.fullmatch(r"(?:please )?(?:make|create|play|show|start|do|run|give me) (?:me )?(?:a )?slide ?show (?:of|with|from|using) (?:all )?(?:these|the|my|those)? ?(?:photos|pictures|pics|images)(?: (?:in|from) (?:my )?(?P<f>[\w .~/-]+?))?"
+                         r"|(?:show|play) (?:me )?(?:these|the|my|those) (?:photos|pictures|pics|images)(?: (?:in|from) (?:my )?(?P<f2>[\w .~/-]+?))? (?:as a|in a) slide ?show|slide ?show(?: of my (?:photos|pictures))?", l2)
+        if m:
+            f = (m.group("f") or m.group("f2") or "").strip()
+            cands = ([tools._path("~/" + f.capitalize()) if "/" not in f and not f.startswith("~") else tools._path(f)] if f else []) + \
+                ([tools._LAST_FOLDER] if tools._LAST_FOLDER else []) + [tools._path("~/Pictures")]
+            pics = []
+            for d in cands:
+                try:
+                    pics = sorted((os.path.join(d, n) for n in os.listdir(d) if n.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic"))
+                                   and not n.startswith(".")), key=os.path.getmtime)
+                except OSError:
+                    pics = []
+                if pics:
+                    break
+            if not pics or not shutil.which("mpv"):
+                self.instant_reply(line, "There are no photos here to show: open the folder they're in (\u201cshow my files in …\u201d) and say it again."
+                                   if not pics else "The player isn't installed: say \u201cinstall mpv\u201d.")
+                return True
+            subprocess.Popen(["mpv", "--fs", "--image-display-duration=5", "--loop-playlist=inf", "--really-quiet", "--title=Slideshow", "--"] + pics,
+                             env=self._child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            self.instant_reply(line, f"Slideshow of {len(pics)} photo(s), 5 seconds each. Space pauses, \u2190 \u2192 go back and forward, Esc ends it.")
+            return True
         if re.fullmatch(r"(?:please )?(?:make|create|start|open|do|build|i (?:want|need) to make) (?:a |an |some |my )?(?:new )?(?:presentation|slides|slide ?show|powerpoint)(?: .*)?", l2) \
                 and not programs.find("presentation"):
             self.instant_reply(line, "There's no presentation program yet. Say \u201cinstall LibreOffice\u201d (about 300 MB) to get one that "

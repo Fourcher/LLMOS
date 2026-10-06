@@ -1993,6 +1993,69 @@ def text_from_image(a, ctx):
         ". Done: tell the owner in one sentence; do not repeat the text."
 
 
+def _secs(v):
+    """'10', '1:30', '1m30s', '2 minutes' -> seconds (float), or None."""
+    s = str(v or "").strip().lower()
+    if not s:
+        return None
+    m = re.fullmatch(r"(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)", s)
+    if m:
+        return int(m.group(1) or 0) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)", s)
+    if m:
+        return float(s)
+    total, found = 0.0, False
+    for n, u in re.findall(r"(\d+(?:\.\d+)?)\s*(hours?|h|minutes?|mins?|m|seconds?|secs?|s)(?![a-z])", s):
+        total += float(n) * (3600 if u.startswith("h") else 60 if u.startswith("m") else 1)
+        found = True
+    return total if found else None
+
+
+@tool("trim_video", "Cut a video (or sound file): remove seconds from its start and/or end, or keep only a part. Saves a new file "
+      "'<name> (trimmed)' next to it; the original stays. With no file named: the newest video.",
+      {"path": {"type": "string", "description": "the video (optional)"},
+       "cut_start": {"type": "string", "description": "how much to remove from the start, e.g. '10' or '1:30'"},
+       "cut_end": {"type": "string", "description": "how much to remove from the end"},
+       "keep_from": {"type": "string", "description": "keep only from this time…"}, "keep_to": {"type": "string", "description": "…to this time"}},
+      [], risk=CHANGE, available=lambda: shutil.which("ffmpeg") is not None)
+def trim_video(a, ctx):
+    path = _path(a["path"]) if a.get("path") else _newest(["~/Videos", "~/Downloads", "~/Desktop", "~/Music"], _MEDIA_EXT)
+    if a.get("path") and not os.path.isfile(path):          # a bare name: where videos usually are
+        path = next((os.path.join(_path(d), os.path.basename(a["path"])) for d in ("~/Videos", "~/Downloads", "~/Desktop", "~/Music", "~")
+                     if os.path.isfile(os.path.join(_path(d), os.path.basename(a["path"])))), path)
+    if not path or not os.path.isfile(path):
+        return "there's no video to cut: name it, for example 'cut the first 10 seconds off holiday.mp4'"
+    try:
+        dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                                   capture_output=True, text=True, timeout=60).stdout.strip())
+    except (ValueError, OSError, subprocess.SubprocessError):
+        return f"error: {os.path.basename(path)} doesn't look like a video or sound file"
+    start = _secs(a.get("keep_from")) if a.get("keep_from") else (_secs(a.get("cut_start")) or 0.0)
+    end = _secs(a.get("keep_to")) if a.get("keep_to") else dur - (_secs(a.get("cut_end")) or 0.0)
+    if start is None or end is None or end - start < 0.5 or start >= dur:
+        return f"error: that would leave nothing ({os.path.basename(path)} is {int(dur // 60)}:{int(dur % 60):02d} long)"
+    stem, ext = os.path.splitext(path)
+    out = f"{stem} (trimmed){ext}"
+    i = 2
+    while os.path.exists(out):
+        out, i = f"{stem} (trimmed {i}){ext}", i + 1
+    audio_only = ext.lower() in _AUDIO_EXT
+    # cut exactly where asked (re-encoded: a plain copy would jump to the nearest keyframe, seconds off)
+    argv = ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.3f}", "-i", path, "-t", f"{end - start:.3f}"] + \
+        ([] if audio_only else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]) + ["-c:a", "aac", "-b:a", "160k", out] \
+        if ext.lower() in (".mp4", ".m4v", ".mov", ".mkv", ".m4a", ".aac") else \
+        ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.3f}", "-i", path, "-t", f"{end - start:.3f}", out]
+    ctx.status("cutting the video…")
+    p = subprocess.run(argv, capture_output=True, text=True, timeout=7200)
+    if p.returncode != 0 or not os.path.exists(out):
+        return f"error: could not cut it: {p.stderr.strip()[-200:]}"
+    home = config.home().rstrip("/")
+    short = "~" + out[len(home):] if out.startswith(home) else out
+    left = end - start
+    return (f"saved {short}: {int(left // 60)}:{int(left % 60):02d} long (from {int(start // 60)}:{int(start % 60):02d} to {int(end // 60)}:{int(end % 60):02d} of the "
+            f"original, which is unchanged). Done: tell the owner in one sentence.")
+
+
 @tool("share_folder", "Share a folder with the owner's other computers and phones on the same network (read-only: they can open "
       "and save its files in a web browser), or stop sharing. The folder is the one last shown unless named.",
       {"path": {"type": "string", "description": "folder to share (default: the folder last shown, else the home folder)"},
