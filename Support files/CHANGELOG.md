@@ -30,6 +30,22 @@ The owner decides how much it asks, and is never second-guessed.
   do", magnifier, on-screen keyboard, ssh, git clone, dark mode in other
   languages, and plain answers about root, the firewall, viruses, crashes and
   booting.
+- **Files:** show hidden files; rename a set of photos ("Holiday 1, 2, 3");
+  find duplicates (and delete the extra copies to the trash); join PDFs; read
+  the text in a screenshot and copy it; **share a folder** with your other
+  computers and phones on the same network (read-only, until you stop);
+  **lock a folder with its own password** (an AES-256 7z file that also opens
+  on other computers).
+- **Video:** cut the first or last seconds, or keep a part (a new file; the
+  original stays); photo slideshow.
+- **Quick answers and actions:** days until a date or holiday; a work-hours
+  timer; what's using a port and stopping it; a local web server and HTML
+  preview; temperature, battery and drive health; parcel tracking; typing and
+  language practice; the computer's name; **focus mode** ("focus mode for an
+  hour" blocks YouTube and social sites and quiets notifications, then undoes
+  itself); programs that open at login; a VPN from its WireGuard or OpenVPN
+  file; slower double-click and key repeat for shaky hands; keep running with
+  the lid closed; the chime on or off; Super+T keeps a window on top.
 - **Fixed:** "every monday" was set up as every day; reminders now say which
   day; "update my apps" installs the updates instead of only listing them.
 
