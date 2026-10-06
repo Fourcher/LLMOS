@@ -1189,6 +1189,32 @@ def _everyday(text):
             args["where"] = m.group("where").lower()
         return ("make_folder", args)
     m = _RENAME.match(text)
+    if m and re.search(r"\b(?:every|all|each)\b.*\b(?:files?|photos?|pictures?|documents?|songs?)\b|\b(?:files|photos|pictures|documents|songs)\b", m.group("n"), re.I):
+        # many files by a rule ("rename every file on my desktop to lowercase with dashes instead of spaces")
+        rule, n = m.group("to").lower(), m.group("n").lower()
+        args = {}
+        fm = re.search(r"\b(?:on|in)\s+(?:my\s+|the\s+)?(desktop|documents|downloads|pictures|photos|music|videos)\b", n)
+        if fm:
+            args["folder"] = "~/" + {"photos": "Pictures"}.get(fm.group(1), fm.group(1).capitalize())
+        elif re.search(r"\b(?:photos?|pictures?)\b", n):
+            args["folder"] = "~/Pictures"
+        elif re.search(r"\bsongs?\b", n):
+            args["folder"] = "~/Music"
+        if re.search(r"lower ?case|small letters", rule):
+            args["case"] = "lower"
+        elif re.search(r"upper ?case|capitals|caps", rule):
+            args["case"] = "upper"
+        elif re.search(r"title case", rule):
+            args["case"] = "title"
+        if re.search(r"dash|hyphen", rule):
+            args["spaces"] = "dashes"
+        elif re.search(r"underscore", rule):
+            args["spaces"] = "underscores"
+        elif re.search(r"no spaces|without spaces|remove (?:the )?spaces", rule):
+            args["spaces"] = "remove"
+        if len(args) > (1 if "folder" in args else 0):
+            return ("rename_files", args)
+        return None                       # many files by some other rule: the model decides
     if m and not re.search(r"\b(?:wifi|network|computer|keyboard)\b", m.group("n"), re.I):
         return ("rename_file", {"name": m.group("n").strip().strip("'\""), "to": m.group("to").strip().strip("'\"")})
     m = _MOVE.match(text)
@@ -1318,6 +1344,17 @@ def _everyday2(text):
             words = say.group("x").strip().strip("'\"")
             return ("schedule_task", {"when": m.group("when"), "task": words[:1].upper() + words[1:], "kind": "reminder"})
         return ("schedule_task", {"when": m.group("when"), "task": what})
+    m = re.match(r"^(?:please\s+)?(?:speak|talk|answer|reply|write)\s+(?:to me\s+)?(?:in\s+)?(?P<l>[a-z]+(?:\s+[a-z]+)?)(?:\s+(?:from now on|please|instead|again|now|only))*$"
+                 r"|^(?:please\s+)?(?:use|switch to|change (?:the |my )?language to|set (?:the |my )?language to)\s+(?P<l2>[a-z]+)(?:\s+(?:from now on|please|instead|language))*$", low)
+    if m:
+        lang = (m.group("l") or m.group("l2") or "").strip()
+        from . import i18n
+        known = {"english", "spanish", "french", "german", "italian", "portuguese", "dutch", "swedish", "norwegian", "danish", "finnish",
+                 "polish", "czech", "greek", "turkish", "russian", "ukrainian", "arabic", "hebrew", "hindi", "bengali", "urdu", "chinese",
+                 "mandarin", "cantonese", "japanese", "korean", "vietnamese", "thai", "indonesian", "malay", "filipino", "tagalog", "swahili",
+                 "romanian", "hungarian", "persian", "farsi", "irish", "welsh", "catalan", "basque", "latin", "esperanto", "klingon", "elvish"}
+        if lang in known:
+            return ("set_appearance", {"language": lang})
     m = re.match(r"^(?:merge|combine|join|put together)\s+(?:all\s+)?(?:of\s+)?(?:these|the|my|those|them|all)?\s*(?:the\s+)?pdfs?(?:\s+files)?"
                  r"(?:\s+in\s+(?:my\s+)?(?P<f>[\w .~/-]+?))?(?:\s+(?:into|in|to|as)\s+(?:one(?:\s+(?:pdf|file))?|a\s+single\s+(?:pdf|file)|(?:a\s+(?:pdf|file)\s+called\s+)?(?P<n>[\w .-]+?)))?$", low)
     if m:
@@ -1353,7 +1390,7 @@ def _everyday2(text):
         return ("show_files", {"hidden": False})
     m = re.match(r"^(?:rename|name)\s+(?:all\s+)?(?:of\s+)?(?:these|the|my|those|all)?\s*(?:the\s+)?(?P<k>photos|pictures|pics|images|videos|songs|music|files)"
                  r"(?:\s+in\s+(?P<f>.+?))?\s+(?:to|as)\s+(?P<b>.+?)(?:\s*\d+\s*(?:,\s*\d+\s*)*(?:,?\s*(?:\.\.\.|…|etc\.?|and so on))?)?$", low)
-    if m and m.group("b").strip(" ,'\""):
+    if m and m.group("b").strip(" ,'\"") and not re.search(r"lower ?case|upper ?case|capitals|caps|dash|hyphen|underscore|title case|spaces", m.group("b")):
         k = {"photos": "photos", "pictures": "photos", "pics": "photos", "images": "photos", "videos": "videos", "songs": "music", "music": "music"}.get(m.group("k"), "all")
         b = t[m.start("b"):m.start("b") + len(m.group("b"))].strip(" ,'\"")     # (the owner's own capitals)
         args = {"name": b, "kind": k}

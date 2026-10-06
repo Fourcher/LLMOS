@@ -594,16 +594,18 @@ def _cap(s):
 # a tool's result ends with a note for the model ("Say one sentence at most.", "do not repeat them, ..."); when the
 # OS answers a shortcut itself, that note must not reach the owner
 _MODEL_NOTE = re.compile(r"(?:[.;]\s*|\s+)(?:(?:do not (?:repeat|describe)[^.;]*[.;,]\s*)?say one sentence at most(?:[;,][^.]*)?|"
-                         r"done: tell the owner[^.]*(?:\.[^.]*call no other tool)?|tell the owner exactly this[^.]*)\.?\s*$", re.I)
+                         r"done: tell the owner[^.]*(?:\.[^.]*call no other tool)?|done: if the request asked for more[^.]*|tell the owner exactly this[^.]*)\.?\s*$", re.I)
 # words meant for the model that must never reach the owner's screen, wherever they come from
+_PATH_NOTE = re.compile(r"\s*\[path for a next step: [^\]]*\]")
 _INTERNAL = re.compile(r"[^.!?\n]*(?:tell the owner exactly this|the owner did not ask for|do only what was asked|call no other tool|"
-                       r"say one sentence at most|do not repeat (?:them|it|its contents))[^.!?\n]*[.!?]?\s*", re.I)
+                       r"say one sentence at most|do not repeat (?:them|it|its contents)|if the request asked for more|if the request has more steps|"
+                       r"use that for any next step)[^.!?\n]*[.!?]?\s*", re.I)
 
 
 def scrub(text):
     """The final words, without notes addressed to the model ('Tell the owner exactly this:' keeps what follows it)."""
     t = re.sub(r"(?i)\s*tell the owner exactly this:?\s*(\w)?", lambda m: " " + (m.group(1) or "").upper(), str(text or ""))
-    t = _INTERNAL.sub("", t).strip()
+    t = _INTERNAL.sub("", _PATH_NOTE.sub("", t)).strip()
     if not t and str(text or "").strip():
         return "I left that as it was. Tell me exactly what to change."
     return t
@@ -798,6 +800,10 @@ _ONLY_IF_ASKED = {
     "mail_reply": r"\b(send|reply|respond|answer|write|e-?mail|mail|tell|let .{0,30} know|forward|notify|message)\b",
     "mail_delete": r"\b(delete|trash|remove|get rid|bin|clean|clear|zero)\b",
     "system_power": r"\b(shut|power|restart|reboot|turn (it )?off|switch off)\b",
+    # deleting only when the request asks for it: a model "tidying up" its own steps (the screenshot it was asked to
+    # turn into a wallpaper) is not what was asked
+    "delete_file": r"\b(delete|deleting|remove|removing|trash|bin|get rid|clean|clear|erase|wipe|empty|tidy|throw|discard|purge|"
+                   r"without the|don'?t need|no longer need|replace|instead of|originals?)\b",
     # a lasting fact only when the owner said something about themselves: a passing request ("share the app with my
     # friend") saved as a fact colours every later answer
     "remember": r"\b(remember|don'?t forget|keep in mind|note (?:that|down)|make a note|call me|my name|i am|i'?m|i like|i love|i hate|i prefer|"

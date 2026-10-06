@@ -36,6 +36,11 @@ def _path(p):
         p = config.home().rstrip("/") + p[1:]
     if p and not os.path.isabs(p):
         p = os.path.join(config.home(), p)
+    # the owner's home folder is the only one there is; a model that guesses "/home/<their name>/Documents" means it
+    home = config.home().rstrip("/")
+    m = re.match(r"^/home/[^/]+(/.*)?$", p or "")
+    if m and not home.startswith("/home/"):
+        p = home + (m.group(1) or "")
     return os.path.normpath(p) if p else p
 
 
@@ -819,8 +824,8 @@ def show_image(a, ctx):
     return f"shown: {info['title']} ({credit}). Source: {info['page']}. Say one sentence at most; do not describe the photo."
 
 
-@tool("set_wallpaper", "ONLY when the owner asks for a wallpaper / desktop background: put a real photograph "
-      "(Wikimedia Commons) behind the desk, or remove it. To just show a photo, use show_image.",
+@tool("set_wallpaper", "Set the wallpaper: a picture file of the owner's (its path), 'random' (one of their pictures), a photo of "
+      "a subject from the web (Wikimedia Commons), or 'default'. Only when a wallpaper/background is asked for; to just show a photo, use show_image.",
       {"subject": {"type": "string", "description": "what the photo should show, e.g. 'the Alps at dawn'; or the path of the owner's own picture (~/Pictures/beach.jpg); 'random' = a random one of the owner's pictures; 'none' or 'default' puts the default background back"}},
       ["subject"], risk=READ, network=lambda a: str(a.get("subject", "")).strip().lower() not in ("none", "remove", "off", "") and not re.match(r"^[~/]", str(a.get("subject", "")).strip()))
 def set_wallpaper(a, ctx):
@@ -849,6 +854,9 @@ def set_wallpaper(a, ctx):
         ctx.redraw()
         return "wallpaper removed"
     local = _path(subject) if re.match(r"^[~/]", subject) else ""
+    if not local and re.search(r"(?i)\b(?:screenshot|screen ?shot|crop(?:ped)?|edited|my (?:photo|picture|image)|this (?:photo|picture|image)|that (?:photo|picture|image)|the (?:photo|picture|image) i|i (?:took|made))\b", subject):
+        # the owner's own picture, said in words ("the cropped screenshot"): the newest one of theirs, not a stock photo
+        local = _newest(["~/Pictures", "~/Desktop", "~/Downloads"], _IMAGE_EXT) or ""
     if local and os.path.isfile(local):
         if os.path.splitext(local)[1].lower() not in _IMAGE_EXT:
             return f"error: {os.path.basename(local)} is not a picture"
@@ -960,7 +968,7 @@ def play_media(a, ctx):
     where = "on the screen" if info["video"] else "as audio only (this machine has no screen attached)"
     sound = "" if info["audio"] else " There is no sound device, so it is silent."
     return (f"now playing \"{info['title']}\" by {info['channel']} ({info['duration']}) {where}.{sound} "
-            f"Done: tell the owner in one sentence and call no other tool.")
+            f"Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence.")
 
 
 @tool("media_control", "Stop, pause or resume what is playing.",
@@ -2533,7 +2541,7 @@ def open_file(a, ctx):
     editor = next((e for e in ("mousepad", "gnome-text-editor", "gedit") if shutil.which(e)), None)
     if a.get("edit") and editor and hasattr(ctx, "launch") and _display_available() and (_looks_like_text(path) or size == 0):
         ctx.launch([editor, path], name=editor)
-        return f"opened {name} in the text editor to change it. Done: tell the owner in one sentence and call no other tool."
+        return f"opened {name} in the text editor to change it. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
     if ext in _MEDIA_EXT:
         denv = media.desk_env()
         if denv is None and not media.has_audio():
@@ -2546,7 +2554,7 @@ def open_file(a, ctx):
             ".zip": "xarchiver", ".7z": "xarchiver", ".tar": "xarchiver", ".gz": "xarchiver", ".rar": "xarchiver"}.get(ext)
     if prog and shutil.which(prog) and hasattr(ctx, "launch") and _display_available():
         ctx.launch([prog, path], name=prog)
-        return f"opened {name} in {prog.capitalize()}. Done: tell the owner in one sentence and call no other tool."
+        return f"opened {name} in {prog.capitalize()}. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
     if ext in (".pptx", ".ppt", ".odp", ".docx", ".odt", ".xlsx", ".ods", ".pdf") and not (prog and shutil.which(prog)) and \
             not (ext == ".pdf" and any(shutil.which(v) for v in ("firefox", "mupdf", "zathura", "evince"))):
         try:
@@ -2627,7 +2635,7 @@ def extract_archive(a, ctx):
             if not os.path.realpath(os.path.join(d, f)).startswith(real + os.sep):
                 return "error: the archive tried to write outside its folder; stopped"
     show_files({"path": dest}, ctx)
-    return f"unpacked {os.path.basename(path)} into {dest} and showed it. Done: tell the owner in one sentence and call no other tool."
+    return f"unpacked {os.path.basename(path)} into {dest} and showed it. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
 
 
 @tool("compress_files", "Make a .zip of a file or folder (next to it, same name), e.g. to email or put on a USB stick.",
@@ -2656,14 +2664,16 @@ def compress_files(a, ctx):
     size = os.path.getsize(dest)
     home = config.home().rstrip("/")
     shown = "~" + dest[len(home):] if dest.startswith(home) else dest
-    return f"made {shown} ({count} file(s), {_human_size(size)}). Done: tell the owner in one sentence and call no other tool."
+    return f"made {shown} ({count} file(s), {_human_size(size)}). Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
 
 
-@tool("convert_to_pdf", "Make a PDF copy of a document (Word, LibreOffice, text, RTF) next to it.", {"path": STR}, ["path"], risk=CHANGE)
+@tool("convert_to_pdf", "Make a PDF of a document or a picture (Word, LibreOffice, text, RTF, JPG, PNG) next to it.", {"path": STR}, ["path"], risk=CHANGE)
 def convert_to_pdf(a, ctx):
     path = os.path.abspath(_path(a.get("path", "")))
     if not os.path.isfile(path):
         return f"error: there is no file {a.get('path')}"
+    if path.lower().endswith(_IMAGE_EXT):          # a picture: the picture editor writes the PDF
+        return edit_image({"path": path, "steps": [], "save_as": os.path.splitext(os.path.basename(path))[0] + ".pdf"}, ctx)
     if not shutil.which("abiword"):
         return "there is no program here that makes PDFs from documents (say 'install abiword')"
     dest = os.path.splitext(path)[0] + ".pdf"
@@ -2671,7 +2681,7 @@ def convert_to_pdf(a, ctx):
     if p.returncode or not os.path.exists(dest):
         return f"could not convert it: {(p.stderr or p.stdout).strip()[:200] or 'this kind of file is not supported'}"
     home = config.home().rstrip("/")
-    return f"made {('~' + dest[len(home):]) if dest.startswith(home) else dest}. Done: tell the owner in one sentence and call no other tool."
+    return f"made {('~' + dest[len(home):]) if dest.startswith(home) else dest}. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
 
 
 _KNOWN_SITES = ("google.com", "gmail.com", "youtube.com", "facebook.com", "instagram.com", "whatsapp.com", "amazon.com", "paypal.com",
@@ -2725,7 +2735,7 @@ def check_site(a, ctx):
         notes.append("WARNING: its secure connection is NOT valid -- don't type passwords or card numbers there")
     except OSError:
         notes.append("it could not be reached on a secure connection")
-    return f"{host}: " + "; ".join(notes) + ". Done: tell the owner plainly, in one or two sentences, and call no other tool."
+    return f"{host}: " + "; ".join(notes) + ". Done: if the request asked for more, do the next step now; otherwise tell the owner plainly, in one or two sentences."
 
 
 _STEP_HELP = ("steps, in order, in plain words: 'flip upside down', 'flip vertically', 'mirror' (left-right), 'rotate 90' / "
@@ -2801,8 +2811,8 @@ def _image_step(step, w, h):
     return None
 
 
-@tool("edit_image", "Change a picture in one go: any steps in order (flip, rotate, resize, crop, black and white, add text, ...) and "
-      "save it as a new file, any format: a .pdf name makes a PDF. The original stays unless save_as names it.",
+@tool("edit_image", "Edit a picture and/or save it as another format (save_as 'x.pdf' makes a PDF): steps in order such as flip, "
+      "rotate, resize, crop, add text, black and white. A new file; the original stays.",
       {"path": STR, "steps": {"type": "array", "items": {"type": "string"}, "description": _STEP_HELP},
        "action": {"type": "string", "description": "a single step (older form of steps)"},
        "save_as": {"type": "string", "description": "the new file's name or path, e.g. 'Happy Birthday.pdf' (default: next to the original)"}},
@@ -2861,8 +2871,8 @@ def edit_image(a, ctx):
     home = config.home().rstrip("/")
     shown = "~" + dest[len(home):] if dest.startswith(home) else dest
     return (f"saved {shown} ({_human_size(os.path.getsize(dest))}) with: {', '.join(done) or 'no changes'}" +
-            (f"; not understood (left out): {', '.join(unknown)}" if unknown else "") + "; the original is unchanged. "
-            f"Its full path is {dest} (use that for any next step).")
+            (f"; not understood (left out): {', '.join(unknown)}" if unknown else "") + "; the original is unchanged "
+            f"[path for a next step: {dest}].")
 
 
 def _usb_target():
@@ -2971,7 +2981,7 @@ def make_document(a, ctx):
         if isinstance(r, str):
             return f"error: {r}"
         return (f"opened a {kind} layout in the word processor, saved as Documents/{os.path.basename(dest)}: replace the grey "
-                "example text with yours. Done: tell the owner in one sentence and call no other tool.")
+                "example text with yours. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence.")
     return f"made Documents/{os.path.basename(dest)}"
 
 
@@ -3384,7 +3394,7 @@ def make_app(a, ctx):
     if hasattr(ctx, "show_app"):
         ctx.show_app(app)
     return (f"made the app '{app['title']}' ({how}) and opened it in a window; it is kept in ~/Apps and opens again with "
-            f"'open {app['title'].split(' (')[0].lower()}'. Done: tell the owner in one sentence and call no other tool.")
+            f"'open {app['title'].split(' (')[0].lower()}'. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence.")
 
 
 @tool("manage_apps", "The owner's apps (made with make_app): action 'list' shows them; 'remove' deletes one by name.",
@@ -3430,7 +3440,7 @@ def open_app(a, ctx):
             r = ctx.launch(programs.argv(p), name=p["name"])
             if isinstance(r, str):
                 return f"error: {r}"
-            return f"opened {programs.label(p)} in a window. Done: tell the owner in one sentence and call no other tool."
+            return f"opened {programs.label(p)} in a window. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
     # one of the owner's own apps ("open my calculator"), or a ready-made one made on the spot
     if hasattr(ctx, "show_app") and not shutil.which(cmd.split()[0]):
         app = apps.find(cmd)
@@ -3439,7 +3449,7 @@ def open_app(a, ctx):
             app = apps.from_template(t, "", cmd) if t else None
         if app:
             ctx.show_app(app)
-            return f"opened the app '{app['title']}'. Done: tell the owner in one sentence and call no other tool."
+            return f"opened the app '{app['title']}'. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
     prog = os.path.basename(cmd.split()[0])
     # "a terminal window" is foot on the screen; a bare shell asked for
     # graphically means the same thing
@@ -3455,7 +3465,7 @@ def open_app(a, ctx):
             if isinstance(r, str):
                 return f"error: {r}"
             what = programs.EXTRA.get(prog, f"'{cmd}'")
-            return f"opened {what} in a window. Done: tell the owner in one sentence and call no other tool."
+            return f"opened {what} in a window. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
         if media.desk_env() is None:
             media.stop()   # a kiosk shows one thing at a time
         media.kiosk_launch(["/bin/sh", "-c", cmd], os.path.join(config.RUN, "gui.log"))
@@ -3595,7 +3605,7 @@ def browse(a, ctx):
     if url and re.search(r"netflix|disneyplus|primevideo|amazon\.\w+/(?:gp/)?video|hulu|max\.com|hbomax|tv\.apple|open\.spotify|crunchyroll|peacocktv|paramountplus", url):
         drm = (" Note: signing in works, but protected films, shows and Spotify music can't play in this browser on LLM OS "
                "(the studios' copy protection isn't made for it); YouTube and most other video works.")
-    return f"opened {name} {what}.{drm} Done: tell the owner in one sentence and call no other tool.".replace("  ", " ")
+    return f"opened {name} {what}.{drm} Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence.".replace("  ", " ")
 
 
 FOLDERS = {"documents": "Documents", "docs": "Documents", "downloads": "Downloads", "pictures": "Pictures", "photos": "Pictures",
@@ -3777,7 +3787,7 @@ def which_file(a, ctx):
         ok, prog = wm.key_to_front(verb.group(1).lower())
         if ok:
             return (f"opened the print window of {prog}: choose the printer and press Print" if verb.group(1).lower() == "print"
-                    else f"pressed Save in {prog}") + ". Done: tell the owner in one sentence and call no other tool."
+                    else f"pressed Save in {prog}") + ". Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
     if re.search(r"wallpaper|background", req, re.I):
         return ("which picture? Open it first (say 'show my photos' and press Set as wallpaper on it), or say "
                 "'use a photo of the sea as my wallpaper' for a new one")
