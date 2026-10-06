@@ -2163,7 +2163,7 @@ def _usb_target():
     from . import syspanels
     drives = syspanels.removable()
     if not drives:
-        return None, "no USB stick or drive is plugged in"
+        return None, "No USB stick or drive is plugged in. Plug one in and say it again."
     d = drives[0]
     ok, where = (True, d["mountpoint"]) if d["mountpoint"] else syspanels.mount(d["path"])
     return (where, d) if ok else (None, f"the drive could not be opened: {where}")

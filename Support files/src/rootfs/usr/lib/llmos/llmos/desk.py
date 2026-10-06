@@ -2093,7 +2093,7 @@ class Desk:
 
     def _instant(self, text):
         low = intent.plain(text).lower().strip()
-        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S+$|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|from (?:my |the )?(?:phone|camera|iphone|android))\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
+        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S+$|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|(?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android))\b|\brepo(?:sitory)?\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
                 any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
                 any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
                                                                             r"(?:extend|mirror) the displays|use only the main display|use only the (?:projector|tv|second (?:screen|display))|projector only|"
@@ -2118,7 +2118,7 @@ class Desk:
             return self.say(text)
         try:
             if self.shortcut(text):
-                self.last_reply = self.__dict__.pop("_said", None) or "(done by the OS: " + text + ")"
+                self.last_reply = self.__dict__.pop("_said", None) or "Done."
                 return
             m = intent.match(text)
             if not m:
@@ -2409,7 +2409,7 @@ class Desk:
             self.last_reply = self._said = "Done." if ok else note
             return True
         if re.fullmatch(r"(?:let'?s )?play a game(?: with me)?|(?:show me |any )?games|i'?m bored|what games (?:are there|do you have|can i play)|"
-                        r"(?:make|find|give me|get) (?:me )?(?:a |some )?games?(?: for (?:my |the )?(?:kids?|child|children|son|daughter|grandkids?|family))?|play (?:solitaire|chess|minesweeper|sudoku)(?: / (?:solitaire|chess|minesweeper|sudoku))+", l2):
+                        r"(?:find|give me|get) (?:me )?(?:a |some )?games?(?: for (?:my |the )?(?:kids?|child|children|son|daughter|grandkids?|family))?|play (?:solitaire|chess|minesweeper|sudoku)(?: / (?:solitaire|chess|minesweeper|sudoku))+", l2):
             games = [("Tic-tac-toe", "play tic tac toe"), ("Snake", "play snake"), ("Minesweeper", "play minesweeper"), ("Sudoku", "play sudoku"),
                      ("Flashcards", "open flashcards"), ("Chess (online)", "play chess"), ("Solitaire (online)", "play solitaire")]
             self.open_window({"id": "games", "replace": True, "title": "Games", "size": "s", "blocks": [
@@ -2619,10 +2619,11 @@ class Desk:
         if re.fullmatch(r"(?:what can you do|what can i (?:do|say|ask)(?: here| with (?:this|it|you))?|how do i use (?:this|you|it)|what do i do|help me|show me what you can do|"
                         r"what are you|what is this|get started|getting started|\?+)[?.!]*", low):
             self.open_panel("help")
+            self.last_reply = self._said = "Here's what I can do."
             return True
         if re.fullmatch(r"(?:stop|cancel|never ?mind|forget it|abort|halt that|stop that|stop it|cancel that|no stop)[.!]*", low):
             if self.busy:
-                self.ctx.cancel.set()           # the request in progress stops; its reply says so
+                self.stop_all()                 # the request in progress stops (its reply says so), and what waited behind it
             else:
                 self.emit({"t": "toast", "text": T("d_nothing_running")})
             return True
@@ -2756,7 +2757,7 @@ class Desk:
         (re.compile(r"(?:open (?:the )?)?(?:storage|disk space|disk usage|free (?:up )?(?:some )?space|(?:my )?disk is full|clean ?up(?: the computer| my computer| disk)?|"
                     r"what'?s (?:using|filling|taking up) (?:my |the )?(?:disk|space|storage)|running out of space|"
                     r"how much (?:free |disk |storage )?(?:space|storage)(?: do i have| is left| left| have i got)?|how full is (?:my |the )?(?:disk|computer|drive))[?.!]*"), "storage"),
-        (re.compile(r"(?:update (?:the |my |all (?:my |the )?)?(?:system|computer|os|llm os|everything|apps|programs|software|applications)|are there (?:any )?updates|check for updates|any updates|updates|"
+        (re.compile(r"(?:are there (?:any )?updates|check for updates|any updates|updates|"
                     r"is (?:it|the system|everything) up to date)[?.!]*"), "updates"),
         (re.compile(r"(?:about this computer|what computer is this|system info(?:rmation)?|how much (?:ram|memory) do i have|"
                     r"what (?:processor|cpu) do i have|specs|my specs|computer specs)[?.!]*"), "about"),
@@ -2855,6 +2856,8 @@ class Desk:
     _TILE = re.compile(r"(?:put|move|snap) (?:the )?(?P<w>[\w ]+?) (?:on|to) the (?P<side>left|right)(?: side| half)?")
 
     _HOWTO = [
+        (r"(?:git )?clone (?:this|a|the|my|that) (?:git )?repo(?:sitory)?|(?:download|get) (?:a |this |the )?(?:git ?hub )?repo(?:sitory)?",
+         "Sure: say “clone” and the repo's address, for example “clone https://github.com/user/project”. It goes into your Projects folder."),
         (r"give me root|(?:make me|am i|i want to be|run as) (?:an? )?(?:root|admin(?:istrator)?|superuser)|sudo|how do i get root",
          "You already have it: everything on LLM OS runs as the computer's owner account, root. In a terminal (Ctrl+Alt+T) every command "
          "works without sudo, and I can run any command for you: just say it."),
@@ -2892,7 +2895,7 @@ class Desk:
         (r"(?:recover|get back|restore|find) (?:my |an? |the )?(?:unsaved|lost) (?:document|file|work|essay|changes)|i (?:forgot|didn'?t) (?:to )?save(?: it)?",
          "Open the same program again: the word processor and the text editor offer to bring back what they saved automatically. "
          "Also try \u201cfind my files called \u2026\u201d with a word from its name, and \u201cshow the trash\u201d."),
-        (r"(?:import|copy|get|transfer|move) (?:my )?(?:photos|pictures|videos|files)(?: and videos)? (?:from|off) (?:my |the )?(?:phone|camera|iphone|android|sd card)(?:/(?:phone|camera))?|"
+        (r"(?:import|copy|get|transfer|move|download) (?:my |the |all (?:my |the )?)?(?:photos|pictures|pics|videos|files)(?: and videos)? (?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android|sd card)(?: ?(?:/|or) ?(?:my )?(?:phone|camera|iphone|android))?|"
          r"(?:connect|plug in) (?:my )?(?:phone|camera|iphone|android)",
          "Plug the phone or camera in with its USB cable and unlock it; on Android choose \u201cFile transfer\u201d, on an iPhone press Trust. It then appears "
          "in Files (say \u201copen the file manager\u201d) on the left; open its DCIM folder and drag the photos into Pictures. A camera's memory card works the same."),
@@ -3006,6 +3009,10 @@ class Desk:
                       "bluetooth": syspanels.bluetooth, "printers": syspanels.printers, "about": syspanels.about,
                       "input": syspanels.input_panel, "storage": syspanels.storage, "updates": syspanels.updates_panel}[which]
                 threading.Thread(target=lambda: self.open_window(fn()), daemon=True).start()
+                self.last_reply = self._said = {"processes": "Here's what is running.", "drives": "Here are the drives.", "displays": "Here are the screens.",
+                                                "bluetooth": "Here's Bluetooth.", "printers": "Here are the printers.", "about": "Here's this computer.",
+                                                "input": "Here are the mouse and keyboard settings.", "storage": "Here's the storage.",
+                                                "updates": "Checking for updates; the list is on the right."}[which]
                 return True
         m = re.fullmatch(r"end process (\d+)", low)
         if m:
@@ -3083,16 +3090,15 @@ class Desk:
             self.emit({"t": "toast", "text": syspanels.clear_caches().capitalize()})
             self.open_window(syspanels.storage())
             return True
-        if re.fullmatch(r"install (?:the |all (?:the )?)?updates[.!]?", low):
-            def upd():
-                if not self.ask({"title": "Install the updates?", "text": "This takes a few minutes; you can keep working.", "danger": False}):
-                    return
+        if re.fullmatch(r"install (?:the |all (?:the )?)?updates[.!]?|update (?:the |my |all (?:my |the )?)?(?:system|computer|os|llm os|everything|apps|programs|software|applications)(?: now)?[.!]?", low):
+            def upd():                    # (asked for in so many words: done, not asked about again)
                 self.emit({"t": "toast", "text": "Installing updates…", "sticky": "upd"})
                 ok, note = syspanels.updates_apply()
                 self.emit({"t": "toast", "text": "", "sticky": "upd"})
                 self.emit({"t": "toast", "text": note.capitalize(), "long": True})
                 self.open_window(syspanels.updates_panel())
             threading.Thread(target=upd, daemon=True).start()
+            self.last_reply = self._said = "Installing the updates; you can keep working. I'll say when they're done."
             return True
         if re.fullmatch(r"(?:sleep|suspend|go to sleep|put (?:it|the computer) to sleep|hibernate)[.!]?", low):
             threading.Thread(target=self.sleep_now, daemon=True).start()
@@ -3145,7 +3151,7 @@ class Desk:
             self.last_reply = self.__dict__.pop("_said", None) or "Done: " + "; ".join(parts) + "."
             return
         if chat == "main" and self.shortcut(text):
-            self.last_reply = self.__dict__.pop("_said", None) or "(done by the OS: " + text + ")"
+            self.last_reply = self.__dict__.pop("_said", None) or "Done."
             return
         c = self.chat(chat)
         cont = c.continues(text)

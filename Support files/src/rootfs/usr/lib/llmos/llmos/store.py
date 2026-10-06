@@ -338,11 +338,10 @@ def parse_when(text, now=None):
     repeat = " every " in s or s.startswith(" every")
     if repeat:
         # interval: "every 30 minutes", "every hour", "every 2 days" (no clock time)
-        m = re.search(r"every\s+(\d+|[a-z-]+)?\s*(second|sec|minute|min|hour|hr|day|week)s?\b", s)
+        m = re.search(r"every\s+(?:(\d+)\s*|([a-z-]+)\s+)?(second|sec|minute|min|hour|hr|day|week)s?\b", s)   # ("every monday" is a weekday)
         if m and not _clock(s) and not _daypart(s):
-            n = m.group(1)
-            n = int(n) if n and n.isdigit() else NUMWORDS.get(n or "", 1)
-            secs = max(60, n * UNITS[m.group(2)])
+            n = int(m.group(1)) if m.group(1) else NUMWORDS.get(m.group(2) or "", 1)
+            secs = max(60, n * UNITS[m.group(3)])
             spec = {"kind": "interval", "seconds": secs}
             return now + dt.timedelta(seconds=secs), spec
         days = None
@@ -407,7 +406,11 @@ def describe(spec, first):
         return first.strftime("%a %d %b %H:%M")
     if spec["kind"] == "interval":
         s = spec["seconds"]
-        return f"every {s // 3600} h" if s % 3600 == 0 else f"every {s // 60} min"
+        for unit, n in (("week", 604800), ("day", 86400), ("hour", 3600), ("minute", 60)):
+            if s % n == 0:
+                k = s // n
+                return f"every {unit}" if k == 1 else f"every {k} {unit}s"
+        return f"every {s // 60} minutes"
     names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     days = spec.get("days")
     when = "every day" if days is None else "weekdays" if days == [0, 1, 2, 3, 4] else \

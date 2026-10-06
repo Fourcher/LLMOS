@@ -56,5 +56,15 @@ config.settings.set("vault", False)
 store.add_note("after unlock", "shopping")
 check(any(n.get("text") == "after unlock" for n in store.notes()), "writes work again once the vault is open")
 
+print("repeating times in plain words")
+import datetime as _dt
+_now = _dt.datetime(2026, 10, 5, 18, 0)        # a Monday evening
+for words, want in (("every monday", "every Mon at 09:00"), ("every friday at 7pm", "every Fri at 19:00"),
+                    ("every day", "every day"), ("every 2 days", "every 2 days"), ("every week", "every week"),
+                    ("every two hours", "every 2 hours"), ("every 30 minutes", "every 30 minutes"),
+                    ("every weekday at 8am", "weekdays at 08:00")):
+    f, sp = store.parse_when(words, _now)
+    check(store.describe(sp, f) == want, f"{words!r} -> {store.describe(sp, f)!r}")
+
 print("all good" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

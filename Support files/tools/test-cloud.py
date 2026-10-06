@@ -174,7 +174,8 @@ ok, note = llm.cloud_setup({"provider": "OpenAI-compatible", "model": "some-mode
 check(ok and "some-model" in note, f"set up: {note}")
 pieces = []
 r = llm.cloud_chat(HISTORY, tools=TOOLS, on_text=pieces.append)
-check(r["content"] == "Hi from openai-ish." and pieces == ["Hi ", "from openai-ish."], f"text streams: {pieces}")
+# (empty pieces are Stop checks while a tool call streams)
+check(r["content"] == "Hi from openai-ish." and [p for p in pieces if p] == ["Hi ", "from openai-ish."], f"text streams: {pieces}")
 check(r["tool_calls"] == [{"id": "call_9", "name": "calculate", "arguments": "{\"expression\": \"3*3\"}"}], f"tool call assembled: {r['tool_calls']}")
 path, hdr, body = SEEN[-1]
 check(path == "/v1/chat/completions" and hdr.get("authorization") == "Bearer sk-test", "bearer key, chat-completions path")

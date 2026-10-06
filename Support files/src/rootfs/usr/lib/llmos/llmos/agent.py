@@ -643,6 +643,10 @@ def _shortcut_words(name, args, out):
             desc = m.group(1) if m else ""
             repeating = desc.lower().startswith("every")
             when = desc.split(" ")[-1] if desc and not repeating else ""
+            day = " ".join(desc.split(" ")[:-1]) if when else ""
+            if day and day != time.strftime("%a %d %b"):        # another day than today: say which
+                day = "tomorrow" if day == time.strftime("%a %d %b", time.localtime(time.time() + 86400)) else day
+                when = f"{day} at {when}"
             if kind == "timer":
                 return f"Timer set — {task}, it rings at {when}." if when else f"Timer set — {task}."
             if repeating:
@@ -801,7 +805,9 @@ _ONLY_IF_ASKED = {
                       r"instructions|web ?pages?|websites?|e-?mails?|files?|check\w*)\b",
     "set_appearance": lambda req: bool(re.search(r"\b(colou?rs?|theme|dark|light|font|text|bigger|smaller|larger|size|zoom|corners?|round\w*|"
                                                  r"square|look\w*|style|wallpaper|background|backdrop|animation\w*|motion|layout|language|"
-                                                 r"desk|mode|contrast|everything|screen|accent|appearance|prettier|nicer|ugly|font|see|read|eyes?|vision|small|tiny|big|huge)\b", req, re.I)
+                                                 r"desk|mode|contrast|everything|screen|accent|appearance|prettier|nicer|ugly|font|see|read|eyes?|vision|small|tiny|big|huge|"
+                                                 r"modo|oscuro|claro|tema|sombre|clair|th[eè]me|dunkel|hell|modus|escuro|scuro|chiaro|fuente|letra|police|schrift|"
+                                                 r"grande|colou?r|couleur|farbe)\b|模式|モード|主题", req, re.I)
                                        or any(ui.parse_color(w) for w in re.findall(r"[a-z]+", req.lower()))),
 }
 
