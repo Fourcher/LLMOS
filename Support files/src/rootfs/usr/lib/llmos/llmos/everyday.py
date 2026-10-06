@@ -37,7 +37,8 @@ MATCH = re.compile(
     r"(?:keep|stay|put) (?:this |it |the window )?(?:always )?on top|always on top|picture[- ]in[- ]picture|\bpip\b|"
     r"(?:other|second|external|left|right) (?:monitor|screen|display)|new (?:workspace|desktop)|(?:game ?)?controller|gamepad|joystick|"
     r"phone'?s? (?:internet|data|hotspot)|tether|hotspot|drawing tablet|wacom|pen tablet|touch ?screen|"
-    r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b|encrypt|stolen|guest|someone else is using|disk encryption|passwords\b|password (?:manager|keeper|vault|safe))", re.I)
+    r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b|encrypt|stolen|guest|someone else is using|disk encryption|passwords\b|password (?:manager|keeper|vault|safe)|logs?\b|journalctl|dmesg|service (?:fail|crash)|default shell|shell to|"
+    r"cloud|new (?:computer|pc|laptop)|settings and apps|snapshot|roll ?back|restore point|kids? mode|child mode|parental|only let my|shortcut for)", re.I)
 
 
 def _say(desk, line, text):
@@ -371,7 +372,7 @@ def health(desk, line, low):
                      ". Closing those, a dimmer screen and “battery saver on” help most.") if busy else \
                 " Nothing is working hard right now; a dimmer screen and “battery saver on” help most."
         return _say(desk, line, ("Battery: " + "; ".join(parts) + "." if parts else "The battery doesn't report its health.") + drain)
-    if re.search(r"drive|disk|ssd|smart", low):
+    if re.search(r"(?:drive|disk|ssd)\b.*\b(?:health|healthy|failing|dying|dead|ok|okay|good|bad|broken)|(?:health|check)\b.*\b(?:drive|disk|ssd)|smart status", low):
         if not shutil.which("smartctl"):
             return _say(desk, line, "The drive checker isn't installed: say “install smartmontools” and ask again.")
         disks = [d for d in glob.glob("/sys/block/*") if not re.search(r"/(loop|ram|zram|dm-|sr)\w*$", d)]
@@ -739,6 +740,24 @@ HOWTO = [
     (r"new (?:workspace|desktop|virtual desktop)|(?:add|make|create) (?:a |another )?(?:workspace|virtual desktop)",
      "There are four workspaces ready: Super+1 to 4 jumps to one (or “go to workspace 2”), Ctrl+Alt+Left/Right moves between them, and "
      "Ctrl+Alt+Shift+Left/Right takes the window you're in along."),
+    (r"back ?up (?:my (?:files|stuff|photos|computer) )?(?:to|in|on(?:to)?) (?:the )?(?:cloud|google drive|onedrive|dropbox|icloud)|cloud back ?up",
+     "Simplest: open your cloud's website (“open google drive”, “open onedrive”, “open dropbox”) and drag your Documents and "
+     "Pictures folders into it. Automatic cloud backup (rclone) isn't set up here yet; for an automatic backup, plug in a USB drive and say "
+     "“back up my files every week”."),
+    (r"(?:move|transfer|copy|bring) (?:all )?(?:my )?(?:stuff|files|things|everything|data) (?:to|onto|over to) (?:a |my |the )?(?:new|other|another) (?:computer|pc|laptop)|"
+     "(?:export|save) my settings and apps",
+     "Plug in a USB drive and say “back up my files”: it copies your Documents, Pictures, Music, Videos, Desktop, Downloads and the apps you made. "
+     "On the new computer (with LLM OS), plug the drive in and say “restore my files from backup”. Settings like your name and look take a "
+     "sentence each to set again (“call me …”, “dark mode”)."),
+    (r"snapshot|roll ?back (?:the )?(?:system|computer|changes|update)|restore point|undo (?:the |that )?(?:update|change to the system)",
+     "System snapshots aren't available yet. What you have: deleted files wait in the trash (“show the trash”), “back up my files” keeps a "
+     "copy of your files on a USB drive, and “what did you do” lists every change I made, so any of them can be undone by asking."),
+    (r"kids? mode|child mode|parental controls?|only let (?:my )?(?:kid|child|son|daughter)s? use|(?:limit|restrict) (?:what )?(?:my )?(?:kid|child)",
+     "There's no kids mode yet (no separate accounts to put limits on). What works now: “focus mode for an hour” blocks YouTube and "
+     "social sites for a set time, “hands-on” makes me ask before every change, and “make a game for my kid” makes them something to do."),
+    (r"(?:is there|what'?s) (?:a |the )?(?:keyboard )?shortcut (?:for|to do) (?:this|that|it)",
+     "Main shortcuts: Super+Space talks to me, Alt+Tab switches windows, Super+Up/Left/Right sizes a window, Super+L locks, Super+E files, "
+     "Ctrl+Alt+T terminal, Super+V clipboard history, Print takes a screenshot, Super+T keeps a window on top. Tell me what you're doing and I'll name the one for it."),
     (r"(?:game ?)?controller|gamepad|joystick",
      "Plug it in with its USB cable and it works straight away in games and the browser. Wireless (Xbox, PlayStation, Switch Pro): hold its pairing "
      "button until the light flashes, then say “bluetooth search” and press Connect next to it. Test it at gamepadtester.com."),
@@ -779,6 +798,52 @@ def privacy(desk, line, low):
     return False
 
 
+def system_more(desk, line, low):
+    if re.search(r"(?:show|see|check|read|open) (?:me )?(?:the )?(?:system|error|kernel|computer'?s?) logs?|^(?:show|see|check) (?:me )?(?:the )?logs?$|journalctl|dmesg|why did (?:that|the|a) (?:service|program|thing) (?:fail|crash|stop)", low):
+        try:
+            k = subprocess.run(["dmesg"], capture_output=True, text=True, timeout=10).stdout.splitlines()
+        except (OSError, subprocess.SubprocessError):
+            k = []
+        bad = [ln for ln in k if re.search(r"error|fail|warn|segfault|oom|killed|i/o", ln, re.I)][-12:]
+        try:
+            st = subprocess.run(["rc-status", "-a"], capture_output=True, text=True, timeout=10).stdout
+            crashed = sorted(set(re.findall(r"^\s*(\S+)\s+\[\s*crashed\s*\]", st, re.M)))
+        except (OSError, subprocess.SubprocessError):
+            crashed = []
+        rows = [{"title": ln[:160]} for ln in (bad or k[-12:])]
+        desk.open_window({"id": "logs", "replace": True, "title": "System log", "size": "l", "blocks": [
+            {"type": "text", "text": ("Services that stopped unexpectedly: " + ", ".join(crashed) + ". Say “restart " + crashed[0] + "” to try again.")
+                                     if crashed else "Every system service is running normally."},
+            {"type": "text", "text": "Recent problems the system noted:" if bad else "Nothing went wrong recently; the latest messages:", "dim": True},
+            {"type": "list", "items": rows}]})
+        return _say(desk, line, (f"{len(crashed)} service(s) stopped unexpectedly: {', '.join(crashed)}. " if crashed else "All services are running. ") +
+                    (f"{len(bad)} recent problem message(s) are in the window." if bad else "No recent problems in the system log."))
+    m = re.search(r"(?:change|switch|set|make) (?:the |my )?(?:default )?shell (?:to )?(?P<s>zsh|bash|fish|sh|ash)|use (?P<s2>zsh|bash|fish) (?:as (?:my|the) (?:default )?shell|by default)", low)
+    if m:
+        sh = m.group("s") or m.group("s2")
+        path = "/bin/sh" if sh == "sh" else shutil.which(sh)
+        if not path:
+            desk.emit({"t": "toast", "text": f"Getting {sh}…", "sticky": "sh"})
+            r = subprocess.run(["apk", "add", "-q", sh], capture_output=True, text=True, timeout=600)
+            desk.emit({"t": "toast", "text": "", "sticky": "sh"})
+            path = shutil.which(sh)
+            if not path:
+                return _say(desk, line, f"Couldn't install {sh}: {(r.stderr or r.stdout).strip()[-150:]}")
+        try:
+            pw = open("/etc/passwd").read()
+            pw = re.sub(r"^(root:[^:]*:0:0:[^:]*:[^:]*:)[^\n]*$", lambda mm: mm.group(1) + path, pw, count=1, flags=re.M)
+            with open("/etc/passwd", "w") as f:
+                f.write(pw)
+            if path not in open("/etc/shells").read().split():
+                with open("/etc/shells", "a") as f:
+                    f.write(path + "\n")
+        except OSError as e:
+            return _say(desk, line, f"Couldn't change it: {e}.")
+        extra = " For oh-my-zsh, say “run the oh-my-zsh installer”." if sh == "zsh" else ""
+        return _say(desk, line, f"New terminals now use {sh} ({path}).{extra}")
+    return False
+
+
 def share_app(desk, line, low):
     m = re.search(r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?(?: (?:i|you|we) made| called (?P<n>[\w .-]+?))?"
                   r"(?: (?:with|to) .+| as a file| to (?:a )?file)?$", low)
@@ -808,7 +873,7 @@ def howto(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, share_app, howto):
+    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, howto):
         try:
             if fn(desk, line, low):
                 return True
