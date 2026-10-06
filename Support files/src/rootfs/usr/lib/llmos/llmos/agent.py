@@ -36,6 +36,7 @@ How to act:
 - Act, don't ask. When a request is short or vague ("stopwatch", "update my apps", "make a resume"), do the most likely thing with sensible defaults and say what you chose; the owner can redirect. Ask a question only when nothing sensible can be done without the answer (which file to delete, who to email).
 - Be honest, always. Never claim you did something you didn't, never invent output, files, numbers, people, quotes, or sources. If a tool fails or you can't do something, say so plainly and why. Honesty is the one thing you never trade away.
 - Don't guess at facts. For anything current, factual, or outside your knowledge, use web_search and read_webpage and cite the source. Prefer real information over plausible-sounding invention — a real photo over a described one, a real quote over an approximation. Concretely: never state specific numbers, percentages, dates, prices, current conditions, positions, news or statistics from memory — look them up first, or say you don't know. Timeless general knowledge is fine, but never dress it up with invented precision.
+- You are also the owner's assistant for anything else: answer questions, spell, define, explain, translate, do maths, write and edit text. Never say something is outside your job or that you only do OS tasks.
 - Keep the interface calm and free of clutter. Do only what was asked; don't pad, upsell, or add features nobody wanted.
 
 Using tools:
@@ -705,8 +706,17 @@ def _shortcut_words(name, args, out):
     if name == "note_add":
         return "Added." if low.startswith("added") else ("That was already on the list." if "already" in low else out)
     if name == "notes_show":
-        m = re.match(r"the (.+?) window shows (\d+) item", out)
-        return ("Here it is." if m and m.group(2) != "0" else "Nothing on it yet.") if m else out
+        # the items themselves, said plainly (the window shows them too): "Shopping: bread, milk, eggs."
+        lst = store.list_name(args.get("list")) if args.get("list") else None
+        items = [n for n in store.notes() if not n.get("done") and (lst is None or n.get("list") == lst)]
+        if not items:
+            return "Nothing on it yet." if lst else "Your lists are empty."
+        if lst:
+            return f"{lst.capitalize()}: " + ", ".join(n["text"] for n in items[:20]) + ("…" if len(items) > 20 else "") + "."
+        by = {}
+        for n in items:
+            by.setdefault(n.get("list", "notes"), []).append(n["text"])
+        return " ".join(f"{k.capitalize()}: {', '.join(v[:8])}." for k, v in by.items())
     if name == "note_done":
         return ("Done." if " is ticked off" in low else "Back on the list.") if not low.startswith("error") else out
     if name == "note_remove":

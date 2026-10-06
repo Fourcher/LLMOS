@@ -39,6 +39,10 @@ MATCH = re.compile(
     r"phone'?s? (?:internet|data|hotspot)|tether|hotspot|drawing tablet|wacom|pen tablet|touch ?screen|"
     r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b|encrypt|stolen|guest|someone else is using|disk encryption|passwords\b|password (?:manager|keeper|vault|safe)|logs?\b|journalctl|dmesg|service (?:fail|crash)|default shell|shell to|"
     r"cloud|new (?:computer|pc|laptop)|settings and apps|snapshot|roll ?back|restore point|kids? mode|child mode|parental|only let my|shortcut for|"
+    r"\d+(?:\.\d+)?\s*(?:times|plus|minus|divided|x|\*|/|\+|-|%)\s*\d+|\d+\s*%\s*of|square root|power of|\bconvert\b|how many \w+ (?:are )?in an? |"
+    r"\b(?:split|divide) \$?\d|time (?:is it )?in [a-z]|how (?:long|much time) (?:is it )?(?:until|till) \d|^(?:how (?:do (?:you|i) )?)?spell\b|"
+    r"^define\b|definition of|what does \w+ mean|meaning of|words? for \w+$|synonyms? (?:of|for)|"
+    r"\d+\s*(?:degrees|°)?\s*(?:fahrenheit|celsius|f|c)\b|\d+\s*(?:kg|kilos?|pounds?|lbs?|miles?|km|feet|foot|inch(?:es)?|cm|meters?|metres?|ounces?|oz|grams?|liters?|litres?|gallons?|cups?|mph)\s+(?:to|in|into)\b|"
     r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)", re.I)
 
 
@@ -948,9 +952,167 @@ def howto(desk, line, low):
     return False
 
 
+# ------------------------------------------------------------------ the boring basics, exactly
+
+_UNITS = {  # unit -> (kind, factor to the base unit)
+    "mm": ("len", .001), "millimeter": ("len", .001), "millimetre": ("len", .001), "cm": ("len", .01), "centimeter": ("len", .01),
+    "centimetre": ("len", .01), "m": ("len", 1), "meter": ("len", 1), "metre": ("len", 1), "km": ("len", 1000), "kilometer": ("len", 1000),
+    "kilometre": ("len", 1000), "in": ("len", .0254), "inch": ("len", .0254), "inches": ("len", .0254), "ft": ("len", .3048),
+    "foot": ("len", .3048), "feet": ("len", .3048), "yd": ("len", .9144), "yard": ("len", .9144), "mi": ("len", 1609.344),
+    "mile": ("len", 1609.344),
+    "mg": ("mass", .001), "milligram": ("mass", .001), "g": ("mass", 1), "gram": ("mass", 1), "kg": ("mass", 1000), "kilo": ("mass", 1000),
+    "kilogram": ("mass", 1000), "oz": ("mass", 28.349523125), "ounce": ("mass", 28.349523125), "lb": ("mass", 453.59237),
+    "lbs": ("mass", 453.59237), "pound": ("mass", 453.59237), "stone": ("mass", 6350.29318), "ton": ("mass", 907184.74),
+    "tonne": ("mass", 1e6),
+    "ml": ("vol", .001), "milliliter": ("vol", .001), "millilitre": ("vol", .001), "l": ("vol", 1), "liter": ("vol", 1), "litre": ("vol", 1),
+    "tsp": ("vol", .00492892), "teaspoon": ("vol", .00492892), "tbsp": ("vol", .0147868), "tablespoon": ("vol", .0147868),
+    "cup": ("vol", .236588), "pint": ("vol", .473176), "quart": ("vol", .946353), "gallon": ("vol", 3.78541),
+    "fl oz": ("vol", .0295735), "fluid ounce": ("vol", .0295735),
+    "mph": ("speed", .44704), "kph": ("speed", 1 / 3.6), "km/h": ("speed", 1 / 3.6), "kmh": ("speed", 1 / 3.6), "m/s": ("speed", 1),
+    "knot": ("speed", .514444),
+    "sq ft": ("area", .092903), "square foot": ("area", .092903), "square feet": ("area", .092903), "sq m": ("area", 1),
+    "square meter": ("area", 1), "square metre": ("area", 1), "acre": ("area", 4046.86), "hectare": ("area", 10000),
+    "byte": ("data", 1), "kb": ("data", 1e3), "mb": ("data", 1e6), "gb": ("data", 1e9), "tb": ("data", 1e12),
+    "second": ("time", 1), "minute": ("time", 60), "hour": ("time", 3600), "day": ("time", 86400), "week": ("time", 604800),
+    "year": ("time", 31557600),
+}
+_TEMP = {"c": "c", "celsius": "c", "centigrade": "c", "f": "f", "fahrenheit": "f", "k": "k", "kelvin": "k"}
+
+
+def _unit(w):
+    w = w.strip().lower().rstrip(".").replace("degrees ", "").replace("°", "")
+    if w in _UNITS or w in _TEMP:
+        return w
+    if w.endswith("es") and w[:-2] in _UNITS:
+        return w[:-2]
+    if w.endswith("s") and w[:-1] in _UNITS:
+        return w[:-1]
+    return None
+
+
+def _num(x):
+    x = round(x, 4)
+    return f"{x:,.0f}" if abs(x - round(x)) < 1e-9 else f"{x:,.2f}".rstrip("0").rstrip(".") if abs(x) >= 1 else f"{x:.4g}"
+
+
+def _convert(n, a, b):
+    a, b = _unit(a), _unit(b)
+    if not a or not b:
+        return None
+    if a in _TEMP or b in _TEMP:
+        ta, tb = _TEMP.get(a), _TEMP.get(b)
+        if not ta or not tb:
+            return None
+        c = n if ta == "c" else (n - 32) * 5 / 9 if ta == "f" else n - 273.15
+        return c if tb == "c" else c * 9 / 5 + 32 if tb == "f" else c + 273.15
+    ka, kb = _UNITS[a], _UNITS[b]
+    if ka[0] != kb[0]:
+        return None
+    return n * ka[1] / kb[1]
+
+
+def quick(desk, line, low):
+    q = low.strip().rstrip("?.!")
+    q = re.sub(r"^(?:hey |ok |so |please |can you |could you |tell me |do you know )+", "", q)
+    # unit conversions: "convert 5 miles to km", "5 miles in km", "72 fahrenheit in celsius", "how many ounces in a pound"
+    unit = r"(?:degrees\s+)?[a-z°/ ]{1,18}?"
+    m = re.fullmatch(rf"(?:convert |what(?:'s| is) |how much is |how many )?(?P<n>-?[\d.,]+)\s*(?P<a>{unit})\s+(?:to|in|into|as)\s+(?P<b>{unit})", q) or \
+        re.fullmatch(rf"how many (?P<b>{unit}) (?:are )?(?:in|per) (?:a |an |one )?(?P<a>{unit})", q)
+    if m:
+        n = float(m.group("n").replace(",", "")) if m.groupdict().get("n") else 1.0
+        r = _convert(n, m.group("a"), m.group("b"))
+        if r is not None:
+            a, b = m.group("a").strip(), m.group("b").strip()
+            sym = {"c": "°C", "f": "°F", "k": "K"}
+            ta, tb = _TEMP.get(_unit(a) or ""), _TEMP.get(_unit(b) or "")
+            if ta and tb:
+                return _say(desk, line, f"{_num(n)}{sym[ta]} is {_num(r)}{sym[tb]}.")
+            return _say(desk, line, f"{_num(n)} {a} is {_num(r)} {b}.")
+    # splitting a bill
+    m = re.fullmatch(r"(?:split|divide) \$?(?P<n>[\d.,]+)(?: dollars| euros| pounds| bucks)? (?:between|among|by|for) (?P<k>\d+|two|three|four|five|six|seven|eight)(?: people| ways| of us| friends)?", q)
+    if m:
+        k = {"two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}.get(m.group("k")) or int(m.group("k"))
+        n = float(m.group("n").replace(",", ""))
+        return _say(desk, line, f"{_num(n / k)} each ({_num(n)} ÷ {k}).")
+    # arithmetic: "23 times 47", "what's 15% of 80", "what is 2 to the power of 10"
+    m = re.fullmatch(r"(?:what(?:'s| is) |calculate |compute |how much is |work out )?(?P<e>[\d.,()\s+\-*/x×÷%^]+(?:\s*(?:times|plus|minus|divided by|over|"
+                     r"multiplied by|to the power of|percent of|% of|squared|cubed)\s*[\d.,()\s+\-*/x×÷%^]*)+|[\d.,]+\s*%\s*of\s*[\d.,]+|square root of [\d.,]+)", q)
+    if m and re.search(r"\d", m.group("e")):
+        e = m.group("e")
+        for w, op in (("multiplied by", "*"), ("divided by", "/"), ("to the power of", "**"), ("percent of", "% of"), ("times", "*"),
+                      ("plus", "+"), ("minus", "-"), ("over", "/"), (" x ", "*")):
+            e = e.replace(w, op)
+        e = re.sub(r"([\d.)]+)\s*squared", r"(\1)**2", e)
+        e = re.sub(r"([\d.)]+)\s*cubed", r"(\1)**3", e)
+        e = re.sub(r"square root of ([\d.,]+)", r"sqrt(\1)", e)
+        from . import tools
+        r = tools.calculate({"expression": e}, desk.ctx)
+        mm = re.search(r"=\s*(.+)$", str(r))
+        val = (mm.group(1) if mm else str(r)).strip()
+        if not str(r).lower().startswith("error"):
+            return _say(desk, line, val)
+    # the time somewhere else
+    m = re.fullmatch(r"what(?:'s| is) (?:the )?time (?:is it )?in (?P<c>[a-z .'-]+)|what time is it in (?P<c2>[a-z .'-]+)|time in (?P<c3>[a-z .'-]+)", q)
+    if m:
+        from . import system
+        place = (m.group("c") or m.group("c2") or m.group("c3")).strip()
+        zone = system.find_timezone(place)
+        if zone:
+            import zoneinfo
+            now = dt.datetime.now(zoneinfo.ZoneInfo(zone))
+            here = dt.datetime.now().astimezone()
+            diff = (now.utcoffset() - here.utcoffset()).total_seconds() / 3600
+            rel = "the same time as here" if diff == 0 else f"{_num(abs(diff))} hour{'s' if abs(diff) != 1 else ''} {'ahead of' if diff > 0 else 'behind'} you"
+            return _say(desk, line, f"It's {now.strftime('%H:%M')} on {now.strftime('%A')} in {place.title()} ({rel}).")
+    # time until an hour today: "how long until 5pm"
+    m = re.fullmatch(r"how (?:long|much time|many (?:hours|minutes)) (?:is it |is there |do i have )?(?:until|till|before) (?P<h>\d{1,2})(?::(?P<mi>\d\d))?\s*(?P<ap>am|pm)?", q)
+    if m:
+        h, mi = int(m.group("h")), int(m.group("mi") or 0)
+        if m.group("ap") == "pm" and h < 12:
+            h += 12
+        elif m.group("ap") == "am" and h == 12:
+            h = 0
+        now = dt.datetime.now()
+        tgt = now.replace(hour=h % 24, minute=mi, second=0, microsecond=0)
+        if tgt <= now:
+            tgt += dt.timedelta(days=1)
+        left = int((tgt - now).total_seconds() // 60)
+        return _say(desk, line, f"{left // 60} h {left % 60:02d} min until {tgt.strftime('%H:%M')}" + (" tomorrow." if tgt.date() != now.date() else "."))
+    # spelling
+    m = re.fullmatch(r"(?:how (?:do (?:you|i) )?spell|spell(?: out)?|what(?:'s| is) the spelling of) (?:the word )?['\"]?(?P<w>[a-z'-]{2,30})['\"]?", q)
+    if m:
+        w = m.group("w")
+        return _say(desk, line, f"{w}: {'-'.join(w.upper())}")
+    # definitions and synonyms from free dictionaries (exact, with a source); the model answers if they can't be reached
+    m = re.fullmatch(r"(?:define|definition of|what does (?P<w2>[a-z'-]+) mean|what(?:'s| is) the meaning of|meaning of|what is a|what(?:'s| is) an?) ?(?P<w>[a-z'-]+)?", q)
+    if m and (m.group("w") or m.group("w2")) and (q.startswith(("define", "definition", "meaning", "what does", "what's the meaning", "what is the meaning"))):
+        w = m.group("w2") or m.group("w")
+        try:
+            from . import web
+            raw = web.fetch(f"https://api.dictionaryapi.dev/api/v2/entries/en/{urllib.parse.quote(w)}", max_bytes=200000, timeout=8)[3]
+            data = json.loads(raw)
+            mean = data[0]["meanings"][0]
+            d = mean["definitions"][0]["definition"]
+            return _say(desk, line, f"{w} ({mean.get('partOfSpeech', '')}): {d}")
+        except Exception:
+            return False
+    m = re.fullmatch(r"(?:another|other|a different) words? for (?P<w>[a-z'-]+)|synonyms? (?:of|for) (?P<w2>[a-z'-]+)|what(?:'s| is) a synonym (?:of|for) (?P<w3>[a-z'-]+)", q)
+    if m:
+        w = m.group("w") or m.group("w2") or m.group("w3")
+        try:
+            from . import web
+            raw = web.fetch(f"https://api.datamuse.com/words?rel_syn={urllib.parse.quote(w)}&max=8", max_bytes=50000, timeout=8)[3]
+            words = [x["word"] for x in json.loads(raw)][:8]
+            if words:
+                return _say(desk, line, f"Other words for {w}: {', '.join(words)}.")
+        except Exception:
+            return False
+    return False
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (quick, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True

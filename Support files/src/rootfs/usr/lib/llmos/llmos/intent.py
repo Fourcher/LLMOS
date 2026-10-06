@@ -1317,6 +1317,17 @@ def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
     import urllib.parse as _u
+    # notes first: "write down: dentist on friday at 3" is a note, not a task at 3
+    m = re.match(r"^(?:please\s+)?(?:write|jot|put|get|note|scribble)\s+(?:this\s+|that\s+|it\s+)?down\s*:?\s+(?P<n>.+)$|^(?:take|make)\s+a\s+note\s*:?\s+(?P<n2>.+)$", t, re.I)
+    if m:
+        n = (m.group("n") or m.group("n2")).strip().strip("'\"")
+        if not re.match(r"(?i)^(?:that\s+)?(?:i|i'm|i am|my)\b", n):
+            return ("note_add", {"text": n, "list": "notes"})
+    m = re.match(r"^(?:please\s+)?(?:delete|remove|get rid of|erase|cross out)\s+(?:the|my|that)\s+note\s+(?:about|on|that says|saying|with)\s+(?P<x>.+)$", low)
+    if m:
+        return ("note_remove", {"item": re.sub(r"^(?:the|a|an|my)\s+", "", m.group("x").strip()), "list": "notes"})
+    if re.match(r"^(?:(?:show|open|read|see|list)\s+(?:me\s+)?(?:all\s+)?my\s+notes|my\s+notes|what\s+notes\s+do\s+i\s+have|what(?:'s| is)\s+in\s+my\s+notes)$", low):
+        return ("notes_show", {"list": "notes"})
     m = re.match(r"^(?:cut|trim|remove|chop|take)\s+(?:off\s+)?(?:the\s+)?(?P<w>first|last|beginning|start|end|opening)(?:\s+(?P<n>[\d:.]+\s*(?:seconds?|secs?|s|minutes?|mins?|m)?(?:\s+and\s+\d+\s*(?:seconds?|secs?))?))?"
                  r"(?:\s+(?:of|off|from)\s+(?:this|that|the|my)?\s*(?P<v>video|clip|recording|movie|song|audio|[\w .-]+\.(?:mp4|mkv|mov|webm|avi|m4v|mp3|m4a|wav|ogg|flac)))?$", low)
     if m and m.group("n") and m.group("v"):
