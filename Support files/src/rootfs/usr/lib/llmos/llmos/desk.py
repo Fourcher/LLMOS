@@ -3746,7 +3746,7 @@ class Desk:
                 for wid in list(self.windows):
                     self.close_window(wid)
                 for k, v in (("autonomy", "balanced"), ("internet", "yes"), ("brain", "local"), ("guidance", "owner"), ("tor", False),
-                             ("screen_off", 0), ("do_not_disturb", False), ("language", "English")):
+                             ("screen_off", 0), ("sleep_after", 0), ("do_not_disturb", False), ("language", "English")):
                     config.settings.set(k, v)
                 self.apply_theme()            # (a test that changed the language must not leave the next one in Spanish)
                 self.start_idle()             # tests drive the desk without touching the keyboard: the screen must stay on
