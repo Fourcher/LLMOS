@@ -47,10 +47,23 @@ for q in ("start work timer", "track my hours", "clock out", "what's listening o
           "start a local web server here", "preview this html", "computer is hot", "temperature", "is my battery dying",
           "why is the battery draining fast", "check my hard drive health", "track my parcel", "check my order status",
           "teach me to type", "typing practice", "learn spanish", "change the computer name", "focus mode for an hour",
-          "block youtube while i study", "end focus mode"):
+          "block youtube while i study", "end focus mode", "my hands shake, double clicks are hard", "sticky keys",
+          "turn off the startup sound", "no clicking sounds", "start firefox when i log in", "stop x from starting automatically",
+          "connect to my work vpn", "set up a proxy/vpn", "rip this cd", "play this dvd", "play this on my tv", "cast to chromecast",
+          "color blind mode", "change my profile picture", "set a screensaver", "show a clock when idle",
+          "can i run this windows program (.exe)", "install this .deb/.appimage", "keep this on top", "picture in picture"):
     check(everyday.MATCH.search(q.lower()) is not None, f"{q!r} is instant")
 for q in ("turn the volume up", "open my documents", "what's the weather", "play some music"):
     check(everyday.MATCH.search(q) is None, f"{q!r} is not")
+
+print("questions and commands that only look alike are left to the model")
+for q, fn in (("what is a vpn", everyday.vpn), ("cd ~/projects", everyday.discs), ("why do people use a vpn", everyday.vpn)):
+    dk = Desk()
+    check(not fn(dk, q, q), f"{q!r} is not acted on")
+dk = Desk()
+check(everyday.howto(dk, "color blind mode", "color blind mode") and "filter" in dk.said, "colour blind: an honest answer, not dark mode")
+dk = Desk()
+check(everyday.howto(dk, "close the lid", "close the lid") is False, "'close the lid' alone is not a how-to")
 
 print(f"\n{'all good' if not fails else str(fails) + ' failure(s)'}")
 sys.exit(1 if fails else 0)

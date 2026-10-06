@@ -26,7 +26,15 @@ MATCH = re.compile(
     r"order status|where is my (?:parcel|package|order)|typing (?:practice|tutor|lessons?|test)|teach me to type|learn (?:to type|\w+ish|french|spanish|german|"
     r"italian|japanese|chinese|korean|portuguese|arabic|russian|hindi|dutch)|computer(?:'?s)? name|hostname|name (?:this|the) computer|"
     r"call this computer|rename (?:this|the) computer|focus mode|block (?:youtube|facebook|instagram|tiktok|reddit|twitter|social media|"
-    r"distracting|websites|sites)|stop focus|end focus)\b", re.I)
+    r"distracting|websites|sites)|stop focus|end focus|double[- ]?clicks?|sticky keys|hands? (?:shake|shaking|tremor)|tremor|"
+    r"(?:startup|start-up|boot|notification|clicking|click|system|alert) sounds?|the chime|chime (?:on|off)|"
+    r"when i (?:log ?in|sign in|start (?:up|the computer))|automatically|autostart|start(?:s)? (?:up )?with the computer|startup (?:programs|apps)|"
+    r"vpn|wireguard|openvpn|proxy|"
+    r"\bcd\b|\bdvd\b|blu-?ray|disc drive|"
+    r"on (?:my |the )?tv|chromecast|cast (?:to|this|my)|airplay|"
+    r"colou?r ?blind|colou?r filter|deuteranop|protanop|tritanop|profile (?:picture|photo|pic)|avatar|screen ?saver|clock when idle|"
+    r"\.exe\b|windows (?:program|app|software|game)s?|\.deb\b|appimage|"
+    r"(?:keep|stay|put) (?:this |it |the window )?(?:always )?on top|always on top|picture[- ]in[- ]picture|\bpip\b)", re.I)
 
 
 def _say(desk, line, text):
@@ -542,9 +550,203 @@ def focus(desk, line, low):
                             "Say “end focus mode” to stop early.")
 
 
+# ------------------------------------------------------------------ settings in plain words
+
+def access(desk, line, low):
+    if re.search(r"double[- ]?clicks? (?:is |are )?(?:hard|difficult|too fast|tricky)|hands? (?:shake|shaking)|tremor|slow(?:er)? double[- ]?click|double[- ]?click (?:slower|speed)", low):
+        inp = dict(config.settings.get("input", {}) or {})
+        inp.update(double_click_ms=900, repeat_delay=1000, repeat_rate=15)
+        config.settings.set("input", inp)
+        desk.apply_input()
+        return _say(desk, line, "Done: a double-click now counts even when the two clicks are almost a second apart, and a held key waits a "
+                                "second before it repeats (no accidental \u201caaaa\u201d). Remember you can also say what you want instead of "
+                                "clicking. Say \u201cnormal double click\u201d to undo.")
+    if re.search(r"normal double[- ]?click|double[- ]?click (?:back to )?normal|faster double[- ]?click", low):
+        inp = dict(config.settings.get("input", {}) or {})
+        inp.update(double_click_ms=500, repeat_delay=600, repeat_rate=25)
+        config.settings.set("input", inp)
+        desk.apply_input()
+        return _say(desk, line, "Double-click and key repeat are back to normal.")
+    if re.search(r"sticky keys", low):
+        return _say(desk, line, "Sticky keys (pressing Ctrl, then C, instead of both together) aren't available on LLM OS yet. What helps now: say what "
+                                "you want instead of using a shortcut (\u201ccopy this\u201d, \u201cswitch to the browser\u201d), or \u201cmy hands shake\u201d "
+                                "for a slower double-click and key repeat.")
+    return False
+
+
+def sounds(desk, line, low):
+    if not re.search(r"sounds?|chime", low):
+        return False
+    off = re.search(r"\b(?:off|no|stop|disable|mute|silence|without|quiet)\b", low)
+    on = re.search(r"\b(?:on|enable|back|unmute)\b", low) and not off
+    startup = re.search(r"startup|start-up|boot", low)
+    if off:
+        config.settings.set("chime", False)
+        return _say(desk, line, ("LLM OS has no startup sound, and no click sounds. " if startup or "click" in low else "") +
+                    "The one sound it makes, the chime for timers and finished work, is now off (timers still show on the screen). "
+                    "Say \u201cturn the chime on\u201d to bring it back.")
+    if on:
+        config.settings.set("chime", True)
+        return _say(desk, line, "The chime is on: it sounds when a timer rings or background work finishes.")
+    if re.search(r"change|different|pick|choose", low):
+        return _say(desk, line, "LLM OS has one sound, a short chime for timers and finished work; it can be on or off (\u201cturn off the chime\u201d) "
+                                "but not swapped yet. Programs' own notification sounds are set inside each program.")
+    return False
+
+
+def autostart(desk, line, low):
+    lst = [a for a in (config.settings.get("autostart") or []) if a]
+    m = re.search(r"(?:don'?t|do not|stop|no longer) (?:start|open|launch|run)(?:ing)? (?P<a>.+?) (?:automatically|when i (?:log ?in|sign in|start)|at (?:start ?up|login))"
+                  r"|(?:stop|prevent|keep) (?P<a2>.+?) from (?:starting|opening|launching) (?:automatically|at (?:start ?up|login)|when i log ?in)"
+                  r"|remove (?P<a3>.+?) from (?:startup|autostart)", low)
+    if m:
+        a = (m.group("a") or m.group("a2") or m.group("a3")).strip()
+        a = re.sub(r"^(?:the|my) ", "", a)
+        keep = [x for x in lst if x.lower() != a.lower()]
+        config.settings.set("autostart", keep)
+        if len(keep) == len(lst):
+            return _say(desk, line, f"{a.capitalize()} wasn't set to start by itself" + (f"; these are: {', '.join(lst)}." if lst else ". Nothing is."))
+        return _say(desk, line, f"{a.capitalize()} won't start by itself any more.")
+    m = re.search(r"(?:start|open|launch|run) (?P<a>.+?) (?:automatically )?(?:when i (?:log ?in|sign in|unlock|start (?:up|the computer))|at (?:start ?up|login)|"
+                  r"with the computer|every time i (?:log ?in|start))|(?:make|have|let) (?P<a2>.+?) (?:start|open) (?:automatically|by itself|at (?:start ?up|login))|"
+                  r"add (?P<a3>.+?) to (?:startup|autostart)", low)
+    if m:
+        a = re.sub(r"^(?:the|my) ", "", (m.group("a") or m.group("a2") or m.group("a3")).strip())
+        if a in ("x", "it", "this", "that", "something", "a program", "an app", "programs", "apps"):
+            return _say(desk, line, "Which program? Say, for example, \u201cstart Firefox when I log in\u201d." +
+                        (f" Starting by itself now: {', '.join(lst)}." if lst else ""))
+        if a.lower() not in [x.lower() for x in lst]:
+            lst.append(a)
+            config.settings.set("autostart", lst)
+        return _say(desk, line, f"{a.capitalize()} will open by itself each time you unlock the desk. Say \u201cdon't start {a} automatically\u201d to undo.")
+    if re.search(r"what (?:starts|opens|runs|launches)(?: by itself)? (?:automatically|when i log ?in|at start ?up)|startup (?:programs|apps)|autostart", low):
+        return _say(desk, line, ("Starting by itself: " + ", ".join(lst) + ".") if lst else "Nothing starts by itself. Say \u201cstart <program> when I log in\u201d to add one.")
+    return False
+
+
+def vpn(desk, line, low):
+    if not re.search(r"vpn|wireguard|openvpn|proxy", low):
+        return False
+    from . import tools
+    if re.search(r"(?:disconnect|turn off|stop|end|close)(?: (?:the|my|from))? (?:work )?vpn|vpn off", low):
+        n = 0
+        for conf in glob.glob("/etc/wireguard/*.conf"):
+            if subprocess.run(["wg-quick", "down", conf], capture_output=True, timeout=30).returncode == 0:
+                n += 1
+        if subprocess.run(["pkill", "-x", "openvpn"], capture_output=True).returncode == 0:
+            n += 1
+        return _say(desk, line, "The VPN is off." if n else "No VPN was on.")
+    if re.match(r"(?:why|what|how (?:does|do|is|are)|is |are |should|do i need|does|can you explain|explain)", low) or \
+            not re.search(r"(?:connect|set ?up|use|turn on|start|join|log ?in|sign in|enable|configure|add)\b", low):
+        return False                      # a question about VPNs is answered like any question
+    if "proxy" in low and "vpn" not in low:
+        return _say(desk, line, "A proxy is set in the browser: Firefox → Settings → Network Settings → Settings… (manual proxy). For everything on this "
+                                "computer to go through a private route, say \u201cturn on Tor\u201d, or connect a VPN from its file (\u201cconnect to my vpn\u201d).")
+    f = None
+    for d in ("~/Downloads", "~/Documents", "~/Desktop", "~"):
+        for c in sorted(glob.glob(os.path.join(tools._path(d), "*.conf")) + glob.glob(os.path.join(tools._path(d), "*.ovpn")), key=os.path.getmtime, reverse=True):
+            try:
+                body = open(c, errors="replace").read(20000)
+            except OSError:
+                continue
+            if ("[Interface]" in body and "PrivateKey" in body) or (c.endswith(".ovpn") and re.search(r"^\s*remote\s", body, re.M)):
+                f = c
+                break
+        if f:
+            break
+    if not f:
+        return _say(desk, line, "Put the VPN's file here first: your work or VPN company gives you a WireGuard file (.conf) or an OpenVPN file (.ovpn). "
+                                "Save it in Downloads (from the email, or a USB stick) and say \u201cconnect to my vpn\u201d again. "
+                                "Apps-only VPNs (some paid services) offer such a file on their website under \u201cmanual setup\u201d or \u201cLinux\u201d.")
+    kind = "openvpn" if f.endswith(".ovpn") else "wireguard"
+    need = "openvpn" if kind == "openvpn" else "wireguard-tools"
+    if not shutil.which("openvpn" if kind == "openvpn" else "wg-quick"):
+        desk.emit({"t": "toast", "text": "Getting the VPN program…", "sticky": "vpn"})
+        r = subprocess.run(["apk", "add", "-q", need], capture_output=True, text=True, timeout=600)
+        desk.emit({"t": "toast", "text": "", "sticky": "vpn"})
+        if r.returncode != 0:
+            return _say(desk, line, f"Couldn't get the VPN program ({need}): {(r.stderr or r.stdout).strip()[-150:]}")
+    if kind == "wireguard":
+        os.makedirs("/etc/wireguard", exist_ok=True)
+        name = re.sub(r"[^a-zA-Z0-9_=+.-]", "", os.path.splitext(os.path.basename(f))[0])[:15] or "vpn"
+        dest = f"/etc/wireguard/{name}.conf"
+        shutil.copy(f, dest)
+        os.chmod(dest, 0o600)
+        r = subprocess.run(["wg-quick", "up", dest], capture_output=True, text=True, timeout=60)
+        ok = r.returncode == 0
+        err = (r.stderr or "").strip().splitlines()[-1:] if not ok else []
+    else:
+        body = open(f, errors="replace").read()
+        if re.search(r"^\s*auth-user-pass\s*$", body, re.M):
+            return _say(desk, line, f"{os.path.basename(f)} needs a user name and password, which isn't supported here yet. If your VPN offers a "
+                                    "WireGuard file, that one works.")
+        r = subprocess.run(["openvpn", "--config", f, "--daemon", "llmos-vpn"], capture_output=True, text=True, timeout=60)
+        time.sleep(6)
+        ok = r.returncode == 0 and subprocess.run(["pgrep", "-x", "openvpn"], capture_output=True).returncode == 0
+        err = [(r.stderr or r.stdout).strip()[-150:]] if not ok else []
+    if not ok:
+        return _say(desk, line, f"The VPN from {os.path.basename(f)} didn't connect: {' '.join(err) or 'no answer from its server'}.")
+    if config.settings.get("internet") == "no":
+        note = " Note: the internet is switched off in settings, so nothing goes out until you turn it on."
+    else:
+        note = ""
+    return _say(desk, line, f"Connected to the VPN from {os.path.basename(f)}: the internet now goes through it. Say \u201cdisconnect the vpn\u201d to stop.{note}")
+
+
+def discs(desk, line, low):
+    if not re.search(r"\b(?:cd|dvd|blu-?ray|disc)s?\b", low) or not re.search(r"\b(?:play|rip|copy|import|burn|watch|listen|drive|read|open)\b", low) \
+            or re.match(r"cd\s+[~/.]", low):
+        return False
+    drives = glob.glob("/dev/sr[0-9]")
+    if not drives:
+        return _say(desk, line, "This computer has no disc drive. A USB DVD drive works once plugged in; then ask again.")
+    if re.search(r"play", low):
+        subprocess.Popen(["mpv", "--fs", ("dvd://" if "dvd" in low else "cdda://"), f"--{'dvd' if 'dvd' in low else 'cdda'}-device={drives[0]}"],
+                         env=desk._child_env(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return _say(desk, line, "Playing the disc. (Most shop-bought DVDs are copy-protected; if it won't play, that's why.)")
+    if re.search(r"rip|copy|import", low):
+        if not shutil.which("abcde"):
+            return _say(desk, line, "Say \u201cinstall abcde\u201d to get the CD copier, then ask again: it saves each song to Music.")
+        subprocess.Popen(["foot", "abcde", "-N", "-o", "mp3", "-d", drives[0]], cwd=os.path.join(config.home(), "Music"), env=desk._child_env(),
+                         start_new_session=True)
+        return _say(desk, line, "Copying the CD into Music; the terminal window shows each song as it's done.")
+    return False
+
+
+HOWTO = [
+    (r"(?:play|watch|show|put|stream|mirror|send)\b.*\b(?:on|to) (?:my |the )?tv|chromecast|cast (?:to|this|my)|airplay",
+     "With a cable: plug the TV into the computer's HDMI port, then say \u201cmirror the displays\u201d (or \u201cuse only the tv\u201d). "
+     "Without a cable: YouTube and Netflix have a Cast button in their pages in Chrome-based browsers, but not in Firefox; on the TV's YouTube app you can "
+     "choose \u201cLink with TV code\u201d and enter the code at youtube.com/pair. Casting your whole screen to a Chromecast isn't available yet."),
+    (r"colou?r ?blind|colou?r filter|deuteranop|protanop|tritanop",
+     "A colour-blind filter for the whole screen isn't available yet. What helps now: \u201chigh contrast\u201d (strong, clearly different colours), "
+     "\u201cbigger text\u201d, and in pictures I can describe colours for you: ask \u201cwhat colour is this\u201d with a screenshot."),
+    (r"(?:change|set|update|add|pick) (?:my |a )?(?:profile (?:picture|photo|pic)|avatar|account (?:picture|photo))|profile (?:picture|photo|pic)",
+     "LLM OS doesn't use a profile picture: there's no account list to show it in. The lock screen shows your wallpaper (\u201cchange the wallpaper\u201d), "
+     "and I call you by your name (\u201ccall me Sam\u201d)."),
+    (r"(?:set|change|turn on|use|add) (?:a |the |my )?screen ?saver|screen ?saver|(?:show|display) (?:a |the )?clock when (?:i'?m )?idle",
+     "There's no screensaver: when you leave it alone the screen turns off after a while, which saves power and the screen. "
+     "Say \u201cturn the screen off after 10 minutes\u201d (or \u201cnever\u201d) to choose when."),
+    (r"\.exe\b|windows (?:program|app|software|game)s?|run (?:a )?windows|\.deb\b|appimage",
+     "Windows programs (.exe) and other Linux systems' packages (.deb, AppImage) are made for different systems and usually don't run here. "
+     "Most programs have a version for this one: say \u201cinstall\u201d and the program's name (\u201cinstall vlc\u201d, \u201cinstall spotify\u201d) "
+     "and I'll find it, from Alpine or Flathub. On a PC with an Intel or AMD processor, \u201cinstall wine\u201d lets some Windows programs run too."),
+    (r"(?:keep|stay|put|make) (?:this |it |that |the \w+ )?(?:window )?(?:always )?on top|always on top|picture[- ]in[- ]picture|\bpip\b",
+     "Click the window, then press Super+T: it stays above the others (Super+T again to undo). For a video in Firefox, hover over it and click the "
+     "picture-in-picture button: it floats in a small window that stays on top while you work."),
+]
+
+
+def howto(desk, line, low):
+    for rx, text in HOWTO:
+        if re.search(rx, low):
+            return _say(desk, line, text)
+    return False
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname):
+    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, howto):
         try:
             if fn(desk, line, low):
                 return True

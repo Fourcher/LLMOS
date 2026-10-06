@@ -1894,8 +1894,12 @@ def rename_series(a, ctx):
     if not os.path.isdir(folder):
         return f"error: {folder} is not a folder"
     exts = {"photos": _IMAGE_EXT, "videos": (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"), "music": _AUDIO_EXT}.get(kind)
-    files = [n for n in os.listdir(folder) if not n.startswith(".") and os.path.isfile(os.path.join(folder, n))
-             and (exts is None or os.path.splitext(n)[1].lower() in exts)]
+    pick = lambda d: [n for n in os.listdir(d) if not n.startswith(".") and os.path.isfile(os.path.join(d, n))
+                      and (exts is None or os.path.splitext(n)[1].lower() in exts)]
+    files = pick(folder)
+    usual = _path({"photos": "~/Pictures", "videos": "~/Videos", "music": "~/Music"}.get(kind, "~"))
+    if not files and not a.get("folder") and folder != usual and os.path.isdir(usual):
+        folder, files = usual, pick(usual)        # ("these photos" said while the home folder was open: the Pictures folder)
     if not files:
         return f"there are no {'' if kind == 'all' else kind + ' '}files in {folder} to rename"
     files.sort(key=lambda n: (os.path.getmtime(os.path.join(folder, n)), n.lower()))
@@ -2016,10 +2020,13 @@ def _secs(v):
       {"path": {"type": "string", "description": "the video (optional)"},
        "cut_start": {"type": "string", "description": "how much to remove from the start, e.g. '10' or '1:30'"},
        "cut_end": {"type": "string", "description": "how much to remove from the end"},
-       "keep_from": {"type": "string", "description": "keep only from this time…"}, "keep_to": {"type": "string", "description": "…to this time"}},
+       "keep_from": {"type": "string", "description": "keep only from this time…"}, "keep_to": {"type": "string", "description": "…to this time"},
+       "kind": {"type": "string", "enum": ["video", "audio", "any"], "description": "which newest file when none is named (default video)"}},
       [], risk=CHANGE, available=lambda: shutil.which("ffmpeg") is not None)
 def trim_video(a, ctx):
-    path = _path(a["path"]) if a.get("path") else _newest(["~/Videos", "~/Downloads", "~/Desktop", "~/Music"], _MEDIA_EXT)
+    kind = a.get("kind") or "video"
+    exts = tuple(x for x in _MEDIA_EXT if x not in _AUDIO_EXT) if kind == "video" else _AUDIO_EXT if kind == "audio" else _MEDIA_EXT
+    path = _path(a["path"]) if a.get("path") else _newest(["~/Videos", "~/Downloads", "~/Desktop"] + (["~/Music"] if kind != "video" else []), exts)
     if a.get("path") and not os.path.isfile(path):          # a bare name: where videos usually are
         path = next((os.path.join(_path(d), os.path.basename(a["path"])) for d in ("~/Videos", "~/Downloads", "~/Desktop", "~/Music", "~")
                      if os.path.isfile(os.path.join(_path(d), os.path.basename(a["path"])))), path)

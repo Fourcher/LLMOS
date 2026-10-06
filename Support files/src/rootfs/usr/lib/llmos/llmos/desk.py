@@ -1295,6 +1295,9 @@ class Desk:
         self.push_status()
         self._model_watch()
         self.show_away()
+        auto = [a for a in (config.settings.get("autostart") or []) if str(a).strip()]
+        if auto:                              # "start X when I log in": each time the desk opens (locking closes programs)
+            threading.Thread(target=lambda: [(time.sleep(1.5), self.act("open " + a)) for a in auto], daemon=True).start()
         if _live() and not getattr(self, "_live_told", False):
             self._live_told = True          # once per start: running from the stick keeps nothing
             self.open_window({"id": "live", "replace": True, "title": T("d_live_title"), "size": "s", "slot": "cascade", "blocks": [
@@ -2691,17 +2694,20 @@ class Desk:
             self.instant_reply(line, T("d_live_answer") if _live() else T("d_disk_answer"))
             return True
         m = re.fullmatch(r"(?:lock|password[- ]?protect|encrypt|protect|put a password on|add a password to|secure) (?:this|that|the|my)?\s*(?P<f>[\w .~/-]*?)\s*folder"
-                         r"(?: (?:with|using) (?:a |its own )?password)?|(?:lock|encrypt|password[- ]?protect) (?:my )?(?P<f2>documents|pictures|photos|music|videos|downloads|desktop|~/\S+|/\S+)(?: (?:with|using) (?:a )?password)?", l2)
+                         r"(?: (?:with|using) (?:a |its own )?password)?|(?:lock|encrypt|password[- ]?protect) (?:my |the folder )?(?P<f2>documents|pictures|photos|music|videos|downloads|desktop|~/\S+|/\S+)(?: (?:with|using) (?:a )?password)?", l2)
         if m:
-            f = (m.group("f") or m.group("f2") or "").strip()
+            g = "f" if m.group("f") else "f2" if m.group("f2") else None
+            f = intent.plain(line).strip()[m.start(g):m.end(g)].strip() if g else ""     # (as typed: folder names have capitals)
             f = {"photos": "~/Pictures", "pictures": "~/Pictures", "music": "~/Music", "documents": "~/Documents", "downloads": "~/Downloads",
-                 "videos": "~/Videos", "desktop": "~/Desktop"}.get(f, f)
+                 "videos": "~/Videos", "desktop": "~/Desktop"}.get(f.lower(), f)
             path = tools._path(f) if f.startswith(("~", "/")) else (os.path.join(config.home(), f) if f and os.path.isdir(os.path.join(config.home(), f))
                                                                    else (tools._LAST_FOLDER if not f else None))
             if not path or path.rstrip("/") in (config.home().rstrip("/"), "/") or not os.path.isdir(path):
-                self.last_reply = self._said = ("Which folder? Open it first (\u201cshow my files\u201d, then open the folder) and say it again, "
-                                                "or name it: \u201clock my documents folder\u201d.") if not path or not os.path.isdir(path) else \
-                    "That's your whole home folder; it's already locked by your passphrase whenever the computer is locked. Name one folder inside it."
+                home = config.home()
+                subs = sorted(n for n in os.listdir(home) if not n.startswith(".") and os.path.isdir(os.path.join(home, n)) and n != "lost+found")[:24]
+                self.open_window({"id": "folder-pick", "replace": True, "title": "Lock which folder?", "size": "s", "slot": "cascade", "blocks": [
+                    {"type": "buttons", "items": [{"label": n, "say": f"lock the folder {os.path.join(home, n)} with a password"} for n in subs]}]})
+                self.last_reply = self._said = "Which folder? Pick it in the window (everything in your home folder is already locked by your passphrase whenever the computer is)."
                 return True
             self.folder_form("lock", path)
             self.last_reply = self._said = "Type the password for it in the window."
@@ -2953,7 +2959,7 @@ class Desk:
     _TILE = re.compile(r"(?:put|move|snap) (?:the )?(?P<w>[\w ]+?) (?:on|to) the (?P<side>left|right)(?: side| half)?")
 
     _HOWTO = [
-        (r"(?:import|bring|move|copy|transfer|get) (?:over )?(?:my )?(?:bookmarks|passwords|favou?rites|history|bookmarks (?:and|/|&) passwords|passwords (?:and|/|&) bookmarks)"
+        (r"(?:import|bring|move|copy|transfer|get) (?:over )?(?:my )?(?:bookmarks|passwords|favou?rites|history)(?: ?(?:and|/|&|or) ?(?:my )?(?:bookmarks|passwords|favou?rites|history))*"
          r"(?: and \w+)? (?:from|out of|over from) (?:google )?(?:chrome|edge|safari|brave|opera|my old (?:computer|browser|laptop))",
          "On the old computer, in Chrome: Bookmarks → Bookmark manager → ⋮ → Export bookmarks (a .html file), and Settings → Passwords → "
          "Export passwords (a .csv file). Put the files on a USB stick and plug it in here. Then in Firefox: Ctrl+Shift+O → Import and Backup → "
@@ -3404,6 +3410,8 @@ class Desk:
             side = "bottom" if config.settings.get("appearance.layout") == "windows" else "top"
             xml = re.sub(r"\s*<margin [^>]*/>", "", xml)
             xml = xml.replace("</labwc_config>", f'  <margin {side}="{bar}" />\n</labwc_config>', 1)
+            # a slower double-click (shaky hands): two clicks this far apart still count as one double-click
+            xml = xml.replace("<mouse>", f"<mouse><doubleClickTime>{int(inp.get('double_click_ms', 500))}</doubleClickTime>", 1)
             rate, delay = int(inp.get("repeat_rate", 25)), int(inp.get("repeat_delay", 600))
             xml = xml.replace("<keyboard>", f"<keyboard><repeatRate>{rate}</repeatRate><repeatDelay>{delay}</repeatDelay>", 1)
             if getattr(self, "_locked_keys", False):

@@ -1292,13 +1292,20 @@ def _everyday2(text):
                  r"(?:\s+(?:of|off|from)\s+(?:this|that|the|my)?\s*(?P<v>video|clip|recording|movie|song|audio|[\w .-]+\.(?:mp4|mkv|mov|webm|avi|m4v|mp3|m4a|wav|ogg|flac)))?$", low)
     if m and m.group("n") and m.group("v"):
         n = m.group("n").strip()
-        args = {"cut_start" if m.group("w") in ("first", "beginning", "start", "opening") else "cut_end": n}
+        args = {"cut_start" if m.group("w") in ("first", "beginning", "start", "opening") else "cut_end": n,
+                "kind": "audio" if m.group("v") in ("song", "audio", "recording") else "video"}
         if "." in (m.group("v") or ""):
             args["path"] = m.group("v")
         return ("trim_video", args)
     m = re.match(r"^(?:keep|cut|trim)\s+(?:only\s+)?(?:this|that|the|my)?\s*(?:video|clip|recording|song)?\s*(?:from|between)\s+(?P<a>[\d:.]+\s*\w*)\s+(?:to|and|until|till)\s+(?P<b>[\d:.]+\s*\w*)$", low)
     if m:
         return ("trim_video", {"keep_from": m.group("a"), "keep_to": m.group("b")})
+    if re.match(r"^(?:(?:when i )?close the lid and (?:keep|stay)\b.*|keep (?:it |the computer )?(?:running|on|awake) when (?:i )?close (?:the|its) lid|"
+                r"(?:don'?t|do not) (?:go to )?sleep when (?:i )?close (?:the|its) lid|(?:closing )?the lid (?:closed|shut) (?:and )?(?:keep|stay) (?:running|on|awake)|"
+                r"lid closed,? (?:keep|stay) (?:running|on|awake))$", low):
+        return ("change_setting", {"setting": "lid", "value": "nothing"})
+    if re.match(r"^(?:sleep|go to sleep|suspend) when (?:i )?close (?:the|its) lid$|^closing the lid should (?:sleep|suspend)$", low):
+        return ("change_setting", {"setting": "lid", "value": "sleep"})
     m = re.match(r"^(?:merge|combine|join|put together)\s+(?:all\s+)?(?:of\s+)?(?:these|the|my|those|them|all)?\s*(?:the\s+)?pdfs?(?:\s+files)?"
                  r"(?:\s+in\s+(?:my\s+)?(?P<f>[\w .~/-]+?))?(?:\s+(?:into|in|to|as)\s+(?:one(?:\s+(?:pdf|file))?|a\s+single\s+(?:pdf|file)|(?:a\s+(?:pdf|file)\s+called\s+)?(?P<n>[\w .-]+?)))?$", low)
     if m:

@@ -57,7 +57,7 @@ def chime():
     """A short sound for timers and finished background work; silent without a sound card."""
     from . import config, media
     wav = os.path.join(config.SHARE, "chime.wav")
-    if not os.path.exists(wav) or not media.has_audio():
+    if not config.settings.get("chime", True) or not os.path.exists(wav) or not media.has_audio():
         return False
     for cmd in (["aplay", "-q", wav], ["mpv", "--no-video", "--really-quiet", wav]):
         if shutil.which(cmd[0]):
