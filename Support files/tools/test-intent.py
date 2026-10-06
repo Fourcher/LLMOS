@@ -82,7 +82,7 @@ CASES = {
     "normal text size": ("set_appearance", {"scale": "default"}),
     "make it cosier": None,
     "turn it off": None,
-    "make everything faded": None,
+    "make everything faded": ("restyle", {"description": "make everything faded"}),
     "change the theme to dark": None,
     "set the display to sleep": None,
     "make a folder called projects in my home": ("make_folder", {"name": "projects", "where": "home"}),

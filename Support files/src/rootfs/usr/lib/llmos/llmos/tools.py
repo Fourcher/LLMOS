@@ -558,10 +558,6 @@ def _clean_css(css):
        "layout": {"type": "string", "enum": ["clean", "windows", "mac"], "description": "the desk's arrangement: clean (LLM OS), "
                   "windows (a taskbar with a start menu, like Windows 7), mac (a menu bar and a dock, like macOS)"},
        "language": {"type": "string", "description": "main language of the whole interface"},
-       "style": {"type": "string", "description": "any other visual change the options above can't express, written as CSS for "
-                 "the desk page (an HTML page): windows are .win (title bar .win .head), the top bar #top, the request box #cmd, "
-                 "the reply column #reply, buttons .btn, the animated background #backdrop; html/body for the whole screen "
-                 "(filter, transform, font-family, clip-path, colours...). Replaces the previous style; '' removes it."},
        "settings_language": {"type": "string", "description": "language for the settings screens only, when it "
         "should differ from the rest (e.g. 'settings in Chinese, rest in English' -> language=English, "
         "settings_language=Chinese)"}})
@@ -681,6 +677,63 @@ def set_appearance(a, ctx):
             pass
     ctx.redraw()
     return "appearance updated: " + ", ".join(changed)
+
+
+_RESTYLE_SYSTEM = """You restyle a desktop's interface by writing CSS for its page (an HTML page in a web view). Parts:
+html, body: the whole screen. #top: the top bar (clock, status). #stage: where windows sit. .win: every window (a box with
+border, border-radius, background var(--card)); .win .head: a window's title bar; #cmd: the request box at the bottom (input
+#in); #reply: the column where answers appear; .btn: buttons; #backdrop: the animated background canvas; #dock: the dock.
+Colours in use: var(--bg), var(--fg), var(--accent), var(--card), var(--line). Fonts available: sans-serif, serif, monospace,
+'Noto Sans', 'JetBrains Mono', 'Noto Serif'.
+Write CSS that makes the look the owner asked for as fully and literally as CSS can: shapes (clip-path, border-radius,
+transform), filters (filter: grayscale/sepia/invert/hue-rotate/blur/contrast), fonts, letter-spacing, text-transform,
+colours, borders, shadows, animations (@keyframes). Style the real elements themselves (.win, #top, html...), not ::before
+or ::after, and add !important to every declaration so it wins over the page's own rules. Keep text readable and keep
+#cmd usable. No url(), no @import.
+Patterns (adapt them, they are not answers):
+- a shape for every window: .win { clip-path: polygon(...) !important; }   (percent points; text inside may need padding)
+- a whole-screen effect: html { filter: sepia(1) contrast(1.1) !important; }
+- a typeface everywhere: * { font-family: monospace !important; letter-spacing: .05em !important; }
+- tilted windows: .win { transform: rotate(-3deg) !important; }
+Reply with only the CSS (at most 25 rules, no explanation, no code fences). If part of the request is impossible with CSS,
+add one last line starting with NOTE: and one short plain sentence saying which part."""
+
+
+@tool("restyle", "Change how the interface looks in any way the fixed look options can't: shapes, a whole style or era, "
+      "effects, filters, text styles, anything visual the owner describes. Give the owner's own words; the style is written "
+      "and applied. 'back to the default look' undoes it.",
+      {"description": {"type": "string", "description": "what the owner wants it to look like, in their words"},
+       "add": {"type": "boolean", "description": "true to add to the current custom style instead of replacing it"}},
+      ["description"], risk=CHANGE)
+def restyle(a, ctx):
+    want = str(a.get("description", "")).strip()
+    if not want:
+        return "error: say what it should look like"
+    try:
+        text = llm.chat([{"role": "system", "content": _RESTYLE_SYSTEM}, {"role": "user", "content": f"The owner asked: {want}"}],
+                        max_tokens=900, temperature=0.2, think=False).get("content", "")
+    except Exception as e:
+        return f"error: the style could not be written ({e})"
+    text = re.sub(r"```(?:css)?", "", text)
+    note = ""
+    m = re.search(r"^\s*NOTE:\s*(.+)$", text, re.M)
+    if m:
+        note, text = m.group(1).strip(), text[:m.start()]
+    if text.count("{") > text.count("}"):              # cut off mid-rule: keep the complete rules
+        text = text[:text.rfind("}") + 1]
+    out = {"note": note}
+    css = _clean_css(text)
+    if len(css.strip()) < 10 or "{" not in css:
+        return "error: no usable style came out; try describing it differently"
+    _undo_push("settings", _settings_snapshot())
+    old = (config.settings.get("appearance", {}) or {}).get("style") or ""
+    css = (old + "\n" + css) if a.get("add") and old else css
+    config.settings.set("appearance.style", css)
+    ui.reload_theme()
+    ctx.redraw()
+    note = str(out.get("note") or "").strip()
+    return (f"restyled: {want}." + (f" Not exactly possible: {note}" if note and not re.match(r"(?i)none|n/?a|nothing", note) else "") +
+            " Say 'back to the default look' to undo (or press Super+Shift+Escape). Tell the owner in one sentence.")
 
 
 @tool("show_panel", "Show one of the system's screens to the user.",

@@ -1528,4 +1528,40 @@ def match(text):
         if len(fact) < 3 or _NOT_MEMORY.search(t):
             return None
         return ("remember", {"fact": _first_person(fact)})
-    return None
+    return _restyle(t)
+
+
+# A whole-look change the fixed look options can't express ("make the windows look like ...", "turn the interface into ...")
+# goes to restyle, which writes a style for it; a known theme or option is left to set_appearance and the rules above.
+_RESTYLE = re.compile(r"^(?:please\s+)?(?:(?:make|turn|change|convert|transform|redo|restyle|redesign)\s+(?:all\s+(?:of\s+)?)?(?:the\s+|my\s+|this\s+)?"
+                      r"(?:entire\s+|whole\s+)?(?P<what>interface|ui|desk(?:top)?|screen|windows?|everything|it|look|buttons?|text|title ?bars?|icons?|menus?)"
+                      r"\s+(?:look\s+)?(?:(?:like|into|to|in(?:\s+the\s+style\s+of)?|as)\s+)?(?P<how>.+)"
+                      r"|(?:i\s+want|give\s+me)\s+(?:the\s+|my\s+|a\s+)?(?:interface|desk(?:top)?|screen|windows?|everything|look)\s+(?:to\s+look\s+|that\s+looks\s+|looking\s+)?(?:like\s+)?(?P<how2>.+))$", re.I)
+_LOOK_HANDLED = re.compile(r"^(?:dark|light|bigger|smaller|larger|default|normal|back|readable|brighter|dimmer|louder|quieter|"
+                           r"(?:full|half)\s*screen|maximi[sz]ed?|minimi[sz]ed?|on|off)\b", re.I)
+
+
+def _restyle(t):
+    m = _RESTYLE.match(t.rstrip(".!"))
+    if not m:
+        return None
+    how = (m.group("how") or m.group("how2") or "").strip()
+    if not how or _LOOK_HANDLED.match(how):
+        return None
+    if (m.group("what") or "").lower() == "screen" and re.search(r"upside|rotat|flip|sideways|portrait|landscape", how, re.I):
+        return None                                   # the real screen turns (display rotation), not just the desk's look
+    if (m.group("what") or "").lower() == "it" and not re.search(r"\blook\b|\bstyle\b|\binto\b", t, re.I):
+        return None                                   # "make it X" alone could be about anything
+    from . import themes
+    short = len(re.findall(r"[\w']+", how)) <= 3
+    if short and ui_color(how):
+        return None                                   # a colour: the look options do it exactly (rules above)
+    if short and themes.resolve(how):
+        return ("set_appearance", {"theme": how})      # a look the OS knows by name
+    return ("restyle", {"description": t.strip()})
+
+
+def ui_color(words):
+    from . import ui
+    w = re.sub(r"^(?:all\s+|completely\s+|totally\s+)", "", str(words).lower()).strip()
+    return ui.parse_color(w) is not None

@@ -116,8 +116,9 @@ def tool_schemas():
     is compact and cut to what leaves room for the system prompt, the recent conversation, the request and the
     answer; the same list every time, so the prompt cache holds."""
     n = llm.context_size()
+    # compact on every machine: the full list grew past 8k tokens, which a CPU reads for minutes whenever the cache misses
     if not n or n >= 12000:
-        return tools.schemas()
+        return tools.schemas(compact=True)
     return tools.schemas(compact=True, budget=max(1500, n - 3400))
 
 

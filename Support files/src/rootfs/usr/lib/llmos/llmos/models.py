@@ -268,7 +268,10 @@ def serve_argv():
     ctx = 16384 if spare > 2.5 else 8192 if spare > 1.6 else 6144 if spare > 0.5 else 4096
     argv = ["llama-server", "-m", path_of(m), "--host", "127.0.0.1", "--port", "8080",
             "--jinja", "-c", str(ctx), "-t", str(threads), "-np", "1",
-            "--no-webui", "--no-slots", "--cache-reuse", "256", "--cache-ram", "0"]
+            "--no-webui", "--no-slots", "--cache-reuse", "256",
+            # with memory to spare, earlier prompts are kept in RAM: a side job (a translation, a style, a decision) no
+            # longer pushes out the main prompt, which a CPU would otherwise read again for minutes
+            "--cache-ram", "1024" if spare > 4.0 else "512" if spare > 3.0 else "0"]
     d = draft_path(m)
     if d and os.path.exists(d):
         # multi-token-prediction draft head: ~1.5x faster generation, same output
