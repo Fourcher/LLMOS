@@ -797,6 +797,11 @@ _ONLY_IF_ASKED = {
     "mail_reply": r"\b(send|reply|respond|answer|write|e-?mail|mail|tell|let .{0,30} know|forward|notify|message)\b",
     "mail_delete": r"\b(delete|trash|remove|get rid|bin|clean|clear|zero)\b",
     "system_power": r"\b(shut|power|restart|reboot|turn (it )?off|switch off)\b",
+    # a lasting fact only when the owner said something about themselves: a passing request ("share the app with my
+    # friend") saved as a fact colours every later answer
+    "remember": r"\b(remember|don'?t forget|keep in mind|note (?:that|down)|make a note|call me|my name|i am|i'?m|i like|i love|i hate|i prefer|"
+                r"i (?:don'?t|do not) (?:like|want|eat|drink)|my (?:\w+ ){0,2}(?:is|are|was)|i live|i work|i have|i use|i speak|from now on|"
+                r"always|never|every time|i'?d rather|favou?rite|allergic|birthday)\b",
     # the vault's passphrase only when it is what was asked about ("store my passwords" is the browser's job, not this)
     "set_passphrase": r"\b(passphrase|pass phrase|vault|lock (?:my |the )?(?:data|files|computer)|(?:set|change|new|reset|choose|pick|make) (?:a |my |the )?(?:login |computer |unlock )?password)\b",
     # a setting or the look changes only when the request is about it ("open the internet" must not turn it off)
