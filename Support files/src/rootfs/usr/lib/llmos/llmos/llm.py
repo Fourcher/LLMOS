@@ -13,8 +13,10 @@ import math
 import os
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.parse
 
@@ -38,9 +40,31 @@ class CloudError(Exception):
 
 # ------------------------------------------------------------------ the on-device model
 
+class Cancelled(Exception):
+    """The owner pressed Stop while the model was working."""
+
+
+_OPEN = set()                 # connections to the model in progress (abort() closes them)
+_OPEN_LOCK = threading.Lock()
+
+
 def _conn(timeout=900):
     u = urllib.parse.urlparse(config.llama_url())
     return http.client.HTTPConnection(u.hostname, u.port or 80, timeout=timeout)
+
+
+def abort():
+    """Stop: cut every request to the on-device model now. Reading a long request can take the model a minute
+    before its first word; closing the connection makes llama-server drop the work at once."""
+    with _OPEN_LOCK:
+        conns = list(_OPEN)
+    for c in conns:
+        c._llmos_aborted = True
+        try:
+            if c.sock:
+                c.sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
 
 
 def health():
@@ -118,6 +142,8 @@ def _read_stream(lines, on_text):
                 content += d["content"]
                 if on_text:
                     on_text(d["content"])
+            if d.get("tool_calls") and on_text:
+                on_text("")                 # (no words to show, but a Stop pressed while a tool call is written is seen at once)
             for tc in d.get("tool_calls") or []:
                 e = calls.setdefault(tc.get("index", 0), {"id": "", "name": "", "arguments": ""})
                 if tc.get("id"):
@@ -149,13 +175,26 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
     if json_schema:
         body["response_format"] = {"type": "json_object", "schema": json_schema}
     c = _conn()
+    with _OPEN_LOCK:
+        _OPEN.add(c)
     try:
-        c.request("POST", "/v1/chat/completions", json.dumps(body),
-                  {"Content-Type": "application/json"})
-        r = c.getresponse()
-    except OSError as e:
-        c.close()
-        raise ModelDown(str(e))
+        return _chat_on(c, body, on_text)
+    except (OSError, http.client.HTTPException, ValueError) as e:
+        if getattr(c, "_llmos_aborted", False):
+            raise Cancelled()
+        if isinstance(e, OSError):
+            raise ModelDown(str(e))
+        raise ModelError(str(e)[:200])
+    finally:
+        with _OPEN_LOCK:
+            _OPEN.discard(c)
+        c.close()                     # closing mid-stream (Ctrl+C, Stop) makes llama-server stop generating
+
+
+def _chat_on(c, body, on_text):
+    c.request("POST", "/v1/chat/completions", json.dumps(body),
+              {"Content-Type": "application/json"})
+    r = c.getresponse()
     if r.status != 200:
         raw = r.read()[:600].decode("utf-8", "replace")
         c.close()
@@ -166,11 +205,7 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
         if "context" in detail.lower() or "exceed" in detail.lower() or "too long" in detail.lower():
             detail = "the request was too long for the model's memory; try a shorter one"
         raise ModelError(str(detail)[:200])
-    try:
-        content, calls, timings, _ = _read_stream(r, on_text)
-    finally:
-        # closing mid-stream (Ctrl+C) makes llama-server stop generating
-        c.close()
+    content, calls, timings, _ = _read_stream(r, on_text)
     return {"content": content, "tool_calls": calls, "timings": timings}
 
 

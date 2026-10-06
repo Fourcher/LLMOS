@@ -1311,7 +1311,7 @@ def _everyday2(text):
     if m and (m.group("w") or m.group("w2") or low == "dictionary"):
         w = m.group("w") or m.group("w2")
         return ("browse", {"site": f"https://www.merriam-webster.com/dictionary/{_u.quote(w)}" if w else "https://www.merriam-webster.com"})
-    m = re.match(r"^(?:connect|add|sync|open|set\s+up)\s+(?:my\s+)?(?P<w>google|outlook|icloud|apple)\s+calendar$", low)
+    m = re.match(r"^(?:connect|add|sync|open|set\s+up)\s+(?:my\s+)?(?P<w>google|outlook|icloud|apple)(?:\s*(?:/|or|and)\s*(?:google|outlook|icloud|apple))?\s+calendars?$", low)
     if m:
         return ("browse", {"site": {"google": "https://calendar.google.com", "outlook": "https://outlook.live.com/calendar",
                                     "icloud": "https://www.icloud.com/calendar", "apple": "https://www.icloud.com/calendar"}[m.group("w")]})

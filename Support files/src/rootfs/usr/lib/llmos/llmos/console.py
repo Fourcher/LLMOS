@@ -39,7 +39,8 @@ class ConsoleCtx:
         return ui.Stream()
 
     def on_text(self, stream, text):
-        stream.feed(text)
+        if text:
+            stream.feed(text)
 
     def end_stream(self, stream):
         stream.end()

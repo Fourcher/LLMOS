@@ -347,6 +347,8 @@ class DeskCtx:
     def on_text(self, stream, text):
         if self.cancel.is_set():
             raise agent.Cancelled()
+        if not text:
+            return
         self.d.emit({"t": "reply.delta", "text": text, "chat": getattr(self, "chat_id", "main")})
 
     def end_stream(self, stream):
@@ -1202,8 +1204,7 @@ class Desk:
         elif t == "voice":
             self.voice_turn()
         elif t == "cancel":
-            self.ctx.cancel.set()
-            self.decline_dialogs()
+            self.stop_all()
         elif t == "window.closed" and str(msg.get("id")) == "away":
             self.windows.pop("away", None)
             store.mark_seen(getattr(self, "away_ids", []))
@@ -3305,9 +3306,11 @@ class Desk:
         except Exception as e:
             sys.stderr.write(f"desk: compositor settings not applied: {e}\n")
 
-    def lock(self):
-        self.lock_stuck = False
-        self.ctx.cancel.set()               # a turn in progress stops; nothing queued runs behind the lock
+    def stop_all(self):
+        """Stop: the request in progress stops, a question it was asking is answered no, and what was waiting behind it
+        is dropped (pressing Stop means stop, not 'go on with the next one')."""
+        self.ctx.cancel.set()
+        llm.abort()                   # (the model may still be reading the request: that stops too)
         self.decline_dialogs()
         while True:
             try:
@@ -3316,6 +3319,10 @@ class Desk:
                 break
             if done:
                 done.set()
+
+    def lock(self):
+        self.lock_stuck = False
+        self.stop_all()                     # a turn in progress stops; nothing queued runs behind the lock
         self._keybinds(False)
         # locking closes every program of this session (a browser with its profile in the vault, a terminal
         # sitting in the home folder, a player on a file in it would otherwise keep the vault open)
@@ -3720,8 +3727,7 @@ class Desk:
                     self.emit({"t": "dialog.close", "id": did})
                 out = {"ok": True}
             elif cmd == "cancel":
-                self.ctx.cancel.set()
-                self.decline_dialogs()
+                self.stop_all()
                 out = {"ok": True}
             elif cmd == "close":
                 self.close_window(arg)
@@ -3764,6 +3770,7 @@ class Desk:
                 system.apply_firewall("yes")
                 if self.screen == "lock":
                     self.unlock("x")
+                record.stop()                 # (a recording one case started must not run on through the rest)
                 self.chat().new_topic()
                 self.push_status()
                 out = {"ok": True}

@@ -85,8 +85,7 @@ def system_prompt():
 MAX_STEPS = 8
 
 
-class Cancelled(Exception):
-    pass
+Cancelled = llm.Cancelled      # (one exception: Stop pressed while the model reads or writes, or between tools)
 
 
 # "ask Claude: …" / "online: …" sends this one request to the online model (when an account exists);
@@ -482,6 +481,8 @@ def run(ctx, user_text, history):
     while True:
         chat = llm.cloud_chat if where == "cloud" else llm.chat
         for step in range(MAX_STEPS):
+            if getattr(ctx, "cancel", None) is not None and ctx.cancel.is_set():
+                raise Cancelled()
             stream = ctx.new_stream()
             est = expect_seconds(where, fresh)
             if est:
@@ -806,6 +807,9 @@ _ONLY_IF_ASKED = {
 
 
 def execute(ctx, name, arguments):
+    cancel = getattr(ctx, "cancel", None)
+    if cancel is not None and cancel.is_set():        # the owner pressed Stop: no further step of this turn runs
+        raise Cancelled()
     tool = tools.REGISTRY.get(name)
     if not tool or not tool.available():
         return f"error: no such tool '{name}'"
