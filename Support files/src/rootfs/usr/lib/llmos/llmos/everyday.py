@@ -37,7 +37,7 @@ MATCH = re.compile(
     r"(?:keep|stay|put) (?:this |it |the window )?(?:always )?on top|always on top|picture[- ]in[- ]picture|\bpip\b|"
     r"(?:other|second|external|left|right) (?:monitor|screen|display)|new (?:workspace|desktop)|(?:game ?)?controller|gamepad|joystick|"
     r"phone'?s? (?:internet|data|hotspot)|tether|hotspot|drawing tablet|wacom|pen tablet|touch ?screen|"
-    r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b|encrypt|stolen|guest|someone else is using|disk encryption)", re.I)
+    r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b|encrypt|stolen|guest|someone else is using|disk encryption|passwords\b|password (?:manager|keeper|vault|safe))", re.I)
 
 
 def _say(desk, line, text):
@@ -768,6 +768,10 @@ def privacy(desk, line, low):
                                     "even while the computer is on. The system itself (programs, the AI model) isn't encrypted; it holds nothing of yours.")
         return _say(desk, line, "Your files are NOT encrypted yet: anyone with the disk could read them. Say “set a passphrase” and I'll move "
                                 "them into an encrypted vault (LUKS, AES-256) that opens only with that passphrase.")
+    if re.search(r"(?:store|save|keep|manage|remember|organi[sz]e) (?:all )?(?:my |the )?passwords|password (?:manager|keeper|vault|safe)|where (?:are|do i find) my (?:saved )?passwords", low):
+        return _say(desk, line, "Firefox keeps your passwords: when you sign in somewhere it offers to save it, and fills it in next time. See or "
+                                "change them at about:logins (they're inside your encrypted vault). For a separate password manager say "
+                                "\u201cinstall keepassxc\u201d (offline) or use Bitwarden's add-on in Firefox (syncs with your phone).")
     if re.search(r"guest (?:mode|account|session|user)|someone else (?:is using|uses|wants to use|will use) (?:my |the |this )?computer|let (?:someone|a friend|my \w+) use (?:my |the |this )?computer", low):
         return _say(desk, line, "There's no guest mode yet: whoever uses the computer uses it as you, with your files. For a short while: open Firefox "
                                 "in a private window (Ctrl+Shift+P) for them, and say “hands-on” so I ask before every change. "

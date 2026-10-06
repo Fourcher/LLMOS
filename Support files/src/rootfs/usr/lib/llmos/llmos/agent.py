@@ -797,6 +797,8 @@ _ONLY_IF_ASKED = {
     "mail_reply": r"\b(send|reply|respond|answer|write|e-?mail|mail|tell|let .{0,30} know|forward|notify|message)\b",
     "mail_delete": r"\b(delete|trash|remove|get rid|bin|clean|clear|zero)\b",
     "system_power": r"\b(shut|power|restart|reboot|turn (it )?off|switch off)\b",
+    # the vault's passphrase only when it is what was asked about ("store my passwords" is the browser's job, not this)
+    "set_passphrase": r"\b(passphrase|pass phrase|vault|lock (?:my |the )?(?:data|files|computer)|(?:set|change|new|reset|choose|pick|make) (?:a |my |the )?(?:login |computer |unlock )?password)\b",
     # a setting or the look changes only when the request is about it ("open the internet" must not turn it off)
     "change_setting": r"\b(internet|online|offline|network|tor|autonom\w*|hands|ask|asks|asking|confirm\w*|permission|brain|claude|"
                       r"cloud|online model|speak\w*|voice|aloud|think\w*|name|call me|focus|guidance|lectures?|caution\w*|"
