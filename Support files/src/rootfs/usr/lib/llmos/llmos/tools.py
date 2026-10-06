@@ -2547,6 +2547,14 @@ def open_file(a, ctx):
         return show_files({"path": path}, ctx)
     if a.get("edit") and not os.path.exists(path) and os.path.isdir(os.path.dirname(path)):
         open(path, "a").close()          # "edit my .bashrc" when there is none yet: start it
+    if not os.path.exists(path) and "/" not in str(a.get("path", "")):
+        # a name alone ("open todo.txt"): the file of that name wherever it is in the owner's folders
+        hits = find_paths(str(a.get("path", "")))
+        exact = [h for h in hits if os.path.basename(h).lower() == str(a.get("path", "")).lower()]
+        if exact or hits:
+            path = (exact or hits)[0]
+            if os.path.isdir(path):
+                return show_files({"path": path}, ctx)
     if not os.path.isfile(path):
         return f"error: there is no file {path}"
     name = os.path.basename(path)

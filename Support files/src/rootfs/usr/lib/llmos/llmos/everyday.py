@@ -43,6 +43,10 @@ MATCH = re.compile(
     r"\b(?:split|divide) \$?\d|time (?:is it )?in [a-z]|how (?:long|much time) (?:is it )?(?:until|till) \d|^(?:how (?:do (?:you|i) )?)?spell\b|"
     r"^define\b|definition of|what does \w+ mean|meaning of|words? for \w+$|synonyms? (?:of|for)|"
     r"\d+\s*(?:degrees|°)?\s*(?:fahrenheit|celsius|f|c)\b|\d+\s*(?:kg|kilos?|pounds?|lbs?|miles?|km|feet|foot|inch(?:es)?|cm|meters?|metres?|ounces?|oz|grams?|liters?|litres?|gallons?|cups?|mph)\s+(?:to|in|into)\b|"
+    r"how (?:big|large) is|how much (?:space|room) does|how many (?:files|things|items|photos|pictures|songs) (?:are |do i have )?in|"
+    r"(?:what|which) (?:wi-?fi|network)|what(?:'s| is) (?:my |the )?(?:wi-?fi|network)|am i (?:on|connected to) (?:the )?wi-?fi|"
+    r"what(?:'s| is) (?:this |the )?(?:playing|song|track)|what song is this|what am i listening to|now playing|"
+    r"(?:open|show|view|play)(?: me)? (?:the |my )?(?:last|latest|newest|most recent|recent) (?:screenshot|photo|picture|image|download|pdf|document|video|song|recording)|"
     r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)", re.I)
 
 
@@ -1110,9 +1114,100 @@ def quick(desk, line, low):
     return False
 
 
+_FOLDERS = {"documents": "Documents", "docs": "Documents", "downloads": "Downloads", "desktop": "Desktop", "pictures": "Pictures",
+            "photos": "Pictures", "music": "Music", "videos": "Videos", "apps": "Apps", "home": "", "home folder": "", "trash": ".Trash"}
+_KINDS = {"screenshot": ("~/Pictures", r"^screenshot", None), "photo": ("~/Pictures", None, (".jpg", ".jpeg", ".png", ".heic", ".webp")),
+          "picture": ("~/Pictures", None, (".jpg", ".jpeg", ".png", ".heic", ".webp", ".gif")), "image": ("~/Pictures", None, (".jpg", ".jpeg", ".png", ".gif", ".webp")),
+          "download": ("~/Downloads", None, None), "pdf": ("~", None, (".pdf",)), "document": ("~/Documents", None, None),
+          "video": ("~/Videos", None, (".mp4", ".mkv", ".webm", ".mov")), "song": ("~/Music", None, (".mp3", ".m4a", ".flac", ".ogg", ".wav")),
+          "recording": ("~/Music", r"^recording", None)}
+
+
+def _human(n):
+    for u in ("bytes", "KB", "MB", "GB", "TB"):
+        if n < 1024 or u == "TB":
+            return f"{n:.0f} {u}" if u == "bytes" else f"{n:.1f} {u}"
+        n /= 1024
+
+
+def files_and_status(desk, line, low):
+    from . import tools
+    q = low.strip().rstrip("?.!")
+    # a folder's size and how many files are in it, counted, not guessed
+    m = re.fullmatch(r"how (?:big|large) is (?:my |the )?(?P<f>[a-z ]+?)(?: folder)?|how much (?:space|room) (?:does|do) (?:my |the )?(?P<f2>[a-z ]+?)(?: folder)? (?:take|use)(?: up)?"
+                     r"|how many (?:files|things|items|photos|pictures|songs) (?:are |do i have )?in (?:my |the )?(?P<f3>[a-z ]+?)(?: folder)?", q)
+    if m:
+        name = (m.group("f") or m.group("f2") or m.group("f3")).strip()
+        if name in _FOLDERS:
+            d = tools._path("~/" + _FOLDERS[name]) if _FOLDERS[name] else tools._path("~")
+            size, count = 0, 0
+            for root, _, fs in os.walk(d):
+                for f in fs:
+                    try:
+                        size += os.path.getsize(os.path.join(root, f))
+                        count += 1
+                    except OSError:
+                        pass
+            label = name.capitalize() if name not in ("home", "home folder") else "Your home folder"
+            return _say(desk, line, f"{label}: {count} file(s), {_human(size)}.")
+    # which network
+    if re.fullmatch(r"(?:what|which) (?:wi-?fi|wifi network|network)(?: am i| is this computer| are we)? (?:on|connected to|using)|what(?:'s| is) (?:my |the )?(?:wi-?fi|network)(?: name| called)?|am i (?:on|connected to) (?:the )?wi-?fi", q):
+        from . import desk as deskmod
+        ssid = deskmod._wifi_now()
+        if ssid:
+            return _say(desk, line, f"You're on the Wi-Fi network “{ssid}”.")
+        try:
+            out = subprocess.run(["ip", "-4", "-o", "route", "show", "default"], capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        if out.strip():
+            dev = re.search(r"\bdev (\S+)", out)
+            return _say(desk, line, f"You're connected by cable ({dev.group(1) if dev else 'wired'}), not Wi-Fi.")
+        return _say(desk, line, "You're not connected to any network. Say “wifi” to pick one.")
+    # what's playing
+    if re.fullmatch(r"what(?:'s| is) (?:this |the )?(?:playing|song|track|music)(?: called)?(?: now| right now)?|what song is this|what am i listening to|now playing", q):
+        np = getattr(desk, "_np", None)
+        from . import media
+        if np and media.playing():
+            return _say(desk, line, f"Playing: {np.get('title', 'something')}" + (f" ({np['channel']})" if np.get("channel") else "") + ".")
+        if shutil.which("playerctl"):
+            try:
+                env = dict(os.environ, **(media.desk_env() or {}))
+                st = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=5, env=env).stdout.strip()
+                if st in ("Playing", "Paused"):
+                    meta = subprocess.run(["playerctl", "metadata", "--format", "{{title}}|{{artist}}"], capture_output=True, text=True,
+                                          timeout=5, env=env).stdout.strip()
+                    title, _, artist = meta.partition("|")
+                    return _say(desk, line, f"{'Playing' if st == 'Playing' else 'Paused'}: {title or 'something'}" + (f" by {artist}" if artist else "") + ".")
+            except (OSError, subprocess.SubprocessError):
+                pass
+        return _say(desk, line, "Nothing is playing.")
+    # the newest file of a kind: "open the last screenshot", "show my latest photo"
+    m = re.fullmatch(r"(?:open|show(?: me)?|view|play) (?:the |my )?(?:last|latest|newest|most recent|recent) (?P<k>screenshot|photo|picture|image|download|pdf|document|video|song|recording)s?", q)
+    if m:
+        base, name_rx, exts = _KINDS[m.group("k")]
+        best = None
+        for root, dirs, fs in os.walk(tools._path(base)):
+            dirs[:] = [x for x in dirs if not x.startswith(".")]
+            for f in fs:
+                if f.startswith(".") or (name_rx and not re.search(name_rx, f, re.I)) or (exts and not f.lower().endswith(exts)):
+                    continue
+                p = os.path.join(root, f)
+                try:
+                    if best is None or os.path.getmtime(p) > os.path.getmtime(best):
+                        best = p
+                except OSError:
+                    pass
+        if not best:
+            return _say(desk, line, f"There's no {m.group('k')} yet.")
+        tools.open_file({"path": best}, desk.ctx)
+        return _say(desk, line, f"Opened {os.path.basename(best)}.")
+    return False
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (quick, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (quick, files_and_status, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True

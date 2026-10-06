@@ -884,6 +884,8 @@ _VOL = re.compile(r"^\s*(?:please\s+)?(?:(?:set\s+|make\s+|put\s+)?(?:the\s+)?(?
 
 
 def _device(text):
+    text = re.sub(r"(?i)\b(?:a\s+(?:little|bit|touch|notch|tad)(?:\s+bit)?|slightly|somewhat|just)\s+", "", text)
+    text = re.sub(r"(?i)\s+(?:a\s+(?:little|bit|touch|notch|tad)(?:\s+bit)?|slightly|some)\s*([.!]?)\s*$", r"\1", text)
     m = _BRIGHT.match(text)
     if m and not _QUESTION.search(text):
         if m.group("n"):
@@ -1236,6 +1238,9 @@ def _everyday(text):
         if q.strip():
             return ("find_files", {"query": " ".join(q.split())})
     m = _SITE.match(text)
+    if m and re.search(r"\.(?:txt|md|pdf|docx?|odt|rtf|xlsx?|ods|csv|pptx?|odp|jpe?g|png|gif|webp|svg|mp3|m4a|wav|flac|ogg|mp4|mkv|mov|webm|zip|7z|tar|gz|html?|json|py|sh)$",
+                      m.group("site").strip(), re.I) and not re.match(r"(?i)^(?:https?://|www\.)", m.group("site").strip()):
+        return ("open_file", {"path": m.group("site").strip()})
     if m:
         site = m.group("site").strip().lower()
         if site in T.SITES or re.match(r"^[\w.-]+\.[a-z]{2,}(/\S*)?$", site):
@@ -1317,6 +1322,44 @@ def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
     import urllib.parse as _u
+    # "set a 3 minute timer", "3 minute timer", "a 90 second timer for the eggs"
+    m = re.match(r"^(?:please\s+)?(?:set\s+|start\s+|make\s+)?(?:a|an|me\s+a)?\s*(?P<n>\d+(?:\.\d+)?|one|two|three|four|five|ten|fifteen|twenty|thirty|half\s+an?)\s*[- ]?"
+                 r"(?P<u>sec(?:ond)?s?|min(?:ute)?s?|h(?:ou)?rs?)\s+timer(?:\s+for\s+(?P<what>.+))?$", low)
+    if m:
+        u = {"s": "seconds", "m": "minutes", "h": "hours"}[m.group("u")[0]]
+        n = m.group("n").replace("half an", "30").replace("half a", "30")
+        if "half" in m.group("n"):
+            u = "minutes" if u == "hours" else u
+        length = f"{n} {u}"
+        return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
+    # a new text file: "make a text file called todo on my desktop"
+    m = re.match(r"^(?:please\s+)?(?:make|create|start|new)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?(?:empty\s+|blank\s+)?(?:text\s+|txt\s+|plain\s+text\s+)?file\s+"
+                 r"(?:called|named)\s+(?P<n>[\w .,'-]+?)(?:\s+(?:on|in)\s+(?:my\s+|the\s+)?(?P<w>desktop|documents|downloads|home(?:\s+folder)?))?$", low)
+    if m:
+        name = t[m.start("n"):m.end("n")].strip().strip("'\"")
+        if not re.search(r"\.\w{1,5}$", name):
+            name += ".txt"
+        where = (m.group("w") or "documents").split()[0]
+        folder = "~" if where == "home" else "~/" + where.capitalize()
+        return ("write_file", {"path": f"{folder}/{name}", "content": "", "append": True})   # (an existing file is kept as it is)
+    # sort a folder: "sort my downloads by newest"
+    m = re.match(r"^(?:please\s+)?(?:sort|order|arrange|show)\s+(?:my\s+|the\s+)?(?P<f>desktop|documents|downloads|pictures|photos|music|videos|files|home folder)"
+                 r"(?:\s+folder)?\s+(?:by\s+|with\s+(?:the\s+)?)?(?P<o>newest|latest|most recent|date|oldest|name|alphabetical(?:ly)?|a-z|size|biggest|largest)(?:\s+first)?$", low)
+    if m:
+        f = {"photos": "Pictures", "files": "", "home folder": ""}.get(m.group("f"), m.group("f").capitalize())
+        o = m.group("o")
+        order = "date" if o in ("newest", "latest", "most recent", "date", "oldest") else "size" if o in ("size", "biggest", "largest") else "name"
+        return ("show_files", {"path": "~/" + f if f else "~", "sort": order})
+    # email straight to an address: "email craig@example.com saying the meeting moved to 3pm"
+    m = re.match(r"^(?:please\s+)?(?:e-?mail|send\s+(?:an\s+)?e-?mail\s+to|write\s+(?:an\s+)?e-?mail\s+to|message)\s+(?P<to>[\w.+-]+@[\w.-]+)\s*,?\s+"
+                 r"(?:saying|that|to\s+say|telling\s+(?:him|her|them)|and\s+(?:say|tell\s+(?:him|her|them))|:)\s*(?P<b>.+)$", t, re.I)
+    if m:
+        body = m.group("b").strip().strip("'\"")
+        body = body[:1].upper() + body[1:]
+        if not re.search(r"[.!?]$", body):
+            body += "."
+        subject = " ".join(re.sub(r"[.!?]$", "", body).split()[:7])
+        return ("mail_send", {"to": m.group("to"), "subject": subject, "body": body})
     # alarms and the list of what's scheduled
     m = re.match(r"^(?:please\s+)?(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)(?:\s+(?:to|and)\s+(?P<why>.+))?$"
                  r"|^wake\s+me\s+(?:up\s+)?(?:at|for)\s+(?P<w2>.+?)(?:\s+(?:to|and)\s+(?P<why2>.+))?$", low)
@@ -1663,6 +1706,8 @@ def _restyle(t):
     how = (m.group("how") or m.group("how2") or "").strip()
     if not how or _LOOK_HANDLED.match(how):
         return None
+    if re.search(r"\b(?:dimm?(?:er)?|brighter|brightness|darker|lighter)\b", how, re.I) and (m.group("what") or "").lower() in ("screen", "display", "it"):
+        return None                                   # the screen's brightness, not its style
     if (m.group("what") or "").lower() == "screen" and re.search(r"upside|rotat|flip|sideways|portrait|landscape", how, re.I):
         return None                                   # the real screen turns (display rotation), not just the desk's look
     if (m.group("what") or "").lower() == "it" and not re.search(r"\blook\b|\bstyle\b|\binto\b", t, re.I):
