@@ -1321,6 +1321,9 @@ def _everyday2(text):
                  r"|^(?:ocr|scan)\s+(?:this|that|the|my)?\s*(?:image|picture|screenshot)(?:\s+for\s+text)?$|^what\s+does\s+(?:this|that|the)\s+(?:screenshot|image|picture)\s+say$", low)
     if m:
         return ("text_from_image", {})
+    if re.match(r"^(?:(?:make|set|put|change)\s+)?(?:everything|all|the\s+text|text|it)?\s*(?:back\s+)?(?:to\s+)?(?:normal|regular|default|standard)\s+(?:text\s+)?size(?:d)?(?:\s+(?:everything|again|text))?$"
+                r"|^(?:everything|text)\s+(?:back\s+)?(?:to\s+)?(?:normal|regular|default)\s+size$", low):
+        return ("set_appearance", {"scale": "default"})
     m = re.match(r"^(?:share|send)\s+(?:this|that|the|my|a)?\s*(?P<f>[\w .~/-]+?)?\s*(?:folder|files?|photos|pictures|documents)?\s+"
                  r"(?:with|to)\s+(?:my\s+|the\s+|another\s+|other\s+)*(?:other\s+)?(?:computer|laptop|pc|mac|phone|tablet|ipad|devices?)s?(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$"
                  r"|^share\s+(?:this|that|the|my)?\s*(?P<f2>[\w .~/-]+?)?\s*folder(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$", low)

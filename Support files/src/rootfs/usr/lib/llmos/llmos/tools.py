@@ -676,7 +676,9 @@ def set_appearance(a, ctx):
         except OSError:
             pass
     ctx.redraw()
-    return "appearance updated: " + ", ".join(changed)
+    still = (config.settings.get("appearance", {}) or {}).get("style")
+    return "appearance updated: " + ", ".join(changed) + \
+        ("; a custom style is still on and may override this (say 'back to the default look' to remove it)" if still and not a.get("theme") else "")
 
 
 _RESTYLE_SYSTEM = """You restyle a desktop's interface by writing CSS for its page (an HTML page in a web view). Parts:
@@ -709,9 +711,13 @@ def restyle(a, ctx):
     want = str(a.get("description", "")).strip()
     if not want:
         return "error: say what it should look like"
+    msgs = [{"role": "system", "content": _RESTYLE_SYSTEM}, {"role": "user", "content": f"The owner asked: {want}"}]
     try:
-        text = llm.chat([{"role": "system", "content": _RESTYLE_SYSTEM}, {"role": "user", "content": f"The owner asked: {want}"}],
-                        max_tokens=900, temperature=0.2, think=False).get("content", "")
+        text = llm.chat(msgs, max_tokens=900, temperature=0.2, think=False).get("content", "")
+        if "{" not in text:                            # words instead of CSS: once more, firmly
+            msgs += [{"role": "assistant", "content": text[:400]},
+                     {"role": "user", "content": "That has no CSS. Reply with CSS rules only, starting with a selector, e.g. html { ... }"}]
+            text = llm.chat(msgs, max_tokens=900, temperature=0.2, think=False).get("content", "")
     except Exception as e:
         return f"error: the style could not be written ({e})"
     text = re.sub(r"```(?:css)?", "", text)

@@ -3281,6 +3281,11 @@ class Desk:
         parts = [p.strip(" ,.") for p in re.split(r"\s*(?:,\s*)?\b(?:and then|and also|then|and)\b\s*", text) if p.strip(" ,.")]
         if len(parts) < 2 or len(parts) > 3:
             return None
+        # a chain, not a list: a later step works on what an earlier one made ("turn it into a pdf, then email it"), or a
+        # part is itself several steps; done one by one, each would lose what "it" is, so the model does the whole thing
+        if any(re.search(r"\b(?:it|its|them|they|that|those|this|these|the result|the file|the same)\b", p, re.I) for p in parts[1:]) \
+                or any("," in p for p in parts):
+            return None
         if all(self._instant(p) or intent.match(p) for p in parts):
             return parts
         return None
@@ -3914,7 +3919,7 @@ class Desk:
                 for wid in list(self.windows):
                     self.close_window(wid)
                 for k, v in (("autonomy", "balanced"), ("internet", "yes"), ("brain", "local"), ("guidance", "owner"), ("tor", False),
-                             ("screen_off", 0), ("sleep_after", 0), ("do_not_disturb", False), ("language", "English")):
+                             ("screen_off", 0), ("sleep_after", 0), ("do_not_disturb", False), ("language", "English"), ("autolock", 0)):
                     config.settings.set(k, v)
                 self.apply_theme()            # (a test that changed the language must not leave the next one in Spanish)
                 self.start_idle()             # tests drive the desk without touching the keyboard: the screen must stay on

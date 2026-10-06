@@ -817,7 +817,9 @@ _ONLY_IF_ASKED = {
                                                  r"modo|oscuro|claro|tema|sombre|clair|th[eè]me|dunkel|hell|modus|escuro|scuro|chiaro|fuente|letra|police|schrift|"
                                                  r"grande|colou?r|couleur|farbe|windows?|interface|ui|appearance|design|aesthetic|vibe|shapes?|like (?:a|an|the|old|my)|"
                                                  r"upside|tilt\w*|spin\w*|rotat\w*|filters?|sepia|gr[ae]y\w*|monochrome|ascii|terminal|retro|vintage|"
-                                                 r"neon|glow\w*|transparen\w*|blur\w*|shadows?|borders?|buttons?|icons?|cursor|pointer|letters?|caps)\b|模式|モード|主题", req, re.I)
+                                                 r"neon|glow\w*|transparen\w*|blur\w*|shadows?|borders?|buttons?|icons?|cursor|pointer|letters?|caps|speak|talk|"
+                                                 r"klingon|english|spanish|french|german|italian|portuguese|chinese|japanese|korean|arabic|hindi|russian|"
+                                                 r"[a-z]+ish|[a-z]+ese)\b|模式|モード|主题", req, re.I)
                                        or any(ui.parse_color(w) for w in re.findall(r"[a-z]+", req.lower()))),
 }
 
