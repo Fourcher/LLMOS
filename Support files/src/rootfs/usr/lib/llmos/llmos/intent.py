@@ -1288,6 +1288,28 @@ def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
     import urllib.parse as _u
+    m = re.match(r"^(?:show|see|view|display|unhide|reveal)\s+(?:the\s+|all\s+|my\s+)?(?:hidden|dot)\s*files?(?:\s+(?:too|as well))?$|^show\s+(?:me\s+)?(?:the\s+)?files?\s+that\s+are\s+hidden$", low)
+    if m:
+        return ("show_files", {"hidden": True})
+    if re.match(r"^(?:hide|stop showing)\s+(?:the\s+)?(?:hidden|dot)\s*files?(?:\s+again)?$", low):
+        return ("show_files", {"hidden": False})
+    m = re.match(r"^(?:rename|name)\s+(?:all\s+)?(?:of\s+)?(?:these|the|my|those|all)?\s*(?:the\s+)?(?P<k>photos|pictures|pics|images|videos|songs|music|files)"
+                 r"(?:\s+in\s+(?P<f>.+?))?\s+(?:to|as)\s+(?P<b>.+?)(?:\s*\d+\s*(?:,\s*\d+\s*)*(?:,?\s*(?:\.\.\.|…|etc\.?|and so on))?)?$", low)
+    if m and m.group("b").strip(" ,'\""):
+        k = {"photos": "photos", "pictures": "photos", "pics": "photos", "images": "photos", "videos": "videos", "songs": "music", "music": "music"}.get(m.group("k"), "all")
+        b = t[m.start("b"):m.start("b") + len(m.group("b"))].strip(" ,'\"")     # (the owner's own capitals)
+        args = {"name": b, "kind": k}
+        if m.group("f"):
+            args["folder"] = m.group("f")
+        return ("rename_series", args)
+    m = re.match(r"^(?:find|show|look for|check for|get rid of|remove|delete|clean up)\s+(?:me\s+)?(?:all\s+)?(?:the\s+|my\s+|any\s+)?(?:duplicates?|duplicate\s+(?:files|photos|pictures|songs)|"
+                 r"(?:files|photos|pictures) (?:that are|i have) (?:twice|duplicated))(?:\s+(?:in|from)\s+(?:my\s+)?(?P<f>.+?))?$", low)
+    if m:
+        delete = bool(re.match(r"^(?:get rid of|remove|delete|clean up)", low))
+        f = (m.group("f") or "").strip()
+        f = {"photos": "~/Pictures", "pictures": "~/Pictures", "pics": "~/Pictures", "music": "~/Music", "songs": "~/Music", "documents": "~/Documents",
+             "docs": "~/Documents", "downloads": "~/Downloads", "videos": "~/Videos", "desktop": "~/Desktop", "files": "~", "home folder": "~"}.get(f, f or "~")
+        return ("find_duplicates", {"folder": f, "delete": True} if delete else {"folder": f})
     m = _DARK_WORDS.match(t)
     if m and len(t.split()) <= 4:
         return ("set_appearance", {"theme": "dark" if m.group("d") else "light"})

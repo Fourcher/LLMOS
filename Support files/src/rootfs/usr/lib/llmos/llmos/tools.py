@@ -1777,6 +1777,7 @@ def _human_size(n):
 
 
 _LAST_FOLDER = None
+_SHOW_HIDDEN = False
 
 
 def _friendly_when(ts):
@@ -1795,11 +1796,14 @@ def _friendly_when(ts):
 @tool("show_files", "Show the owner's files as a window: a folder listing with open/delete buttons. The home folder is "
       "/root (~). Use for 'show my files', 'open my documents folder', 'what's in ~/projects'.",
       {"path": {"type": "string", "description": "folder to show (default: the home folder)"},
-       "sort": {"type": "string", "enum": ["name", "date", "size"], "description": "order (default name; date = newest first)"}}, [], risk=READ)
+       "sort": {"type": "string", "enum": ["name", "date", "size"], "description": "order (default name; date = newest first)"},
+       "hidden": {"type": "boolean", "description": "true to show hidden files (names starting with a dot), false to hide them again"}}, [], risk=READ)
 def show_files(a, ctx):
-    global _LAST_FOLDER
-    # "sort by date" with no folder named: the folder last shown
-    path = _path(a.get("path") or (_LAST_FOLDER if a.get("sort") and _LAST_FOLDER else "~"))
+    global _LAST_FOLDER, _SHOW_HIDDEN
+    # "sort by date" / "show hidden files" with no folder named: the folder last shown
+    if a.get("hidden") is not None:
+        _SHOW_HIDDEN = bool(a.get("hidden"))
+    path = _path(a.get("path") or (_LAST_FOLDER if (a.get("sort") or a.get("hidden") is not None) and _LAST_FOLDER else "~"))
     _LAST_FOLDER = path
     if path.rstrip("/") == _trash():
         os.makedirs(path, exist_ok=True)       # nothing deleted yet: an empty trash, not an error
@@ -1822,7 +1826,7 @@ def show_files(a, ctx):
         names = sorted(os.listdir(path), key=_key)
     except OSError as e:
         return f"error: {e.strerror}: {path}"
-    names = [n for n in names if not n.startswith(".") and n != "lost+found"]   # (the vault's ext4 housekeeping dir)
+    names = [n for n in names if (_SHOW_HIDDEN or not n.startswith(".")) and n != "lost+found"]   # (the vault's ext4 housekeeping dir)
     cut = len(names) > uispec.MAX_ITEMS
     names = names[:uispec.MAX_ITEMS]
     is_trash = path.rstrip("/") == _trash()
@@ -1853,7 +1857,8 @@ def show_files(a, ctx):
     nav = ([{"label": "↑ " + up, "say": f"show my files in {parent}"}] if path.rstrip("/") not in ("", "/") else []) + \
         ([{"label": "Open in Files", "say": f"open {path} in files"}] if shutil.which("thunar") and not is_trash else []) + \
         [{"label": lab, "say": f"sort by {o}", "primary": str(a.get("sort") or "name") == o}
-         for lab, o in (("A–Z", "name"), ("Newest", "date"), ("Biggest", "size"))]
+         for lab, o in (("A–Z", "name"), ("Newest", "date"), ("Biggest", "size"))] + \
+        [{"label": "Hide hidden files" if _SHOW_HIDDEN else "Show hidden files", "say": "hide hidden files" if _SHOW_HIDDEN else "show hidden files"}]
     blocks = [{"type": "buttons", "items": nav}] if nav else []
     if is_trash:
         blocks.insert(0, {"type": "text", "text": "Deleted files wait here until you empty the trash. Press Restore to put one back where it was."
@@ -1873,6 +1878,108 @@ def show_files(a, ctx):
 
 
 _IMAGE_EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif")
+
+
+@tool("rename_series", "Rename a set of files to one name with numbers, in date order: 'rename these photos to Holiday 1, 2, 3' "
+      "-> Holiday 1.jpg, Holiday 2.jpg… The folder is the one last shown (or Pictures for photos).",
+      {"name": {"type": "string", "description": "the new name before the number, e.g. 'Holiday'"},
+       "folder": {"type": "string", "description": "folder (default: the folder last shown; Pictures for photos)"},
+       "kind": {"type": "string", "enum": ["photos", "videos", "music", "all"], "description": "which files (default photos)"}}, ["name"], risk=CHANGE)
+def rename_series(a, ctx):
+    base = re.sub(r"[/\\\0]", "-", str(a.get("name", "")).strip()).strip(" .")
+    if not base:
+        return "error: say the new name, for example 'rename these photos to Holiday 1, 2, 3'"
+    kind = str(a.get("kind") or "photos")
+    folder = _path(a.get("folder") or _LAST_FOLDER or ("~/Pictures" if kind == "photos" else "~/Videos" if kind == "videos" else "~/Music" if kind == "music" else "~"))
+    if not os.path.isdir(folder):
+        return f"error: {folder} is not a folder"
+    exts = {"photos": _IMAGE_EXT, "videos": (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"), "music": _AUDIO_EXT}.get(kind)
+    files = [n for n in os.listdir(folder) if not n.startswith(".") and os.path.isfile(os.path.join(folder, n))
+             and (exts is None or os.path.splitext(n)[1].lower() in exts)]
+    if not files:
+        return f"there are no {'' if kind == 'all' else kind + ' '}files in {folder} to rename"
+    files.sort(key=lambda n: (os.path.getmtime(os.path.join(folder, n)), n.lower()))
+    width = len(str(len(files))) if len(files) >= 10 else 1
+    plan = [(n, f"{base} {str(i).zfill(width)}{os.path.splitext(n)[1].lower()}") for i, n in enumerate(files, 1)]
+    tmp = []
+    for old, new in plan:                       # in two steps, so 'Holiday 2' can become 'Holiday 1' without a clash
+        t = os.path.join(folder, f".llmos-ren-{len(tmp)}-{old}")
+        os.rename(os.path.join(folder, old), t)
+        tmp.append((t, new))
+    for t, new in tmp:
+        dest = os.path.join(folder, new)
+        if os.path.exists(dest):
+            stem, ext = os.path.splitext(new)
+            dest = os.path.join(folder, f"{stem} (2){ext}")
+        os.rename(t, dest)
+    if _LAST_FOLDER == folder:
+        show_files({"path": folder}, ctx)
+    return f"renamed {len(plan)} file(s) in {folder}: {plan[0][1]} … {plan[-1][1]}. Done: tell the owner in one sentence."
+
+
+@tool("find_duplicates", "Find files that are exact copies of each other (same contents, any name) and show them with buttons to "
+      "delete the extra copies; delete=true moves the extra copies to the trash at once (the oldest copy of each is kept).",
+      {"folder": {"type": "string", "description": "where to look (default: the home folder)"}, "delete": {"type": "boolean"}}, [],
+      risk=lambda a: DESTRUCTIVE if a.get("delete") else READ)
+def find_duplicates(a, ctx):
+    import hashlib
+    root = _path(a.get("folder") or "~")
+    if not os.path.isdir(root):
+        return f"error: {root} is not a folder"
+    by_size, seen = {}, 0
+    for d, dirs, fs in os.walk(root):
+        dirs[:] = [x for x in dirs if not x.startswith(".") and os.path.join(d, x) != _trash()]
+        for f in fs:
+            p = os.path.join(d, f)
+            try:
+                if f.startswith(".") or os.path.islink(p):
+                    continue
+                sz = os.path.getsize(p)
+            except OSError:
+                continue
+            seen += 1
+            if sz > 0:
+                by_size.setdefault(sz, []).append(p)
+    groups = []
+    for sz, ps in by_size.items():
+        if len(ps) < 2:
+            continue
+        by_hash = {}
+        for p in ps:
+            h = hashlib.sha256()
+            try:
+                with open(p, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(1 << 20), b""):
+                        h.update(chunk)
+            except OSError:
+                continue
+            by_hash.setdefault(h.hexdigest(), []).append(p)
+        groups += [(sz, sorted(g, key=os.path.getmtime)) for g in by_hash.values() if len(g) > 1]
+    home = config.home().rstrip("/")
+    short = lambda p: "~" + p[len(home):] if p.startswith(home) else p
+    if not groups:
+        show(ctx, {"id": "dupes", "replace": True, "title": "Duplicates", "size": "m", "blocks": [
+            {"type": "text", "text": f"No duplicates: {seen} file(s) in {short(root)} are all different."}]})
+        return f"no duplicate files among {seen} in {short(root)}; said on screen"
+    groups.sort(key=lambda g: -g[0] * (len(g[1]) - 1))
+    waste = sum(sz * (len(g) - 1) for sz, g in groups)
+    if a.get("delete"):
+        gone = 0
+        for _, g in groups:
+            for p in g[1:]:
+                if not str(REGISTRY["delete_file"].fn({"path": p}, ctx)).startswith("error"):
+                    gone += 1
+        return (f"moved {gone} extra cop{'y' if gone == 1 else 'ies'} ({_human_size(waste)}) to the trash; the oldest copy of each file is kept. "
+                "Done: tell the owner in one sentence (they can say 'show the trash' to put any back).")
+    items = []
+    for sz, g in groups[:40]:
+        items.append({"title": os.path.basename(g[0]), "subtitle": f"{len(g)} copies · {_human_size(sz)} each · oldest kept: {short(g[0])}",
+                      "actions": [{"label": f"Delete {short(p)}", "say": f"delete the file {p}", "danger": True} for p in g[1:4]]})
+    show(ctx, {"id": "dupes", "replace": True, "title": "Duplicates", "size": "l", "blocks": [
+        {"type": "text", "text": f"{len(groups)} file(s) have copies; the extra copies take {_human_size(waste)}. The oldest copy of each is kept; "
+                                 "delete the others with the buttons (they go to the trash)."},
+        {"type": "list", "items": items}]})
+    return f"{len(groups)} duplicate group(s), {_human_size(waste)} in extra copies, shown on the owner's screen; say one sentence at most."
 _MEDIA_EXT = (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac", ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v")
 _AUDIO_EXT = (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac")
 
