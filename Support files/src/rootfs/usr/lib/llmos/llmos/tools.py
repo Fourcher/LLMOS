@@ -1917,6 +1917,34 @@ def rename_series(a, ctx):
     return f"renamed {len(plan)} file(s) in {folder}: {plan[0][1]} … {plan[-1][1]}. Done: tell the owner in one sentence."
 
 
+@tool("share_folder", "Share a folder with the owner's other computers and phones on the same network (read-only: they can open "
+      "and save its files in a web browser), or stop sharing. The folder is the one last shown unless named.",
+      {"path": {"type": "string", "description": "folder to share (default: the folder last shown, else the home folder)"},
+       "stop": {"type": "boolean", "description": "true to stop sharing"}}, [], risk=CHANGE)
+def share_folder(a, ctx):
+    from . import share
+    if a.get("stop"):
+        st = share.stop()
+        show(ctx, {"id": "share", "replace": True, "title": "Sharing", "size": "s", "blocks": [
+            {"type": "text", "text": "Sharing is off: other computers can no longer open the folder." if st else "Nothing was being shared."}]})
+        return ("stopped sharing " + st["folder"] if st else "nothing was being shared") + ". Done: tell the owner in one sentence."
+    folder = _path(a.get("path") or _LAST_FOLDER or "~")
+    ok, st = share.start(folder)
+    if not ok:
+        return "error: " + st
+    links = share.urls(st)
+    home = config.home().rstrip("/")
+    shown = "~" + folder[len(home):] if folder.startswith(home) else folder
+    show(ctx, {"id": "share", "replace": True, "title": "Sharing " + (os.path.basename(folder.rstrip("/")) or shown), "size": "m", "blocks": [
+        {"type": "text", "text": "On the other computer or phone (on the same Wi-Fi or network), open this address in its web browser:"},
+        {"type": "text", "text": "\n".join(links) if links else "This computer has no network address yet: connect to Wi-Fi first."},
+        {"type": "text", "text": f"They can open and save the files in {shown}, not change or delete them. Anyone on this network who has the "
+                                 "address can too, until you stop sharing.", "dim": True},
+        {"type": "buttons", "items": [{"label": "Stop sharing", "say": "stop sharing", "danger": True}]}]})
+    return (f"sharing {shown} on the local network at {', '.join(links) or '(no network address yet)'}; the address is on the owner's "
+            "screen. Done: tell the owner in one sentence.")
+
+
 @tool("find_duplicates", "Find files that are exact copies of each other (same contents, any name) and show them with buttons to "
       "delete the extra copies; delete=true moves the extra copies to the trash at once (the oldest copy of each is kept).",
       {"folder": {"type": "string", "description": "where to look (default: the home folder)"}, "delete": {"type": "boolean"}}, [],

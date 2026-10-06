@@ -1288,6 +1288,16 @@ def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
     import urllib.parse as _u
+    m = re.match(r"^(?:share|send)\s+(?:this|that|the|my|a)?\s*(?P<f>[\w .~/-]+?)?\s*(?:folder|files?|photos|pictures|documents)?\s+"
+                 r"(?:with|to)\s+(?:my\s+|the\s+|another\s+|other\s+)*(?:other\s+)?(?:computer|laptop|pc|mac|phone|tablet|ipad|devices?)s?(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$"
+                 r"|^share\s+(?:this|that|the|my)?\s*(?P<f2>[\w .~/-]+?)?\s*folder(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$", low)
+    if m and "screen" not in low:
+        f = (m.group("f") or m.group("f2") or "").strip()
+        f = {"photos": "~/Pictures", "pictures": "~/Pictures", "music": "~/Music", "documents": "~/Documents", "downloads": "~/Downloads",
+             "videos": "~/Videos", "desktop": "~/Desktop"}.get(f, f if f.startswith(("~", "/")) else "")
+        return ("share_folder", {"path": f} if f else {})
+    if re.match(r"^(?:stop|end|turn off)\s+(?:the\s+)?shar(?:ing|e)(?:\s+(?:the\s+|this\s+|my\s+)?(?:folder|files))?$", low):
+        return ("share_folder", {"stop": True})
     m = re.match(r"^(?:show|see|view|display|unhide|reveal)\s+(?:the\s+|all\s+|my\s+)?(?:hidden|dot)\s*files?(?:\s+(?:too|as well))?$|^show\s+(?:me\s+)?(?:the\s+)?files?\s+that\s+are\s+hidden$", low)
     if m:
         return ("show_files", {"hidden": True})

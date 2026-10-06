@@ -31,7 +31,7 @@ import sys
 import threading
 import time
 
-from . import clip, record, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line
+from . import clip, record, folderlock, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
@@ -1076,6 +1076,36 @@ class Desk:
                     except Exception:
                         self.emit({"t": "toast", "text": "Not changed: the passphrase you use now was not right.", "long": True})
                 threading.Thread(target=change, daemon=True).start()
+        elif t in ("folder.lock", "folder.unlock"):
+            if not getattr(self, "folder_nonce", None) or msg.get("nonce") != self.folder_nonce:
+                sys.stderr.write(f"desk: ignored a {t} that did not come from its form\n")
+            else:
+                self.folder_nonce = None
+                path, pw, pw2 = str(msg.get("path", "")), str(msg.get("password", "")), str(msg.get("password2", pw))
+                if t == "folder.lock" and pw != pw2:
+                    self.emit({"t": "toast", "text": "The two passwords are different; type the same one twice."})
+                    self.folder_form("lock", path)
+                    return
+                self.close_window("folder-lock")
+
+                def go(t=t, path=path, pw=pw):
+                    self.emit({"t": "toast", "text": "Locking the folder…" if t == "folder.lock" else "Unlocking…", "sticky": "flock"})
+                    ok, out = (folderlock.lock if t == "folder.lock" else folderlock.unlock)(path, pw)
+                    self.emit({"t": "toast", "text": "", "sticky": "flock"})
+                    home = config.home().rstrip("/")
+                    short = lambda p: "~" + p[len(home):] if p.startswith(home) else p
+                    if ok and t == "folder.lock":
+                        text = (f"Locked: {os.path.basename(path.rstrip('/'))} is now {short(out)}, which opens only with that password "
+                                f"(here: say \u201cunlock {os.path.basename(path.rstrip('/'))}\u201d; on another computer: 7-Zip). "
+                                "Keep the password somewhere safe: without it the files can't be got back.")
+                    elif ok:
+                        text = f"Unlocked: {short(out)} is a normal folder again."
+                    else:
+                        text = out[:1].upper() + out[1:] + "."
+                        if out == "wrong password":
+                            self.folder_form("unlock", path)
+                    self.instant_reply("lock folder" if t == "folder.lock" else "unlock folder", text)
+                threading.Thread(target=go, daemon=True).start()
         elif t == "mail.form":
             if not getattr(self, "mail_nonce", None) or msg.get("nonce") != self.mail_nonce:
                 sys.stderr.write("desk: ignored a mail.form that did not come from the email form\n")
@@ -1476,6 +1506,23 @@ class Desk:
                           "actions": [{"label": "Show", "say": f"switch to {aid}", "primary": True}, {"label": "Close", "say": f"close {aid}"}]})
         return {"id": "panel-open", "replace": True, "title": "Open now", "size": "s", "slot": "side",
                 "blocks": [{"type": "list", "items": items}] if items else [{"type": "text", "text": "Nothing is open.", "dim": True}]}
+
+    def folder_form(self, kind, path):
+        """The password for locking or unlocking a folder: typed into a form, never into the request box."""
+        import secrets
+        self.folder_nonce = secrets.token_hex(12)
+        home = config.home().rstrip("/")
+        shown = "~" + path[len(home):] if path.startswith(home) else path
+        fields = [{"name": "password", "label": "Password", "kind": "password"}]
+        if kind == "lock":
+            fields.append({"name": "password2", "label": "The same password again", "kind": "password"})
+        fields += [{"name": "path", "kind": "hidden", "value": path}, {"name": "nonce", "kind": "hidden", "value": self.folder_nonce}]
+        self.open_window({"id": "folder-lock", "replace": True, "title": ("Lock " if kind == "lock" else "Unlock ") + os.path.basename(path.rstrip("/")),
+                          "size": "s", "slot": "cascade", "blocks": [
+            {"type": "text", "text": (f"{shown} becomes one locked file that opens only with this password, here or on any computer with 7-Zip. "
+                                      "Without the password the files can't be got back, so keep it safe." if kind == "lock" else
+                                      f"The password {shown} was locked with."), "dim": True},
+            {"type": "form", "fields": fields, "submit": {"label": "Lock" if kind == "lock" else "Unlock", "post": "folder." + kind}}]})
 
     def mail_form(self):
         """Email set up here (to read and answer it on this computer): a form, nothing typed into the request box."""
@@ -2093,7 +2140,7 @@ class Desk:
 
     def _instant(self, text):
         low = intent.plain(text).lower().strip()
-        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S+$|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|(?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android))\b|\brepo(?:sitory)?\b|\b(?:users?|accounts?|profile|login|guest)\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
+        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S+$|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|(?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android))\b|\brepo(?:sitory)?\b|\b(?:lock|encrypt|password|protect|secure)\b.*\bfolder\b|^(?:unlock|decrypt) \w|\b(?:lock|encrypt|password[- ]?protect) (?:my )?(?:documents|pictures|photos|music|videos|downloads|desktop)\b|\bbookmarks?\b|\bblur\b|\b(?:users?|accounts?|profile|login|guest)\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
                 any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
                 any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
                                                                             r"(?:extend|mirror) the displays|use only the main display|use only the (?:projector|tv|second (?:screen|display))|projector only|"
@@ -2616,6 +2663,29 @@ class Desk:
         if _MEDIUM_Q.search(low):
             self.instant_reply(line, T("d_live_answer") if _live() else T("d_disk_answer"))
             return True
+        m = re.fullmatch(r"(?:lock|password[- ]?protect|encrypt|protect|put a password on|add a password to|secure) (?:this|that|the|my)?\s*(?P<f>[\w .~/-]*?)\s*folder"
+                         r"(?: (?:with|using) (?:a |its own )?password)?|(?:lock|encrypt|password[- ]?protect) (?:my )?(?P<f2>documents|pictures|photos|music|videos|downloads|desktop|~/\S+|/\S+)(?: (?:with|using) (?:a )?password)?", l2)
+        if m:
+            f = (m.group("f") or m.group("f2") or "").strip()
+            f = {"photos": "~/Pictures", "pictures": "~/Pictures", "music": "~/Music", "documents": "~/Documents", "downloads": "~/Downloads",
+                 "videos": "~/Videos", "desktop": "~/Desktop"}.get(f, f)
+            path = tools._path(f) if f.startswith(("~", "/")) else (os.path.join(config.home(), f) if f and os.path.isdir(os.path.join(config.home(), f))
+                                                                   else (tools._LAST_FOLDER if not f else None))
+            if not path or path.rstrip("/") in (config.home().rstrip("/"), "/") or not os.path.isdir(path):
+                self.last_reply = self._said = ("Which folder? Open it first (\u201cshow my files\u201d, then open the folder) and say it again, "
+                                                "or name it: \u201clock my documents folder\u201d.") if not path or not os.path.isdir(path) else \
+                    "That's your whole home folder; it's already locked by your passphrase whenever the computer is locked. Name one folder inside it."
+                return True
+            self.folder_form("lock", path)
+            self.last_reply = self._said = "Type the password for it in the window."
+            return True
+        m = re.fullmatch(r"(?:unlock|open|decrypt) (?:the |my )?(?P<n>[\w .~/-]+?)(?: folder)?", l2)
+        if m and m.group("n") not in ("screen", "computer", "the screen", "it", "vault"):
+            hits = folderlock.find_locked(m.group("n"), config.home().rstrip("/"))
+            if hits:
+                self.folder_form("unlock", hits[0])
+                self.last_reply = self._said = "Type its password in the window."
+                return True
         if re.fullmatch(r"(?:what can you do|what can i (?:do|say|ask)(?: here| with (?:this|it|you))?|how do i use (?:this|you|it)|what do i do|help me|show me what you can do|"
                         r"what are you|what is this|get started|getting started|\?+)[?.!]*", low):
             self.open_panel("help")
@@ -2856,6 +2926,14 @@ class Desk:
     _TILE = re.compile(r"(?:put|move|snap) (?:the )?(?P<w>[\w ]+?) (?:on|to) the (?P<side>left|right)(?: side| half)?")
 
     _HOWTO = [
+        (r"(?:import|bring|move|copy|transfer|get) (?:over )?(?:my )?(?:bookmarks|passwords|favou?rites|history|bookmarks (?:and|/|&) passwords|passwords (?:and|/|&) bookmarks)"
+         r"(?: and \w+)? (?:from|out of|over from) (?:google )?(?:chrome|edge|safari|brave|opera|my old (?:computer|browser|laptop))",
+         "On the old computer, in Chrome: Bookmarks → Bookmark manager → ⋮ → Export bookmarks (a .html file), and Settings → Passwords → "
+         "Export passwords (a .csv file). Put the files on a USB stick and plug it in here. Then in Firefox: Ctrl+Shift+O → Import and Backup → "
+         "Import Bookmarks from HTML, and for the passwords about:logins → ⋯ → Import from a File. Delete the passwords file afterwards: it isn't encrypted."),
+        (r"blur (?:my |the )?background(?: (?:in|on|during) (?:the |my )?(?:video )?(?:call|meeting|zoom|teams|meet))?|(?:change|hide) (?:my )?background (?:in|on|during) (?:the |my |a )?(?:video )?(?:call|meeting)|virtual background",
+         "That's set in the call itself: in Google Meet, ⋮ → Apply visual effects → Blur; in Zoom, ^ next to Stop Video → Blur my background; in Teams, "
+         "… → Video effects → Blur. (Say “change the wallpaper” if you meant this computer's background.)"),
         (r"(?:add|make|create|set up|new) (?:an? |another |a new |a separate )?(?:user|account|login|profile)(?: account)?(?: for (?:my |the |a )?.+)?|"
          r"(?:remove|delete) (?:that|the|this|a|my \w+'?s?) (?:user|account|profile)|(?:switch|change) (?:the )?users?|guest (?:account|mode)|"
          r"(?:can|how do) (?:my )?(?:\w+ )?(?:have|get|use) (?:their|his|her|my|an?) (?:own )?(?:account|login)",
