@@ -2062,8 +2062,14 @@ class Desk:
                 done.set()
             return
         self.last_active = time.time()
-        if chat == "main" and self.busy and done is None and self._instant(text):
-            threading.Thread(target=self.act, args=(text,), daemon=True).start()
+        if chat == "main" and self.busy and self._instant(text):
+            def now():
+                try:
+                    self.act(text)
+                finally:
+                    if done:
+                        done.set()
+            threading.Thread(target=now, daemon=True).start()
             return
         self.requests.put((text, done, chat))
 
@@ -2211,7 +2217,11 @@ class Desk:
             self.instant_reply(line, "Airplane mode is on: Wi-Fi and Bluetooth are off." if v == "on" else "Airplane mode is off.")
             self.push_status()
             return True
-        if re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) and _wifi_now():
+        if re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")):
+            if not _wifi_now():
+                self.instant_reply(line, "You're not on Wi-Fi right now (connected by cable or not at all), so there's no network to forget. "
+                                   "Say \u201cwifi\u201d to see the ones this computer remembers.")
+                return True
             line = "forget wifi " + _wifi_now()
         m = re.fullmatch(r"forget (?:the )?wi-?fi(?: network)? (?P<s>.+)|(?P<dis>disconnect (?:from )?(?:the )?wi-?fi)", line.strip().rstrip(".!"), re.I)
         if m and shutil.which("iwctl"):
@@ -2397,7 +2407,8 @@ class Desk:
                 self.open_window(self.windows_panel())
             self.last_reply = self._said = "Done." if ok else note
             return True
-        if re.fullmatch(r"(?:let'?s )?play a game(?: with me)?|(?:show me |any )?games|i'?m bored|what games (?:are there|do you have|can i play)|play (?:solitaire|chess|minesweeper|sudoku)(?: / (?:solitaire|chess|minesweeper|sudoku))+", l2):
+        if re.fullmatch(r"(?:let'?s )?play a game(?: with me)?|(?:show me |any )?games|i'?m bored|what games (?:are there|do you have|can i play)|"
+                        r"(?:make|find|give me|get) (?:me )?(?:a |some )?games?(?: for (?:my |the )?(?:kids?|child|children|son|daughter|grandkids?|family))?|play (?:solitaire|chess|minesweeper|sudoku)(?: / (?:solitaire|chess|minesweeper|sudoku))+", l2):
             games = [("Tic-tac-toe", "play tic tac toe"), ("Snake", "play snake"), ("Minesweeper", "play minesweeper"), ("Sudoku", "play sudoku"),
                      ("Flashcards", "open flashcards"), ("Chess (online)", "play chess"), ("Solitaire (online)", "play solitaire")]
             self.open_window({"id": "games", "replace": True, "title": "Games", "size": "s", "blocks": [

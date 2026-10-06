@@ -100,9 +100,13 @@ def find(name):
             return a
     t = match_template(n)
     if t:
-        for a in apps:
-            if a["id"] == t["id"] or a["id"].startswith(t["id"] + "-"):
-                return a
+        plain = [a for a in apps if a["id"] == t["id"]]          # the plain one first, then a themed copy
+        if plain:
+            return plain[0]
+        if any(w in n for w in ("retro", "pink", "theme", "dark", "neon", "colour", "color")):
+            for a in apps:
+                if a["id"].startswith(t["id"] + "-"):
+                    return a
     return None
 
 

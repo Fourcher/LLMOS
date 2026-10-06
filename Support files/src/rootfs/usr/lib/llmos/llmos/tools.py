@@ -2243,6 +2243,32 @@ def format_drive(a, ctx):
     return f"the drive is empty and ready, named {label} (works on Windows, Mac and Linux). Done: tell the owner in one sentence."
 
 
+@tool("make_document", "Start a document from a ready layout (resume, letter, cover letter) in Documents and open it in the "
+      "word processor to fill in.", {"kind": {"type": "string", "enum": ["resume", "letter", "cover letter"]}}, ["kind"], risk=CHANGE)
+def make_document(a, ctx):
+    kind = str(a.get("kind", "resume")).lower()
+    name = {"resume": "Resume", "letter": "Letter", "cover letter": "Cover letter"}.get(kind, "Document")
+    src = os.path.join(config.SHARE if hasattr(config, "SHARE") else "/usr/share/llmos", "templates",
+                       {"resume": "resume.html", "letter": "letter.html", "cover letter": "cover-letter.html"}.get(kind, "letter.html"))
+    if not os.path.exists(src):
+        src = os.path.join("/usr/share/llmos/templates", os.path.basename(src))
+    d = os.path.join(config.home(), "Documents")
+    os.makedirs(d, exist_ok=True)
+    dest, n = os.path.join(d, name + ".html"), 1
+    while os.path.exists(dest):
+        n += 1
+        dest = os.path.join(d, f"{name} ({n}).html")
+    shutil.copyfile(src, dest)
+    prog = next((p for p in ("abiword", "libreoffice") if shutil.which(p)), None)
+    if prog and hasattr(ctx, "launch") and _display_available():
+        r = ctx.launch([prog, dest], name=prog)
+        if isinstance(r, str):
+            return f"error: {r}"
+        return (f"opened a {kind} layout in the word processor, saved as Documents/{os.path.basename(dest)}: replace the grey "
+                "example text with yours. Done: tell the owner in one sentence and call no other tool.")
+    return f"made Documents/{os.path.basename(dest)}"
+
+
 @tool("remove_software", "Uninstall a program the owner installed (an Alpine package or a Flathub app). Never the system's own parts.",
       {"name": STR}, ["name"], risk=DESTRUCTIVE)
 def remove_software(a, ctx):

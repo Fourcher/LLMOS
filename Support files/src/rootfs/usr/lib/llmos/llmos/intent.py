@@ -1347,6 +1347,10 @@ def _everyday2(text):
         return ("open_file", {"path": "~/" + (f if f.startswith(".") else "." + f), "edit": True})
     if re.match(r"^(?:open|show|go\s+to)\s+(?:the\s+)?(?:last|most\s+recent)\s+(?:thing|file|document)\s+(?:i\s+(?:was\s+)?(?:using|working\s+on|opened|had\s+open))?$", low):
         return ("open_latest", {"where": "home"})
+    m = re.match(r"^(?:make|write|create|start|help\s+me\s+(?:write|make))\s+(?:me\s+)?(?:a\s+|my\s+)?(?:new\s+)?(?P<k>resume|résumé|cv|cover\s+letter|letter)$", low)
+    if m:
+        k = m.group("k").replace("résumé", "resume").replace("cv", "resume")
+        return ("make_document", {"kind": "cover letter" if "cover" in k else k})
     if re.match(r"^(?:back\s*up|backup|save\s+a\s+copy\s+of|copy)\s+(?:all\s+)?(?:my\s+)?(?:files|stuff|documents|photos|computer|everything)(?:\s+(?:to|onto)\s+(?:the\s+|my\s+)?(?:usb|stick|usb\s+stick|external\s+(?:drive|disk)|drive))?$|^make\s+a\s+backup$", low):
         return ("backup_files", {})
     if re.match(r"^(?:restore|bring\s+back|get\s+back)\s+(?:my\s+)?(?:files|stuff|everything)\s+from\s+(?:the\s+|my\s+)?(?:backup|usb|stick|drive)$|^restore\s+(?:my\s+|the\s+)?backup$", low):
