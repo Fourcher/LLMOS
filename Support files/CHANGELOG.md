@@ -46,7 +46,16 @@ The owner decides how much it asks, and is never second-guessed.
   itself); programs that open at login; a VPN from its WireGuard or OpenVPN
   file; slower double-click and key repeat for shaky hands; keep running with
   the lid closed; the chime on or off; Super+T keeps a window on top.
-- **Fixed:** "every monday" was set up as every day; reminders now say which
+- **Start fresh:** "reset this computer" says what it erases and keeps, offers
+  a backup, asks once more, then erases everything personal and restarts at
+  setup (the AI model stays). Also: the system log at a glance, the default
+  shell in words, sharing an app you made as one file, Super+Shift+Left/Right
+  moves a window to the other screen, and truthful answers about disk
+  encryption, guest use, passwords, cloud backup, snapshots and kids mode.
+- **Fixed:** the model no longer opens the passphrase window or changes the
+  trust setting for unrelated security questions; a passing request is no
+  longer saved as a lasting "fact" about you;
+  "every monday" was set up as every day; reminders now say which
   day; "update my apps" installs the updates instead of only listing them.
 
 ## 1.7.0 — 2026-10-05
