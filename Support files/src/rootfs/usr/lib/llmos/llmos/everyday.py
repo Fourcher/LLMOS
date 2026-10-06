@@ -37,7 +37,7 @@ MATCH = re.compile(
     r"(?:keep|stay|put) (?:this |it |the window )?(?:always )?on top|always on top|picture[- ]in[- ]picture|\bpip\b|"
     r"(?:other|second|external|left|right) (?:monitor|screen|display)|new (?:workspace|desktop)|(?:game ?)?controller|gamepad|joystick|"
     r"phone'?s? (?:internet|data|hotspot)|tether|hotspot|drawing tablet|wacom|pen tablet|touch ?screen|"
-    r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b)", re.I)
+    r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b|encrypt|stolen|guest|someone else is using|disk encryption)", re.I)
 
 
 def _say(desk, line, text):
@@ -757,6 +757,24 @@ HOWTO = [
 ]
 
 
+def privacy(desk, line, low):
+    if re.search(r"encrypt (?:my |the |this )?(?:disk|drive|computer|laptop|files|data|hard ?drive|ssd)|(?:laptop|computer|pc) (?:gets |is |was )?(?:stolen|lost)|"
+                 r"is (?:my )?(?:disk|data|computer) encrypted|disk encryption", low):
+        from . import vault
+        if config.settings.get("vault"):
+            return _say(desk, line, "Your files are already encrypted: everything in your home folder (files, apps, conversations, settings for "
+                                    "programs) lives in a vault locked with your passphrase (LUKS, AES-256). If the computer is stolen, a thief "
+                                    "sees only scrambled data unless they know the passphrase. Lock it when you step away (Super+L) so it's closed "
+                                    "even while the computer is on. The system itself (programs, the AI model) isn't encrypted; it holds nothing of yours.")
+        return _say(desk, line, "Your files are NOT encrypted yet: anyone with the disk could read them. Say “set a passphrase” and I'll move "
+                                "them into an encrypted vault (LUKS, AES-256) that opens only with that passphrase.")
+    if re.search(r"guest (?:mode|account|session|user)|someone else (?:is using|uses|wants to use|will use) (?:my |the |this )?computer|let (?:someone|a friend|my \w+) use (?:my |the |this )?computer", low):
+        return _say(desk, line, "There's no guest mode yet: whoever uses the computer uses it as you, with your files. For a short while: open Firefox "
+                                "in a private window (Ctrl+Shift+P) for them, and say “hands-on” so I ask before every change. "
+                                "Lock it afterwards (Super+L) and nothing of theirs stays in the browser.")
+    return False
+
+
 def share_app(desk, line, low):
     m = re.search(r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?(?: (?:i|you|we) made| called (?P<n>[\w .-]+?))?"
                   r"(?: (?:with|to) .+| as a file| to (?:a )?file)?$", low)
@@ -786,7 +804,7 @@ def howto(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, share_app, howto):
+    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, share_app, howto):
         try:
             if fn(desk, line, low):
                 return True
