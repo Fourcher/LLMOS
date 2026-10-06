@@ -237,8 +237,13 @@ def from_template(t, look_words="", what=""):
     title = t.get("title", t["id"])
     if t["id"] == "tracker" and what:
         # the tracker sets itself up from its title: "Water tracker" counts glasses, "Budget tracker" dollars
-        w = re.sub(r"\b(a|an|the|my|me|app|make|create|build|for|to|please|i|want|need)\b", " ", str(what).lower())
-        w = " ".join(w.split())[:30]
+        low = str(what).lower()
+        m = re.search(r"how (?:many|much) (?:\w+ of )?(\w+)", low) or re.search(r"track(?:s|ing)? (?:my |the |of |how )?(\w+)", low)
+        if m and m.group(1) not in ("many", "much", "i", "what", "when", "it", "things", "stuff"):
+            w = m.group(1)
+        else:
+            w = re.sub(r"\b(a|an|the|my|me|app|make|create|build|for|to|please|i|want|need|that|which|who|tracks?|tracking)\b", " ", low)
+            w = " ".join(w.split()[:3])           # whole words, never cut mid-word
         if w and w != "tracker":
             title = w[:1].upper() + w[1:] + ("" if "track" in w or "log" in w else " tracker")
     app_id = t["id"] if title == t.get("title", t["id"]) else _slug(title)

@@ -821,12 +821,22 @@ def show_image(a, ctx):
 
 @tool("set_wallpaper", "ONLY when the owner asks for a wallpaper / desktop background: put a real photograph "
       "(Wikimedia Commons) behind the desk, or remove it. To just show a photo, use show_image.",
-      {"subject": {"type": "string", "description": "what the photo should show, e.g. 'the Alps at dawn'; or the path of the owner's own picture (~/Pictures/beach.jpg); 'none' removes the wallpaper"}},
+      {"subject": {"type": "string", "description": "what the photo should show, e.g. 'the Alps at dawn'; or the path of the owner's own picture (~/Pictures/beach.jpg); 'random' = a random one of the owner's pictures; 'none' or 'default' puts the default background back"}},
       ["subject"], risk=READ, network=lambda a: str(a.get("subject", "")).strip().lower() not in ("none", "remove", "off", "") and not re.match(r"^[~/]", str(a.get("subject", "")).strip()))
 def set_wallpaper(a, ctx):
     subject = str(a.get("subject", "")).strip()
     req = getattr(ctx, "current_request", "") or ""
-    if subject.lower() in ("none", "remove", "off", "") and req and not re.search(r"\b(remove|no|off|delete|get rid|plain|clear|without|stop)\b", req, re.I):
+    if subject.lower() in ("default", "original", "normal", "standard", "the default"):
+        subject = "none"
+    if re.match(r"(?i)^(?:a\s+)?random(?:\s+(?:one|photo|picture|image))?(?:\s+(?:from|of|in)\s+(?:my\s+)?(?P<f>[\w ~/.-]+))?$", subject):
+        mf = re.match(r"(?i).*\b(?:from|of|in)\s+(?:my\s+)?(?P<f>[\w ~/.-]+)$", subject)
+        folder = _path(("~/" + mf.group("f").strip().capitalize()) if mf and "/" not in mf.group("f") else (mf.group("f") if mf else "~/Pictures"))
+        import random
+        pics = [os.path.join(d, n) for d, _, fs in os.walk(folder) for n in fs if n.lower().endswith(_IMAGE_EXT)] if os.path.isdir(folder) else []
+        if not pics:
+            return f"there are no pictures in {folder} to choose from"
+        subject = random.choice(pics)
+    if subject.lower() in ("none", "remove", "off", "") and req and not re.search(r"\b(remove|no|off|delete|get rid|plain|clear|without|stop|default|original|normal|back)\b", req, re.I):
         return "not done: the owner did not ask to remove the wallpaper. Ask which picture they mean."
     dest = config.data("wallpaper.img")
     if subject.lower() in ("none", "remove", "off", ""):
@@ -2201,6 +2211,207 @@ def share_folder(a, ctx):
         {"type": "buttons", "items": [{"label": "Stop sharing", "say": "stop sharing", "danger": True}]}]})
     return (f"sharing {shown} on the local network at {', '.join(links) or '(no network address yet)'}; the address is on the owner's "
             "screen. Done: tell the owner in one sentence.")
+
+
+def _files_from(a, exts=None, default_folder="~"):
+    """The files a batch tool works on: named files, or every matching file in a folder (the one last shown by default)."""
+    out = []
+    for f in a.get("files") or []:
+        p = _path(f)
+        if not os.path.isfile(p):
+            hits = find_paths(str(f))
+            p = hits[0] if hits else p
+        if os.path.isfile(p):
+            out.append(p)
+    if not out:
+        folder = _path(a.get("folder") or _LAST_FOLDER or default_folder)
+        if os.path.isdir(folder):
+            for d, dirs, fs in os.walk(folder):
+                dirs[:] = [x for x in dirs if not x.startswith(".")] if a.get("include_subfolders") else []
+                out += [os.path.join(d, n) for n in sorted(fs) if not n.startswith(".") and (not exts or n.lower().endswith(exts))]
+    return out
+
+
+@tool("rename_files", "Rename many files at once by a rule: lower or upper case, spaces to dashes or underscores, replace words, "
+      "add a prefix or suffix. Every file in the folder (the one last shown unless named), or only the files named.",
+      {"folder": STR, "files": {"type": "array", "items": {"type": "string"}},
+       "case": {"type": "string", "enum": ["lower", "upper", "title", "keep"]},
+       "spaces": {"type": "string", "enum": ["dashes", "underscores", "remove", "keep"]},
+       "replace": {"type": "string", "description": "text to replace in the names"}, "with": {"type": "string", "description": "what to put instead"},
+       "prefix": STR, "suffix": {"type": "string", "description": "added before the extension"}}, [], risk=CHANGE)
+def rename_files(a, ctx):
+    files = _files_from(a)
+    if not files:
+        return "there are no files there to rename"
+    done, clash = [], []
+    for p in files:
+        d, name = os.path.split(p)
+        stem, ext = os.path.splitext(name)
+        if a.get("replace"):
+            stem = re.sub(re.escape(str(a["replace"])), str(a.get("with", "")), stem, flags=re.I)
+        sp = a.get("spaces") or "keep"
+        if sp != "keep":
+            stem = re.sub(r"\s+", {"dashes": "-", "underscores": "_", "remove": ""}[sp], stem.strip())
+        case = a.get("case") or "keep"
+        if case == "lower":
+            stem, ext = stem.lower(), ext.lower()
+        elif case == "upper":
+            stem = stem.upper()
+        elif case == "title":
+            stem = stem.title()
+        stem = f"{a.get('prefix') or ''}{stem}{a.get('suffix') or ''}"
+        new = stem + ext
+        if new == name:
+            continue
+        dest = os.path.join(d, new)
+        if os.path.exists(dest) and dest.lower() != p.lower():
+            clash.append(name)
+            continue
+        os.rename(p, dest)
+        done.append(f"{name} → {new}")
+    if _LAST_FOLDER and files and os.path.dirname(files[0]) == _LAST_FOLDER:
+        show_files({"path": _LAST_FOLDER}, ctx)
+    return (f"renamed {len(done)} file(s): " + "; ".join(done[:12]) + (" …" if len(done) > 12 else "") +
+            (f". Left alone (the new name was taken): {', '.join(clash)}" if clash else "") + ". Done: tell the owner in one sentence.")
+
+
+@tool("edit_images", "Change many pictures at once with the same steps (resize, rotate, black and white, add text ...); copies go "
+      "into a new folder or a .zip, the originals stay. Every picture in the folder unless files are named.",
+      {"folder": STR, "files": {"type": "array", "items": {"type": "string"}},
+       "steps": {"type": "array", "items": {"type": "string"}, "description": "as for edit_image"},
+       "into": {"type": "string", "description": "a new folder or a .zip for the copies, e.g. '~/Desktop/small photos.zip'"},
+       "include_subfolders": {"type": "boolean"}}, ["steps"], risk=CHANGE)
+def edit_images(a, ctx):
+    pics = _files_from(a, _IMAGE_EXT, "~/Pictures")
+    if not pics:
+        return "there are no pictures there"
+    into = str(a.get("into") or "").strip()
+    to_zip = into.lower().endswith(".zip")
+    out_dir = tempfile.mkdtemp(prefix="llmos-pics-") if to_zip or not into else _path(into)
+    if not to_zip and into:
+        os.makedirs(out_dir, exist_ok=True)
+    elif not into:
+        out_dir = os.path.join(os.path.dirname(pics[0]), "edited")
+        os.makedirs(out_dir, exist_ok=True)
+    made, failed = [], []
+    for i, p in enumerate(pics):
+        ctx.status(f"picture {i + 1} of {len(pics)}…")
+        r = edit_image({"path": p, "steps": a.get("steps") or [], "save_as": os.path.join(out_dir, os.path.basename(p))}, ctx)
+        (made if r.startswith("saved") else failed).append(os.path.basename(p))
+    home = config.home().rstrip("/")
+    short = lambda x: "~" + x[len(home):] if x.startswith(home) else x
+    where = out_dir
+    if to_zip and made:
+        dest = _path(into)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        import zipfile
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
+            for n in sorted(os.listdir(out_dir)):
+                z.write(os.path.join(out_dir, n), n)
+        shutil.rmtree(out_dir, ignore_errors=True)
+        where = dest
+    return (f"{len(made)} picture(s) changed into {short(where)}" + (f"; could not change: {', '.join(failed[:6])}" if failed else "") +
+            "; the originals are unchanged. Done: tell the owner in one sentence.")
+
+
+@tool("convert_media", "Convert sound or video files to another format (mp3, ogg, wav, flac, m4a, mp4, webm, gif ...), one or many; "
+      "delete_originals moves the old files to the trash afterwards, only when asked.",
+      {"folder": STR, "files": {"type": "array", "items": {"type": "string"}},
+       "from_format": {"type": "string", "description": "only files of this type, e.g. 'wav'"},
+       "to": {"type": "string", "description": "the new format, e.g. 'mp3'"}, "delete_originals": {"type": "boolean"}},
+      ["to"], risk=lambda a: DESTRUCTIVE if a.get("delete_originals") else CHANGE, available=lambda: shutil.which("ffmpeg") is not None)
+def convert_media(a, ctx):
+    to = str(a.get("to", "")).lower().strip(". ")
+    if not re.fullmatch(r"[a-z0-9]{2,5}", to):
+        return "error: say the new format, e.g. mp3"
+    src = str(a.get("from_format") or "").lower().strip(". ")
+    files = _files_from(a, (("." + src),) if src else _MEDIA_EXT, "~/Music")
+    files = [f for f in files if not f.lower().endswith("." + to)]
+    if not files:
+        return "there are no such files to convert"
+    made, failed = [], []
+    for i, p in enumerate(files):
+        ctx.status(f"file {i + 1} of {len(files)}…")
+        dest = os.path.splitext(p)[0] + "." + to
+        n = 2
+        while os.path.exists(dest):
+            dest, n = f"{os.path.splitext(p)[0]} ({n}).{to}", n + 1
+        extra = ["-vf", "fps=12,scale=480:-1:flags=lanczos"] if to == "gif" else ["-q:a", "2"] if to == "mp3" else []
+        r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", p] + extra + [dest], capture_output=True, text=True, timeout=3600)
+        if r.returncode == 0 and os.path.exists(dest) and os.path.getsize(dest) > 0:
+            made.append((p, dest))
+        else:
+            failed.append(os.path.basename(p))
+            try:
+                os.remove(dest)
+            except OSError:
+                pass
+    gone = 0
+    if a.get("delete_originals"):
+        for p, _ in made:
+            if not str(REGISTRY["delete_file"].fn({"path": p}, ctx)).startswith("error"):
+                gone += 1
+    return (f"converted {len(made)} file(s) to {to}: {', '.join(os.path.basename(d) for _, d in made[:8])}" +
+            (f"; {gone} original(s) moved to the trash" if gone else "") + (f"; failed: {', '.join(failed[:6])}" if failed else "") +
+            ". Done: tell the owner in one sentence.")
+
+
+@tool("biggest_files", "Find the biggest files (on the whole computer, or in a folder) and list them with their sizes and types.",
+      {"folder": {"type": "string", "description": "where to look (default: the whole computer)"},
+       "count": {"type": "integer", "description": "how many (default 10)"}}, [], risk=READ)
+def biggest_files(a, ctx):
+    root = _path(a.get("folder") or "/")
+    n = max(1, min(int(a.get("count") or 10), 50))
+    skip = ("/proc", "/sys", "/dev", "/run", "/tmp/.X11-unix")
+    big = []
+    for d, dirs, fs in os.walk(root):
+        if d.startswith(skip):
+            dirs[:] = []
+            continue
+        for f in fs:
+            p = os.path.join(d, f)
+            try:
+                if os.path.islink(p):
+                    continue
+                big.append((os.path.getsize(p), p))
+            except OSError:
+                pass
+    big.sort(reverse=True)
+    import mimetypes
+    rows = []
+    for size, p in big[:n]:
+        kind = (mimetypes.guess_type(p)[0] or "file").split("/")[0]
+        rows.append(f"{p} ({_human_size(size)}, {kind if kind in ('video', 'audio', 'image', 'text') else 'other'})")
+    return "biggest files, largest first: " + "; ".join(rows) if rows else "no files found"
+
+
+@tool("make_spreadsheet", "Make a spreadsheet file (opens in the spreadsheet program): rows of cells; a cell starting with = is a "
+      "formula, e.g. '=SUM(B2:B4)'. Saved in Documents unless a path is given, then opened.",
+      {"name": STR, "rows": {"type": "array", "items": {"type": "array", "items": {"type": "string"}},
+                             "description": "the rows, first row = column titles, e.g. [['Item','Amount'],['Rent','1200'],['Total','=SUM(B2:B2)']]"},
+       "open": {"type": "boolean", "description": "open it afterwards (default true)"}}, ["name", "rows"], risk=CHANGE)
+def make_spreadsheet(a, ctx):
+    import csv
+    rows = [[str(c) for c in r] for r in (a.get("rows") or []) if isinstance(r, list)]
+    if not rows:
+        return "error: no rows given"
+    name = re.sub(r"[/\\\0]", "-", str(a.get("name") or "Spreadsheet").strip()) or "Spreadsheet"
+    base = _path(name) if "/" in name or name.startswith("~") else os.path.join(config.home(), "Documents", name)
+    base = os.path.splitext(base)[0]
+    os.makedirs(os.path.dirname(base), exist_ok=True)
+    csv_path = base + ".csv"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerows(rows)
+    out = csv_path
+    if shutil.which("ssconvert"):            # a real spreadsheet file: formulas stay formulas
+        r = subprocess.run(["ssconvert", csv_path, base + ".xlsx"], capture_output=True, text=True, timeout=120)
+        if r.returncode == 0 and os.path.exists(base + ".xlsx"):
+            os.remove(csv_path)
+            out = base + ".xlsx"
+    if a.get("open", True):
+        open_file({"path": out}, ctx)
+    home = config.home().rstrip("/")
+    return f"made {('~' + out[len(home):]) if out.startswith(home) else out} with {len(rows)} row(s) and opened it. Done: tell the owner in one sentence."
 
 
 @tool("find_duplicates", "Find files that are exact copies of each other (same contents, any name) and show them with buttons to "

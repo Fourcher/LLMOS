@@ -1237,6 +1237,9 @@ def _apps(text):
         if programs.find(kind):
             return ("open_app", {"command": kind})
     m = _MAKE_APP.match(text) or _WANT_APP.match(text)
+    if m and re.search(r"\b(?:remind|reminds|reminding|notify|notifies|alert|nag|nags|every (?:hour|day|morning|evening|night|\d+)|"
+                       r"each (?:hour|day)|at \d|email|send|share)\b", text, re.I):
+        m = None                          # an app and something more (a reminder, an email): the model does both
     if m:
         rest = m.group("rest").strip()
         look = ""
@@ -1306,6 +1309,15 @@ def _everyday2(text):
         return ("change_setting", {"setting": "lid", "value": "nothing"})
     if re.match(r"^(?:sleep|go to sleep|suspend) when (?:i )?close (?:the|its) lid$|^closing the lid should (?:sleep|suspend)$", low):
         return ("change_setting", {"setting": "lid", "value": "sleep"})
+    m = re.match(r"^(?P<what>.+?),?\s+(?P<when>(?:every time|each time|whenever|when|as soon as)\s+i\s+(?:unlock|log ?in|sign in|log on|"
+                 r"start (?:up|the computer)|turn (?:it|the computer) on)(?:\s+(?:the|my)\s+(?:computer|pc|laptop|screen))?)$", low)
+    if m:
+        what = t[:len(m.group("what"))].strip()
+        say = re.match(r"(?i)^(?:say|tell me|greet me with|remind me(?: to| that| about)?)\s+(?P<x>.+?)(?:\s+to me)?$", what)
+        if say:
+            words = say.group("x").strip().strip("'\"")
+            return ("schedule_task", {"when": m.group("when"), "task": words[:1].upper() + words[1:], "kind": "reminder"})
+        return ("schedule_task", {"when": m.group("when"), "task": what})
     m = re.match(r"^(?:merge|combine|join|put together)\s+(?:all\s+)?(?:of\s+)?(?:these|the|my|those|them|all)?\s*(?:the\s+)?pdfs?(?:\s+files)?"
                  r"(?:\s+in\s+(?:my\s+)?(?P<f>[\w .~/-]+?))?(?:\s+(?:into|in|to|as)\s+(?:one(?:\s+(?:pdf|file))?|a\s+single\s+(?:pdf|file)|(?:a\s+(?:pdf|file)\s+called\s+)?(?P<n>[\w .-]+?)))?$", low)
     if m:
@@ -1444,7 +1456,44 @@ def _everyday2(text):
     return None
 
 
+_STEP_VERB = (r"(?:turn|flip|rotate|add|call|name|rename|email|e-mail|send|mail|move|copy|put|make|zip|shrink|resize|save|read|"
+              r"open|convert|delete|remove|write|set|play|crop|summari[sz]e|remind|tell|show|print|attach|upload|download|"
+              r"find|search|look|count|sort|list|share|lock|unlock|close|start|stop|cancel|schedule|install|create|build|draw)")
+_CHAIN = re.compile(rf"(?:,|;|\band)\s*(?:then\s+|and\s+|also\s+|after that\s+|finally\s+)?{_STEP_VERB}\b.*(?:,|\band\b|\bthen\b)|"
+                    rf"\bthen\s+{_STEP_VERB}\b|\bafter that\b|\bfinally\b", re.I)
+
+
+def is_chain(text):
+    """Several steps where later ones build on earlier ones ("turn it into a pdf, flip it, then email it"): no single
+    word route may take it; the model does the whole chain. Two plain requests ("open my email and play music") are not."""
+    t = str(text or "")
+    if _mail_setup(t.strip()):
+        return False
+    if re.search(r"\b(?:make|build|create|write|draw|design)\b.*\band\s+(?:also\s+)?(?:remind|reminds|notify|notifies|nag|nags|email|"
+                 r"emails|send|sends|share|schedule|play|open)\b", t, re.I):
+        return True                       # make something, and also do something with it / about it
+    steps = len(re.findall(rf"(?:^|,|;|\band\b|\bthen\b)\s*(?:then\s+|and\s+|also\s+)?{_STEP_VERB}\b", t, re.I))
+    return steps >= 3 or bool(re.search(rf"\bthen\s+{_STEP_VERB}\b.*\b(?:it|them|that|the \w+)\b|\b(?:it|them)\b.*\bthen\b", t, re.I)) \
+        or (steps >= 2 and bool(re.search(r"\b(?:it|them|those|these)\b", t, re.I)) and "," in t)
+
+
+def _fix_schedule(r):
+    """A clock time left in the task ("shut down at 11pm", when "every night") belongs to the time."""
+    if not r or r[0] != "schedule_task":
+        return r
+    a = dict(r[1])
+    m = re.search(r"\s*\bat\s+(\d{1,2}(?::\d\d)?\s*(?:am|pm)|\d{1,2}:\d\d|noon|midnight)\b", a.get("task", ""), re.I)
+    if m and not re.search(r"\d|noon|midnight", a.get("when", "")):
+        a["when"] = f"{a['when']} at {m.group(1)}".strip()
+        a["task"] = (a["task"][:m.start()] + a["task"][m.end():]).strip()
+    return (r[0], a)
+
+
 def match(text):
+    return _fix_schedule(_match(text))
+
+
+def _match(text):
     text = plain(text)
     t = text.strip()
     if len(t) > 400 or "\n" in t:
@@ -1452,6 +1501,8 @@ def match(text):
     ms = _mail_setup(t)
     if ms:
         return ms
+    if is_chain(t):
+        return None
     if len(t) > 200:
         return None
     ev2 = _everyday2(t)

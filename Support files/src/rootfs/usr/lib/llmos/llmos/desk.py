@@ -1295,6 +1295,16 @@ class Desk:
         self.push_status()
         self._model_watch()
         self.show_away()
+        def on_unlock():
+            for t in store.on_event("unlock"):
+                if t.get("kind") == "reminder":
+                    self.instant_reply("(on unlock)", t["task"])
+                    if config.settings.get("speak_replies") or re.search(r"\b(?:say|tell|greet|speak)\b", t.get("when", "") + " " + t["task"], re.I):
+                        self.ctx.background(lambda w=t["task"]: voice.speak(w))
+                else:
+                    self.say(t["task"])
+        if store.on_event("unlock"):
+            threading.Thread(target=lambda: (time.sleep(2), on_unlock()), daemon=True).start()
         auto = [a for a in (config.settings.get("autostart") or []) if str(a).strip()]
         if auto:                              # "start X when I log in": each time the desk opens (locking closes programs)
             threading.Thread(target=lambda: [(time.sleep(1.5), self.act("open " + a)) for a in auto], daemon=True).start()
@@ -2146,6 +2156,8 @@ class Desk:
 
     def _instant(self, text):
         low = intent.plain(text).lower().strip()
+        if intent.is_chain(low):
+            return False                  # several steps that build on each other: the model does them together
         if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or everyday.MATCH.search(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S+$|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|(?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android))\b|\brepo(?:sitory)?\b|\b(?:reset|factory|like new|erase everything)\b|\b(?:lock|encrypt|password|protect|secure)\b.*\bfolder\b|^(?:unlock|decrypt) \w|\b(?:lock|encrypt|password[- ]?protect) (?:my )?(?:documents|pictures|photos|music|videos|downloads|desktop)\b|\bbookmarks?\b|\bblur\b|\b(?:users?|accounts?|profile|login|guest)\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
                 any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
                 any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
@@ -2219,7 +2231,7 @@ class Desk:
         r = self._system_shortcut(low, line)
         if r:
             return True
-        if everyday.MATCH.search(low) and everyday.handle(self, line):
+        if everyday.MATCH.search(low) and not intent.is_chain(low) and everyday.handle(self, line):
             return True
         if re.fullmatch(r"(?:pause|resume|unpause|play ?pause|pause (?:the |my )?(?:music|video|song)|resume (?:the |my )?(?:music|video|song)|keep playing)[.!]?", low):
             if not media.playing():
@@ -3279,8 +3291,8 @@ class Desk:
         """'open my email and play music': two requests the OS knows by heart, done one after the other. Only when
         every part is one it handles without the model, so 'rock and roll' or 'add milk and eggs' are left whole."""
         parts = [p.strip(" ,.") for p in re.split(r"\s*(?:,\s*)?\b(?:and then|and also|then|and)\b\s*", text) if p.strip(" ,.")]
-        if len(parts) < 2 or len(parts) > 3:
-            return None
+        if len(parts) < 2 or len(parts) > 3 or intent.is_chain(text) or intent.match(text):
+            return None                       # a chain, or a request the OS already knows whole (a schedule "...and then...")
         # a chain, not a list: a later step works on what an earlier one made ("turn it into a pdf, then email it"), or a
         # part is itself several steps; done one by one, each would lose what "it" is, so the model does the whole thing
         if any(re.search(r"\b(?:it|its|them|they|that|those|this|these|the result|the file|the same)\b", p, re.I) for p in parts[1:]) \
@@ -3456,6 +3468,7 @@ class Desk:
             # the keyboard layout is read from the compositor's environment file
             with open(os.path.join(cfg, "environment"), "w") as f:
                 f.write(f"XKB_DEFAULT_LAYOUT={re.sub(r'[^a-z,]', '', str(inp.get('layout', 'us')).lower()) or 'us'}\n")
+                f.write(f"XCURSOR_SIZE={int(inp.get('cursor_size', 24))}\n")
                 if inp.get("variant"):
                     f.write(f"XKB_DEFAULT_VARIANT={re.sub(r'[^a-z0-9_,]', '', str(inp['variant']).lower())}\n")
             subprocess.run(["labwc", "--reconfigure"], capture_output=True, timeout=10, env=self._child_env())

@@ -428,10 +428,32 @@ def _save_tasks(ts):
     config.save_json(config.data("tasks.json"), ts)
 
 
+EVENTS = {"unlock": r"\b(?:every time|each time|whenever|when|after|as soon as)\b.*\b(?:unlock|log ?in|sign in|log on|come back|"
+                     r"start (?:up|the computer)|turn (?:it|the computer) on|boot)|\bat (?:login|log ?in|start ?up|unlock)\b|\bon (?:unlock|login|start ?up)\b"}
+
+
+def event_of(when):
+    """'every time I unlock the computer' -> 'unlock' (a task that runs on that event, not at a time), else None."""
+    for ev, rx in EVENTS.items():
+        if re.search(rx, str(when or ""), re.I):
+            return ev
+    return None
+
+
 @_locked
 def add_task(when, task, kind="agent", approved=False):
     """kind: "agent" (the model carries the task out), "timer" (task = its length, e.g. "10 minutes"),
-    "reminder" (task = the words to show); timers and reminders are delivered as they are, no model."""
+    "reminder" (task = the words to show); timers and reminders are delivered as they are, no model.
+    A 'when' that names an event ("every time I unlock") makes a task that runs on that event instead."""
+    ev = event_of(when)
+    if ev:
+        t = {"id": uuid.uuid4().hex[:6], "task": task.strip(), "when": when, "kind": kind if kind in ("reminder",) else "agent",
+             "event": ev, "spec": None, "next": None, "created": time.time(),
+             "desc": {"unlock": "every time you unlock"}[ev], "approved": bool(approved)}
+        cur = tasks()
+        cur.append(t)
+        _save_tasks(cur)
+        return t
     first, spec = parse_when(when)
     t = {"id": uuid.uuid4().hex[:6], "task": task.strip(), "when": when, "kind": kind if kind in ("timer", "reminder") else "agent",
          "spec": spec, "next": first.timestamp(), "created": time.time(),
@@ -455,7 +477,12 @@ def cancel_task(ref):
 
 def due(now=None):
     now = now or time.time()
-    return [t for t in tasks() if t["next"] <= now]
+    return [t for t in tasks() if t.get("next") and t["next"] <= now]
+
+
+def on_event(ev):
+    """The tasks that run on this event ('unlock')."""
+    return [t for t in tasks() if t.get("event") == ev]
 
 
 @_locked
@@ -466,9 +493,11 @@ def finished(task_id, result):
             continue
         t["last_run"] = time.time()
         t["last_result"] = str(result)[:500]
+        if t.get("event"):
+            continue                      # an event task stays until it is cancelled
         if t.get("spec"):
             nxt = next_occurrence(t["spec"], dt.datetime.now())
             t["next"] = nxt.timestamp()
         else:
             t["next"] = None
-    _save_tasks([t for t in cur if t.get("next")])
+    _save_tasks([t for t in cur if t.get("next") or t.get("event")])

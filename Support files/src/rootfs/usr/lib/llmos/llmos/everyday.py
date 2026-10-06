@@ -19,14 +19,14 @@ import urllib.parse
 from . import config
 
 MATCH = re.compile(
-    r"\b(?:days? (?:until|till|to|left)|countdown|how long (?:until|till)|work timer|clock (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
+    r"\b(?:days? (?:until|till|to|left)|countdown|how long (?:until|till)|work timer|^clock (?:in|out)$|i'?m clocking (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
     r"hours (?:did i|have i) work|port \d+|on \d{2,5}\b|web ?server|serve (?:this|the)|preview (?:this|the|my)|temperature|"
     r"(?:too |so |very |running |getting )?hot\b|overheat|battery (?:health|dying|dead|draining|drains|life|is draining)|"
     r"drive health|disk health|hard ?drive (?:health|failing|dying|ok)|ssd health|smart status|track (?:my )?(?:parcel|package|order|delivery)|"
     r"order status|where is my (?:parcel|package|order)|typing (?:practice|tutor|lessons?|test)|teach me to type|learn (?:to type|\w+ish|french|spanish|german|"
     r"italian|japanese|chinese|korean|portuguese|arabic|russian|hindi|dutch)|computer(?:'?s)? name|hostname|name (?:this|the) computer|"
     r"call this computer|rename (?:this|the) computer|focus mode|block (?:youtube|facebook|instagram|tiktok|reddit|twitter|social media|"
-    r"distracting|websites|sites)|stop focus|end focus|double[- ]?clicks?|sticky keys|hands? (?:shake|shaking|tremor)|tremor|"
+    r"distracting|websites|sites)|stop focus|end focus|double[- ]?clicks?|sticky keys|(?:mouse )?(?:pointer|cursor)\b|hands? (?:shake|shaking|tremor)|tremor|"
     r"(?:startup|start-up|boot|notification|clicking|click|system|alert) sounds?|the chime|chime (?:on|off)|"
     r"when i (?:log ?in|sign in|start (?:up|the computer))|automatically|autostart|start(?:s)? (?:up )?with the computer|startup (?:programs|apps)|"
     r"vpn|wireguard|openvpn|proxy|"
@@ -38,7 +38,8 @@ MATCH = re.compile(
     r"(?:other|second|external|left|right) (?:monitor|screen|display)|new (?:workspace|desktop)|(?:game ?)?controller|gamepad|joystick|"
     r"phone'?s? (?:internet|data|hotspot)|tether|hotspot|drawing tablet|wacom|pen tablet|touch ?screen|"
     r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?\b|encrypt|stolen|guest|someone else is using|disk encryption|passwords\b|password (?:manager|keeper|vault|safe)|logs?\b|journalctl|dmesg|service (?:fail|crash)|default shell|shell to|"
-    r"cloud|new (?:computer|pc|laptop)|settings and apps|snapshot|roll ?back|restore point|kids? mode|child mode|parental|only let my|shortcut for)", re.I)
+    r"cloud|new (?:computer|pc|laptop)|settings and apps|snapshot|roll ?back|restore point|kids? mode|child mode|parental|only let my|shortcut for|"
+    r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)", re.I)
 
 
 def _say(desk, line, text):
@@ -162,7 +163,7 @@ def work_timer(desk, line, low):
     lg = _log()
     midnight = time.mktime(dt.date.today().timetuple())
     week = midnight - dt.date.today().weekday() * 86400
-    if re.search(r"\b(?:start|begin|resume)(?:ing)? (?:the |my |a )?(?:work )?timer|clock in|start tracking|track(?:ing)? (?:my )?(?:hours|time)$|^track my hours", low):
+    if re.search(r"\b(?:start|begin|resume)(?:ing)? (?:the |my |a )?(?:work )?timer|^clock in$|clocking in|start tracking|track(?:ing)? (?:my )?(?:hours|time)$|^track my hours", low):
         if lg["running"]:
             return _say(desk, line, f"The work timer is already running, since {time.strftime('%H:%M', time.localtime(lg['running']))} "
                                     f"({_hm(time.time() - lg['running'])} so far). Say “stop the work timer” to stop it.")
@@ -170,7 +171,7 @@ def work_timer(desk, line, low):
         _save_log(lg)
         return _say(desk, line, f"Work timer started at {time.strftime('%H:%M')}. Say “stop the work timer” when you stop; "
                                 f"today so far: {_hm(_total(lg, midnight))}.")
-    if re.search(r"\b(?:stop|end|pause|finish)(?:ing)? (?:the |my )?(?:work )?timer|clock out|stop tracking", low):
+    if re.search(r"\b(?:stop|end|pause|finish)(?:ing)? (?:the |my )?(?:work )?timer|^clock out$|clocking out|stop tracking", low):
         if not lg["running"]:
             return _say(desk, line, "The work timer isn't running. Today: " + _hm(_total(lg, midnight)) + ".")
         took = time.time() - lg["running"]
@@ -462,24 +463,84 @@ def _focus_state():
         return None
 
 
-def _hosts_block(sites):
+def _hosts_block(focus_sites):
+    """Write what is blocked now: the focus period's sites plus the owner's own blocks ("block reddit", "block every
+    website except wikipedia"); to /etc/hosts (every program) and Firefox's own filter (it may look names up itself)."""
+    wb = config.settings.get("web_block") or {}
+    blocked = sorted(set(list(focus_sites) + list(wb.get("block") or [])))
+    allow_only = list(wb.get("allow_only") or [])
+    host_sites = [h for s in blocked for h in (s, "www." + s) if not s.startswith("www.")] + [s for s in blocked if s.startswith("www.")]
     try:
         lines = [ln for ln in open("/etc/hosts").read().splitlines() if _MARK not in ln]
-        lines += [f"0.0.0.0 {s} {_MARK}" for s in sites]
+        lines += [f"0.0.0.0 {s} {_MARK}" for s in dict.fromkeys(host_sites)]
         with open("/etc/hosts", "w") as f:
             f.write("\n".join(lines) + "\n")
     except OSError:
         pass
-    try:   # Firefox may look names up itself (DNS over HTTPS): its own block list too, read when it next starts
+    try:
         pol = json.load(open(_POLICY))
-        if sites:
-            pol["policies"]["WebsiteFilter"] = {"Block": [f"*://{s}/*" for s in sites] + [f"*://*.{s}/*" for s in sites if not s.startswith("www.")]}
+        if allow_only:
+            pol["policies"]["WebsiteFilter"] = {"Block": ["<all_urls>"],
+                                                "Exceptions": [f"*://{s}/*" for s in allow_only] + [f"*://*.{s}/*" for s in allow_only]}
+        elif blocked:
+            pol["policies"]["WebsiteFilter"] = {"Block": [f"*://{s}/*" for s in blocked] + [f"*://*.{s}/*" for s in blocked if not s.startswith("www.")]}
         else:
             pol["policies"].pop("WebsiteFilter", None)
         with open(_POLICY, "w") as f:
             json.dump(pol, f, indent=2)
     except (OSError, ValueError, KeyError):
         pass
+
+
+def _site(word):
+    w = word.strip().lower().strip(".,")
+    w = re.sub(r"^(?:https?://)?(?:www\.)?", "", w).split("/")[0]
+    known = {"youtube": "youtube.com", "facebook": "facebook.com", "instagram": "instagram.com", "tiktok": "tiktok.com", "reddit": "reddit.com",
+             "twitter": "twitter.com", "x": "x.com", "netflix": "netflix.com", "wikipedia": "wikipedia.org", "google": "google.com",
+             "amazon": "amazon.com", "ebay": "ebay.com", "twitch": "twitch.tv", "discord": "discord.com", "news": "news.google.com"}
+    return known.get(w, w if "." in w else w + ".com")
+
+
+def _firefox_note():
+    return " (Firefox applies it fully the next time it starts)" if subprocess.run(["pgrep", "-x", "firefox"], capture_output=True).returncode == 0 else ""
+
+
+def web_block(desk, line, low):
+    m = re.search(r"^(?:please\s+)?(?:block|stop|ban)\s+(?:every|all(?: the)?|any)\s+(?:website|site|web ?page)s?\s+(?:except|but|apart from|other than)\s+(?P<keep>.+)$", low)
+    if m:
+        keep = [_site(w) for w in re.split(r",|\band\b|\bor\b", m.group("keep")) if w.strip()]
+        config.settings.set("web_block", {"allow_only": keep, "block": []})
+        _hosts_block(_focus_sites())
+        return _say(desk, line, f"Only {', '.join(keep)} open in the browser now; every other website is blocked{_firefox_note()}. "
+                                "Say \u201cunblock all websites\u201d to undo.")
+    m = re.search(r"^(?:please\s+)?(?:unblock|allow)\s+(?:all|every|the)?\s*(?:websites?|sites?|everything|the internet|web)$|^(?:remove|clear|stop) (?:all )?(?:the )?(?:website )?blocks?(?:ing)?$", low)
+    if m:
+        config.settings.set("web_block", {})
+        _hosts_block(_focus_sites())
+        return _say(desk, line, "All websites open again" + (" (focus mode is still on until it ends)" if _focus_sites() else "") + ".")
+    m = re.search(r"^(?:please\s+)?unblock\s+(?P<s>[\w., -]+)$", low)
+    if m:
+        wb = dict(config.settings.get("web_block") or {})
+        drop = {_site(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()}
+        wb["block"] = [x for x in wb.get("block") or [] if x not in drop]
+        config.settings.set("web_block", wb)
+        _hosts_block(_focus_sites())
+        return _say(desk, line, f"{', '.join(sorted(drop))} open again.")
+    m = re.search(r"^(?:please\s+)?block\s+(?P<s>(?!every|all\b)[\w., -]+?)(?:\s+(?:forever|for good|permanently|from now on))?$", low)
+    if m and not re.search(r"\b(?:for|until|while)\b", m.group("s")):
+        wb = dict(config.settings.get("web_block") or {})
+        add = [_site(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()]
+        wb["block"] = sorted(set((wb.get("block") or []) + add))
+        wb.pop("allow_only", None)
+        config.settings.set("web_block", wb)
+        _hosts_block(_focus_sites())
+        return _say(desk, line, f"Blocked {', '.join(add)}{_firefox_note()}. Say \u201cunblock {add[0].split('.')[0]}\u201d to undo.")
+    return False
+
+
+def _focus_sites():
+    st = _focus_state()
+    return st.get("sites", []) if st else []
 
 
 def focus_end(desk=None, quiet=False):
@@ -524,8 +585,8 @@ def focus(desk, line, low):
         st = focus_end()
         return _say(desk, line, "Focus mode is off: sites and notifications are back." if st else "Focus mode wasn't on.")
     m = re.search(r"focus mode|block (?:youtube|facebook|instagram|tiktok|reddit|twitter|social media|distracting (?:sites|websites)|websites|sites)", low)
-    if not m:
-        return False
+    if not m or ("focus" not in low and not re.search(r"\b(?:for|while|until|during)\b", low)):
+        return False                      # "block reddit" with no time: a lasting block (web_block), not a focus period
     mins = 60
     d = re.search(r"(?:for|during) (?:an? |the next )?(?P<n>\d+(?:\.\d+)?|half an|an|one|two|three|four)?\s*(?P<u>hours?|hrs?|minutes?|mins?)", low)
     if d:
@@ -571,6 +632,22 @@ def access(desk, line, low):
         config.settings.set("input", inp)
         desk.apply_input()
         return _say(desk, line, "Double-click and key repeat are back to normal.")
+    m = re.search(r"(?:mouse |the )?(?:pointer|cursor|arrow)\b.*\b(?P<s>huge|giant|enormous|massive|bigger|big|larger|large|smaller|small|tiny|normal|default)\b|"
+                  r"(?P<s2>bigger|larger|smaller|huge|giant|normal) (?:mouse )?(?:pointer|cursor)", low)
+    if m:
+        w = m.group("s") or m.group("s2")
+        size = {"huge": 96, "giant": 96, "enormous": 128, "massive": 128, "bigger": 48, "big": 48, "larger": 48, "large": 48,
+                "smaller": 16, "small": 16, "tiny": 16, "normal": 24, "default": 24}[w]
+        inp = dict(config.settings.get("input", {}) or {})
+        inp["cursor_size"] = size
+        config.settings.set("input", inp)
+        desk.apply_input()
+        try:
+            subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "cursor-size", str(size)], capture_output=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return _say(desk, line, f"Pointer size set to {size} (normal is 24). Programs opened from now on use it; the desk's own pointer "
+                                "changes the next time the computer starts.")
     if re.search(r"sticky keys", low):
         return _say(desk, line, "Sticky keys (pressing Ctrl, then C, instead of both together) aren't available on LLM OS yet. What helps now: say what "
                                 "you want instead of using a shortcut (\u201ccopy this\u201d, \u201cswitch to the browser\u201d), or \u201cmy hands shake\u201d "
@@ -873,7 +950,7 @@ def howto(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, howto):
+    for fn in (focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True
