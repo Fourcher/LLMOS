@@ -1097,13 +1097,20 @@ def quick(desk, line, low):
     m = re.fullmatch(r"(?:define|definition of|what does (?P<w2>[a-z'-]+) mean|what(?:'s| is) the meaning of|meaning of|what is a|what(?:'s| is) an?) ?(?P<w>[a-z'-]+)?", q)
     if m and (m.group("w") or m.group("w2")) and (q.startswith(("define", "definition", "meaning", "what does", "what's the meaning", "what is the meaning"))):
         w = m.group("w2") or m.group("w")
-        try:
-            from . import web
+        from . import web
+        try:      # Wiktionary's own API (free, no key)
+            raw = web.fetch(f"https://en.wiktionary.org/api/rest_v1/page/definition/{urllib.parse.quote(w)}", max_bytes=400000, timeout=8)[3]
+            for e in json.loads(raw).get("en", []):
+                for dd in e.get("definitions", []):
+                    d = re.sub(r"<[^>]+>", "", dd.get("definition", "")).strip()
+                    if d:
+                        return _say(desk, line, f"{w} ({e.get('partOfSpeech', '').lower()}): {d}")
+        except Exception:
+            pass
+        try:      # the Free Dictionary API (built on Wiktionary too)
             raw = web.fetch(f"https://api.dictionaryapi.dev/api/v2/entries/en/{urllib.parse.quote(w)}", max_bytes=200000, timeout=8)[3]
-            data = json.loads(raw)
-            mean = data[0]["meanings"][0]
-            d = mean["definitions"][0]["definition"]
-            return _say(desk, line, f"{w} ({mean.get('partOfSpeech', '')}): {d}")
+            mean = json.loads(raw)[0]["meanings"][0]
+            return _say(desk, line, f"{w} ({mean.get('partOfSpeech', '')}): {mean['definitions'][0]['definition']}")
         except Exception:
             return False
     m = re.fullmatch(r"(?:another|other|a different) words? for (?P<w>[a-z'-]+)|synonyms? (?:of|for) (?P<w2>[a-z'-]+)|what(?:'s| is) a synonym (?:of|for) (?P<w3>[a-z'-]+)", q)

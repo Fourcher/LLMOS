@@ -207,5 +207,27 @@
    "wants 16 GB+ and is the slowest",
    "heavy on an old laptop"
   ]
+ },
+ {
+  "id": "underdog-27b",
+  "name": "Underdog 27B",
+  "maker": "Conway Research",
+  "origin": "",
+  "repo": "ConwayResearch/Underdog-27B-1.1",
+  "file": "Underdog-27B-Q4_1.gguf",
+  "sha256": "bb75d62fe485bfbc2817d63fd2a7d8c1ef2d796218ca80ed155c38592922d459",
+  "size": 16909548032,
+  "license": "Apache-2.0",
+  "ram_gb": 20,
+  "speed": "very slow",
+  "note": "the largest here (27B, built on Qwen); needs a 32 GB machine",
+  "good_at": [
+   "the most capable on-device model here",
+   "long writing, coding and summaries"
+  ],
+  "limits": [
+   "wants 32 GB of memory and a 17 GB download",
+   "very slow without a graphics card"
+  ]
  }
 ]
