@@ -65,5 +65,14 @@ check(everyday.howto(dk, "color blind mode", "color blind mode") and "filter" in
 dk = Desk()
 check(everyday.howto(dk, "close the lid", "close the lid") is False, "'close the lid' alone is not a how-to")
 
+print("a custom style can change the look but never hide or move the request box and the frame")
+from llmos import tools  # noqa: E402
+css = tools._clean_css("#cmd { display: none !important; color: lime } html { height: 1px; filter: sepia(1) } "
+                       ".win { clip-path: polygon(50% 0,100% 100%,0 100%) !important } @import url(http://x); a { background: url(http://evil/x.png) }")
+check("display" not in css and "lime" in css, "the request box keeps showing; its colour may change")
+check("height" not in css and "sepia" in css, "the page keeps its size; a whole-screen effect stays")
+check("clip-path" in css, "windows may take any shape")
+check("http://" not in css, "nothing is fetched from the network")
+
 print(f"\n{'all good' if not fails else str(fails) + ' failure(s)'}")
 sys.exit(1 if fails else 0)

@@ -540,7 +540,33 @@ def _clean_css(css):
     css = re.sub(r"@import[^;]*;?", "", css, flags=re.I)
     css = re.sub(r"url\(\s*(['\"]?)(?!data:)[^)]*\)", "none", css, flags=re.I)
     css = re.sub(r"expression\s*\(|javascript:|behavior\s*:|-moz-binding", "", css, flags=re.I)
+    css = _protect_layout(css)
     return css.replace("</", "<\\/")
+
+
+# the frame that keeps the desk usable whatever it looks like: the page, the top bar, the window area, the request box,
+# the reply column and the dock keep their size, place and visibility (colours, fonts, borders, effects are free)
+_FRAME = re.compile(r"(?:^|[\s,>+~])(?:html|body|\*|#top|#stage|#cmd|#in|#send|#reply|#dock|#desk|#overlay|#toasts)(?=$|[\s,.:#\[>+~])", re.I)
+_LAYOUT_PROPS = re.compile(r"^\s*(?:position|display|visibility|opacity|width|height|min-width|min-height|max-width|max-height|top|left|right|"
+                           r"bottom|inset|overflow(?:-[xy])?|float|z-index|margin(?:-\w+)?|flex(?:-\w+)?|grid(?:-\w+)?|order|pointer-events|"
+                           r"clip-path|clip|content)\s*:", re.I)
+
+
+def _protect_layout(css):
+    out, i = [], 0
+    for m in re.finditer(r"(@keyframes[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\})|([^{}@]+)\{([^{}]*)\}", css):
+        out.append(css[i:m.start()])
+        i = m.end()
+        if m.group(1):
+            out.append(m.group(1))
+            continue
+        sel, body = m.group(2), m.group(3)
+        targets = [re.split(r"[\s>+~]+", g.strip())[-1] for g in sel.split(",") if g.strip()]
+        if any(_FRAME.search(" " + re.sub(r"::?[\w-]+(?:\([^)]*\))?", "", t)) for t in targets):
+            body = ";".join(d for d in body.split(";") if d.strip() and not _LAYOUT_PROPS.match(d))
+        out.append(f"{sel}{{{body}}}")
+    out.append(css[i:])
+    return "".join(out)
 
 
 @tool("set_appearance",
@@ -728,8 +754,8 @@ def restyle(a, ctx):
     text = re.sub(r"```(?:css)?", "", text)
     note = ""
     m = re.search(r"^\s*NOTE:\s*(.+)$", text, re.M)
-    if m:
-        note, text = m.group(1).strip(), text[:m.start()]
+    if m:                                          # the note may come first or last: take that line out, keep the CSS
+        note, text = m.group(1).strip(), text[:m.start()] + text[m.end():]
     if text.count("{") > text.count("}"):              # cut off mid-rule: keep the complete rules
         text = text[:text.rfind("}") + 1]
     out = {"note": note}
