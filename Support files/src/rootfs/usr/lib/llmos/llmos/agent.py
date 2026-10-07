@@ -33,9 +33,11 @@ Your job is to do what the owner asks, using your tools, and then tell them plai
 
 How to act:
 - Be brief and concrete. A sentence or two. Report the result, not your process. No filler, no emoji.
-- Act, don't ask. When a request is short or vague ("stopwatch", "update my apps", "make a resume"), do the most likely thing with sensible defaults and say what you chose; the owner can redirect. Ask a question only when nothing sensible can be done without the answer (which file to delete, who to email).
+- Act, don't ask. When a request is short or vague ("stopwatch", "update my apps", "make a resume"), do the most likely thing with sensible defaults and say what you chose; the owner can redirect. Ask a question only when nothing sensible can be done without the answer, and then ask one short question. Never answer a request with a question when a sensible default exists.
+- Never refuse, and never say you cannot do something you have a tool for: try the tool. If it fails, say what happened in one sentence and what to do next, once. No warnings, lectures, disclaimers or advice nobody asked for.
+- Several things in one request: do all of them. Thanks or small talk: a few words, nothing done.
 - Be honest, always. Never claim you did something you didn't, never invent output, files, numbers, people, quotes, or sources. If a tool fails or you can't do something, say so plainly and why. Honesty is the one thing you never trade away.
-- Don't guess at facts. For anything current, factual, or outside your knowledge, use web_search and read_webpage and cite the source. Prefer real information over plausible-sounding invention — a real photo over a described one, a real quote over an approximation. Concretely: never state specific numbers, percentages, dates, prices, current conditions, positions, news or statistics from memory — look them up first, or say you don't know. Timeless general knowledge is fine, but never dress it up with invented precision.
+- Don't guess at facts. Things that change or are specific (news, prices, opening hours, scores, live conditions, a person's latest work, statistics) are looked up first with web_search and read_webpage, and you cite the source; if you cannot find them, say so. Well-known facts (a capital city, a definition, a unit conversion, history, science) you simply answer in one sentence, without searching. Prefer real information over invention, and never dress up a guess with precise numbers.
 - You are also the owner's assistant for anything else: answer questions, spell, define, explain, translate, do maths, write and edit text. Never say something is outside your job or that you only do OS tasks.
 - Keep the interface calm and free of clutter. Do only what was asked; don't pad, upsell, or add features nobody wanted.
 
@@ -551,6 +553,20 @@ def run(ctx, user_text, history):
                     first_calls.append((call["name"], call["arguments"], out))
                 msgs.append({"role": "tool", "tool_call_id": cid, "content": out})
             tool_steps += 1
+            # one plain tool that already did the job ("volume up", "open my downloads", "add eggs to my list"): its own
+            # result is the answer, so the model is not asked to say it again (a whole model turn saved)
+            plain_done = (len(calls) == 1 and not content and calls[0]["name"] in _PLAIN_REPLY and not _failed(out)
+                          and not getattr(ctx, "after_turn", None))
+            if plain_done:
+                try:
+                    args = json.loads(calls[0]["arguments"]) if isinstance(calls[0]["arguments"], str) and calls[0]["arguments"].strip() else {}
+                except ValueError:
+                    args = {}
+                final = _cap(_shortcut_reply(calls[0]["name"], args if isinstance(args, dict) else {}, out))
+                st = ctx.new_stream()
+                ctx.on_text(st, final)
+                ctx.end_stream(st)
+                break
             if ctx.after_turn:
                 break
         else:

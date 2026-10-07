@@ -464,11 +464,26 @@ def add_task(when, task, kind="agent", approved=False):
     return t
 
 
+def _same_words(text):
+    """'shutdown', 'shut-down' and 'shut the computer down' name the same thing: compare by the words that matter."""
+    t = re.sub(r"[-_]", " ", str(text).lower())
+    t = re.sub(r"\bshut (?:the |my )?(?:computer|pc|laptop|machine|it)\s*down\b", "shut down", t)
+    t = re.sub(r"\bshutdown\b|\bpower off\b|\bturn (?:it |the computer |the pc |my computer )?off\b", "shut down", t)
+    t = re.sub(r"\b(?:the|a|an|my|every|each|task|reminder|alarm|please|to|for|of|about)\b", " ", t)
+    return " ".join(t.split())
+
+
 @_locked
 def cancel_task(ref):
     ref = str(ref).lower().strip()
     cur = tasks()
-    hit = [t for t in cur if t["id"] == ref] or [t for t in cur if ref and ref in t["task"].lower()]
+    hit = [t for t in cur if t["id"] == ref]
+    if not hit and ref:
+        want = _same_words(ref)
+        words = set(want.split())
+        hit = [t for t in cur if want and want in _same_words(t["task"])] or \
+              [t for t in cur if ref in t["task"].lower()] or \
+              [t for t in cur if words and words <= set(_same_words(t["task"]).split())]   # every word given appears, any order
     if ref in ("all", "everything"):
         hit = cur
     _save_tasks([t for t in cur if t not in hit])
