@@ -1322,6 +1322,18 @@ def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
     import urllib.parse as _u
+    # finding the owner's own things by what they are about
+    m = re.match(r"^(?:please\s+)?(?:find|show(?:\s+me)?|where(?:'s|\s+is|\s+are)|look\s+for|get(?:\s+me)?|open)\s+(?:the|my|that|those)\s+(?:photos?|pictures?|pics?|images?|snaps?)\s+"
+                 r"(?:of|with|from|where|showing|that\s+(?:has|have|shows?)|i\s+took\s+(?:of|at|in))\s+(?P<q>.+)$"
+                 r"|^(?:please\s+)?(?:find|show(?:\s+me)?)\s+(?:my\s+)?(?:photos?|pictures?|pics?)\s+(?:of|with|from)\s+(?P<q2>.+?)\s+(?:i\s+took|from\s+my\s+(?:photos|pictures|phone|camera))$", low)
+    if m:
+        return ("find_by_meaning", {"query": (m.group("q") or m.group("q2")).strip(), "kind": "photos"})
+    m = re.match(r"^(?:please\s+)?(?:find|show(?:\s+me)?|where(?:'s|\s+is|\s+are)|look\s+for|get(?:\s+me)?|open)\s+(?:the|my|that)\s+"
+                 r"(?:document|doc|file|pdf|letter|note|essay|report|spreadsheet|invoice|receipt|contract|recipe|presentation|story|cv|resume|form)s?\s+"
+                 r"(?:about|on|for|regarding|that\s+(?:mentions|talks\s+about|is\s+about|says)|mentioning|with|where\s+i\s+(?:wrote|talked)\s+about)\s+(?P<q>.+)$"
+                 r"|^(?:please\s+)?search\s+(?:through\s+)?(?:my|all\s+my|the)\s+(?:files|documents|stuff|computer|notes)\s+for\s+(?P<q2>.+)$", low)
+    if m:
+        return ("find_by_meaning", {"query": (m.group("q") or m.group("q2")).strip(), "kind": "documents" if m.group("q") else "any"})
     # "set a 3 minute timer", "3 minute timer", "a 90 second timer for the eggs"
     m = re.match(r"^(?:please\s+)?(?:set\s+|start\s+|make\s+)?(?:a|an|me\s+a)?\s*(?P<n>\d+(?:\.\d+)?|one|two|three|four|five|ten|fifteen|twenty|thirty|half\s+an?)\s*[- ]?"
                  r"(?P<u>sec(?:ond)?s?|min(?:ute)?s?|h(?:ou)?rs?)\s+timer(?:\s+for\s+(?P<what>.+))?$", low)

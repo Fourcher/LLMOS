@@ -2138,7 +2138,7 @@ class Desk:
         self.requests.put((text, done, chat))
 
     # tools that finish at once and need no model: safe to run beside a request in progress
-    _SLOW = {"install_app", "manage_models", "web_search", "read_webpage", "show_image", "set_wallpaper", "install_to_disk",
+    _SLOW = {"install_app", "manage_models", "find_by_meaning", "edit_images", "convert_media", "web_search", "read_webpage", "show_image", "set_wallpaper", "install_to_disk",
              "play_media", "check_new_models", "add_model", "manage_voice", "wifi_scan", "wifi_connect", "run_command"}
 
     _QUICK = {"settings", "models", "tasks", "memory", "audit", "help", "connectors", "?", "lock", "voice", "listen", "clear",

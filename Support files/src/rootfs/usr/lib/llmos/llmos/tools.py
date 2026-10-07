@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+import threading
 
 from . import apps, config, devices, programs, themes, i18n, llm, mail, media, models, store, system, ui, uispec, web
 
@@ -2450,6 +2451,53 @@ def make_spreadsheet(a, ctx):
         open_file({"path": out}, ctx)
     home = config.home().rstrip("/")
     return f"made {('~' + out[len(home):]) if out.startswith(home) else out} with {len(rows)} row(s) and opened it. Done: tell the owner in one sentence."
+
+
+@tool("find_by_meaning", "Find the owner's own files, notes or photos by what they are about, not their names: 'the photo of the "
+      "dog on the beach', 'my letter about the car insurance'. Searches this computer only.",
+      {"query": {"type": "string", "description": "what it is about, in the owner's words"},
+       "kind": {"type": "string", "enum": ["any", "photos", "documents"], "description": "photos, documents, or any (default)"}},
+      ["query"], risk=READ)
+def find_by_meaning(a, ctx):
+    from . import meaning
+    q = str(a.get("query", "")).strip()
+    kind = a.get("kind") or "any"
+    if not q:
+        return "error: what should I look for?"
+    if not meaning.available():
+        return ("searching by meaning needs a newer model runtime than this system has; it comes with the next LLM OS update. "
+                "Until then I can search by name: say 'find my files called …'")
+    vision = kind in ("photos", "any") and any(True for _ in meaning._candidates(("image",)))
+    try:
+        if not meaning.ready(vision=vision):
+            ctx.status("getting the search model once (310 MB" + (" + 555 MB for pictures" if vision else "") + "), checked before use…")
+            meaning.fetch(vision=vision, progress=lambda d, t: ctx.status(f"search model: {d * 100 // max(1, t)}%"))
+        ctx.status("looking through your files…")
+        meaning.index(("doc", "other"), limit=400)
+        if vision and kind in ("photos", "any"):
+            ctx.status("looking at your newest photos…")
+            meaning.index(("image",), limit=12, progress=lambda i, n: ctx.status(f"photo {i} of {n}…"))
+            threading.Thread(target=meaning.background_photos, daemon=True).start()   # the rest while idle
+        hits = meaning.search(q, kind=kind, matches_only=True)
+    except Exception as e:
+        return f"error: {e}"
+    if not hits:
+        return f"nothing about '{q}' among your files" + (" yet (older photos are still being looked at in the background)" if vision else "")
+    home = config.home().rstrip("/")
+    short = lambda p: "~" + p[len(home):] if p.startswith(home) else p
+    pics = [h for h in hits if h[2] == "image"]
+    docs = [h for h in hits if h[2] != "image"]
+    blocks = []
+    if pics:
+        blocks.append({"type": "gallery", "items": [{"src": p, "title": os.path.basename(p), "say": f"open the file {p}"} for _, p, _, _ in pics]})
+    if docs:
+        blocks.append({"type": "list", "items": [{"title": os.path.basename(p), "subtitle": (snip[:90] + "…") if snip else short(os.path.dirname(p)),
+                                                  "actions": [{"label": i18n.t("d_open"), "say": f"open the file {p}", "primary": True}]}
+                                                 for _, p, _, snip in docs]})
+    show(ctx, {"id": "meaning", "replace": True, "title": f"About \u201c{q[:40]}\u201d", "size": "l", "blocks": blocks})
+    best = hits[0]
+    more = f" (and {len(hits) - 1} more in the window)" if len(hits) > 1 else ""
+    return f"Best match: {os.path.basename(best[1])} in {short(os.path.dirname(best[1]))}{more}. Say one sentence at most."
 
 
 @tool("find_duplicates", "Find files that are exact copies of each other (same contents, any name) and show them with buttons to "

@@ -52,6 +52,28 @@ The owner decides how much it asks, and is never second-guessed.
   shell in words, sharing an app you made as one file, Super+Shift+Left/Right
   moves a window to the other screen, and truthful answers about disk
   encryption, guest use, passwords, cloud backup, snapshots and kids mode.
+- **Find things by what they're about** ("find the photo of the dog", "my
+  letter about the car insurance", "search my files for a dessert recipe"):
+  EmbeddingGemma 2 (Google, Apache-2.0) runs on this computer, indexes your
+  documents, notes and photos (photos in the background), and says plainly
+  when nothing matches. The model (310 MB + 555 MB for pictures) is fetched on
+  first use and pinned by SHA-256; the image carries a llama.cpp built from a
+  pinned commit for it.
+- **New model:** Underdog 27B (Conway Research, Apache-2.0) for 32 GB machines.
+- **Everyday basics, exact and at once:** sums and percentages, unit and
+  temperature conversions, splitting a bill, the time elsewhere, time until an
+  hour, what day a date falls on, spelling, definitions (Wiktionary),
+  synonyms, weather for here or anywhere (Open-Meteo, no key), whether the
+  internet works, which Wi-Fi, what's playing, folder sizes, notes ("write
+  down: …"), alarms, timers, reminders by their words, text files by name,
+  "email <address> saying …", "read my latest email", "did Craig reply".
+- **Extreme requests:** any look you describe ("make the windows triangles",
+  "a 1950s newspaper") is written as a style for the desk (the request box
+  always stays usable; Super+Shift+Escape resets); chains of steps go to the
+  model whole and keep going; pictures edited in any order of steps and saved
+  as PDF; email attachments; batch rename/convert/edit; tasks on every unlock;
+  block sites or allow only some; a task you schedule yourself carries your
+  permission.
 - **Fixed:** the model no longer opens the passphrase window or changes the
   trust setting for unrelated security questions; a passing request is no
   longer saved as a lasting "fact" about you;

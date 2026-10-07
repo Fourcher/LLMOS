@@ -151,6 +151,28 @@ fetch_verify() {  # url dest sha256
 fetch_verify "$PAYLOAD/build/cache/$MODEL_FILE" "$TARGET/var/lib/llmos/models/$MODEL_FILE" "$MODEL_SHA256"
 fetch_verify "$PAYLOAD/build/cache/$WHISPER_FILE" "$TARGET/usr/share/llmos/voice/$WHISPER_FILE" "$WHISPER_SHA256"
 
+log "search-by-meaning runtime (llama.cpp ${EMBED_LLAMA_COMMIT:-?}, built from source)"
+# Alpine's llama.cpp is too old for EmbeddingGemma 2; a cached build for this commit and architecture is used when the
+# build host has one, otherwise it is compiled here from the pinned upstream commit. The build tools leave afterwards.
+EMBED_TAR="llama-embed-$EMBED_LLAMA_COMMIT-$ARCH.tar"
+mkdir -p $TARGET/usr/lib/llmos/embed
+if wget -q -O /tmp/embed.tar "$PAYLOAD/build/cache/$EMBED_TAR" 2>/dev/null && [ -s /tmp/embed.tar ]; then
+  tar -x -o -C $TARGET/usr/lib/llmos/embed -f /tmp/embed.tar
+else
+  BUILD_DEPS="build-base cmake linux-headers git"
+  apk add --root $TARGET --no-cache -q $BUILD_DEPS
+  chroot $TARGET sh -c "set -e; rm -rf /tmp/lc; git init -q /tmp/lc; cd /tmp/lc; \
+    git fetch -q --depth 1 https://github.com/ggml-org/llama.cpp $EMBED_LLAMA_COMMIT; git checkout -q FETCH_HEAD; \
+    cmake -B build -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DGGML_NATIVE=OFF \
+      -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_RPATH='\$ORIGIN' \
+      -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON >/dev/null; \
+    cmake --build build --target llama-server -j\$(nproc) >/dev/null; \
+    cp build/bin/llama-server build/bin/*.so* /usr/lib/llmos/embed/; rm -rf /tmp/lc"
+  apk del --root $TARGET -q $BUILD_DEPS
+  ( cd $TARGET/usr/lib/llmos/embed && tar -cf /tmp/embed.tar . )     # (kept by the build host when it collects the cache)
+fi
+chroot $TARGET /usr/lib/llmos/embed/llama-server --version >/dev/null 2>&1 || { echo "the search-by-meaning runtime does not run"; exit 1; }
+
 log "system configuration"
 echo llmos > $TARGET/etc/hostname
 printf '127.0.0.1\tllmos localhost\n::1\t\tllmos localhost\n' > $TARGET/etc/hosts
