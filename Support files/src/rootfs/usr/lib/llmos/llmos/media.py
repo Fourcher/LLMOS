@@ -61,13 +61,13 @@ def _proxy_args():
     return ["--proxy", "socks5h://127.0.0.1:9050"] if config.settings.get("tor") else []   # h: names resolved by Tor, no DNS leak
 
 
-def find(query):
+def find(query, pick=1):
     """Return a dict (url, title, channel, duration, thumbnail, live) for a
-    URL or a search phrase."""
+    URL or a search phrase. pick: which result of a search (1 = the first; "skip" asks for the next)."""
     from . import system
     if re.match(r"^https?://", query) and system.is_blocked(query):
         raise MediaError("that site is blocked while focus mode is on; turn focus off to play from it")
-    target = query if re.match(r"^https?://", query) else f"ytsearch1:{query}"
+    target = query if re.match(r"^https?://", query) else f"ytsearch{max(1, int(pick))}:{query}"
     cmd = ["yt-dlp", "--no-warnings", "--no-playlist", "--js-runtimes", "quickjs",
            *_proxy_args(), "--skip-download",
            "--print", "%(webpage_url)s\t%(title)s\t%(channel,uploader)s\t%(duration_string)s\t%(thumbnail)s\t%(is_live)s", target]
@@ -77,7 +77,8 @@ def find(query):
         raise MediaError("yt-dlp is not installed")
     except subprocess.TimeoutExpired:
         raise MediaError("the video site took too long to answer")
-    line = next((ln for ln in p.stdout.splitlines() if ln.startswith("http")), "")
+    lines = [ln for ln in p.stdout.splitlines() if ln.startswith("http")]
+    line = lines[-1] if lines else ""
     if not line:
         err = (p.stderr.strip().splitlines() or ["nothing found"])[-1]
         raise MediaError(err[:300])

@@ -48,7 +48,8 @@ MATCH = re.compile(
     r"(?:what|which) (?:wi-?fi|network)|what(?:'s| is) (?:my |the )?(?:wi-?fi|network)|am i (?:on|connected to) (?:the )?wi-?fi|"
     r"what(?:'s| is) (?:this |the )?(?:playing|song|track)|what song is this|what am i listening to|now playing|"
     r"(?:open|show|view|play)(?: me)? (?:the |my )?(?:last|latest|newest|most recent|recent) (?:screenshot|photo|picture|image|download|pdf|document|video|song|recording)|"
-    r"\bweather\b|\bforecast\b|(?:will|is) it (?:going to )?(?:rain|snow|be (?:hot|cold|sunny|windy))|do i need an? (?:umbrella|coat|jacket)|how (?:hot|cold|warm) (?:is it|will it be)|"
+    r"\bweather\b|\bforecast\b|(?:is|are) (?:the )?[a-z .'-]{2,30}? (?:down|offline|not working|broken)\b|\bnews\b|\bheadlines\b|\bcalendar\b|\bagenda\b|"
+    r"\bmy schedule\b|(?:open|check|show) (?:my )?(?:e-?mail|mail|inbox)\b|(?:will|is) it (?:going to )?(?:rain|snow|be (?:hot|cold|sunny|windy))|do i need an? (?:umbrella|coat|jacket)|how (?:hot|cold|warm) (?:is it|will it be)|"
     r"internet (?:working|up|down|ok|on|connected)|am i (?:online|connected)|do i have (?:the )?internet|(?:wi-?fi|network) working|are we online|"
     r"^what day (?:of the week )?(?:is|was|will be|falls on|does)\b|"
     r"\.(?:txt|md|csv|log)$|"
@@ -1261,6 +1262,9 @@ def _place():
 
 def weather(desk, line, low):
     q = low.strip().rstrip("?.!")
+    q = re.sub(r"^(?:should|do) i (?:bring|take|grab|wear|need)\s+(?:an?\s+|my\s+)?", "do i need a ", q)
+    q = re.sub(r"^will i (?:need|want)\s+(?:an?\s+|my\s+)?", "do i need a ", q)
+    q = re.sub(r"^do i need a (umbrella|coat|jacket|raincoat|jumper|sweater)", r"do i need an \1", q)
     m = re.fullmatch(r"(?:what(?:'s| is| will be)|how(?:'s| is| will be)) (?:the )?weather(?: like| going to be(?: like)?| be like)?(?P<w> today| tomorrow| this weekend| tonight| on \w+day| this week)?(?: in (?P<p>[a-z .,'-]+?))?(?P<w2> today| tomorrow| this weekend| tonight| this week)?"
                      r"|weather(?: today| tomorrow| forecast)?(?: in (?P<p2>[a-z .,'-]+))?|(?:the )?forecast(?: for (?P<p3>[a-z .,'-]+))?"
                      r"|(?:will|is) it (?:going to )?(?P<r>rain|snow|be (?:hot|cold|sunny|windy))(?P<w3> today| tomorrow| tonight| this weekend)?(?: in (?P<p4>[a-z .,'-]+))?"
@@ -1360,9 +1364,104 @@ def net_and_dates(desk, line, low):
     return False
 
 
+# ------------------------------------------------------------------ calendar, news, service status, mail
+
+_STATUS_PAGES = {"github": "www.githubstatus.com", "slack": "status.slack.com", "discord": "discordstatus.com",
+                 "spotify": "status.spotify.com", "zoom": "status.zoom.us", "dropbox": "status.dropbox.com", "openai": "status.openai.com",
+                 "chatgpt": "status.openai.com", "cloudflare": "www.cloudflarestatus.com", "gitlab": "status.gitlab.com",
+                 "notion": "status.notion.so", "reddit": "www.redditstatus.com", "netflix": "status.netflix.com", "steam": "steamstatus.io",
+                 "twitch": "status.twitch.tv", "shopify": "www.shopifystatus.com", "vercel": "www.vercel-status.com", "heroku": "status.heroku.com",
+                 "twilio": "status.twilio.com", "stripe": "status.stripe.com", "square": "www.issquareup.com", "venmo": "status.venmo.com",
+                 "microsoft teams": "status.office.com", "teams": "status.office.com", "outlook": "status.office.com", "office": "status.office.com",
+                 "onedrive": "status.office.com", "icloud": "www.apple.com/support/systemstatus", "google": "www.google.com/appsstatus/dashboard"}
+
+
+def service_status(desk, line, low):
+    m = re.fullmatch(r"(?:is|are) (?:the )?(?P<s>[a-z][a-z .'-]{1,30}?)(?:'s)? (?:servers? |website |site |app |service )?(?:down|up|working|broken|having (?:issues|problems|an outage)|not working|offline)(?: (?:right )?now| today)?", low)
+    if not m:
+        return False
+    name = m.group("s").strip()
+    page = _STATUS_PAGES.get(name)
+    if not page:
+        return False                       # an unknown service: the model looks it up on the web
+    from . import web
+    try:
+        st = json.loads(web.fetch(f"https://{page}/api/v2/status.json", max_bytes=100000, timeout=8)[3])["status"]
+    except Exception:
+        return _say(desk, line, f"I couldn't reach {name}'s status page just now. Check {page} directly.")
+    ok = st.get("indicator") in ("none", "") or "operational" in str(st.get("description", "")).lower()
+    shown = {"github": "GitHub", "openai": "OpenAI", "chatgpt": "ChatGPT", "gitlab": "GitLab", "icloud": "iCloud", "onedrive": "OneDrive",
+             "twilio": "Twilio", "heroku": "Heroku", "vercel": "Vercel", "notion": "Notion", "zoom": "Zoom", "dropbox": "Dropbox"}.get(name, name.title())
+    return _say(desk, line, f"{shown}: {st.get('description', 'no answer')}" + ("" if ok else f" ({page})") + ".")
+
+
+def news(desk, line, low):
+    if not re.fullmatch(r"(?:what(?:'s| is| are) (?:the |in the |the latest |today's )?(?:news|headlines)(?: today| right now| now)?|"
+                        r"(?:show|give) me (?:the |today's |the latest )?(?:news|headlines)|(?:top |latest )?headlines|the news)", low):
+        return False
+    if config.settings.get("internet") == "no":
+        return _say(desk, line, "The internet is switched off in settings, so I can't get the news.")
+    import xml.etree.ElementTree as ET
+    from . import web
+    try:
+        root = ET.fromstring(web.fetch("https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", max_bytes=400000, timeout=10)[3])
+    except Exception:
+        return False                       # no feed: the model tries the web itself
+    items = []
+    for it in root.iter("item"):
+        t = (it.findtext("title") or "").strip()
+        src = (it.find("source").text.strip() if it.find("source") is not None and it.find("source").text else "")
+        link = (it.findtext("link") or "").strip()
+        if t:
+            items.append((t, src, link))
+        if len(items) >= 8:
+            break
+    if not items:
+        return False
+    desk.open_window({"id": "news", "replace": True, "title": "Top stories", "size": "m", "blocks": [
+        {"type": "list", "items": [{"title": t.rsplit(" - ", 1)[0][:140], "subtitle": src,
+                                    "actions": [{"label": "Open", "say": f"open {link} in the browser", "primary": True}]}
+                                   for t, src, link in items if link]}]})
+    lead = "; ".join(f"{i}. {t.rsplit(' - ', 1)[0]}" for i, (t, _, _) in enumerate(items[:3], 1))
+    return _say(desk, line, f"Top stories: {lead}. The rest are on the screen.")
+
+
+def calendar(desk, line, low):
+    if not re.fullmatch(r"(?:what(?:'s| is| do i have| have i got)?)\s+(?:on\s+)?(?:my\s+)?(?:calendar|schedule|agenda)(?:\s+(?:today|tomorrow|this week|for today))?|"
+                        r"(?:what(?:'s| is) )?(?:on )?my (?:calendar|schedule|agenda) (?:today|tomorrow|this week)|"
+                        r"(?:what do i have|anything) (?:on|scheduled) (?:today|tomorrow)", low):
+        return False
+    from . import store
+    day = dt.date.today() + (dt.timedelta(days=1) if "tomorrow" in low else dt.timedelta(0))
+    mine = []
+    for t in store.tasks():
+        try:
+            when = dt.datetime.fromtimestamp(float(t.get("next") or 0))
+        except (TypeError, ValueError, OSError):
+            continue
+        if when.date() == day:
+            mine.append(f"{when.strftime('%H:%M')} {t.get('task', '')[:60]}")
+    word = "today" if day == dt.date.today() else "tomorrow"
+    if mine:
+        return _say(desk, line, f"No calendar is connected, so these are your reminders for {word}: " + "; ".join(sorted(mine)) + ".")
+    return _say(desk, line, f"No calendar is connected, and you have no reminders for {word}. To add one, say \u201cadd dentist to my calendar on friday at 2pm\u201d.")
+
+
+def open_mail(desk, line, low):
+    if not re.fullmatch(r"(?:open|check|show|see|get|go to) (?:my |the )?(?:e-?mail|mail|inbox)(?: (?:app|program|account))?|(?:my )?(?:e-?mail|mail|inbox)", low):
+        return False
+    from . import mail, tools
+    if mail.account() is None:
+        desk.mail_form()
+        return _say(desk, line, "Your email isn't set up yet. Enter your address and password in the window (Gmail and most others need an app password).")
+    from . import agent
+    out = tools.REGISTRY["mail_inbox"].fn({}, desk.ctx)
+    return _say(desk, line, agent._shortcut_reply("mail_inbox", {}, out))
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (quick, files_and_status, weather, net_and_dates, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (quick, files_and_status, weather, net_and_dates, service_status, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True

@@ -3550,6 +3550,10 @@ def open_app(a, ctx):
         cmd, prog = "foot", "foot"
     if not shutil.which(prog):
         return f"'{prog}' is not installed; install it with install_app first (e.g. firefox-esr for a web browser)"
+    if prog == "mpv" and cmd.strip() == "mpv":
+        # the player on its own: a window that waits for something to play (this desktop needs the wlshm video output;
+        # the default X11 one closes at once)
+        cmd = "mpv --vo=wlshm --idle=yes --force-window=yes --title='Media Player'"
     if a.get("graphical") or prog in ("firefox", "firefox-esr", "chromium", "foot", "mpv", "imv"):
         if not _display_available():
             return "there is no screen attached (or the display server is missing), so graphical programs can't open; text programs still can"
@@ -3895,5 +3899,7 @@ def which_file(a, ctx):
                 "or 'show my videos' to pick one of yours")
     v = (re.match(r"\s*(?:please\s+)?(\w+)", req) or [None, "open"])[1].lower()
     v = v if v in ("open", "print", "copy", "move", "rename", "send", "email", "attach", "delete", "show", "zip", "compress", "convert", "put", "crop", "rotate") else "open"
+    if v == "print":
+        return ("nothing is open to print. Open the document, then say 'print' (or say its name: 'print recipe.pdf').")
     return (f"which file? Say its name (for example '{v} recipe.pdf'), or say 'find my recipe' to look for it, "
             "or open your files and use the buttons there")

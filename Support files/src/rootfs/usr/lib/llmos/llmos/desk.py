@@ -2234,6 +2234,16 @@ class Desk:
             return True
         if everyday.MATCH.search(low) and not intent.is_chain(low) and everyday.handle(self, line):
             return True
+        if re.fullmatch(r"(?:skip|next)(?: (?:this|the|that|current))?(?: (?:song|track|one|video|tune))?[.!]?|skip it|next song|next track", low) \
+                and getattr(self, "_np_query", ""):
+            def skip():
+                try:
+                    self.media_action("skip")
+                except Exception as e:
+                    self.emit({"t": "toast", "text": f"Couldn't skip: {e}"})
+            threading.Thread(target=skip, daemon=True).start()
+            self.last_reply = self._said = "Playing the next one."
+            return True
         if re.fullmatch(r"(?:pause|resume|unpause|play ?pause|pause (?:the |my )?(?:music|video|song)|resume (?:the |my )?(?:music|video|song)|keep playing)[.!]?", low):
             if not media.playing():
                 # a video in the browser or another player: the standard media controls (MPRIS)
@@ -2896,7 +2906,10 @@ class Desk:
                     r"connect (?:my )?bluetooth(?: \w+)*)[?.!]*"), "bluetooth"),
         (re.compile(r"(?:open (?:the )?)?(?:printers?|printer settings|add (?:a |my )?printer|set up (?:a |my )?printer|print(?:ing)? (?:is ?n'?t|not) working)[?.!]*"), "printers"),
         (re.compile(r"(?:open (?:the )?)?(?:keyboard|mouse|touchpad|trackpad|keyboard settings|mouse settings|touchpad settings|keyboard and mouse|"
-                    r"keyboard layout|change (?:the |my )?keyboard(?: layout)?|input settings)[?.!]*"), "input"),
+                    r"keyboard layout|change (?:the |my )?keyboard(?: layout)?|input settings|"
+                    r"(?:my |the )?(?:mouse|touchpad|keyboard|pointer)(?: is| has)? (?:stopped|stopped working|isn'?t|is not|doesn'?t|won'?t|not|no longer) (?:working|responding|moving|clicking|typing|connecting)|"
+                    r"(?:my |the )?(?:mouse|touchpad|keyboard) (?:is )?(?:broken|dead|frozen|not responding)|"
+                    r"(?:mouse|keyboard|touchpad) (?:problem|trouble)s?)[?.!]*"), "input"),
         (re.compile(r"(?:open (?:the )?)?(?:storage|disk space|disk usage|free (?:up )?(?:some )?space|(?:my )?disk is full|clean ?up(?: the computer| my computer| disk)?|"
                     r"what'?s (?:using|filling|taking up) (?:my |the )?(?:disk|space|storage)|running out of space|"
                     r"how much (?:free |disk |storage )?(?:space|storage)(?: do i have| is left| left| have i got)?|how full is (?:my |the )?(?:disk|computer|drive))[?.!]*"), "storage"),
@@ -3007,6 +3020,8 @@ class Desk:
         (r"blur (?:my |the )?background(?: (?:in|on|during) (?:the |my )?(?:video )?(?:call|meeting|zoom|teams|meet))?|(?:change|hide) (?:my )?background (?:in|on|during) (?:the |my |a )?(?:video )?(?:call|meeting)|virtual background",
          "That's set in the call itself: in Google Meet, ⋮ → Apply visual effects → Blur; in Zoom, ^ next to Stop Video → Blur my background; in Teams, "
          "… → Video effects → Blur. (Say “change the wallpaper” if you meant this computer's background.)"),
+        (r"(?:how (?:do|to|can)(?: (?:i|you|we))? |hwo (?:do|to)(?: i)? )?print(?:ing)?(?: a| the| this| my)?\s*(?:how|document|file|page|something)?\??|(?:how (?:do|to) |hwo )?(?:i )?(?:want to )?print (?:this|that|it|a document|a page)\s*\??$",
+         "To print: open the document, press Ctrl+P, pick the printer and press Print. Or say 'print recipe.pdf' with the file's name and I'll send it. No printer yet? Say 'add a printer'."),
         (r"(?:add|make|create|set up|new) (?:an? |another |a new |a separate )?(?:user|account|login|profile)(?: account)?(?: for (?:my |the |a )?.+)?|"
          r"(?:remove|delete) (?:that|the|this|a|my \w+'?s?) (?:user|account|profile)|(?:switch|change) (?:the )?users?|guest (?:account|mode)|"
          r"(?:can|how do) (?:my )?(?:\w+ )?(?:have|get|use) (?:their|his|her|my|an?) (?:own )?(?:account|login)",
@@ -3804,8 +3819,17 @@ class Desk:
     # ---- media (mpv as a window, controlled over its IPC socket)
 
     def media_action(self, action, **kw):
+        if action == "skip":
+            q, pick = getattr(self, "_np_query", ""), getattr(self, "_np_pick", 1) + 1
+            if not q:
+                return "nothing to skip to"
+            return self.media_action("play", query=q, pick=pick)
         if action == "play":
-            info = media.find(kw.get("query", ""))
+            q = kw.get("query", "")
+            pick = int(kw.get("pick") or 1)
+            if not re.match(r"^https?://", q):
+                self._np_query, self._np_pick = q, pick
+            info = media.find(q, pick)
             media.stop()
             audio_only = bool(kw.get("audio_only"))
             p = media.play_windowed(info, audio_only, self._child_env())

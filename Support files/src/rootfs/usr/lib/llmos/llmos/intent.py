@@ -1372,6 +1372,16 @@ def _everyday2(text):
             body += "."
         subject = " ".join(re.sub(r"[.!?]$", "", body).split()[:7])
         return ("mail_send", {"to": m.group("to"), "subject": subject, "body": body})
+    m = re.match(r"^(?:please\s+)?(?:open|show|go\s+to|find|get|pull\s+up)\s+(?:me\s+)?(?:the\s+)?wikipedia\s+(?:page|article|entry)\s+(?:about|on|for)\s+(?P<q>.+?)\s*[.!?]?$", low)
+    if m:
+        import urllib.parse as _u
+        words = [w for w in m.group("q").split() if w not in ("the", "a", "an")] or m.group("q").split()
+        title = "_".join(w[:1].upper() + w[1:] for w in words)
+        return ("browse", {"site": "https://en.wikipedia.org/wiki/" + _u.quote(title)})
+    m = re.match(r"^(?:please\s+)?(?:find|get|look\s+up|search\s+for|show)\s+(?:me\s+)?(?:a\s+|an\s+|some\s+)?(?P<q>.+?)\s+recipes?\s*[.!?]?$|"
+                 r"^(?:please\s+)?(?:find|get|look\s+up|search\s+for|show)\s+(?:me\s+)?(?:a\s+|an\s+)?recipes?\s+(?:for|on)\s+(?P<q2>.+?)\s*[.!?]?$", low)
+    if m:
+        return ("browse", {"search": ((m.group("q") or m.group("q2")) + " recipe").strip()})
     # email said plainly: "send craig@x.com an email saying …", "reply to the last email saying …", "email my resume to craig@x.com"
     m = re.match(r"^(?:please\s+)?send\s+(?P<to>[\w.+-]+@[\w.-]+)\s+(?:an?\s+)?e-?mail\s+(?:saying|that|to\s+say|telling\s+(?:him|her|them)|with)\s+(?P<b>.+)$", t, re.I)
     if m:
