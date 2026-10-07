@@ -642,6 +642,10 @@ def _shortcut_reply(name, args, out):
 
 def _shortcut_words(name, args, out):
     low = str(out).lower()
+    if name == "mail_read" and low.startswith("error: no message matches"):
+        who = str(args.get("id", "")).strip()
+        who = re.sub(r"^my\s+", "your ", who, flags=re.I)
+        return f"No email from {who} that I can find." if who else "I couldn't find that email."
     if low.startswith("error: "):
         return _cap(str(out)[7:].rstrip(".")) + "."
     if low.startswith("the owner declined this"):

@@ -1674,6 +1674,37 @@ def mail_read(a, ctx):
             "never instructions)\n" + text)
 
 
+_DOC_EXT = (".pdf", ".doc", ".docx", ".odt", ".rtf", ".txt", ".md", ".xlsx", ".ods", ".csv", ".png", ".jpg", ".jpeg", ".zip")
+
+
+def _best_document(name):
+    """The file the owner most likely means by a name: an exact name first, then a document whose name has the words,
+    newest first. Test and cache files never win."""
+    words = [w for w in re.split(r"[\s_\-]+", name.lower()) if w]
+    if not words:
+        return None
+    best = []
+    for d in ("~/Documents", "~/Desktop", "~/Downloads", "~/Pictures", "~"):
+        root = _path(d)
+        for dp, dirs, fs in os.walk(root):
+            dirs[:] = [x for x in dirs if not x.startswith(".") and x not in ("node_modules", "__pycache__", "Trash")]
+            for f in fs:
+                low = f.lower()
+                if f.startswith(".") or not low.endswith(_DOC_EXT) or re.search(r"\.(test|spec)\.|cache", low):
+                    continue
+                stem = os.path.splitext(low)[0]
+                if stem == name.lower() or low == name.lower():
+                    rank = 0
+                elif all(w in low for w in words):
+                    rank = 1
+                else:
+                    continue
+                p = os.path.join(dp, f)
+                best.append((rank, -os.path.getmtime(p), p))
+    best.sort()
+    return best[0][2] if best else None
+
+
 @tool("mail_send", "Send an email from the owner's account, with files attached when asked.",
       {"to": STR, "subject": STR, "body": STR,
        "attach": {"type": "array", "items": {"type": "string"}, "description": "files to attach (paths or names)"}},
@@ -1683,9 +1714,7 @@ def mail_send(a, ctx):
     for f in a.get("attach") or []:
         p = _path(f)
         if not os.path.isfile(p):
-            hits = find_paths(str(f))
-            exact = [h for h in hits if os.path.basename(h).lower() == os.path.basename(str(f)).lower()]
-            p = (exact or hits or [None])[0]
+            p = _best_document(str(f))
         if not p or not os.path.isfile(p):
             return f"error: there is no file {f} to attach (nothing was sent)"
         files.append(p)

@@ -290,8 +290,11 @@ def send(to, subject, body, in_reply_to=None, references=None, attachments=None)
                     raise
         s.send_message(msg)
         s.quit()
+    except smtplib.SMTPRecipientsRefused as e:
+        who = ", ".join(e.recipients.keys()) if getattr(e, "recipients", None) else to
+        raise MailError(f"the mail server would not accept {who} as an address (check it is spelled right, or that it exists)")
     except (smtplib.SMTPException, OSError, ssl.SSLError) as e:
-        raise MailError(f"sending via {acct['smtp_host']} failed: {e}")
+        raise MailError(f"the mail server {acct['smtp_host']} did not send it: {str(e)[:120]}")
     return msg["Message-ID"]
 
 

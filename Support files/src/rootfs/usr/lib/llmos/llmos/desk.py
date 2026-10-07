@@ -3321,10 +3321,15 @@ class Desk:
     def turn(self, text, chat="main"):
         parts = self._split_compound(text) if chat == "main" else None
         if parts:
+            said = []
             for p in parts:
+                self.last_reply = ""
                 self.act(p)
                 time.sleep(0.3)
-            self.last_reply = self.__dict__.pop("_said", None) or "Done: " + "; ".join(parts) + "."
+                s = self.__dict__.pop("_said", None) or self.last_reply or ""
+                if s and s not in said:
+                    said.append(s)
+            self.last_reply = " ".join(x.rstrip(".") + "." for x in said) if said else "Done: " + "; ".join(parts) + "."
             return
         if chat == "main" and self.shortcut(text):
             self.last_reply = self.__dict__.pop("_said", None) or "Done."

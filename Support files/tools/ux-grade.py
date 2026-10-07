@@ -20,7 +20,7 @@ REFUSED = re.compile(r"\b(i (cannot|can't|can not|am unable|'m unable|am not abl
                      r"outside (of )?my|i'?m sorry,? but|not allowed to|unable to (do|help|complete|find|perform|set|change|open))\b", re.I)
 ASKED_START = re.compile(r"^\s*(which|what|where|who|when|how|could you|can you|would you like|do you want|should i|shall i|"
                          r"please (tell|say|specify|provide|clarify|choose|pick|describe)|tell me)\b", re.I)
-ASKED_INSIDE = re.compile(r"\bsay (its|the|a|your) (name|date|time)\b|\bpick (it|one|the)\b|\bwhich (file|folder|one|email|photo|"
+ASKED_INSIDE = re.compile(r"\bsay (its|the|a|your) (name|date|time)\b|\bpick (it|one)\b|\bwhich (file|folder|one|email|photo|"
                           r"program|app|printer|network|picture|document|song|video)\b|\bwhat would you like\b", re.I)
 LECTURE = re.compile(r"\b(it'?s important|be careful|please be (careful|aware)|caution|safety|security (risk|concern)|make sure (you|to)|"
                      r"i (strongly )?(recommend|suggest|advise)|you should (consider|always|never|be)|be aware|keep in mind|"
