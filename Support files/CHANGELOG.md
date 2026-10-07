@@ -80,6 +80,24 @@ The owner decides how much it asks, and is never second-guessed.
   "every monday" was set up as every day; reminders now say which
   day; "update my apps" installs the updates instead of only listing them.
 
+- **Everyday pass (112 requests, graded and read by hand).** The OS answers
+  more plain requests itself, in about a second: weekdays in day counts ("next
+  friday"); tips, taxes and discounts; "thanks"; sending an email to an
+  address, replying to the last email, emailing a resume; how loud it is; the
+  newest video or song; what was written in notes; 24-hour clock; unknown
+  service status and opening hours from one search; a daily reminder
+  ("remind me to … every day at 8am"); printing a file by name; the newest
+  PDF; the taskbar layout ("look like windows 7"); Bluetooth on and off with
+  the real result.
+- **No refusals, no questions back, no lectures.** A single plain tool's own
+  result is the reply (no second model turn). Writing requests are answered in
+  words; a file or app is made only when asked for. Several things in one
+  request are all done. Biggest files are listed as sizes and names.
+- **Mail:** attachments choose the likely document (never test or cache
+  files); a refused address is said plainly; mail errors name the server.
+- **Cancelling tasks** matches the words given ("shutdown task" finds "shut the
+  computer down").
+
 ## 1.7.0 — 2026-10-05
 Useful, not just pretty: real apps, programs that behave, a conversation that
 never needs clearing, a living background, and what a stock Linux desktop
