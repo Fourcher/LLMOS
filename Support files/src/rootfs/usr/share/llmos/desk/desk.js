@@ -78,6 +78,8 @@
     software = !!m.software;
     if (software) document.documentElement.dataset.software = "1"; else delete document.documentElement.dataset.software;
     document.documentElement.lang = m.lang || "en";
+    clock24 = typeof m.clock24 === "boolean" ? m.clock24 : null;     // the owner's 24-hour choice (null: the language's own)
+    clock();
     document.documentElement.dir = m.dir || "ltr";
     lang = m.lang || "en";
     Object.assign(S, m.strings || {});
@@ -204,9 +206,10 @@
     modelOk = !!m.model_ok;
     presence();
   }
+  let clock24 = null;
   function clock() {
     const now = new Date();
-    try { $("clock").textContent = now.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) + "   " + now.toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" }); }
+    try { $("clock").textContent = now.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", hour12: clock24 === null ? undefined : !clock24 }) + "   " + now.toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" }); }
     catch (e) { $("clock").textContent = now.toLocaleTimeString(); }
   }
   setInterval(clock, 1000);

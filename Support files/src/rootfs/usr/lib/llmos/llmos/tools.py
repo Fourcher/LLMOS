@@ -1357,7 +1357,7 @@ _SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission
                   "brain": r"online model|claude|cloud|chatgpt|on this computer|locally|think only|brain|offline model",
                   "speak_replies": r"speak|read (?:aloud|out)|voice|talk|out loud", "think": r"\bthink|reason",
                   "name": r"\bname\b|call me", "focus_mode": r"focus|distract", "guidance": r"guidance|lectur|caution|careful|warn|preach|instructions|my machine",
-                  "timezone": r"time ?zone|\btime\b|clock|\bhour", "autolock": r"\block",
+                  "timezone": r"time ?zone|\btime\b|clock|\bhour", "autolock": r"\block", "clock": r"\b24\b|\b12\b|twenty.?four|\bhour clock|clock format|\bam\b|\bpm\b|military time",
                   "screen_off": r"screen|display|monitor|blank|dim|presentation|awake", "sleep_after": r"sleep|suspend|idle|nap", "lid": r"\blid\b|close|clos",
                   "do_not_disturb": r"disturb|notification|quiet|silen|focus",
                   "guard_untrusted": r"web pages?|e-?mails?|files?|instructions|hidden|trick|inject|untrusted|check", "night_light": r"night|warm|blue light|eye|evening|yellow"}
@@ -1372,10 +1372,11 @@ _SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission
       "sleep_after: minutes idle before the computer sleeps (0 = never). lid: sleep | nothing. "
       "guard_untrusted: on/off (show me first what instructions inside web pages, files or emails would make you do). "
       "do_not_disturb: on/off (programs' notifications hidden). night_light: on/off (warmer screen in the evening). timezone: a city, country or zone name ('Paris', 'Pacific', 'Asia/Tokyo'). "
+      "clock: 24 or 12 (the hours shown in the top bar and on the clock: '24-hour clock', '12-hour clock'). "
       "(Language changes go through set_appearance.)",
       {"setting": {"type": "string", "enum": ["autonomy", "internet", "tor", "speak_replies", "focus_mode",
                                               "think", "name", "autolock", "guidance", "brain", "timezone",
-                                              "screen_off", "sleep_after", "lid", "do_not_disturb", "night_light", "guard_untrusted"]},
+                                              "screen_off", "sleep_after", "lid", "do_not_disturb", "night_light", "guard_untrusted", "clock"]},
        "value": STR, "minutes": {"type": "integer"}}, ["setting", "value"],
       risk=lambda a: _policy_risk(a.get("setting"), a.get("value")))
 def change_setting(a, ctx):
@@ -1490,6 +1491,12 @@ def change_setting(a, ctx):
         if hasattr(ctx, "start_night_light"):
             ctx.start_night_light()
         return "night light is on: the screen turns warmer from 7 pm to 7 am" if on else "night light is off"
+    if s == "clock":
+        h24 = bool(re.search(r"24|twenty.?four|military|\b24h\b", str(v), re.I))
+        config.settings.set("clock24", h24)
+        if hasattr(ctx, "redraw"):
+            ctx.redraw()
+        return "the clock shows 24-hour time now" if h24 else "the clock shows 12-hour time (AM/PM) now"
     if s == "lid":
         val = "nothing" if re.search(r"\b(nothing|stay|keep|awake|no|off|don'?t)\b", str(v), re.I) else "sleep"
         config.settings.set("lid", val)

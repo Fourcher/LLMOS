@@ -1372,6 +1372,22 @@ def _everyday2(text):
             body += "."
         subject = " ".join(re.sub(r"[.!?]$", "", body).split()[:7])
         return ("mail_send", {"to": m.group("to"), "subject": subject, "body": body})
+    # email said plainly: "send craig@x.com an email saying …", "reply to the last email saying …", "email my resume to craig@x.com"
+    m = re.match(r"^(?:please\s+)?send\s+(?P<to>[\w.+-]+@[\w.-]+)\s+(?:an?\s+)?e-?mail\s+(?:saying|that|to\s+say|telling\s+(?:him|her|them)|with)\s+(?P<b>.+)$", t, re.I)
+    if m:
+        body = m.group("b").strip().strip("'\"")
+        body = body[:1].upper() + body[1:]
+        return ("mail_send", {"to": m.group("to"), "subject": " ".join(re.sub(r"[.!?]$", "", body).split()[:7]),
+                              "body": body if re.search(r"[.!?]$", body) else body + "."})
+    m = re.match(r"^(?:please\s+)?(?:reply|respond|answer)\s+(?:to\s+)?(?:the\s+)?(?:last|latest|newest|most\s+recent)\s+(?:e-?mail|message|mail)\s+"
+                 r"(?:saying|with|that\s+says|telling\s+\S+)\s+(?P<b>.+)$", t, re.I)
+    if m:
+        body = m.group("b").strip().strip("'\"")
+        return ("mail_reply", {"id": "latest", "body": body[:1].upper() + body[1:]})
+    m = re.match(r"^(?:please\s+)?(?:e-?mail|send)\s+(?:my\s+|the\s+)?(?P<f>[\w .'-]+?)\s+to\s+(?P<to>[\w.+-]+@[\w.-]+)$", t, re.I)
+    if m and not re.search(r"\b(?:saying|that|about)\b", t, re.I):
+        f = m.group("f").strip()
+        return ("mail_send", {"to": m.group("to"), "subject": f[:1].upper() + f[1:], "body": f"Please find {f} attached.", "attach": [f]})
     # email in plain words (only with an account; otherwise the agent says how to set one up)
     if re.match(r"^(?:how many|do i have any|have i got any|any)\s+(?:new\s+|unread\s+)*(?:e-?mails?|mail|messages)(?:\s+do\s+i\s+have)?$", low):
         return ("mail_inbox", {})
@@ -1381,6 +1397,19 @@ def _everyday2(text):
                  r"|^(?:any|is there an?)\s+(?:new\s+)?(?:e-?mail|mail|message|reply)\s+from\s+(?P<w2>[\w.@ -]+)$", low)
     if m:
         return ("mail_read", {"id": (m.group("w") or m.group("w2")).strip()})
+    m = re.match(r"^(?:please\s+)?(?:switch\s+to|use|set|turn\s+on|make\s+it|show\s+(?:the\s+)?time\s+in|change\s+to|go\s+to)\s+(?:the\s+|a\s+)?"
+                 r"(?P<h>24|12|twenty[- ]four|twelve)[- ]?hour\s+(?:clock|time|format)(?:\s+please)?$", low)
+    if m:
+        return ("change_setting", {"setting": "clock", "value": "24" if m.group("h") in ("24", "twenty four", "twenty-four", "twenty") else "12"})
+    # a quick look at the volume; the newest video or song
+    if re.match(r"^how\s+(?:loud|high)\s+is\s+(?:the\s+)?(?:volume|sound|it|the\s+sound|the\s+speakers?)(?:\s+(?:right\s+)?now)?$|"
+                r"^what(?:'s|\s+is)\s+the\s+volume(?:\s+(?:right\s+)?now)?$", low):
+        return ("set_volume", {})
+    m = re.match(r"^(?:please\s+)?(?:play|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:newest|latest|last|most\s+recent)\s+"
+                 r"(?P<k>video|movie|clip|song|track|recording)s?(?:\s+(?:in|from)\s+(?:my\s+)?(?P<f>videos|music|downloads|desktop|documents))?$", low)
+    if m:
+        where = m.group("f") or ("music" if m.group("k") in ("song", "track", "recording") else "videos")
+        return ("open_latest", {"where": where})
     # alarms and the list of what's scheduled
     m = re.match(r"^(?:please\s+)?(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)(?:\s+(?:to|and)\s+(?P<why>.+))?$"
                  r"|^wake\s+me\s+(?:up\s+)?(?:at|for)\s+(?P<w2>.+?)(?:\s+(?:to|and)\s+(?P<why2>.+))?$", low)
@@ -1403,7 +1432,8 @@ def _everyday2(text):
     m = re.match(r"^(?:please\s+)?(?:delete|remove|get rid of|erase|cross out)\s+(?:the|my|that)\s+note\s+(?:about|on|that says|saying|with)\s+(?P<x>.+)$", low)
     if m:
         return ("note_remove", {"item": re.sub(r"^(?:the|a|an|my)\s+", "", m.group("x").strip()), "list": "notes"})
-    if re.match(r"^(?:(?:show|open|read|see|list)\s+(?:me\s+)?(?:all\s+)?my\s+notes|my\s+notes|what\s+notes\s+do\s+i\s+have|what(?:'s| is)\s+in\s+my\s+notes)$", low):
+    if re.match(r"^(?:(?:show|open|read|see|list)\s+(?:me\s+)?(?:all\s+)?my\s+notes|my\s+notes|what\s+notes\s+do\s+i\s+have|what(?:'s| is)\s+in\s+my\s+notes|"
+                r"what\s+(?:did\s+i|have\s+i)\s+(?:write|wrote|put|written|saved)\s+(?:down\s+)?(?:in|on)\s+my\s+notes)$", low):
         return ("notes_show", {"list": "notes"})
     m = re.match(r"^(?:cut|trim|remove|chop|take)\s+(?:off\s+)?(?:the\s+)?(?P<w>first|last|beginning|start|end|opening)(?:\s+(?P<n>[\d:.]+\s*(?:seconds?|secs?|s|minutes?|mins?|m)?(?:\s+and\s+\d+\s*(?:seconds?|secs?))?))?"
                  r"(?:\s+(?:of|off|from)\s+(?:this|that|the|my)?\s*(?P<v>video|clip|recording|movie|song|audio|[\w .-]+\.(?:mp4|mkv|mov|webm|avi|m4v|mp3|m4a|wav|ogg|flac)))?$", low)

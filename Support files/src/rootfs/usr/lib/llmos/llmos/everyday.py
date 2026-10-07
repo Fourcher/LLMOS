@@ -43,6 +43,7 @@ MATCH = re.compile(
     r"\b(?:split|divide) \$?\d|time (?:is it )?in [a-z]|how (?:long|much time) (?:is it )?(?:until|till) \d|^(?:how (?:do (?:you|i) )?)?spell\b|"
     r"^define\b|definition of|what does \w+ mean|meaning of|words? for \w+$|synonyms? (?:of|for)|"
     r"\d+\s*(?:degrees|°)?\s*(?:fahrenheit|celsius|f|c)\b|\d+\s*(?:kg|kilos?|pounds?|lbs?|miles?|km|feet|foot|inch(?:es)?|cm|meters?|metres?|ounces?|oz|grams?|liters?|litres?|gallons?|cups?|mph)\s+(?:to|in|into)\b|"
+    r"\d+(?:\.\d+)?\s*(?:%|percent)\s+(?:tip|tax|discount|off|service|gratuity)|^(?:thanks?|thank you|thx|cheers|ta)\b|"
     r"how (?:big|large) is|how much (?:space|room) does|how many (?:files|things|items|photos|pictures|songs) (?:are |do i have )?in|"
     r"(?:what|which) (?:wi-?fi|network)|what(?:'s| is) (?:my |the )?(?:wi-?fi|network)|am i (?:on|connected to) (?:the )?wi-?fi|"
     r"what(?:'s| is) (?:this |the )?(?:playing|song|track)|what song is this|what am i listening to|now playing|"
@@ -96,8 +97,19 @@ _MONTHS.update({m[:3]: i for m, i in list(_MONTHS.items())})
 _MONTHS["sept"] = 9
 
 
+_WEEKDAYS = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+
+
 def _date_of(words, today):
     w = words.strip().lower().rstrip("?.! ").removeprefix("the ")
+    wd = re.fullmatch(r"(?:(next|this|on)\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?", w)
+    if wd:
+        # "next friday" is the Friday after this one; "friday" alone is the coming one (today counts)
+        target = _WEEKDAYS[wd.group(2)]
+        ahead = (target - today.weekday()) % 7
+        if wd.group(1) == "next" and ahead == 0:
+            ahead = 7
+        return today + dt.timedelta(days=ahead), w
     w = re.sub(r"^(?:next |this )", "", w)
     if w in _HOLIDAYS:
         d = _HOLIDAYS[w](today.year)
@@ -1023,6 +1035,19 @@ def _convert(n, a, b):
 def quick(desk, line, low):
     q = low.strip().rstrip("?.!")
     q = re.sub(r"^(?:hey |ok |so |please |can you |could you |tell me |do you know )+", "", q)
+    if re.fullmatch(r"thanks?(?: you| a lot| so much| very much)?|thank you(?: so much| very much)?|thx|thanks again|cheers|ta", q):
+        return _say(desk, line, "You're welcome.")
+    # a tip, a tax or a discount: "what's an 18 percent tip on 46 dollars"
+    m = re.fullmatch(r"(?:what(?:'s| is) )?(?:an? )?(?P<p>\d+(?:\.\d+)?)\s*(?:%|percent)\s+(?P<k>tip|tax|discount|off|service(?: charge)?|gratuity)"
+                     r"(?:\s+(?:on|of|for))?\s+\$?(?P<n>\d[\d,]*(?:\.\d+)?)(?:\s*(?:dollars|bucks|usd|euros?|pounds?))?", q)
+    if m:
+        p, n = float(m.group("p")), float(m.group("n").replace(",", ""))
+        amount = n * p / 100
+        cur = "$" if re.search(r"dollars|bucks|usd|\$", q) else ""
+        f = (lambda v: f"{cur}{v:,.0f}" if abs(v - round(v)) < 1e-9 else f"{cur}{v:,.2f}")
+        if m.group("k") in ("discount", "off"):
+            return _say(desk, line, f"{p:g}% off {f(n)} saves {f(amount)}, so you pay {f(n - amount)}.")
+        return _say(desk, line, f"A {p:g}% {m.group('k').split()[0]} on {f(n)} is {f(amount)}, for a total of {f(n + amount)}.")
     # unit conversions: "convert 5 miles to km", "5 miles in km", "72 fahrenheit in celsius", "how many ounces in a pound"
     unit = r"(?:degrees\s+)?[a-z°/ ]{1,18}?"
     m = re.fullmatch(rf"(?:convert |what(?:'s| is) |how much is |how many )?(?P<n>-?[\d.,]+)\s*(?P<a>{unit})\s+(?:to|in|into|as)\s+(?P<b>{unit})", q) or \

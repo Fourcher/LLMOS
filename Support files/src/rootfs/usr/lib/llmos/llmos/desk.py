@@ -1358,6 +1358,7 @@ class Desk:
         strings.update({k: T(k, area="settings") for k in ("settings",)})
         mode = "light" if (th.bg and ui._lum(th.bg) > 0.4) else "dark"
         return {"t": "theme", "css": css, "mode": mode, "corners": corners, "lang": lang, "motion": motion, "style": style,
+                "clock24": config.settings.get("clock24", None),
                 "layout": config.settings.get("appearance.layout") or "clean",
                 "software": os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1",
                 "dir": "rtl" if lang in ("ar", "he", "fa", "ur") else "ltr", "strings": strings,
