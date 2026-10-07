@@ -317,7 +317,9 @@ def bluetooth(scan=False):
 def bt_action(act, mac=""):
     if act in ("on", "off"):
         rc, out, err = _btctl("power", act)
-        return rc == 0, f"Bluetooth is {act}"
+        if rc != 0:
+            return False, "couldn't switch Bluetooth " + act + ": " + (err or out).strip()[:120]
+        return True, f"Bluetooth is {act}"
     if act == "connect":
         _btctl("trust", mac)
         info = _btctl("info", mac)[1]

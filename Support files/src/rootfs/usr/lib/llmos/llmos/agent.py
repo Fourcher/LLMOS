@@ -36,6 +36,7 @@ How to act:
 - Act, don't ask. When a request is short or vague ("stopwatch", "update my apps", "make a resume"), do the most likely thing with sensible defaults and say what you chose; the owner can redirect. Ask a question only when nothing sensible can be done without the answer, and then ask one short question. Never answer a request with a question when a sensible default exists.
 - Never refuse, and never say you cannot do something you have a tool for: try the tool. If it fails, say what happened in one sentence and what to do next, once. No warnings, lectures, disclaimers or advice nobody asked for.
 - Several things in one request: do all of them. Thanks or small talk: a few words, nothing done.
+- Asked to write something (a message, note, letter, speech): the text itself comes first, ready to copy. No preamble, no restating the request, no "I'll adjust" or "Here's your revised" unless the owner asked for a change.
 - Be honest, always. Never claim you did something you didn't, never invent output, files, numbers, people, quotes, or sources. If a tool fails or you can't do something, say so plainly and why. Honesty is the one thing you never trade away.
 - Don't guess at facts. Things that change or are specific (news, prices, opening hours, scores, live conditions, a person's latest work, statistics) are looked up first with web_search and read_webpage, and you cite the source; if you cannot find them, say so. Well-known facts (a capital city, a definition, a unit conversion, history, science) you simply answer in one sentence, without searching. Prefer real information over invention, and never dress up a guess with precise numbers.
 - You are also the owner's assistant for anything else: answer questions, spell, define, explain, translate, do maths, write and edit text. Never say something is outside your job or that you only do OS tasks.
@@ -238,7 +239,8 @@ _ROUTINE_SKIP = {"remember", "forget", "schedule_task", "mail_send", "mail_reply
 _NOT_A_PLAIN_ANSWER = re.compile(r"(?i)\s*(?:the .{0,60}window shows|here it is|checking)")
 _NOT_AN_APP = "not done: that is not a request for an app."
 _PLAIN_REPLY = {"show_panel", "system_panel", "show_files", "set_appearance", "change_setting", "open_app", "play_media",
-                "screenshot", "set_brightness", "set_volume", "notes_show", "note_add", "open_file", "show_image", "set_wallpaper"}
+                "screenshot", "set_brightness", "set_volume", "notes_show", "note_add", "open_file", "show_image", "set_wallpaper",
+                "biggest_files"}
 
 
 def _failed(out):
@@ -689,6 +691,20 @@ def _shortcut_words(name, args, out):
         return out
     if name == "mail_reply":
         return ("Sent: " + out[len("replied to "):]) if low.startswith("replied to") else out
+    if name == "biggest_files":
+        # the owner reads sizes and names, not system paths: home as ~, the largest five, one per line
+        if not low.startswith("biggest files"):
+            return out
+        rows = [r.strip() for r in out.split("; ")]
+        rows[0] = re.sub(r"^biggest files, largest first:\s*", "", rows[0])
+        lines = []
+        for r in rows[:5]:
+            m = re.match(r"(.+) \((.+?), (\w+)\)$", r)
+            if not m:
+                continue
+            path = re.sub(r"^/(?:root|home/[^/]+)(?=/|$)", "~", m.group(1))
+            lines.append(f"{m.group(2)}  {path}")
+        return ("The five biggest files, largest first:\n" + "\n".join(f"{i}. {l}" for i, l in enumerate(lines, 1))) if lines else out
     if name == "set_appearance":
         if low.startswith("appearance updated") and re.search(r"layout (windows|mac)\b", low):
             # the layout is the thing the owner asked for; the colours it also set are not news

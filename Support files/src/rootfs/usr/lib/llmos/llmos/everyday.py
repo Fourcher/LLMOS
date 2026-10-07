@@ -19,7 +19,7 @@ import urllib.parse
 from . import config
 
 MATCH = re.compile(
-    r"\b(?:days? (?:until|till|to|left)|countdown|how long (?:until|till)|work timer|^clock (?:in|out)$|i'?m clocking (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
+    r"\b(?:days? (?:until|till|to|left)|is (?!it\b|this\b|my\b|that\b|the (?:computer|screen|wifi|sound|mouse|printer|keyboard|battery|camera)\b)[a-z][a-z .'-]{1,30} (?:down|broken|having (?:issues|problems|an outage))\b|what time does [a-z' .-]{2,40} (?:open|close)\b|countdown|how long (?:until|till)|work timer|^clock (?:in|out)$|i'?m clocking (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
     r"hours (?:did i|have i) work|port \d+|on \d{2,5}\b|web ?server|serve (?:this|the)|preview (?:this|the|my)|temperature|"
     r"(?:too |so |very |running |getting )?hot\b|overheat|battery (?:health|dying|dead|draining|drains|life|is draining)|"
     r"drive health|disk health|hard ?drive (?:health|failing|dying|ok)|ssd health|smart status|track (?:my )?(?:parcel|package|order|delivery)|"
@@ -1396,6 +1396,44 @@ def service_status(desk, line, low):
     return _say(desk, line, f"{shown}: {st.get('description', 'no answer')}" + ("" if ok else f" ({page})") + ".")
 
 
+_LIVE_STATUS = re.compile(r"(?:is|are) (?P<s>(?!it\b|this\b|my\b|that\b)[a-z][a-z .'-]{1,30}?)(?:'s)? (?:servers? |website |site |app |service )?"
+                          r"(?:down|broken|having (?:issues|problems|an outage))(?: right now| now| today| at the moment)?")
+_LIVE_HOURS = re.compile(r"what time does (?P<s>[a-z' .-]{2,40}?) (?P<v>open|close)")
+_CLOCK_TIME = re.compile(r"\b\d{1,2}(?::\d{2})?\s?(?:am|pm|a\.m\.|p\.m\.)|\b\d{1,2}:\d{2}\b", re.I)
+
+
+def live_lookup(desk, line, low):
+    """A question about a live service or opening hours: a search, answered from its results in one line (no model turn)."""
+    m = _LIVE_STATUS.fullmatch(low)
+    h = None if m else _LIVE_HOURS.fullmatch(low)
+    if not (m or h):
+        return False
+    if config.settings.get("internet") == "no":
+        return _say(desk, line, "The internet is switched off in settings, so I can't check that.")
+    from . import web
+    name = (m or h).group("s").strip(" '")
+    if m and name in _STATUS_PAGES:
+        return False                  # a known status page: service_status answers it
+    try:
+        res = web.search(f"{name} {'status outage today' if m else 'opening hours'}", n=3)
+    except Exception:
+        return _say(desk, line, f"I couldn't search for {name} just now. Try again in a minute.")
+    if not res:
+        return _say(desk, line, f"I couldn't find anything about {name}.")
+    top = res[0]
+    if m:
+        return _say(desk, line, f"I can't read {name}'s live status here. The top result is “{top['title']}” ({top['url']}). "
+                                f"Check there for the current state.")
+    times = [t for r in res for t in _CLOCK_TIME.findall(r["title"] + " " + r["snippet"])]
+    if times:
+        # "open 9am to 5:30pm": a closing question takes the later time, an opening one the earlier
+        when = times[-1] if h.group("v") == "close" else times[0]
+        return _say(desk, line, f"Search results give {name}'s {h.group('v')} time as {when.strip()} "
+                                f"({top['url']}). Opening hours change, so check that page before you go.")
+    return _say(desk, line, f"I couldn't find the {h.group('v')} time for {name} in search. The top result is “{top['title']}” "
+                            f"({top['url']}).")
+
+
 def news(desk, line, low):
     if not re.fullmatch(r"(?:what(?:'s| is| are) (?:the |in the |the latest |today's )?(?:news|headlines)(?: today| right now| now)?|"
                         r"(?:show|give) me (?:the |today's |the latest )?(?:news|headlines)|(?:top |latest )?headlines|the news)", low):
@@ -1462,7 +1500,7 @@ def open_mail(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (quick, files_and_status, weather, net_and_dates, service_status, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True

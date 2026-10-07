@@ -3219,6 +3219,11 @@ class Desk:
             return True
         m = re.fullmatch(r"bluetooth (on|off|search|connect|disconnect|forget)(?: ([0-9a-f:]{17}))?", low)
         if m:
+            if m.group(1) in ("on", "off"):          # the power switch: quick, and its answer is the reply
+                ok, note = syspanels.bt_action(m.group(1))
+                self.instant_reply(line, note + "." if ok else note[:1].upper() + note[1:] + ".")
+                self.open_window(syspanels.bluetooth())
+                return True
             def bt(act=m.group(1), mac=(m.group(2) or "").upper()):
                 if act == "search":
                     self.emit({"t": "toast", "text": "Looking for Bluetooth devices…"})
