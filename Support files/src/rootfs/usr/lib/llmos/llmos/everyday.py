@@ -19,7 +19,7 @@ import urllib.parse
 from . import config
 
 MATCH = re.compile(
-    r"\b(?:days? (?:until|till|to|left)|is (?!it\b|this\b|my\b|that\b|the (?:computer|screen|wifi|sound|mouse|printer|keyboard|battery|camera)\b)[a-z][a-z .'-]{1,30} (?:down|broken|having (?:issues|problems|an outage))\b|what time does [a-z' .-]{2,40} (?:open|close)\b|countdown|how long (?:until|till)|work timer|^clock (?:in|out)$|i'?m clocking (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
+    r"\b(?:days? (?:until|till|to|left)|is (?!it\b|this\b|my\b|that\b|the (?:computer|screen|wifi|sound|mouse|printer|keyboard|battery|camera)\b)[a-z][a-z .'-]{1,30} (?:down|broken|having (?:issues|problems|an outage))\b|what time does [a-z' .-]{2,40} (?:open|close)\b|who won (?:the )?[a-z' .-]{2,40}(?: last night| yesterday| today| this week)?\b|countdown|how long (?:until|till)|work timer|^clock (?:in|out)$|i'?m clocking (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
     r"hours (?:did i|have i) work|port \d+|on \d{2,5}\b|web ?server|serve (?:this|the)|preview (?:this|the|my)|temperature|"
     r"(?:too |so |very |running |getting )?hot\b|overheat|battery (?:health|dying|dead|draining|drains|life|is draining)|"
     r"drive health|disk health|hard ?drive (?:health|failing|dying|ok)|ssd health|smart status|track (?:my )?(?:parcel|package|order|delivery)|"
@@ -1399,6 +1399,7 @@ def service_status(desk, line, low):
 _LIVE_STATUS = re.compile(r"(?:is|are) (?P<s>(?!it\b|this\b|my\b|that\b)[a-z][a-z .'-]{1,30}?)(?:'s)? (?:servers? |website |site |app |service )?"
                           r"(?:down|broken|having (?:issues|problems|an outage))(?: right now| now| today| at the moment)?")
 _LIVE_HOURS = re.compile(r"what time does (?P<s>[a-z' .-]{2,40}?) (?P<v>open|close)")
+_LIVE_WON = re.compile(r"who won (?:the )?(?P<s>[a-z' .-]{2,40}?)(?: last night| yesterday| today| this week)?")
 _CLOCK_TIME = re.compile(r"\b\d{1,2}(?::\d{2})?\s?(?:am|pm|a\.m\.|p\.m\.)|\b\d{1,2}:\d{2}\b", re.I)
 
 
@@ -1406,6 +1407,20 @@ def live_lookup(desk, line, low):
     """A question about a live service or opening hours: a search, answered from its results in one line (no model turn)."""
     m = _LIVE_STATUS.fullmatch(low)
     h = None if m else _LIVE_HOURS.fullmatch(low)
+    won = None if (m or h) else _LIVE_WON.fullmatch(low)
+    if won:
+        if config.settings.get("internet") == "no":
+            return _say(desk, line, "The internet is switched off in settings, so I can't look up results.")
+        from . import web
+        try:
+            res = web.search(f"{won.group('s').strip(' ')} result last night", n=3)
+        except Exception:
+            return _say(desk, line, "I couldn't search for the result just now. Try again in a minute.")
+        if not res:
+            return _say(desk, line, "I couldn't find that result.")
+        top = res[0]
+        return _say(desk, line, f"From search: “{top['title']}” ({top['url']}). {top['snippet'][:200]} "
+                                "Check the page for the final score.")
     if not (m or h):
         return False
     if config.settings.get("internet") == "no":
