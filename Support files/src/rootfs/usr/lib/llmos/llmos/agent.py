@@ -236,6 +236,7 @@ _ROUTINE_SKIP = {"remember", "forget", "schedule_task", "mail_send", "mail_reply
 # tools whose own plain output (via _shortcut_reply) is the answer, so a replay needs no model turn at all
 # a tool result that only points at something on the screen ("Here it is.") is not the answer to a request for words
 _NOT_A_PLAIN_ANSWER = re.compile(r"(?i)\s*(?:the .{0,60}window shows|here it is|checking)")
+_NOT_AN_APP = "not done: that is not a request for an app."
 _PLAIN_REPLY = {"show_panel", "system_panel", "show_files", "set_appearance", "change_setting", "open_app", "play_media",
                 "screenshot", "set_brightness", "set_volume", "notes_show", "note_add", "open_file", "show_image", "set_wallpaper"}
 
@@ -445,6 +446,9 @@ def run(ctx, user_text, history):
     if shortcut:
         name, args = shortcut
         out = execute(ctx, name, args)
+        if str(out).startswith(_NOT_AN_APP):
+            shortcut = None         # "write a birthday message" is words: the model writes them
+    if shortcut:
         reply = _cap(_shortcut_reply(name, args, out))
         st = ctx.new_stream()
         ctx.on_text(st, reply)
@@ -686,6 +690,9 @@ def _shortcut_words(name, args, out):
     if name == "mail_reply":
         return ("Sent: " + out[len("replied to "):]) if low.startswith("replied to") else out
     if name == "set_appearance":
+        if low.startswith("appearance updated") and re.search(r"layout (windows|mac)\b", low):
+            # the layout is the thing the owner asked for; the colours it also set are not news
+            return "Done — the layout is now " + ("Windows-style" if "layout windows" in low else "Mac-style") + "."
         return ("Done — " + out[len("appearance updated: "):] + ".") if low.startswith("appearance updated") else out
     if name == "play_media":
         m = re.match(r'now playing "(.+?)" by (.+?) \((.*?)\)', out)
@@ -855,6 +862,9 @@ def _for_history(text):
 # earlier failed request on their own (e.g. replying to an email when only
 # asked to sort the inbox).
 _ONLY_IF_ASKED = {
+    # a written text ("write a birthday message") is the reply itself; a file is made only when the owner asks for one
+    "write_file": r"\b(save|saved|file|files|folder|document|\.txt|\.md|\.docx?|to disk|on (?:my|the) desktop|append|add to)\b",
+    "make_folder": r"\b(folder|directory|make a dir|create a dir)\b",
     "mail_send": r"\b(send|reply|respond|answer|write|e-?mail|mail|tell|let .{0,30} know|forward|notify|message)\b",
     "mail_reply": r"\b(send|reply|respond|answer|write|e-?mail|mail|tell|let .{0,30} know|forward|notify|message)\b",
     "mail_delete": r"\b(delete|trash|remove|get rid|bin|clean|clear|zero)\b",
@@ -903,7 +913,7 @@ def execute(ctx, name, arguments):
     if name == "make_app" and not _APP_WORDS.search(str(getattr(ctx, "current_request", "") or "")):
         # "write a birthday message" is words, not an app: the reply itself is the answer
         store.audit(name, arguments, "blocked: not an app request", allowed=False)
-        return ("not done: that is not a request for an app. Write what was asked as the reply itself, in words; "
+        return (_NOT_AN_APP + " Write what was asked as the reply itself, in words; "
                 "do not make an app.")
     need = _ONLY_IF_ASKED.get(name)
     current = getattr(ctx, "current_request", "") or ""

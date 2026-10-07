@@ -7,6 +7,7 @@
   FAILED    the reply is the fallback for a failure, or says an error
   SLOW      longer than the time the kind of request should take (instant ones: 15 s; model ones: 120 s)
   TIMEOUT   the harness gave up on it
+  PENDING   the reply is only a placeholder ("the result follows"); read the answer that follows it
 Flags are a checklist, not a verdict: every reply is still read by hand.
 usage: tools/ux-grade.py run/everyday [more run dirs]    (writes REPORT.md into the first dir)"""
 import glob
@@ -27,6 +28,8 @@ LECTURE = re.compile(r"\b(it'?s important|be careful|please be (careful|aware)|c
                      r"it is (important|recommended|advisable)|i'?d (strongly )?(recommend|advise))\b", re.I)
 FAILED = re.compile(r"couldn'?t finish that|could not finish|did not complete|something went wrong|that didn'?t work|"
                     r"\berror\b|\bfailed\b|no answer from the model|the model (is|was) (busy|unavailable)", re.I)
+# a placeholder is the first words while the real answer is still on its way: the harness read it too early
+PENDING = re.compile(r"the result follows|checking (?:the |that |it |now)|one moment", re.I)
 INSTANT, MODEL = 20, 120
 
 
@@ -70,6 +73,8 @@ def grade(r):
         flags.append("FAILED")
     if r.get("timed_out"):
         flags.append("TIMEOUT")
+    if reply and PENDING.search(reply):
+        flags.append("PENDING")
     limit = INSTANT if is_instant(r.get("phrase", "")) else MODEL
     if (r.get("seconds") or 0) > limit:
         flags.append(f"SLOW{int(r['seconds'])}s")

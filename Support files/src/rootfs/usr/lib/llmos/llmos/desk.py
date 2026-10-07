@@ -2198,6 +2198,8 @@ class Desk:
                 def __getattr__(lane, k):
                     return getattr(lane._ctx, k)
             out = agent.execute(Lane(self.ctx), name, args)
+            if str(out).startswith(agent._NOT_AN_APP):
+                return self.say(text)       # words, not an app: the model writes them
             reply = agent._cap(agent._shortcut_reply(name, args, out))
             self.last_reply = reply
             if reply and reply not in ("Here it is.", "(done)"):
