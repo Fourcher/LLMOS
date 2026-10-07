@@ -920,6 +920,8 @@ def schedule_task(a, ctx):
         t = store.add_task(str(a.get("when", "")), str(a.get("task", "")), str(a.get("kind") or "agent"), approved=owner)
     except store.WhenError as e:
         return f"error: {e}"
+    if t.get("kind") in ("reminder", "timer"):
+        return f"scheduled [{t['id']}] {t['desc']}: {t['task']}"
     return f"scheduled [{t['id']}] {t['desc']}: {t['task']}" + (" (it will do this by itself then, as asked)" if t.get("approved") else "")
 
 
@@ -3146,8 +3148,10 @@ def remove_software(a, ctx):
       {"path": STR, "copies": {"type": "integer"}, "printer": STR}, ["path"], risk=CHANGE)
 def print_file(a, ctx):
     path = _path(a.get("path", ""))
+    if not os.path.isfile(path):
+        path = _best_document(str(a.get("path", ""))) or path      # "my resume": the document of that name
     if not path or not os.path.isfile(path):
-        return f"error: there is no file {path}"
+        return f"error: there is no file {a.get('path')}"
     if not shutil.which("lp"):
         return "printing is not available on this system"
     st = subprocess.run(["lpstat", "-d"], capture_output=True, text=True, timeout=10)
@@ -3900,11 +3904,15 @@ def move_files(a, ctx):
             + ". Say one sentence at most.")
 
 
-@tool("open_latest", "Open the newest file in a folder (default Downloads): 'open what I just downloaded'.",
-      {"where": STR}, [], risk=READ)
+@tool("open_latest", "Open the newest file in a folder (default Downloads): 'open what I just downloaded'. kind: pdf, picture, "
+      "video, song or document to open the newest one of that kind.",
+      {"where": STR, "kind": STR}, [], risk=READ)
 def open_latest(a, ctx):
     base = folder(a.get("where") or "downloads")
-    files = sorted(_walk(base), key=lambda p: -os.path.getmtime(p)) if base else []
+    kinds = {"pdf": (".pdf",), "picture": _IMAGE_EXT, "photo": _IMAGE_EXT, "image": _IMAGE_EXT, "video": _MEDIA_EXT,
+             "song": _AUDIO_EXT, "document": (".pdf", ".doc", ".docx", ".odt", ".rtf", ".txt", ".md")}
+    want = kinds.get(str(a.get("kind") or "").lower())
+    files = sorted((p for p in _walk(base) if not want or p.lower().endswith(want)), key=lambda p: -os.path.getmtime(p)) if base else []
     if not files:
         return f"error: {str(a.get('where') or 'Downloads')} is empty"
     return open_file({"path": files[0]}, ctx)

@@ -1382,6 +1382,15 @@ def _everyday2(text):
                  r"^(?:please\s+)?(?:find|get|look\s+up|search\s+for|show)\s+(?:me\s+)?(?:a\s+|an\s+)?recipes?\s+(?:for|on)\s+(?P<q2>.+?)\s*[.!?]?$", low)
     if m:
         return ("browse", {"search": ((m.group("q") or m.group("q2")) + " recipe").strip()})
+    m = re.match(r"^(?:please\s+)?print\s+(?:me\s+)?(?:my\s+|the\s+|that\s+|a\s+)?(?P<f>[\w .'()-]+?)\s*[.!]?$", t, re.I)
+    if m and m.group("f").lower() not in ("this", "that", "it", "this page", "this document", "page", "it out") \
+            and not re.search(r"\b(?:how|what|why|where|which)\b", m.group("f"), re.I):
+        return ("print_file", {"path": m.group("f").strip()})
+    # the newest PDF I downloaded: "open the pdf I downloaded today"
+    m = re.match(r"^(?:please\s+)?(?:open|show|view)\s+(?:the\s+|my\s+|that\s+)?(?P<k>pdf|picture|photo|image|video|song|document|file)\s+"
+                 r"(?:i|that\s+i)\s+(?:just\s+)?(?:downloaded|got|saved)(?:\s+(?:today|yesterday|last night))?$", t, re.I)
+    if m:
+        return ("open_latest", {"where": "downloads", "kind": m.group("k").lower()})
     # email said plainly: "send craig@x.com an email saying …", "reply to the last email saying …", "email my resume to craig@x.com"
     m = re.match(r"^(?:please\s+)?send\s+(?P<to>[\w.+-]+@[\w.-]+)\s+(?:an?\s+)?e-?mail\s+(?:saying|that|to\s+say|telling\s+(?:him|her|them)|with)\s+(?P<b>.+)$", t, re.I)
     if m:
@@ -1420,6 +1429,10 @@ def _everyday2(text):
     if m:
         where = m.group("f") or ("music" if m.group("k") in ("song", "track", "recording") else "videos")
         return ("open_latest", {"where": where})
+    m = re.match(r"^(?:please\s+)?remind\s+me\s+(?:to\s+)?(?P<what>.+?)\s+(?P<when>every\s+(?:day|morning|evening|night|weekday|weekend|week|hour|"
+                 r"(?:mon|tues|wednes|thurs|fri|satur|sun)day)(?:\s+(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?)\s*[.!]?$", low)
+    if m:
+        return ("schedule_task", {"when": m.group("when"), "task": m.group("what"), "kind": "reminder"})
     # alarms and the list of what's scheduled
     m = re.match(r"^(?:please\s+)?(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)(?:\s+(?:to|and)\s+(?P<why>.+))?$"
                  r"|^wake\s+me\s+(?:up\s+)?(?:at|for)\s+(?P<w2>.+?)(?:\s+(?:to|and)\s+(?P<why2>.+))?$", low)
@@ -1767,6 +1780,8 @@ def _restyle(t):
     how = (m.group("how") or m.group("how2") or "").strip()
     if not how or _LOOK_HANDLED.match(how):
         return None
+    if re.search(r"look(?:s)? like (?:windows|mac|macos|the mac|a mac|the windows)", how, re.I):
+        return None                                   # a desk layout (taskbar or menu bar): the layout options do it
     if re.search(r"\b(?:dimm?(?:er)?|brighter|brightness|darker|lighter)\b", how, re.I) and (m.group("what") or "").lower() in ("screen", "display", "it"):
         return None                                   # the screen's brightness, not its style
     if (m.group("what") or "").lower() == "screen" and re.search(r"upside|rotat|flip|sideways|portrait|landscape", how, re.I):

@@ -2287,7 +2287,7 @@ class Desk:
             if m.group("mic"):
                 self.emit({"t": "toast", "text": "Listening for 4 seconds: say something…"})
             threading.Thread(target=lambda: self.instant_reply(line, fn()[1]), daemon=True).start()
-            self._said = "(checking)"
+            self._said = "Checking now; the result follows."
             return True
         m = re.fullmatch(r"(?:turn |switch )?(?:on |off )?(?:airplane|aeroplane|flight|plane) mode(?: (?P<v>on|off))?|(?P<v2>turn on|turn off|enable|disable) (?:airplane|aeroplane|flight) mode", low.rstrip(".!"))
         if m and shutil.which("rfkill"):
@@ -2414,7 +2414,7 @@ class Desk:
                 self.instant_reply(line, ("Your connection works, so I reloaded the page. " if ok else "Your connection works. ") +
                                    "If it still doesn't load, the site itself is probably down or busy: try again in a few minutes.")
             threading.Thread(target=diagnose, daemon=True).start()
-            self._said = "(checking the connection)"
+            self._said = "Checking the connection now; the result follows."
             return True
         if re.fullmatch(r"(?:save|print|export|turn) (?:this|the) (?:web ?)?page (?:as|to|into) (?:a )?pdf|save (?:this|the) (?:web ?)?page|print (?:this|the) (?:web ?)?page", l2) and shutil.which("wtype"):
             ok, note = wm.browser_key("print")
@@ -2493,7 +2493,7 @@ class Desk:
                 self.instant_reply(line, (f"On your network: {local or 'not connected'}." if local else "Not connected to a network.") +
                                    (f" To the internet: {public}." if re.fullmatch(r"[\d.:a-f]+", public or "x") else ""))
             threading.Thread(target=ip, daemon=True).start()
-            self._said = "(checking)"
+            self._said = "Checking now; the result follows."
             return True
         m = re.fullmatch(r"close window (\S+)", l2)
         if m and m.group(1) in self.windows:
@@ -2693,7 +2693,7 @@ class Desk:
                 self.instant_reply(line, "I turned the sound on and played a chime. Heard it? If not, pick your speaker or headphones "
                                    "under Output in the sound panel (More\u2026 shows every device).")
             threading.Thread(target=fix, daemon=True).start()
-            self._said = "(checking the sound)"
+            self._said = "Checking the sound now; the result follows."
             return True
         # a new wallpaper: the choices, never a removal
         if re.fullmatch(r"(?:change|switch|new|different|another|pick a) (?:my |the |a )?(?:wallpaper|background|desktop background|desktop picture)|(?:change|set) (?:my |the )?wallpaper|i want a (?:new|different) (?:wallpaper|background)", l2):
@@ -2999,7 +2999,7 @@ class Desk:
         (re.compile(r"(?:mirror|duplicate|clone) (?:my |the )?(?:screen|display|displays|screens)(?: (?:to|on) (?:the )?(?:projector|tv|second screen|monitor))?|"
                     r"show (?:my |the )?screen on (?:the )?(?:projector|tv|big screen)|same picture on both screens"), "mirror the displays"),
         (re.compile(r"extend (?:my |the )?(?:screen|display|displays|desktop)(?: (?:to|onto) (?:the )?(?:second (?:screen|monitor)|monitor|tv))?|use both (?:screens|monitors) separately"), "extend the displays"),
-        (re.compile(r"(?:turn|switch) (?:off|on) (?:the )?bluetooth|(?:disable|enable) bluetooth|bluetooth (?:off|on)"), "__bt__"),
+        (re.compile(r"(?:turn|switch) (?:off|on) (?:the |my )?bluetooth|(?:turn|switch) (?:the |my )?bluetooth (?:off|on)|(?:disable|enable) bluetooth|bluetooth (?:off|on)"), "__bt__"),
         (re.compile(r"(?:make )?(?:the )?key(?:board)? repeat(?: rate)? faster|keys repeat (?:too )?slow(?:ly)?"), "key repeat faster"),
         (re.compile(r"(?:make )?(?:the )?key(?:board)? repeat(?: rate)? slower|keys repeat (?:too )?(?:fast|quickly)"), "key repeat slower"),
     ]

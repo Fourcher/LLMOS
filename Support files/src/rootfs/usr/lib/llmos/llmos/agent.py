@@ -234,6 +234,8 @@ def about_time(seconds, left=False):
 _ROUTINE_SKIP = {"remember", "forget", "schedule_task", "mail_send", "mail_reply", "mail_delete", "system_power",
                  "write_file", "set_passphrase", "online_model", "install_to_disk", "manage_models", "install_app"}
 # tools whose own plain output (via _shortcut_reply) is the answer, so a replay needs no model turn at all
+# a tool result that only points at something on the screen ("Here it is.") is not the answer to a request for words
+_NOT_A_PLAIN_ANSWER = re.compile(r"(?i)\s*(?:the .{0,60}window shows|here it is|checking)")
 _PLAIN_REPLY = {"show_panel", "system_panel", "show_files", "set_appearance", "change_setting", "open_app", "play_media",
                 "screenshot", "set_brightness", "set_volume", "notes_show", "note_add", "open_file", "show_image", "set_wallpaper"}
 
@@ -556,7 +558,8 @@ def run(ctx, user_text, history):
             # one plain tool that already did the job ("volume up", "open my downloads", "add eggs to my list"): its own
             # result is the answer, so the model is not asked to say it again (a whole model turn saved)
             plain_done = (len(calls) == 1 and not content and calls[0]["name"] in _PLAIN_REPLY and not _failed(out)
-                          and not getattr(ctx, "after_turn", None))
+                          and not getattr(ctx, "after_turn", None) and not _WRITING_RE.search(user_text)
+                          and not _NOT_A_PLAIN_ANSWER.match(str(out)))
             if plain_done:
                 try:
                     args = json.loads(calls[0]["arguments"]) if isinstance(calls[0]["arguments"], str) and calls[0]["arguments"].strip() else {}
@@ -622,7 +625,8 @@ _INTERNAL = re.compile(r"[^.!?\n]*(?:tell the owner exactly this|the owner did n
 def scrub(text):
     """The final words, without notes addressed to the model ('Tell the owner exactly this:' keeps what follows it)."""
     t = re.sub(r"(?i)\s*tell the owner exactly this:?\s*(\w)?", lambda m: " " + (m.group(1) or "").upper(), str(text or ""))
-    t = _INTERNAL.sub("", _PATH_NOTE.sub("", t)).strip()
+    t = _INTERNAL.sub("", _PATH_NOTE.sub("", t))
+    t = re.sub(r"\s*\(\s*#[0-9a-fA-F]{3,8}(?:\s*(?:and|,)\s*#[0-9a-fA-F]{3,8})*\s*\)|\s*#[0-9a-fA-F]{6}\b", "", t).strip()
     if not t and str(text or "").strip():
         return "I left that as it was. Tell me exactly what to change."
     return t
@@ -885,6 +889,10 @@ _ONLY_IF_ASKED = {
 }
 
 
+_APP_WORDS = re.compile(r"\b(app|application|program|tool|tracker|timer|countdown|calculator|game|dashboard|widget|to-?do|planner|"
+                        r"log|quiz|flashcards?|sketch|converter|calendar)\b", re.I)
+
+
 def execute(ctx, name, arguments):
     cancel = getattr(ctx, "cancel", None)
     if cancel is not None and cancel.is_set():        # the owner pressed Stop: no further step of this turn runs
@@ -892,6 +900,11 @@ def execute(ctx, name, arguments):
     tool = tools.REGISTRY.get(name)
     if not tool or not tool.available():
         return f"error: no such tool '{name}'"
+    if name == "make_app" and not _APP_WORDS.search(str(getattr(ctx, "current_request", "") or "")):
+        # "write a birthday message" is words, not an app: the reply itself is the answer
+        store.audit(name, arguments, "blocked: not an app request", allowed=False)
+        return ("not done: that is not a request for an app. Write what was asked as the reply itself, in words; "
+                "do not make an app.")
     need = _ONLY_IF_ASKED.get(name)
     current = getattr(ctx, "current_request", "") or ""
     if need and current and not (need(current) if callable(need) else re.search(need, current, re.I)):
