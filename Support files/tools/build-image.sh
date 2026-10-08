@@ -43,7 +43,7 @@ $V run run/bser.sock "$LOG" "setup-interfaces -a -r >/dev/null 2>&1; udhcpc -i e
 echo "==> installing (this is the slow part)"
 M=$($V mark "$LOG")
 $V send run/bser.sock "PAYLOAD=http://10.0.2.2:8765 sh /tmp/install.sh 2>&1 | tee /tmp/install.log"
-$V wait "$LOG" 'LLMOS_INSTALL_OK|HASH MISMATCH|not enough disk|ERROR' 900 --from "$M" | grep -E '^==>|LLMOS_INSTALL_OK|MISMATCH|ERROR|not enough|/dev/vda2'
+$V wait "$LOG" 'LLMOS_INSTALL_OK|HASH MISMATCH|not enough disk|ERROR|fatal:|INSTALL FAILED' 900 --from "$M" | grep -E '^==>|LLMOS_INSTALL_OK|MISMATCH|ERROR|not enough|/dev/vda2'
 grep -q LLMOS_INSTALL_OK <(tail -c 4000 "$LOG") || { echo "INSTALL FAILED"; exit 1; }
 
 echo "==> power off"

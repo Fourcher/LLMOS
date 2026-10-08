@@ -1494,7 +1494,10 @@ def change_setting(a, ctx):
             mins = int(a.get("minutes") or 0) if on else 0
             if mins > 0:
                 import threading
-                def _off(): subprocess.run(["makoctl", "mode", "-r", "do-not-disturb"], capture_output=True)
+                def _off():
+                    config.settings.set("do_not_disturb", False)
+                    subprocess.run(["makoctl", "mode", "-r", "do-not-disturb"], capture_output=True,
+                                   env=dict(os.environ, **(media.desk_env() or {})))
                 threading.Timer(mins * 60, _off).start()
                 return f"do not disturb is on for {mins} minutes: programs' notifications stay hidden"
             return "do not disturb is on: programs' notifications stay hidden" if on else "do not disturb is off"

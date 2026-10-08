@@ -1325,7 +1325,7 @@ def weather(desk, line, low):
 
 def net_and_dates(desk, line, low):
     q = low.strip().rstrip("?.!")
-    if re.fullmatch(r"(?:is (?:the |my )?internet (?:working|up|down|ok|on|connected)|am i (?:online|connected(?: to the internet)?)|do i have (?:the )?internet|is (?:the )?(?:wi-?fi|network) working|are we online)", q):
+    if re.fullmatch(r"(?:is (?:the |my )?internet (?:working|up|down|ok|on|connected)|am i (?:online|connected(?: to the internet)?)|do i have (?:the )?internet|is (?:the )?(?:wi-?fi|network) working|is (?:the )?(?:wi-?fi|network|connection) down|are we online)", q):
         if config.settings.get("internet") == "no":
             return _say(desk, line, "The internet is switched off in settings (say “turn the internet on”).")
         t0 = time.time()
