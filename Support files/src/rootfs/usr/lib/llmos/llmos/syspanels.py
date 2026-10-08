@@ -25,7 +25,11 @@ def _run(argv, timeout=10):
     try:
         p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
         return p.returncode, p.stdout, p.stderr
-    except (OSError, subprocess.SubprocessError) as e:
+    except subprocess.TimeoutExpired:
+        return 1, "", "it took too long to answer"
+    except OSError:
+        return 1, "", "this system doesn't have " + argv[0] + " installed"
+    except subprocess.SubprocessError as e:
         return 1, "", str(e)
 
 
@@ -316,7 +320,7 @@ def bluetooth(scan=False):
 
 def bt_action(act, mac=""):
     if act in ("on", "off"):
-        rc, out, err = _btctl("power", act)
+        rc, out, err = _btctl("power", act, timeout=6)
         if rc != 0:
             return False, "couldn't switch Bluetooth " + act + ": " + (err or out).strip()[:120]
         return True, f"Bluetooth is {act}"
