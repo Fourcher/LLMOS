@@ -558,6 +558,7 @@ def run(ctx, user_text, history):
     escalated = False
     first_calls = []           # the step-0 tool calls, kept as a routine when the turn goes well
     tool_steps = 0
+    blocked, no_tools = set(), False             # calls a guard refused; once one comes back, the model answers in words
     fresh = len(msgs[-1].get("content") or "")   # characters the model has not seen yet (its cache holds the rest)
     while True:
         chat = llm.cloud_chat if where == "cloud" else llm.chat
@@ -570,7 +571,7 @@ def run(ctx, user_text, history):
                 _ctx(ctx, "expect", est, step)
             t0 = time.time()
             try:
-                result = chat(msgs, tools=tools.schemas() if where == "cloud" else tool_schemas(),
+                result = chat(msgs, tools=None if no_tools else (tools.schemas() if where == "cloud" else tool_schemas()),
                               on_text=lambda t: ctx.on_text(stream, t))
             except llm.CloudError as e:
                 # the online model did not answer: say so and carry on here with the same messages
@@ -621,9 +622,17 @@ def run(ctx, user_text, history):
                 assistant_msg["_anthropic"] = result["raw"]     # replayed unchanged on the next step (llm.py)
             msgs.append(assistant_msg)
             fresh = 0
+            same = {}                                    # the same call twice in one step runs once
             for i, call in enumerate(calls):
                 cid = call["id"] or f"call_{step}_{i}"
-                out = execute(ctx, call["name"], call["arguments"])
+                key = (call["name"], json.dumps(call["arguments"], sort_keys=True) if not isinstance(call["arguments"], str) else call["arguments"])
+                out = same[key] if key in same else execute(ctx, call["name"], call["arguments"])
+                same[key] = out
+                if str(out).lower().startswith(("not done", "blocked")):
+                    # a refused call asked again, or words asked for as an app: the next turn is words only
+                    if key in blocked or str(out).startswith(_NOT_AN_APP):
+                        no_tools = True
+                    blocked.add(key)
                 tools_ran += 1
                 fresh += len(out)
                 if tool_steps == 0:

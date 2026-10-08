@@ -57,6 +57,10 @@ def run_one(case, phrase, yes, timeout):
     tsh(f"llmos desk-ctl testreset >/dev/null; {kill}rm -f /tmp/uc.json", 60)
     if state().get("screen") == "lock":            # a task locked the screen: the test VM's passphrase opens it
         tsh(f"llmos desk-ctl unlock {os.environ.get('LLMOS_TEST_PASS', 'correct horse battery')} >/dev/null", 60)
+    for _ in range(30):                              # the previous request must be finished, or this one is only queued
+        if not state().get("busy"):
+            break
+        time.sleep(3)
     t0 = time.time()
     tsh(f"( llmos say '{q}' > /tmp/uc.json 2>&1 & )", 20)
     answered, dialogs = [], []
@@ -80,6 +84,10 @@ def run_one(case, phrase, yes, timeout):
             answered.append(ans)
     else:
         tsh("llmos desk-ctl cancel >/dev/null", 20)
+    while time.time() - t0 < timeout:                # 'say' can come back while the desk is still working on it
+        if not state().get("busy"):
+            break
+        time.sleep(3)
     took = round(time.time() - t0, 1)
     raw = tsh("cat /tmp/uc.json", 30)
     m = re.search(r"\{.*\}", raw, re.S)
@@ -88,6 +96,8 @@ def run_one(case, phrase, yes, timeout):
     except ValueError:
         res = {}
     st = state()
+    if st.get("reply") and st.get("reply") != res.get("reply"):
+        res["reply"] = st["reply"]                   # the finished request's own words, not what was showing when 'say' returned
     # a placeholder ("checking now; the result follows") is followed by the real answer from the desk: wait for it
     if re.search(r"the result follows|one moment", res.get("reply", "") or "", re.I):
         end = time.time() + 40

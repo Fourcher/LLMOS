@@ -144,7 +144,7 @@ CASES = {
     "download gemma 4 e2b": ("manage_models", {"action": "download", "model": "gemma-4-e2b"}),
     "use gemma 4 e2b": ("manage_models", {"action": "use", "model": "gemma-4-e2b"}),
     "switch to ministral 8b": ("manage_models", {"action": "use", "model": "ministral-3-8b"}),
-    "remove granite 3b": ("manage_models", {"action": "remove", "model": "granite-4.1-3b"}),
+    "remove granite 3b": ("manage_models", {"action": "remove", "model": "granite-4.2-3b"}),
     "download gemma": None,
     "use the bathroom": None,
     "install htop": ("install_app", {"packages": "htop"}),

@@ -3504,6 +3504,8 @@ def click(a, ctx):
             d = control.find(label)
         except RuntimeError as e:
             return f"error: {e}"
+        if not d and a.get("x") is not None and a.get("y") is not None:
+            d = {"x": int(a["x"]), "y": int(a["y"])}       # the words were not read, but the place was given
         if not d:
             return f"error: '{label}' is not on the screen now. The screen shows:\n" + _screen_after(60)
         x, y = d["x"], d["y"]

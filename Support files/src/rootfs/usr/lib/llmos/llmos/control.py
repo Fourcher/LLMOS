@@ -101,9 +101,11 @@ def _buttons():
         if _run(["magick", SHOT, "-crop", f"{w}x{h}+{x}+{y}", "+repage", "PNG24:" + BOX], timeout=20).returncode:
             continue
         text = " ".join((_run(["tesseract", BOX, "-", "--psm", "7"], timeout=20).stdout or "").split())
+        if not text.strip() and w < 2.5 * h:            # a key with one sign on it ("7", "=", "+"): read as one character
+            text = " ".join((_run(["tesseract", BOX, "-", "--psm", "10"], timeout=20).stdout or "").split())
         text = re.sub(r"^[^\w(]+|[^\w).!?]+$", "", text)        # the box's own edge read as ':' or '|' 
         cx, cy, sx, sy = (x + w // 2) // 2, (y + h // 2) // 2, w // 2, h // 2
-        if not re.search(r"[A-Za-z0-9]", text) or len(text) > 60:
+        if not re.search(r"[A-Za-z0-9=+×÷−%.()-]", text) or len(text) > 60:
             if w > 3 * h:                                  # an empty, wide box: a place to write (a text field)
                 lines.append({"text": "", "x": cx, "y": cy, "w": sx, "h": sy, "words": [], "field": True})
             continue

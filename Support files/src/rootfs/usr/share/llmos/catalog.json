@@ -48,26 +48,28 @@
   ]
  },
  {
-  "id": "granite-4.1-3b",
-  "name": "Granite 4.1 3B",
+  "id": "granite-4.2-3b",
+  "name": "Granite 4.2 3B",
   "maker": "IBM",
   "origin": "USA",
   "license": "Apache-2.0",
-  "repo": "ibm-granite/granite-4.1-3b-GGUF",
-  "file": "granite-4.1-3b-Q4_K_M.gguf",
-  "size": 2099501664,
-  "sha256": "662b0626cd58f443baea23559b469df6576a81d349649c59413b36a9fb32eb29",
+  "repo": "ibm-granite/granite-4.2-3b-GGUF",
+  "file": "granite-4.2-3b-Q4_K_M.gguf",
+  "size": 2244011552,
+  "sha256": "e0406663965846ae22a403456eb826ccce5f450840491f71952f18a7cb78e7d5",
   "ram_gb": 3,
-  "note": "conservative, business-oriented",
+  "note": "trained for using tools over many steps",
   "speed": "fast",
   "good_at": [
-   "business and office tasks",
+   "using the computer's tools step by step",
    "concise, factual"
   ],
   "limits": [
-   "cautious: refuses more than the others",
    "weaker at creative writing"
-  ]
+  ],
+  "chat_kwargs": {
+   "enable_thinking": false
+  }
  },
  {
   "id": "gemma-4-e4b",

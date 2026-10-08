@@ -272,6 +272,8 @@ def serve_argv():
             # with memory to spare, earlier prompts are kept in RAM: a side job (a translation, a style, a decision) no
             # longer pushes out the main prompt, which a CPU would otherwise read again for minutes
             "--cache-ram", "1024" if spare > 4.0 else "512" if spare > 3.0 else "0"]
+    if m.get("chat_kwargs"):                     # e.g. a model that thinks before answering by default: off, for CPU speed
+        argv += ["--chat-template-kwargs", json.dumps(m["chat_kwargs"])]
     d = draft_path(m)
     if d and os.path.exists(d):
         # multi-token-prediction draft head: ~1.5x faster generation, same output
