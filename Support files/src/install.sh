@@ -152,6 +152,8 @@ fetch_verify "$PAYLOAD/build/cache/$MODEL_FILE" "$TARGET/var/lib/llmos/models/$M
 fetch_verify "$PAYLOAD/build/cache/$WHISPER_FILE" "$TARGET/usr/share/llmos/voice/$WHISPER_FILE" "$WHISPER_SHA256"
 
 log "search-by-meaning runtime (llama.cpp ${EMBED_LLAMA_COMMIT:-?}, built from source)"
+# the runtime is built and checked inside the target: it needs /dev, /proc and /sys there (bound again for the bootloader step)
+for d in dev proc sys; do mountpoint -q $TARGET/$d || mount --bind /$d $TARGET/$d; done
 # Alpine's llama.cpp is too old for EmbeddingGemma 2; a cached build for this commit and architecture is used when the
 # build host has one, otherwise it is compiled here from the pinned upstream commit. The build tools leave afterwards.
 EMBED_TAR="llama-embed-$EMBED_LLAMA_COMMIT-$ARCH.tar"
@@ -234,7 +236,7 @@ echo 'SYSLOGD_OPTS="-C512"' > /etc/conf.d/syslog     # logs stay in RAM
 EOF
 
 log "bootloader"
-mount --bind /dev $TARGET/dev; mount --bind /proc $TARGET/proc; mount --bind /sys $TARGET/sys
+for d in dev proc sys; do mountpoint -q $TARGET/$d || mount --bind /$d $TARGET/$d; done
 if [ "$ARCH" = aarch64 ]; then
   sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/' $TARGET/etc/default/grub
   grep -q '^GRUB_TIMEOUT=' $TARGET/etc/default/grub || echo 'GRUB_TIMEOUT=0' >> $TARGET/etc/default/grub
