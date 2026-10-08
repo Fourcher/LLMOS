@@ -310,18 +310,26 @@ def _replay(ctx, user_text, rt):
              "tool_calls": [{"id": f"call_r{i}", "type": "function", "function": {"name": n, "arguments": json.dumps(a)}}
                             for i, (n, a, _) in enumerate(outs)]}]
     msgs += [{"role": "tool", "tool_call_id": f"call_r{i}", "content": o} for i, (_, _, o) in enumerate(outs)]
-    msgs.append({"role": "user", "content": "Answer the request above from these results, in a sentence or two."})
+    msgs.append({"role": "user", "content": "Answer the request above from these results, in a sentence or two of plain "
+                 "words for a person. Never copy the raw output; give only the numbers or names that answer it."})
     online = config.settings.get("brain", "local") == "cloud" and config.cloud() is not None and config.settings.get("internet") != "no"
     if online:
         _going_online(ctx, True)
     chat = llm.cloud_chat if online else llm.chat
     stream = ctx.new_stream()
     try:
-        text = chat(msgs, on_text=lambda t: ctx.on_text(stream, t), max_tokens=400).get("content", "").strip()
+        text = chat(msgs, on_text=None, max_tokens=400).get("content", "").strip()
     except (llm.ModelDown, llm.CloudError):
         text = ""
+    # a reply that is the command's raw output is not an answer: the request goes the normal way instead
+    if re.match(r"(?is)\s*(?:exit code \d|filesystem\s+size|total \d+\n)", text) or (
+            text and any(text[:120] in o for (_, _, o) in outs)):
+        ctx.end_stream(stream)
+        return None
+    if text:
+        ctx.on_text(stream, text)
     ctx.end_stream(stream)
-    return text or "\n".join(o for _, _, o in outs)[:1500]
+    return text or None          # no words came back: the request goes the normal way rather than as raw output
 
 
 def context_block(private=False):

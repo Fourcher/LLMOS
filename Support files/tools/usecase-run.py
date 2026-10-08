@@ -85,8 +85,16 @@ def run_one(case, phrase, yes, timeout):
     else:
         tsh("llmos desk-ctl cancel >/dev/null", 20)
     while time.time() - t0 < timeout:                # 'say' can come back while the desk is still working on it
-        if not state().get("busy"):
+        st = state()
+        if not st.get("busy"):
             break
+        for d in st.get("dialogs", []):              # a question asked meanwhile is answered as below
+            dialogs.append(d.get("title", ""))
+            destructive = d.get("danger") or re.search(r"delete|erase|wipe|format|remove|shut|restart|reboot|power|uninstall|"
+                                                      r"forget|empty|install llm os|kill|end ", (d.get("title", "") + " " + d.get("text", "")), re.I)
+            ans = "yes" if yes or not destructive else "no"
+            tsh(f"llmos desk-ctl dialog {ans} >/dev/null", 20)
+            answered.append(ans)
         time.sleep(3)
     took = round(time.time() - t0, 1)
     raw = tsh("cat /tmp/uc.json", 30)

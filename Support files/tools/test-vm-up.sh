@@ -18,5 +18,7 @@ ctl "wizard welcome"; ctl "wizard language en"; ctl "wizard name Jordan"
 ctl "wizard timezone America/Phoenix"; ctl "wizard autonomy hands-off"; ctl "wizard internet yes"
 ctl "wizard passphrase correct horse battery" 300; ctl "wizard done"
 sh 'wget -qO /tmp/mf.sh http://10.0.2.2:8765/tools/mailfixture.sh && sh /tmp/mf.sh >/tmp/mf.log 2>&1; tail -1 /tmp/mf.log' 300
+# the test mailbox from tools/mailfixture.sh (jordan@localhost, the fixture's test password), set up the way an owner would
+sh 'llmos say "set up my email: address jordan@localhost, password test, imap_host 127.0.0.1, imap_port 143, imap_ssl false, smtp_host 127.0.0.1, smtp_port 25, smtp_security none" | head -c 160; echo' 120
 sh 'llmos desk-state | head -c 120; echo' 30
 echo "TEST VM READY"
