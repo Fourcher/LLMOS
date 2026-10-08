@@ -74,7 +74,7 @@ tools._catalog_authors = lambda: ["mistralai", "TheLab"]
 
 print("catalog overlay")
 n_builtin = len(models.catalog())
-check(n_builtin == 10, f"built-in catalog has 10 models ({n_builtin})")
+check(n_builtin == 12, f"built-in catalog has 12 models ({n_builtin})")
 entry = {"id": "my-model", "name": "My Model", "maker": "Me", "repo": "Me/My-GGUF", "file": "m.gguf",
          "size": 3_000_000_000, "sha256": SHA, "ram_gb": 4, "note": "mine", "good_at": [], "limits": []}
 models.add_catalog_entry(entry)
