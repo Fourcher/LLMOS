@@ -19,6 +19,8 @@ import urllib.parse
 from . import config
 
 MATCH = re.compile(
+    r"^(?:yes|yeah|yep|yup|sure|ok|okay)$|(?:the |my )?(?:screen|computer|pc|laptop|everything) (?:has |have )?(?:froze|frozen|locked up|is stuck)$|"
+    r"(?:computer|pc|laptop|machine) (?:is |has been |got |feels )?(?:really |very |so |quite )?slow\b|"
     r"\b(?:days? (?:until|till|to|left)|is (?!it\b|this\b|my\b|that\b|the (?:computer|screen|wifi|sound|mouse|printer|keyboard|battery|camera)\b)[a-z][a-z .'-]{1,30} (?:down|broken|having (?:issues|problems|an outage))\b|what time does [a-z' .-]{2,40} (?:open|close)\b|who won (?:the )?[a-z' .-]{2,40}(?: last night| yesterday| today| this week)?\b|countdown|how long (?:until|till)|work timer|^clock (?:in|out)$|i'?m clocking (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
     r"hours (?:did i|have i) work|port \d+|on \d{2,5}\b|web ?server|serve (?:this|the)|preview (?:this|the|my)|temperature|"
     r"(?:too |so |very |running |getting )?hot\b|overheat|battery (?:health|dying|dead|draining|drains|life|is draining)|"
@@ -1513,9 +1515,33 @@ def open_mail(desk, line, low):
     return _say(desk, line, agent._shortcut_reply("mail_inbox", {}, out))
 
 
+def small_answers(desk, line, low):
+    """Words that need no model: a 'yes' with nothing waiting, a frozen screen, a slow computer."""
+    if re.fullmatch(r"yes|yeah|yep|yup|sure|ok|okay", low):
+        return _say(desk, line, "Nothing is waiting for a yes.")
+    if re.fullmatch(r"(?:the |my )?(?:screen|computer|pc|laptop|everything) (?:has |have )?(?:froze|frozen|locked up|is stuck)", low):
+        return _say(desk, line, "Give it a minute; it often comes back. If it is still stuck, press and hold the power button "
+                                "for five seconds, then press it again to start. Anything not saved is lost.")
+    if re.search(r"(?:computer|pc|laptop|machine) (?:is |has been |got |feels )?(?:really |very |so |quite )?slow\b", low):
+        import subprocess
+        try:
+            out = subprocess.run(["ps", "-eo", "comm,pcpu", "--sort=-pcpu"], capture_output=True, text=True, timeout=10).stdout.split("\n")[1:4]
+        except Exception:
+            out = []
+        busy = []
+        for row in out:
+            parts = row.split()
+            if len(parts) == 2 and parts[1].replace(".", "", 1).isdigit():
+                busy.append(f"{parts[0]} ({float(parts[1]):.0f}% CPU)")
+        if not busy:
+            return _say(desk, line, "Nothing is using much processor right now. Restart the program that feels slow.")
+        return _say(desk, line, "Busiest now: " + ", ".join(busy) + ". Close a program you are not using to free it up.")
+    return False
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (small_answers, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True

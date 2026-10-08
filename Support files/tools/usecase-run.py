@@ -88,6 +88,16 @@ def run_one(case, phrase, yes, timeout):
     except ValueError:
         res = {}
     st = state()
+    # a placeholder ("checking now; the result follows") is followed by the real answer from the desk: wait for it
+    if re.search(r"the result follows|one moment", res.get("reply", "") or "", re.I):
+        end = time.time() + 40
+        while time.time() < end:
+            time.sleep(3)
+            st = state()
+            if st.get("reply") and not re.search(r"the result follows|one moment", st.get("reply", ""), re.I):
+                res["reply"] = st["reply"]
+                break
+        took = round(time.time() - t0, 1)
     shot = f"{OUT}/{case['id']}.png"
     subprocess.run(["python3", "tools/screendump.py", "run/tmon.sock", shot], capture_output=True)
     return {"id": case["id"], "phrase": phrase, "success_looks_like": case["success"], "priority": case["priority"],

@@ -523,7 +523,7 @@ def install_app(a, ctx):
         hint = ", ".join(s.stdout.split()[:8])
         return f"install failed: {clip(p.stderr.strip() or p.stdout.strip(), 800)}" + \
             (f"\nsimilar packages: {hint}" if hint else "")
-    return "installed: " + " ".join(pkgs) + " -- open it by name.\n" + clip(p.stdout.strip().splitlines()[-1] if p.stdout.strip() else "", 300)
+    return "installed: " + " ".join(pkgs) + " -- open it by name."
 
 
 @tool("system_power", "Shut down or restart this computer.",
@@ -1489,6 +1489,12 @@ def change_setting(a, ctx):
         if s == "do_not_disturb":
             subprocess.run(["makoctl", "mode", "-s" if on else "-r", "do-not-disturb"], capture_output=True,
                            env=dict(os.environ, **(media.desk_env() or {})))
+            mins = int(a.get("minutes") or 0) if on else 0
+            if mins > 0:
+                import threading
+                def _off(): subprocess.run(["makoctl", "mode", "-r", "do-not-disturb"], capture_output=True)
+                threading.Timer(mins * 60, _off).start()
+                return f"do not disturb is on for {mins} minutes: programs' notifications stay hidden"
             return "do not disturb is on: programs' notifications stay hidden" if on else "do not disturb is off"
         if hasattr(ctx, "start_night_light"):
             ctx.start_night_light()
@@ -3833,7 +3839,10 @@ def rename_file(a, ctx):
         exact = [h for h in hits if os.path.basename(h).lower() == str(a.get("name", "")).lower()]
         src = (exact or hits or [None])[0]
         if len(hits) > 1 and not exact:
-            return f"error: several files match '{a.get('name')}': " + ", ".join(os.path.basename(h) for h in hits[:5]) + " -- say which"
+            best = _best_document(str(a.get("name", "")))         # the document of that name, never a test or cache file
+            if not best:
+                return f"error: several files match '{a.get('name')}': " + ", ".join(os.path.basename(h) for h in hits[:5]) + " -- say which"
+            src = best
     if not src or not _in_home(src):
         return f"error: no file called '{a.get('name')}' in the home folder"
     new = str(a.get("to", "")).strip().strip("'\"").replace("/", "-")

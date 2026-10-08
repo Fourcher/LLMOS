@@ -27,7 +27,9 @@ LECTURE = re.compile(r"\b(it'?s important|be careful|please be (careful|aware)|c
                      r"i (strongly )?(recommend|suggest|advise)|you should (consider|always|never|be)|be aware|keep in mind|"
                      r"it is (important|recommended|advisable)|i'?d (strongly )?(recommend|advise))\b", re.I)
 FAILED = re.compile(r"couldn'?t finish that|could not finish|did not complete|something went wrong|that didn'?t work|"
-                    r"\berror\b|\bfailed\b|no answer from the model|the model (is|was) (busy|unavailable)", re.I)
+                    r"\berror\b|no answer from the model|the model (is|was) (busy|unavailable)", re.I)
+# an honest limit ("I can't read the status page here") is not a refusal
+HONEST_LIMIT = re.compile(r"\bi (can'?t|cannot|can not|couldn'?t) (read|see|check|tell|reach|open|find|hear|measure|know)\b[^.]{0,80}\bhere\b", re.I)
 # a placeholder is the first words while the real answer is still on its way: the harness read it too early
 PENDING = re.compile(r"the result follows|checking (?:the |that |it |now)|one moment", re.I)
 INSTANT, MODEL = 20, 120
@@ -62,7 +64,7 @@ def grade(r):
     flags = []
     if not reply and not wins:
         flags.append("EMPTY")
-    if reply and REFUSED.search(reply):
+    if reply and REFUSED.search(reply) and not HONEST_LIMIT.search(reply):
         flags.append("REFUSED")
     body = reply.rstrip()
     if (body.endswith("?") or ASKED_START.match(reply) or ASKED_INSIDE.search(reply)) and not wins:

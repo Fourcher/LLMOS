@@ -1591,6 +1591,11 @@ def _everyday2(text):
         return ("change_setting", {"setting": "autolock", "value": m.group("n")})
     if re.match(r"^(?:turn\s+off|stop|disable|mute|silence|hide)\s+(?:all\s+)?(?:the\s+)?notifications$", low):
         return ("change_setting", {"setting": "do_not_disturb", "value": "on"})
+    m = re.match(r"^(?:turn\s+off|stop|disable|mute|silence|hide|pause)\s+(?:all\s+)?(?:the\s+)?notifications?\s+for\s+"
+                 r"(?:(?P<a>an?)\s+hour|(?P<n>\d+)\s*(?P<u>minutes?|mins?|hours?))$", low)
+    if m:
+        mins = 60 if m.group("a") else int(m.group("n")) * (60 if (m.group("u") or "").startswith("hour") else 1)
+        return ("change_setting", {"setting": "do_not_disturb", "value": "on", "minutes": mins})
     m = re.match(r"^(?:ssh|connect|log\s*in)\s+(?:in)?to\s+(?:my\s+)?(?:server\s+)?(?P<h>[\w.@-]+\.[\w.-]+|\d+\.\d+\.\d+\.\d+)$|^ssh\s+(?P<h2>[\w.@-]+)$", low)
     if m:
         import shlex as _sh
