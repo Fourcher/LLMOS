@@ -3868,7 +3868,7 @@ def move_files(a, ctx):
     if to in ("usb", "usb stick", "stick", "flash drive", "the usb", "my usb", "external drive", "drive"):
         drives = syspanels.removable()
         if not drives:
-            return "error: no USB stick is plugged in"
+            return "error: no USB stick is plugged in. Plug one in and say it again."
         d = drives[0]
         ok, where = (True, d["mountpoint"]) if d["mountpoint"] else syspanels.mount(d["path"])
         if not ok:
