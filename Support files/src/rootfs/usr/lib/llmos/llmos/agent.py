@@ -949,6 +949,15 @@ def _for_history(text):
 # asked for in the CURRENT request. Small models otherwise "complete" an
 # earlier failed request on their own (e.g. replying to an email when only
 # asked to sort the inbox).
+def _names_a_theme(req):
+    """'make it patriotic', 'go ocean': the words name one of the built-in themes, so a look change was asked for."""
+    try:
+        from . import themes
+        return bool(themes.resolve(req))
+    except Exception:
+        return False
+
+
 _ONLY_IF_ASKED = {
     # a written text ("write a birthday message") is the reply itself; a file is made only when the owner asks for one
     "write_file": r"\b(save|saved|file|files|folder|document|\.txt|\.md|\.docx?|to disk|on (?:my|the) desktop|append|add to)\b",
@@ -974,7 +983,7 @@ _ONLY_IF_ASKED = {
                       r"settings?|turn|switch|enable|disable|allow|block|stop using|start using|use|lock\w*|time ?zone|clock|time|screen|display|sleep\w*|lid|minutes?|hours?|never|disturb|dnd|notifications?|"
                       r"night|warm\w*|blue light|quiet|presentation|awake|mute|trust|rein|reign|control|freedom|risky|"
                       r"instructions|web ?pages?|websites?|e-?mails?|files?|check\w*)\b",
-    "set_appearance": lambda req: bool(re.search(r"\b(colou?rs?|theme|dark|light|font|text|bigger|smaller|larger|size|zoom|corners?|round\w*|"
+    "set_appearance": lambda req: _names_a_theme(req) or bool(re.search(r"\b(colou?rs?|theme|dark|light|font|text|bigger|smaller|larger|size|zoom|corners?|round\w*|"
                                                  r"square|look\w*|style|wallpaper|background|backdrop|animation\w*|motion|layout|language|"
                                                  r"desk|mode|contrast|everything|screen|accent|appearance|prettier|nicer|ugly|font|see|read|eyes?|vision|small|tiny|big|huge|"
                                                  r"modo|oscuro|claro|tema|sombre|clair|th[eè]me|dunkel|hell|modus|escuro|scuro|chiaro|fuente|letra|police|schrift|"

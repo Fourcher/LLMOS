@@ -70,6 +70,8 @@ def act(what, target):
     if target not in windows():
         return False, f"{NAMES.get(target, target)} is not open"
     verb = {"focus": "focus", "maximize": "maximize", "minimize": "minimize", "fullscreen": "fullscreen", "close": "close"}[what]
+    if verb in ("focus", "maximize", "fullscreen"):
+        _run(["wlrctl", "toplevel", "unminimize", f"app_id:{target}"])   # a minimized window is never "focused" out of sight
     rc, out = _run(["wlrctl", "toplevel", verb, f"app_id:{target}"])
     return rc == 0, out.strip()
 
@@ -103,6 +105,11 @@ def focus_program(argv):
     ids = windows()
     for aid in [a for a, p in PROCS.items() if p == name] + [name, name.lower()]:
         if aid in ids:
+            return act("focus", aid)
+    # a window id that names the program ("telegram-desktop" shows as "org.telegram.desktop")
+    core = re.sub(r"[-_](?:desktop|bin|app|gtk|qt)$", "", name.lower())
+    for aid in ids:
+        if core and (core in aid.lower().split(".") or aid.lower().endswith("." + core) or core in aid.lower()):
             return act("focus", aid)
     return False, "its window is not open"
 

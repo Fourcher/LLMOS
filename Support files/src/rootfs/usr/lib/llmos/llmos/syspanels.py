@@ -290,6 +290,10 @@ def _btctl(*args, timeout=15):
 
 
 def bluetooth(scan=False):
+    import glob
+    if not glob.glob("/sys/class/bluetooth/hci*"):                 # no adapter: say so at once (bluetoothctl would wait)
+        return {"id": "panel-bluetooth", "replace": True, "title": "Bluetooth", "size": "s", "slot": "side",
+                "blocks": [{"type": "text", "text": "This computer has no Bluetooth adapter (or it is switched off in the firmware)."}]}
     if not shutil.which("bluetoothctl"):
         return {"id": "panel-bluetooth", "replace": True, "title": "Bluetooth", "size": "s", "slot": "side",
                 "blocks": [{"type": "text", "text": "Bluetooth is not available on this system."}]}
