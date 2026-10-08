@@ -177,12 +177,21 @@ input,select{background:var(--card);border:1px solid var(--line);border-radius:v
 input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
 h1,h2,h3{margin:.2em 0 .5em}
 """
-_BRIDGE = """
+_BRIDGE = r"""
 window.LLMOS={_cb:null,
  load(cb){this._cb=cb;parent.postMessage({llmos:"load"},"*");setTimeout(()=>{if(this._cb){const c=this._cb;this._cb=null;c(null)}},1500)},
  save(state){try{parent.postMessage({llmos:"save",state},"*")}catch(e){}},
  export(name,data){parent.postMessage({llmos:"export",name,data},"*")}};
-addEventListener("message",e=>{const m=e.data||{};if(m.llmos==="state"&&LLMOS._cb){const c=LLMOS._cb;LLMOS._cb=null;c(m.state)}});
+addEventListener("message",e=>{const m=e.data||{};if(m.llmos==="state"&&LLMOS._cb){const c=LLMOS._cb;LLMOS._cb=null;c(m.state)}
+ else if(m.llmos==="press"||m.llmos==="read"){
+  const N=s=>String(s||"").replace(/\s+/g," ").trim().toLowerCase().replace(/[×✕]/g,"x").replace(/[−–—]/g,"-").replace(/÷/g,"/");
+  const els=[...document.querySelectorAll("button,a,[role=button],input[type=button],input[type=submit],[onclick],[data-key],label,li,td")];
+  const name=x=>x.getAttribute("aria-label")||x.value||x.innerText||x.textContent||"";
+  if(m.llmos==="read"){parent.postMessage({llmos:"page",text:(document.body.innerText||"").slice(0,3000),
+    controls:els.map(name).map(s=>s.replace(/\s+/g," ").trim()).filter(s=>s&&s.length<40).slice(0,80)},"*");return}
+  const want=N(m.text);let hit=els.find(x=>N(name(x))===want)||els.find(x=>N(name(x)).includes(want));
+  if(hit){hit.click();hit.dispatchEvent(new Event("input",{bubbles:true}))}
+  setTimeout(()=>parent.postMessage({llmos:"pressed",ok:!!hit,text:m.text,page:(document.body.innerText||"").slice(0,1500)},"*"),120)}});
 """
 
 

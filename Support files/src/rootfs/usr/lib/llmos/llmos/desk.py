@@ -431,6 +431,14 @@ class DeskCtx:
     def close_window(self, wid):
         self.d.close_window(wid)
 
+    def app_press(self, text):
+        """An open app's control pressed by its label: {"ok", "page"} or None when no app is open."""
+        return self.d.app_call("press", text)
+
+    def app_read(self):
+        """An open app's page: {"text", "controls"} or None when no app is open."""
+        return self.d.app_call("read")
+
     def signin(self, provider=None):
         """"sign in to Claude / ChatGPT": the service's key page in a window; the copied key comes in by itself."""
         pid = self._provider(provider) or "anthropic"
@@ -1028,6 +1036,9 @@ class Desk:
                     pass
         elif t == "app.export":
             self._app_export(str(msg.get("name", "picture.png")), str(msg.get("data", "")))
+        elif t == "app.result":
+            self._app_res = msg.get("data") or {}
+            self._app_evt().set()
         elif t == "signin":
             pid = str(msg.get("provider", ""))
             if (llm.CLOUD_PROVIDERS.get(pid) or {}).get("signin"):
@@ -3775,6 +3786,21 @@ class Desk:
                    SDL_VIDEODRIVER="wayland", XDG_SESSION_TYPE="wayland")
         env.update(config.personal_env())
         return env
+
+    def _app_evt(self):
+        if not hasattr(self, "_app_event"):
+            self._app_event = threading.Event()
+        return self._app_event
+
+    def app_call(self, what, text="", app_id=""):
+        """Ask the open app (the front one, or app_id) to press a control by its label or to report its page."""
+        if not any(w.get("kind") == "app" for w in self.windows.values()):
+            return None
+        evt = self._app_evt()
+        evt.clear()
+        self._app_res = None
+        self.emit({"t": "eval", "js": f"window.llmosApp && window.llmosApp({json.dumps(what)}, {json.dumps(text)}, {json.dumps(app_id)})"})
+        return self._app_res if evt.wait(3) else None
 
     def _focus_or_reopen(self, argv, name=""):
         """A running program whose window was closed (Telegram keeps running in the background) is opened again:

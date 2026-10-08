@@ -43,12 +43,9 @@ def _size(path):
         return 0, 0
 
 
-def read_screen():
-    """Every line of text on the screen with its centre: [{"text", "x", "y", "w", "h"}], top to bottom."""
-    r = _run(["grim", SHOT], timeout=30)
-    if r.returncode != 0:
-        raise RuntimeError("the screen could not be captured: " + (r.stderr or "").strip()[:200])
-    t = _run(["tesseract", SHOT, "-", "--psm", "11", "tsv"], timeout=90)
+def _ocr(psm):
+    """The lines tesseract reads in the screenshot with one page-segmentation mode, in screen pixels."""
+    t = _run(["tesseract", SHOT, "-", "--psm", psm, "tsv"], timeout=90)
     if t.returncode != 0:
         raise RuntimeError("the text on the screen could not be read: " + (t.stderr or "").strip()[:200])
     groups = {}
@@ -61,19 +58,35 @@ def read_screen():
             left, top, w, h = (int(v) for v in c[6:10])
         except ValueError:
             continue
-        if conf < 35:
+        word = c[11].strip()
+        if conf < (35 if len(word) > 2 else 5):           # a button's single digit or sign is read with low confidence
             continue
-        key = (c[2], c[3], c[4])                       # block, paragraph, line: one line of words
-        groups.setdefault(key, []).append((left, top, w, h, c[11].strip()))
+        left, top, w, h = left // 2, top // 2, max(1, w // 2), max(1, h // 2)   # back to screen pixels
+        groups.setdefault((c[2], c[3], c[4]), []).append((left, top, w, h, word))   # block, paragraph, line
     lines = []
     for words in groups.values():
         words.sort()
-        x0 = min(a[0] for a in words); y0 = min(a[1] for a in words)
-        x1 = max(a[0] + a[2] for a in words); y1 = max(a[1] + a[3] for a in words)
-        lines.append({"text": " ".join(a[4] for a in words), "x": (x0 + x1) // 2, "y": (y0 + y1) // 2,
+        x0 = min(q[0] for q in words); y0 = min(q[1] for q in words)
+        x1 = max(q[0] + q[2] for q in words); y1 = max(q[1] + q[3] for q in words)
+        lines.append({"text": " ".join(q[4] for q in words), "x": (x0 + x1) // 2, "y": (y0 + y1) // 2,
                       "w": x1 - x0, "h": y1 - y0, "words": words})
+    return lines
+
+
+def read_screen():
+    """Every line of text on the screen with its centre: [{"text", "x", "y", "w", "h"}], top to bottom."""
+    r = _run(["grim", "-s", "2", SHOT], timeout=30)       # twice the size: tesseract reads small text and single keys far better
+    if r.returncode != 0:
+        raise RuntimeError("the screen could not be captured: " + (r.stderr or "").strip()[:200])
+    # two readings merged: as one block (reads every button's single digit or sign) and as scattered text (finds
+    # labels the block reading skips); a scattered line is kept only where the block reading found nothing
+    lines = _ocr("6")
+    for d in _ocr("11"):
+        if not any(abs(d["x"] - e["x"]) <= e["w"] // 2 + 6 and abs(d["y"] - e["y"]) <= e["h"] // 2 + 6 for e in lines):
+            lines.append(d)
     lines.sort(key=lambda d: (d["y"] // 12, d["x"]))
-    _LAST.update(lines=lines, at=time.time(), size=_size(SHOT))
+    sw, sh = _size(SHOT)
+    _LAST.update(lines=lines, at=time.time(), size=(sw // 2, sh // 2))
     return lines
 
 
@@ -94,12 +107,47 @@ def describe(lines=None, limit=120):
     return "\n".join(out)
 
 
+_SAME = {"×": "x", "*": "x", "−": "-", "–": "-", "—": "-", "÷": "/", "o": "0", "O": "0"}
+
+
+def _norm_char(c):
+    c = (c or "").strip()
+    return _SAME.get(c, c).lower()
+
+
+def _read_box(x, y, w, h):
+    """One small piece of the last screenshot read as a single character or two (a button's label)."""
+    if not shutil.which("magick"):
+        return ""
+    pad = 6
+    crop = "/tmp/llmos-key.png"
+    geo = f"{(w + 2 * pad) * 2}x{(h + 2 * pad) * 2}+{max(0, (x - pad) * 2)}+{max(0, (y - pad) * 2)}"
+    if _run(["magick", SHOT, "-crop", geo, "+repage", "-colorspace", "Gray", "-resize", "300%", crop], timeout=20).returncode:
+        return ""
+    return (_run(["tesseract", crop, "-", "--psm", "10"], timeout=20).stdout or "").strip()
+
+
+def _find_key(want, lines):
+    """A short label ("7", "+", "=", "OK"): every short word on the screen is read again on its own, so a misread
+    sign (÷ taken for +) is never clicked by mistake; the matching one is returned."""
+    goal = _norm_char(want)
+    for d in lines:
+        for (x, y, w, h, word) in d["words"]:
+            if len(word) > 3:
+                continue
+            if _norm_char(_read_box(x, y, w, h)) == goal:
+                return dict(d, text=word, x=x + w // 2, y=y + h // 2)
+    return None
+
+
 def find(target, lines=None):
     """The place on the screen that best matches the words: a whole line, or a word inside a line."""
     lines = read_screen() if lines is None else lines
     want = re.sub(r"\s+", " ", str(target or "")).strip().lower()
     if not want:
         return None
+    if len(want) <= 2:
+        return _find_key(want, lines)
     best, score = None, 0.0
     for d in lines:
         text = d["text"].lower()

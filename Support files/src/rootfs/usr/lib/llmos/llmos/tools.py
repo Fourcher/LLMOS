@@ -3466,15 +3466,26 @@ def _screen_after(limit=40):
         return f"(the screen could not be read afterwards: {e})"
 
 
+def _app_page(ctx):
+    """An open app's own page (exact text and button labels), when one of the OS's apps is open."""
+    if not hasattr(ctx, "app_read"):
+        return ""
+    r = ctx.app_read() or {}
+    if r.get("none") or not (r.get("text") or r.get("controls")):
+        return ""
+    return ("In the open app (exact): " + " ".join(str(r.get("text", "")).split())[:800] +
+            ("\nIts buttons and controls: " + ", ".join(r.get("controls") or [])[:600] if r.get("controls") else "") + "\n")
+
+
 @tool("look_at_screen", "Read what is on the screen now: the windows that are open and every line of text with its "
       "position as [x,y]. Use it before clicking in a program's window, and again after each step to see what changed.",
       {}, [], risk=SAFE, available=_control_ok)
 def look_at_screen(a, ctx):
     from . import control
     try:
-        return control.describe()
+        return _app_page(ctx) + control.describe()
     except RuntimeError as e:
-        return f"error: {e}"
+        return _app_page(ctx) or f"error: {e}"
 
 
 @tool("click", "Click on something on the screen: by the words written on it (text), or at a place x,y from "
@@ -3484,6 +3495,10 @@ def look_at_screen(a, ctx):
 def click(a, ctx):
     from . import control
     label = str(a.get("text") or "").strip()
+    if label and hasattr(ctx, "app_press"):
+        r = ctx.app_press(label)                   # one of the OS's own apps: its control, pressed exactly
+        if r and r.get("ok"):
+            return f"pressed {label!r} in the app. It now shows: " + " ".join(str(r.get("page", "")).split())[:700]
     if label:
         try:
             d = control.find(label)
@@ -3814,8 +3829,9 @@ def _browser_open(ctx, url=None):
     return p["name"]
 
 
-@tool("browse", "Open the web browser: on a site ('youtube', 'bbc.co.uk', a full address) or on a web search, or just "
-      "open it. For the owner to look at the web themselves.",
+@tool("browse", "Open the web browser: on a site ('youtube', 'bbc.co.uk', a full address such as http://… opens that exact "
+      "page) or on a web search, or just open it. To open a page and then use it, call browse with its address first, then "
+      "look_at_screen and click.",
       {"site": {"type": "string", "description": "a site name or address (optional)"},
        "search": {"type": "string", "description": "words to search the web for (optional)"}}, [])
 def browse(a, ctx):

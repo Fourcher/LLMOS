@@ -53,7 +53,15 @@
     if (m.llmos === "load") e.source.postMessage({ llmos: "state", state: f.llmosState == null ? null : f.llmosState }, "*");
     else if (m.llmos === "save") { f.llmosState = m.state; post({ t: "app.save", id, state: m.state }); }
     else if (m.llmos === "export" && typeof m.data === "string") post({ t: "app.export", id, name: String(m.name || "picture.png"), data: m.data });
+    else if (m.llmos === "pressed" || m.llmos === "page") post({ t: "app.result", id, data: m });
   });
+  // the OS uses an open app the way a person would: press a control by its label, or read what the page shows
+  window.llmosApp = (what, text, id) => {
+    const fs = [...document.querySelectorAll("iframe.app")];
+    const f = (id && fs.find(x => x.dataset.app === id)) || fs[fs.length - 1];
+    if (!f) { post({ t: "app.result", id: "", data: { llmos: what === "read" ? "page" : "pressed", ok: false, none: true } }); return; }
+    f.contentWindow.postMessage({ llmos: what, text }, "*");
+  };
   // a button: the OS does it at once (never behind a request the model is still working on)
   function act(text) { if (text && text.trim()) post({ t: "act", text: text.trim() }); }
   function say(text) { if (!text || !text.trim()) return; if (text.trim().toLowerCase() === "lock") { post({ t: "lock" }); return; } post({ t: "say", text: text.trim() }); }

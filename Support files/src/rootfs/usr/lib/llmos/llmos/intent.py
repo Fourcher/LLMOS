@@ -934,6 +934,11 @@ def _files(text):
     if m:
         o = m.group("o").lower()
         return ("show_files", {"sort": "date" if o in ("date", "newest", "latest", "recent") else "size" if o in ("size", "biggest", "largest") else "name"})
+    # "open http://… in firefox": that exact page in the browser
+    m = re.match(r"^\s*(?:please\s+)?(?:open|go\s+to|visit|load|show(?:\s+me)?)\s+(?:the\s+)?(?:page\s+|site\s+|address\s+|link\s+)?(?P<u>https?://\S+|www\.\S+)"
+                 r"(?:\s+(?:in|with|using|on)\s+(?:firefox|the\s+browser|my\s+browser|a\s+browser|the\s+web\s+browser))?\s*[.!]?\s*$", text, re.I)
+    if m:
+        return ("browse", {"site": m.group("u").rstrip(".,;")})
     m = re.match(r"^\s*(?:please\s+)?(?:convert|turn|save|export|make)\s+(?P<p>(?:~|/)\S.*?|this|that|it)\s+(?:to|into|as)\s+(?:a\s+)?pdf\s*[.!]?\s*$", text, re.I)
     if m:
         return ("convert_to_pdf", {"path": m.group("p")}) if m.group("p")[0] in "~/" else ("which_file", {"request": text.strip()})
