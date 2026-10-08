@@ -1251,7 +1251,7 @@ class Desk:
         elif t == "app.focus":
             a = self.apps.get(int(msg.get("pid", 0) or 0))
             if a:
-                threading.Thread(target=wm.focus_program, args=(a["argv"],), daemon=True).start()
+                threading.Thread(target=self._focus_or_reopen, args=(a["argv"], a.get("name", "")), daemon=True).start()
         elif t == "lock":
             if config.settings.get("vault"):
                 self.lock()             # at once, not queued behind a running request
@@ -3775,6 +3775,13 @@ class Desk:
                    SDL_VIDEODRIVER="wayland", XDG_SESSION_TYPE="wayland")
         env.update(config.personal_env())
         return env
+
+    def _focus_or_reopen(self, argv, name=""):
+        """A running program whose window was closed (Telegram keeps running in the background) is opened again:
+        clicking it must never do nothing. A program that is still open is brought to the front."""
+        ok, _ = wm.focus_program(argv)
+        if not ok:
+            self.launch_app(argv, name)
 
     def launch_app(self, argv, name=""):
         log = open(os.path.join(config.RUN, "gui.log"), "a")
