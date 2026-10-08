@@ -1383,16 +1383,9 @@ def _everyday2(text):
         o = m.group("o")
         order = "date" if o in ("newest", "latest", "most recent", "date", "oldest") else "size" if o in ("size", "biggest", "largest") else "name"
         return ("show_files", {"path": "~/" + f if f else "~", "sort": order})
-    # email straight to an address: "email craig@example.com saying the meeting moved to 3pm"
-    m = re.match(r"^(?:please\s+)?(?:e-?mail|send\s+(?:an\s+)?e-?mail\s+to|write\s+(?:an\s+)?e-?mail\s+to|message)\s+(?P<to>[\w.+-]+@[\w.-]+)\s*,?\s+"
-                 r"(?:saying|that|to\s+say|telling\s+(?:him|her|them)|and\s+(?:say|tell\s+(?:him|her|them))|:)\s*(?P<b>.+)$", t, re.I)
-    if m:
-        body = m.group("b").strip().strip("'\"")
-        body = body[:1].upper() + body[1:]
-        if not re.search(r"[.!?]$", body):
-            body += "."
-        subject = " ".join(re.sub(r"[.!?]$", "", body).split()[:7])
-        return ("mail_send", {"to": m.group("to"), "subject": subject, "body": body})
+    em = _mail_send_direct(t)
+    if em:
+        return em
     m = re.match(r"^(?:please\s+)?(?:open|show|go\s+to|find|get|pull\s+up)\s+(?:me\s+)?(?:the\s+)?wikipedia\s+(?:page|article|entry)\s+(?:about|on|for)\s+(?P<q>.+?)\s*[.!?]?$", low)
     if m:
         import urllib.parse as _u
@@ -1697,6 +1690,21 @@ def match(text):
     return _fix_schedule(_match(text))
 
 
+def _mail_send_direct(t):
+    # email straight to an address: "email craig@example.com saying the meeting moved", "write a short email to X saying … and send it"
+    m = re.match(r"^(?:please\s+)?(?:e-?mail|send\s+(?:an?\s+)?e-?mail\s+to|write\s+(?:an?\s+)?(?:short\s+|quick\s+|brief\s+|new\s+|nice\s+|little\s+)?e-?mail\s+to|message)\s+(?P<to>[\w.+-]+@[\w.-]+)\s*,?\s+"
+                 r"(?:saying|that|to\s+say|telling\s+(?:him|her|them)|and\s+(?:say|tell\s+(?:him|her|them))|:)\s*(?P<b>.+)$", t, re.I)
+    if not m:
+        return None
+    body = m.group("b").strip().strip("'\"")
+    body = re.sub(r"[,;]?\s+(?:and|then)\s+(?:send|email|mail)\s+it\.?$", "", body, flags=re.I).strip()
+    body = body[:1].upper() + body[1:]
+    if not re.search(r"[.!?]$", body):
+        body += "."
+    subject = " ".join(re.sub(r"[.!?]$", "", body).split()[:7])
+    return ("mail_send", {"to": m.group("to"), "subject": subject, "body": body})
+
+
 def _match(text):
     text = plain(text)
     t = text.strip()
@@ -1705,6 +1713,9 @@ def _match(text):
     ms = _mail_setup(t)
     if ms:
         return ms
+    em = _mail_send_direct(t)                 # "write an email to X saying … and send it": one action, not a chain
+    if em:
+        return em
     if is_chain(t):
         return None
     if len(t) > 200:
