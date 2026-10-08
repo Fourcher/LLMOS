@@ -5,6 +5,7 @@
 set -eu
 apk add -q dovecot postfix seatd-launch
 adduser -D alice 2>/dev/null || true
+adduser -D craig 2>/dev/null || true
 adduser -D jordan 2>/dev/null || true
 echo "alice:test" | chpasswd
 echo "jordan:test" | chpasswd   # Dovecot refuses uid 0, so the OS uses the "jordan" mailbox
@@ -41,10 +42,10 @@ namespace inbox {
   }
 }
 EOF
-{ for u in jordan alice; do printf '%s:{PLAIN}test:%s:%s::/home/%s
+{ for u in jordan alice craig; do printf '%s:{PLAIN}test:%s:%s::/home/%s
 %s@localhost:{PLAIN}test:%s:%s::/home/%s
 ' "$u" "$(id -u $u)" "$(id -g $u)" "$u" "$u" "$(id -u $u)" "$(id -g $u)" "$u"; done; } > /etc/dovecot/users; chmod 644 /etc/dovecot/users
-mkdir -p /home/jordan/Maildir /home/alice/Maildir; chown -R jordan /home/jordan; chown -R alice /home/alice
+mkdir -p /home/jordan/Maildir /home/alice/Maildir /home/craig/Maildir; chown -R jordan /home/jordan; chown -R alice /home/alice; chown -R craig /home/craig
 doveconf -n >/dev/null || { echo "DOVECOT CONFIG ERROR"; doveconf -n 2>&1 | head -5; exit 1; }
 rc-service dovecot restart >/dev/null 2>&1 </dev/null; rc-service dovecot status
 
