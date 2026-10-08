@@ -751,7 +751,10 @@ def _shortcut_words(name, args, out):
     if name in ("restore_file", "empty_trash"):
         return _cap(out.split(". Say")[0]) + "." if not low.startswith("error") else out
     if name == "note_add":
-        return "Added." if low.startswith("added") else ("That was already on the list." if "already" in low else out)
+        where = {"shopping": "shopping list", "notes": "notes"}.get(str(args.get("list", "")), str(args.get("list", "")) + " list").strip()
+        if low.startswith("added"):
+            return f"Added to your {where}."
+        return f"That's already in your {where}." if "already" in low else out
     if name == "write_file":
         mm = re.match(r"wrote (\d+) bytes to (.+)$", out)
         if mm:
