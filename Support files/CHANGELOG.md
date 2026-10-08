@@ -98,6 +98,21 @@ The owner decides how much it asks, and is never second-guessed.
 - **Cancelling tasks** matches the words given ("shutdown task" finds "shut the
   computer down").
 
+- **Everyday passes 4–7.** Timers: "set a timer for 15 minutes for the pasta"
+  makes a timer. Do not disturb "for an hour" turns itself off again. Bluetooth
+  on and off answer at once with the real result (a failed switch says why, in
+  plain words). "Is the wifi down" is a connectivity check. Who-won answers
+  come from one search with its source; "last night" is added only for games and
+  matches. A frozen screen gets straight advice; "my computer is slow" names the
+  busy programs and says when memory is nearly full. "Yes" with nothing waiting
+  says so. Biggest files, rename (the likely file), USB copy (what to do next),
+  install ("installed: X -- open it by name"), and Wi-Fi and help replies say what
+  they show. A note or list reply names the list it went to.
+- **Build fixes.** The search-by-meaning runtime is built inside the target
+  with /dev, /proc and /sys bound and a resolver set, so the image build no
+  longer fails with "could not open /dev/null". The image build waits stop on
+  git errors instead of waiting out their full timeout.
+
 ## 1.7.0 — 2026-10-05
 Useful, not just pretty: real apps, programs that behave, a conversation that
 never needs clearing, a living background, and what a stock Linux desktop
