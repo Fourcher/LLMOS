@@ -320,6 +320,9 @@ def bluetooth(scan=False):
 
 def bt_action(act, mac=""):
     if act in ("on", "off"):
+        import glob
+        if not glob.glob("/sys/class/bluetooth/hci*"):
+            return False, "this computer has no Bluetooth adapter"
         rc, out, err = _btctl("power", act, timeout=6)
         if rc != 0:
             return False, "couldn't switch Bluetooth " + act + ": " + (err or out).strip()[:120]
