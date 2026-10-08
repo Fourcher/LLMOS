@@ -659,6 +659,8 @@ def set_appearance(a, ctx):
                 new = int(float(v))
             except ValueError:
                 return f"error: '{a['scale']}' is not a size; say bigger, smaller, default or a percent"
+        if v in ("bigger", "larger", "up") and cur >= 200:
+            return "the text is already at its largest size (200%)"
         new = max(70, min(200, new))
         config.settings.set("appearance.scale", new)
         changed.append(f"size {new}%")

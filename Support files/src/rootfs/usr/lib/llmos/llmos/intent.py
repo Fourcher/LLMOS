@@ -1334,6 +1334,13 @@ def _everyday2(text):
                  r"|^(?:please\s+)?search\s+(?:through\s+)?(?:my|all\s+my|the)\s+(?:files|documents|stuff|computer|notes)\s+for\s+(?P<q2>.+)$", low)
     if m:
         return ("find_by_meaning", {"query": (m.group("q") or m.group("q2")).strip(), "kind": "documents" if m.group("q") else "any"})
+    # "set a timer for 15 minutes for the pasta": the same timer, with the length first
+    m = re.match(r"^(?:please\s+)?(?:set|start|make)\s+(?:a\s+|me\s+a\s+)?timer\s+for\s+(?P<n>\d+(?:\.\d+)?|one|two|three|four|five|ten|fifteen|twenty|thirty)"
+                 r"\s*(?P<u>sec(?:ond)?s?|min(?:ute)?s?|h(?:ou)?rs?)(?:\s+for\s+(?P<what>.+))?$", low)
+    if m:
+        u = {"s": "seconds", "m": "minutes", "h": "hours"}[m.group("u")[0]]
+        length = f"{m.group('n')} {u}"
+        return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
     # "set a 3 minute timer", "3 minute timer", "a 90 second timer for the eggs"
     m = re.match(r"^(?:please\s+)?(?:set\s+|start\s+|make\s+)?(?:a|an|me\s+a)?\s*(?P<n>\d+(?:\.\d+)?|one|two|three|four|five|ten|fifteen|twenty|thirty|half\s+an?)\s*[- ]?"
                  r"(?P<u>sec(?:ond)?s?|min(?:ute)?s?|h(?:ou)?rs?)\s+timer(?:\s+for\s+(?P<what>.+))?$", low)
