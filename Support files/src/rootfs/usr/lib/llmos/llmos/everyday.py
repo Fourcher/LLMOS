@@ -1533,8 +1533,23 @@ def small_answers(desk, line, low):
             parts = row.split()
             if len(parts) == 2 and parts[1].replace(".", "", 1).isdigit():
                 busy.append(f"{parts[0]} ({float(parts[1]):.0f}% CPU)")
+        mem = {}
+        try:
+            for row in open("/proc/meminfo"):
+                k, v = row.split(":", 1)
+                mem[k] = int(v.split()[0])
+        except (OSError, ValueError):
+            pass
+        if mem.get("MemTotal") and mem.get("MemAvailable", mem["MemTotal"]) < mem["MemTotal"] * 0.1:
+            try:
+                top = subprocess.run(["ps", "-eo", "comm,rss", "--sort=-rss"], capture_output=True, text=True, timeout=10).stdout.split("\n")[1:2]
+                name, rss = top[0].split()[:2]
+                hog = f"{name} ({int(rss) // 1024} MB)"
+            except (IndexError, ValueError):
+                hog = "the program using the most memory"
+            busy.insert(0, f"memory is nearly full, and {hog} uses the most")
         if not busy:
-            return _say(desk, line, "Nothing is using much processor right now. Restart the program that feels slow.")
+            return _say(desk, line, "Nothing is using much processor or memory right now. Restart the program that feels slow.")
         return _say(desk, line, "Busiest now: " + ", ".join(busy) + ". Close a program you are not using to free it up.")
     return False
 
