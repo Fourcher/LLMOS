@@ -407,13 +407,47 @@ _STEP_CLICK = re.compile(r"^(?:click|press|tap|hit)\s+(?:on\s+)?(?:the\s+)?(?P<t
 _STEP_DOWNLOAD = re.compile(r"^download\s+(?:the\s+)?(?P<t>.+?)(?:\s+on\s+(?:that|the|this)\s+page|\s+from\s+there)?$", re.I)
 
 
+_KEYWORD = {"plus": "+", "minus": "-", "times": "x", "multiply": "x", "multiplied by": "x", "divided by": "/",
+            "divide": "/", "equals": "=", "equal": "=", "clear": "C", "point": ".", "dot": ".", "percent": "%"}
+
+
+def _one_key(tok):
+    """A single calculator-style key at the start of `tok`, and any words after it: ('7', '') or ('=', 'tell me…')."""
+    tok = tok.strip()
+    low = tok.lower()
+    for word, k in _KEYWORD.items():
+        if low == word:
+            return k, ""
+        if low.startswith(word + " "):
+            return k, tok[len(word):].strip()
+    m = re.match(r"^([0-9+\-=*/×÷%.])(?:\s+(.*))?$", tok)
+    if m:
+        return m.group(1), (m.group(2) or "").strip()
+    return None, tok
+
+
 def _screen_steps(ctx, text):
     """Do the steps of `text` that are plain screen actions; return (the steps left for the model, notes of what was done)."""
     if "look_at_screen" not in tools.REGISTRY or not tools.REGISTRY["look_at_screen"].available():
         return text, []
     steps = [x.strip(" .") for x in re.split(r",\s*(?:and\s+)?(?:then\s+)?|\s+and\s+then\s+|\s+then\s+|\s+and\s+(?=(?:send|click|press|download|write|type)\b)", text) if x.strip(" .")]
-    left, notes = [], []
+    left, notes, in_keys = [], [], False
     for st in steps:
+        # an explicit key sequence ("press 7 then + then 2 then =") on the OS's own app or any field: each key pressed
+        # exactly, no model guessing. A key is a digit, an operator, or its word; trailing words ("= and tell me…") stay.
+        km = re.match(r"^(?:press|type|hit|enter|tap)\s+(?P<k>.+)$", st, re.I)
+        tok = km.group("k") if km else st
+        key, rest = _one_key(tok)
+        if key and (km or in_keys):
+            out = execute(ctx, "click", {"text": key})
+            notes.append(f"pressed {key}." if not _failed(out) else f"could not press {key}.")
+            in_keys = True
+            rest = re.sub(r"^(?:and|then|,)\s+", "", rest).strip()
+            if rest:
+                left.append(rest)
+                in_keys = False
+            continue
+        in_keys = False
         m = _STEP_WRITE.match(st)
         if m:
             out = execute(ctx, "fill_in", {"field": m.group("field"), "text": m.group("text")})
