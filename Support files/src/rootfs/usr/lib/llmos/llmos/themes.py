@@ -11,6 +11,7 @@ from . import ui
 
 # (names, background, text, accent, font)
 PALETTES = [
+    (("patriotic", "patriot", "americana", "stars and stripes", "red white and blue", "red, white and blue", "red white & blue", "flag", "usa", "america"), "#0b1f4b", "#ffffff", "#c8102e", ""),
     (("retro", "terminal", "hacker", "matrix", "green screen", "crt", "8-bit", "8 bit"), "#031a07", "#3cff6e", "#3cff6e", "mono"),
     (("neon", "cyberpunk", "synthwave", "vaporwave", "futuristic", "sci-fi", "scifi"), "#0d0221", "#f6e7ff", "#ff2bd6", ""),
     (("pastel", "cute", "soft", "kawaii"), "#fff4fa", "#4a3b4f", "#e0729f", ""),

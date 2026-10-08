@@ -287,6 +287,9 @@ def _theme(text):
         st = {"animated": "living", "alive": "living", "moving": "living", "static": "still", "calm": "still", "solid": "plain",
               "simple": "plain", "picture": "photo", "wallpaper": "photo", "": "still"}.get(st, st)
         return ("set_appearance", {"backdrop": st})
+    m = re.fullmatch(r"(?:make|set|use|switch to|change to|give me|turn)\s+(?:it|the (?:theme|look|colou?rs?|screen))?\s*(?:to\s+|a\s+|an\s+)?(?:a\s+)?(?P<t>patriotic|patriot|americana|stars and stripes|red,? white,? (?:and|&) blue)(?:\s+(?:theme|look|colou?rs?|style))?", text.lower().strip().rstrip(".!?"))
+    if m:
+        return ("set_appearance", {"theme": "patriotic"})
     m = _DARK.match(text)
     if m:
         return ("set_appearance", {"theme": "dark" if m.group("t").lower().startswith("dark") else "light"})
