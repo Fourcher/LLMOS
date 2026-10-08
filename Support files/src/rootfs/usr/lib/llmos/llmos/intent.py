@@ -1288,6 +1288,12 @@ def _apps(text):
                     if lead.strip() and _LOOKISH.search(lead):
                         look = lead.strip()
                 return ("make_app", {"what": what or rest, "look": look} if look else {"what": what or rest})
+    # "make the calculator red" (an open app changes colour) and "make a red calculator": the same app, in that look
+    _COL = r"(?:red|blue|green|yellow|orange|pink|purple|violet|black|white|grey|gray|brown|teal|navy|gold|silver|dark|light)"
+    m = re.fullmatch(r"(?:make|turn|change|colou?r|paint|dye)\s+(?:the |my |this |that )?(?P<what>[a-z][a-z -]{1,30}?)\s+(?:to\s+)?(?P<look>" + _COL + r")", text.lower().strip().rstrip(".!?")) \
+        or re.fullmatch(r"(?:make|create|build|design|open)\s+(?:me\s+)?(?:a|an|the)\s+(?P<look>" + _COL + r")\s+(?P<what>[a-z][a-z -]{1,30})", text.lower().strip().rstrip(".!?"))
+    if m and re.fullmatch(r"(?:the |my )?(?:calculator|calc|timer|stopwatch|clock|to-?do(?: list)?|tracker|counter|converter|quiz|flashcards?|sudoku|minesweeper|game|app|tool|widget|planner|calendar)", m.group("what").strip()):
+        return ("make_app", {"what": m.group("what").strip(), "look": m.group("look")})
     bare = text.strip().lower().rstrip(".!?")
     if 1 <= len(bare.split()) <= 2 and apps.match_template(bare) and any(bare.replace(" ", "_") == w or bare == w.replace("_", " ")
                                                                           for tt in apps.templates() for w in [tt["id"]] + tt["words"]):
