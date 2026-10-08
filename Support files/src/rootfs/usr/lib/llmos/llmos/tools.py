@@ -277,6 +277,7 @@ PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpag
             "show_screen", "schedule_task", "manage_tasks", "note_add", "notes_show", "note_done", "note_remove",
             "set_appearance", "change_setting", "show_panel", "open_app", "play_media", "media_control", "set_volume",
             "set_brightness", "show_files", "open_file", "delete_file", "restore_file", "empty_trash", "screenshot",
+            "look_at_screen", "click", "type_text", "press_keys", "scroll", "focus_window",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
             "mail_delete", "mail_triage", "mail_setup", "show_image", "system_panel", "set_wallpaper",
             "manage_models", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
@@ -3447,6 +3448,101 @@ def _settings_snapshot():
     import copy
     allv = config.settings.all()
     return {k: copy.deepcopy(allv.get(k)) for k in _UNDO_KEYS}
+
+
+# ------------------------------------------------------------ using any program on the screen (control.py)
+
+def _control_ok():
+    from . import control
+    return control.available()
+
+
+def _screen_after(limit=40):
+    from . import control
+    time.sleep(0.8)
+    try:
+        return control.describe(limit=limit)
+    except RuntimeError as e:
+        return f"(the screen could not be read afterwards: {e})"
+
+
+@tool("look_at_screen", "Read what is on the screen now: the windows that are open and every line of text with its "
+      "position as [x,y]. Use it before clicking in a program's window, and again after each step to see what changed.",
+      {}, [], risk=SAFE, available=_control_ok)
+def look_at_screen(a, ctx):
+    from . import control
+    try:
+        return control.describe()
+    except RuntimeError as e:
+        return f"error: {e}"
+
+
+@tool("click", "Click on something on the screen: by the words written on it (text), or at a place x,y from "
+      "look_at_screen. button: left (default) or right; double=true for a double click. Returns what the screen shows after.",
+      {"text": STR, "x": {"type": "integer"}, "y": {"type": "integer"}, "button": STR, "double": {"type": "boolean"}},
+      [], risk=CHANGE, available=_control_ok)
+def click(a, ctx):
+    from . import control
+    label = str(a.get("text") or "").strip()
+    if label:
+        try:
+            d = control.find(label)
+        except RuntimeError as e:
+            return f"error: {e}"
+        if not d:
+            return f"error: '{label}' is not on the screen now. The screen shows:\n" + _screen_after(60)
+        x, y = d["x"], d["y"]
+    elif a.get("x") is not None and a.get("y") is not None:
+        x, y = int(a["x"]), int(a["y"])
+    else:
+        return "error: say what to click (its words) or where (x and y from look_at_screen)"
+    button = "right" if str(a.get("button", "")).lower().startswith("r") else "left"
+    if not control.click(x, y, button, bool(a.get("double"))):
+        return "error: the click did not go through (the pointer could not be moved)"
+    return f"clicked {repr(label) if label else ''} at [{x},{y}]. Now on screen:\n" + _screen_after()
+
+
+@tool("type_text", "Type text into whatever has the keyboard (click the field first). enter=true presses Enter after.",
+      {"text": STR, "enter": {"type": "boolean"}}, ["text"], risk=CHANGE, available=_control_ok)
+def type_text(a, ctx):
+    from . import control
+    ok, err = control.type_text(a.get("text", ""))
+    if not ok:
+        return f"error: typing failed: {err}"
+    if a.get("enter"):
+        control.press("enter")
+    return "typed. Now on screen:\n" + _screen_after()
+
+
+@tool("press_keys", "Press keys or shortcuts in the front window: 'enter', 'ctrl+s', 'alt+f4', 'ctrl+shift+t', 'tab tab enter'.",
+      {"keys": STR}, ["keys"], risk=CHANGE, available=_control_ok)
+def press_keys(a, ctx):
+    from . import control
+    ok, err = control.press(a.get("keys", ""))
+    if not ok:
+        return f"error: those keys could not be pressed: {err}"
+    return f"pressed {a.get('keys')}. Now on screen:\n" + _screen_after()
+
+
+@tool("scroll", "Scroll the window under the pointer up or down (amount: how far, default 3).",
+      {"direction": STR, "amount": {"type": "integer"}}, [], risk=SAFE, available=_control_ok)
+def scroll(a, ctx):
+    from . import control
+    if not control.scroll(a.get("direction", "down"), a.get("amount") or 3):
+        return "error: could not scroll"
+    return "scrolled. Now on screen:\n" + _screen_after()
+
+
+@tool("focus_window", "Bring a program's window to the front by its name (from look_at_screen's 'windows open').",
+      {"name": STR}, ["name"], risk=SAFE, available=_control_ok)
+def focus_window(a, ctx):
+    from . import wm
+    name = str(a.get("name", "")).strip()
+    target = wm.app_id(name) or name.lower()
+    ok, note = wm.act("focus", target)
+    if not ok:
+        return f"error: no window called '{name}' is open ({note})"
+    return f"{name} is in front. Now on screen:\n" + _screen_after()
 
 
 @tool("undo", "Take back the last change the owner made: a look or setting change, or a file moved to the trash.", {}, [], risk=CHANGE)
