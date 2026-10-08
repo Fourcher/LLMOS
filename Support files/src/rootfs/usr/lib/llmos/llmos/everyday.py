@@ -1415,14 +1415,16 @@ def live_lookup(desk, line, low):
             return _say(desk, line, "The internet is switched off in settings, so I can't look up results.")
         from . import web
         try:
-            res = web.search(f"{won.group('s').strip(' ')} result last night", n=3)
+            what = won.group("s").strip(" ")
+            sport = re.search(r"\b(game|match|final|cup|series|race|fight|bout|season|league|team)\b", what)
+            res = web.search(f"{what} result" + (" last night" if sport else ""), n=3)
         except Exception:
             return _say(desk, line, "I couldn't search for the result just now. Try again in a minute.")
         if not res:
             return _say(desk, line, "I couldn't find that result.")
         top = res[0]
         return _say(desk, line, f"From search: “{top['title']}” ({top['url']}). {top['snippet'][:200]} "
-                                "Check the page for the final score.")
+                                "Check the page for the details.")
     if not (m or h):
         return False
     if config.settings.get("internet") == "no":
