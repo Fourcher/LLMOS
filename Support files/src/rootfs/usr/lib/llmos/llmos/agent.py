@@ -36,7 +36,7 @@ How to act:
 - Act, don't ask. When a request is short or vague ("stopwatch", "update my apps", "make a resume"), do the most likely thing with sensible defaults and say what you chose; the owner can redirect. Ask a question only when nothing sensible can be done without the answer, and then ask one short question. Never answer a request with a question when a sensible default exists.
 - Never refuse, and never say you cannot do something you have a tool for: try the tool. If it fails, say what happened in one sentence and what to do next, once. No warnings, lectures, disclaimers or advice nobody asked for.
 - Several things in one request: do all of them. Thanks or small talk: a few words, nothing done.
-- To use a program's window the way a person would (press its buttons, fill in a field, open a chat, download a file shown in it): look_at_screen, then click / type_text / press_keys, and look at what the result shows; keep going step by step until the goal is reached, then say what was done. If the program's window is already open (look_at_screen shows it), use that one; install a program only if it is not on the computer.
+- To use a program's window the way a person would (press its buttons, fill in a field, open a chat, download a file shown in it): look_at_screen, then click (buttons and links by their words) or fill_in (write in a box by its label or hint, submit=true to send), and look at what the result shows; keep going step by step until the goal is reached, then say what was done. If the program's window is already open (look_at_screen shows it), use that one; install a program only if it is not on the computer.
 - Asked to write something (a message, note, letter, speech): the text itself comes first, ready to copy. No preamble, no restating the request, no "I'll adjust" or "Here's your revised" unless the owner asked for a change.
 - Be honest, always. Never claim you did something you didn't, never invent output, files, numbers, people, quotes, or sources. If a tool fails or you can't do something, say so plainly and why. Honesty is the one thing you never trade away.
 - Don't guess at facts. Things that change or are specific (news, prices, opening hours, scores, live conditions, a person's latest work, statistics) are looked up first with web_search and read_webpage, and you cite the source; if you cannot find them, say so. Well-known facts (a capital city, a definition, a unit conversion, history, science) you simply answer in one sentence, without searching. Prefer real information over invention, and never dress up a guess with precise numbers.
@@ -391,6 +391,56 @@ def clip_input(text):
     return f"{head}\n[… {len(text) - len(head) - len(tail)} characters left out: the request was too long …]\n{tail}", True
 
 
+# plain steps on whatever is on the screen, done by the OS itself in order ("write hello in the message box, send it,
+# download the chat log"); the steps it does not know are left for the model, in their order
+_STEP_WRITE = re.compile(r"^(?:write|type|enter|put)\s+(?P<text>.+?)\s+(?:in|into)\s+(?:the\s+)?(?P<field>[\w' -]{2,30}?)(?:\s+(?:box|field|bar))?$", re.I)
+_STEP_SEND = re.compile(r"^(?:send|submit)(?:\s+(?:it|that|the message|the form))?$", re.I)
+_STEP_CLICK = re.compile(r"^(?:click|press|tap|hit)\s+(?:on\s+)?(?:the\s+)?(?P<t>.+?)(?:\s+(?:button|link))?(?:\s+on\s+(?:that|the|this)\s+page|\s+there)?$", re.I)
+_STEP_DOWNLOAD = re.compile(r"^download\s+(?:the\s+)?(?P<t>.+?)(?:\s+on\s+(?:that|the|this)\s+page|\s+from\s+there)?$", re.I)
+
+
+def _screen_steps(ctx, text):
+    """Do the steps of `text` that are plain screen actions; return (the steps left for the model, notes of what was done)."""
+    if "look_at_screen" not in tools.REGISTRY or not tools.REGISTRY["look_at_screen"].available():
+        return text, []
+    steps = [x.strip(" .") for x in re.split(r",\s*(?:and\s+)?(?:then\s+)?|\s+and\s+then\s+|\s+then\s+|\s+and\s+(?=(?:send|click|press|download|write|type)\b)", text) if x.strip(" .")]
+    left, notes = [], []
+    for st in steps:
+        m = _STEP_WRITE.match(st)
+        if m:
+            out = execute(ctx, "fill_in", {"field": m.group("field"), "text": m.group("text")})
+            notes.append(f"wrote '{m.group('text')}' in the {m.group('field')} box." if not _failed(out) else f"could not write in the {m.group('field')} box.")
+            continue
+        if _STEP_SEND.match(st):
+            out = execute(ctx, "click", {"text": "Send"})
+            if _failed(out):
+                out = execute(ctx, "press_keys", {"keys": "enter"})
+            notes.append("sent it." if not _failed(out) else "could not send it.")
+            continue
+        m = _STEP_DOWNLOAD.match(st)
+        if m:
+            label = m.group("t")
+            out = execute(ctx, "click", {"text": "Download " + label})
+            if _failed(out):
+                out = execute(ctx, "click", {"text": label})
+            notes.append(f"clicked to download the {label}." if not _failed(out) else f"could not find the {label} to download.")
+            continue
+        m = _STEP_CLICK.match(st)
+        if m and not re.search(r"\b(?:me|what|how|why|whether|if)\b", m.group("t"), re.I):
+            out = execute(ctx, "click", {"text": m.group("t")})
+            notes.append(f"clicked {m.group('t')}." if not _failed(out) else f"could not find {m.group('t')} on the screen.")
+            continue
+        left.append(st)
+    if notes and left:
+        time.sleep(1)
+        try:
+            from . import control
+            notes.append("The screen now shows: " + control.describe(limit=50))
+        except Exception:
+            pass
+    return ", ".join(left), notes
+
+
 def run(ctx, user_text, history):
     """Run one user turn. Streams text through ctx, executes tools under the
     autonomy policy, appends to history, returns the final text."""
@@ -445,6 +495,24 @@ def run(ctx, user_text, history):
 
     # Deterministic shortcut for a few unambiguous intents small models fumble
     # (explicit "remember X"). Runs the same tool through the same policy path.
+    # "open <page>, then click Download": the first step is one the OS knows, so it is done here and the model is
+    # given only the rest (a small model otherwise loses the first step and works on whatever is on the screen)
+    if not intent.match(user_text):
+        lead = re.match(r"^(?P<first>.+?)(?:,\s*|\s+)(?:and\s+)?then\s+(?P<rest>.+)$", user_text, re.I | re.S)
+        first = intent.match(lead.group("first")) if lead else None
+        if first:
+            out1 = execute(ctx, first[0], first[1])
+            if not _failed(out1):
+                done = _cap(_shortcut_reply(first[0], first[1], out1))
+                ctx.status(done)
+                time.sleep(2)                      # a page or program that was just opened has time to show
+                rest, notes = _screen_steps(ctx, lead.group("rest").strip())
+                done = " ".join([done] + notes)
+                if rest and re.match(r"(?i)\s*(?:tell me|say|what|read|did|is|does)\b", rest):
+                    note = "Answer it from what the screen shows above; do not click, open or write anything."
+                else:
+                    note = "Now do the rest; use look_at_screen and click for anything shown in a window."
+                user_text = ((rest or "Say in one sentence what was done.") + f"\n(Already done for this request: {done} {note})")
     shortcut = intent.match(user_text)
     if shortcut:
         name, args = shortcut

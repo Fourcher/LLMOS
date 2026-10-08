@@ -277,7 +277,7 @@ PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpag
             "show_screen", "schedule_task", "manage_tasks", "note_add", "notes_show", "note_done", "note_remove",
             "set_appearance", "change_setting", "show_panel", "open_app", "play_media", "media_control", "set_volume",
             "set_brightness", "show_files", "open_file", "delete_file", "restore_file", "empty_trash", "screenshot",
-            "look_at_screen", "click", "type_text", "press_keys", "scroll", "focus_window",
+            "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
             "mail_delete", "mail_triage", "mail_setup", "show_image", "system_panel", "set_wallpaper",
             "manage_models", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
@@ -3529,6 +3529,33 @@ def type_text(a, ctx):
     return "typed. Now on screen:\n" + _screen_after()
 
 
+@tool("fill_in", "Write in a box on the screen in one step: field = the box's words (its label or the grey hint "
+      "inside it, e.g. 'message', 'search', 'email'), text = what to write; submit=true sends it (Enter). Use it for "
+      "chat messages, search boxes and forms.",
+      {"field": STR, "text": STR, "submit": {"type": "boolean"}}, ["text"], risk=CHANGE, available=_control_ok)
+def fill_in(a, ctx):
+    from . import control
+    field = str(a.get("field") or "").strip()
+    if field:
+        want = " ".join(w for w in re.split(r"\s+", field.lower())
+                        if w not in ("box", "field", "input", "bar", "area", "the", "a", "text", "in", "into"))
+        try:
+            lines = control.read_screen()
+            d = control.field_for(want or field, lines) or control.find(want or field, lines)
+        except RuntimeError as e:
+            return f"error: {e}"
+        if not d:
+            return f"error: no box with '{field}' is on the screen now. The screen shows:\n" + _screen_after(60)
+        control.click(d["x"], d["y"])
+        time.sleep(0.3)
+    ok, err = control.type_text(a.get("text", ""))
+    if not ok:
+        return f"error: typing failed: {err}"
+    if a.get("submit"):
+        control.press("enter")
+    return ("wrote it" + (" and sent it" if a.get("submit") else "") + ". Now on screen:\n") + _screen_after()
+
+
 @tool("press_keys", "Press keys or shortcuts in the front window: 'enter', 'ctrl+s', 'alt+f4', 'ctrl+shift+t', 'tab tab enter'.",
       {"keys": STR}, ["keys"], risk=CHANGE, available=_control_ok)
 def press_keys(a, ctx):
@@ -3685,6 +3712,14 @@ def open_app(a, ctx):
             rc = ctx.interactive(" ".join(programs.argv(p)))
             return f"the owner used {p['name']}; it exited with code {rc}"
         if p:
+            try:
+                from . import wm
+                ok, _ = wm.focus_program(programs.argv(p))      # already open: the same window, in front (never a 2nd one)
+            except Exception:
+                ok = False
+            if ok:
+                return (f"{programs.label(p)} is already open and now in front (no second window). Done: if the request asked "
+                        "for more, do the next step now (look_at_screen to see it); otherwise tell the owner in one sentence.")
             r = ctx.launch(programs.argv(p), name=p["name"])
             if isinstance(r, str):
                 return f"error: {r}"

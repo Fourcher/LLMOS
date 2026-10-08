@@ -43,9 +43,13 @@ def _size(path):
         return 0, 0
 
 
-def _ocr(psm):
-    """The lines tesseract reads in the screenshot with one page-segmentation mode, in screen pixels."""
-    t = _run(["tesseract", SHOT, "-", "--psm", psm, "tsv"], timeout=90)
+STRIP = "/tmp/llmos-strip.png"
+
+
+def _ocr(psm, path=SHOT, dy=0):
+    """The lines tesseract reads in an image (the screenshot, or a strip of it starting dy pixels down, at twice the
+    screen's size) with one page-segmentation mode, in screen pixels."""
+    t = _run(["tesseract", path, "-", "--psm", psm, "tsv"], timeout=90)
     if t.returncode != 0:
         raise RuntimeError("the text on the screen could not be read: " + (t.stderr or "").strip()[:200])
     groups = {}
@@ -61,7 +65,7 @@ def _ocr(psm):
         word = c[11].strip()
         if conf < (35 if len(word) > 2 else 5):           # a button's single digit or sign is read with low confidence
             continue
-        left, top, w, h = left // 2, top // 2, max(1, w // 2), max(1, h // 2)   # back to screen pixels
+        left, top, w, h = left // 2, (top + dy) // 2, max(1, w // 2), max(1, h // 2)   # back to screen pixels
         groups.setdefault((c[2], c[3], c[4]), []).append((left, top, w, h, word))   # block, paragraph, line
     lines = []
     for words in groups.values():
@@ -73,19 +77,67 @@ def _ocr(psm):
     return lines
 
 
+BOX = "/tmp/llmos-box.png"
+
+
+def _buttons():
+    """Buttons and other solid boxes, each read on its own: a dark button with light words (or the other way round)
+    reads cleanly by itself even where a whole-screen reading turns it into noise."""
+    if not shutil.which("magick"):
+        return []
+    sw, sh = _size(SHOT)
+    r = _run(["magick", SHOT, "-colorspace", "Gray", "-threshold", "70%", "-define", "connected-components:verbose=true",
+              "-define", "connected-components:area-threshold=1500", "-connected-components", "4", "null:"], timeout=60)
+    boxes = []
+    for row in (r.stdout or "").splitlines()[1:]:
+        m = re.match(r"\s*\d+:\s+(\d+)x(\d+)\+(\d+)\+(\d+)", row)
+        if not m:
+            continue
+        w, h, x, y = (int(v) for v in m.groups())
+        if 100 <= w <= min(1400, sw // 2) and 40 <= h <= 220:        # the size of a button, a tab or a field (at 2x)
+            boxes.append((x, y, w, h))
+    lines = []
+    for (x, y, w, h) in boxes[:40]:
+        if _run(["magick", SHOT, "-crop", f"{w}x{h}+{x}+{y}", "+repage", "PNG24:" + BOX], timeout=20).returncode:
+            continue
+        text = " ".join((_run(["tesseract", BOX, "-", "--psm", "7"], timeout=20).stdout or "").split())
+        text = re.sub(r"^[^\w(]+|[^\w).!?]+$", "", text)        # the box's own edge read as ':' or '|' 
+        cx, cy, sx, sy = (x + w // 2) // 2, (y + h // 2) // 2, w // 2, h // 2
+        if not re.search(r"[A-Za-z0-9]", text) or len(text) > 60:
+            if w > 3 * h:                                  # an empty, wide box: a place to write (a text field)
+                lines.append({"text": "", "x": cx, "y": cy, "w": sx, "h": sy, "words": [], "field": True})
+            continue
+        lines.append({"text": text, "x": cx, "y": cy, "w": sx, "h": sy,
+                      "words": [(x // 2, y // 2, sx, sy, text)], "button": True, "field": w > 4 * h})
+    return lines
+
+
 def read_screen():
     """Every line of text on the screen with its centre: [{"text", "x", "y", "w", "h"}], top to bottom."""
     r = _run(["grim", "-s", "2", SHOT], timeout=30)       # twice the size: tesseract reads small text and single keys far better
     if r.returncode != 0:
         raise RuntimeError("the screen could not be captured: " + (r.stderr or "").strip()[:200])
-    # two readings merged: as one block (reads every button's single digit or sign) and as scattered text (finds
-    # labels the block reading skips); a scattered line is kept only where the block reading found nothing
-    lines = _ocr("6")
-    for d in _ocr("11"):
-        if not any(abs(d["x"] - e["x"]) <= e["w"] // 2 + 6 and abs(d["y"] - e["y"]) <= e["h"] // 2 + 6 for e in lines):
-            lines.append(d)
-    lines.sort(key=lambda d: (d["y"] // 12, d["x"]))
+    # the screen is read in overlapping strips (a whole-screen reading drops buttons drawn as dark boxes, like a
+    # "Download" button), then once whole as scattered text for anything the strips missed; a line already found is
+    # not added twice
+    lines = []
+
+    def add(found):
+        for d in found:
+            if not any(abs(d["x"] - e["x"]) <= max(e["w"], d["w"]) // 2 + 6 and abs(d["y"] - e["y"]) <= max(e["h"], d["h"]) // 2 + 6
+                       for e in lines):
+                lines.append(d)
     sw, sh = _size(SHOT)
+    add(_buttons())                                    # buttons first: the most reliable reading of what can be clicked
+    step, height = 150, 200
+    if shutil.which("magick") and sh:
+        for y in range(0, sh, step):
+            if _run(["magick", SHOT, "-crop", f"{sw}x{height}+0+{y}", "+repage", "PNG24:" + STRIP], timeout=20).returncode == 0:
+                add(_ocr("6", STRIP, y))
+    else:
+        add(_ocr("6"))
+    add(_ocr("11"))
+    lines.sort(key=lambda d: (d["y"] // 12, d["x"]))
     _LAST.update(lines=lines, at=time.time(), size=(sw // 2, sh // 2))
     return lines
 
@@ -101,7 +153,7 @@ def describe(lines=None, limit=120):
     w, h = _LAST["size"]
     out = [f"screen {w}x{h}" + (f"; windows open: {', '.join(wins)}" if wins else "")]
     for d in lines[:limit]:
-        out.append(f"[{d['x']},{d['y']}] {d['text']}")
+        out.append(f"[{d['x']},{d['y']}] {d['text']}" if d["text"] else f"[{d['x']},{d['y']}] (empty box to write in)")
     if len(lines) > limit:
         out.append(f"(+{len(lines) - limit} more lines)")
     return "\n".join(out)
@@ -140,6 +192,23 @@ def _find_key(want, lines):
     return None
 
 
+def field_for(target, lines=None):
+    """The box to write in for these words: the box whose own words (a grey hint inside it) match, else the empty box
+    nearest to the matching words (a label beside or above it), else the only box on the screen."""
+    lines = read_screen() if lines is None else lines
+    fields = [d for d in lines if d.get("field")]
+    if not fields:
+        return None
+    want = str(target or "").lower()
+    for d in fields:
+        if d["text"] and want and want in d["text"].lower():
+            return d
+    near = find(want, [d for d in lines if d["text"]]) if want else None
+    if near:
+        return min(fields, key=lambda f: abs(f["x"] - near["x"]) / 3 + abs(f["y"] - near["y"]) + (0 if f["y"] >= near["y"] - 4 else 200))
+    return fields[0] if len(fields) == 1 else max(fields, key=lambda f: f["w"])
+
+
 def find(target, lines=None):
     """The place on the screen that best matches the words: a whole line, or a word inside a line."""
     lines = read_screen() if lines is None else lines
@@ -150,6 +219,8 @@ def find(target, lines=None):
         return _find_key(want, lines)
     best, score = None, 0.0
     for d in lines:
+        if not d["text"]:
+            continue
         text = d["text"].lower()
         if text == want:
             return d
@@ -162,7 +233,7 @@ def find(target, lines=None):
                 cand = dict(d, x=(x0 + x1) // 2, y=(y0 + y1) // 2)
             else:
                 cand = d
-            s = 0.9 + len(want) / (len(text) + 1) / 10
+            s = 0.75 + 0.25 * len(want) / max(len(text), 1)
         else:
             s = difflib.SequenceMatcher(None, want, text).ratio()
             cand = d
