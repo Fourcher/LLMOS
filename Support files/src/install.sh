@@ -152,6 +152,8 @@ fetch_verify "$PAYLOAD/build/cache/$MODEL_FILE" "$TARGET/var/lib/llmos/models/$M
 fetch_verify "$PAYLOAD/build/cache/$WHISPER_FILE" "$TARGET/usr/share/llmos/voice/$WHISPER_FILE" "$WHISPER_SHA256"
 
 log "search-by-meaning runtime (llama.cpp ${EMBED_LLAMA_COMMIT:-?}, built from source)"
+# the target needs a working resolver for the runtime build (GitHub): the live system's, else QEMU's DNS at 10.0.2.3
+if [ -s /etc/resolv.conf ] && grep -q nameserver /etc/resolv.conf; then cp /etc/resolv.conf $TARGET/etc/resolv.conf; else echo "nameserver 10.0.2.3" > $TARGET/etc/resolv.conf; fi
 # the runtime is built and checked inside the target: it needs /dev, /proc and /sys there (bound again for the bootloader step)
 for d in dev proc sys; do mountpoint -q $TARGET/$d || mount --bind /$d $TARGET/$d; done
 # Alpine's llama.cpp is too old for EmbeddingGemma 2; a cached build for this commit and architecture is used when the
