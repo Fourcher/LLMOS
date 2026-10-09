@@ -426,6 +426,28 @@ def _one_key(tok):
     return None, tok
 
 
+def _shown_result(ctx, page_text):
+    """The result an open app shows now: its display, as the read bridge reports it (the 'display value: N' control
+    calculator.html labels its screen with); else the LAST number of the page text, never the first (a calculator's
+    history line "7 + 2 =" comes before the display "9"). None when there is neither."""
+    reader = getattr(ctx, "app_read", None)
+    if reader:
+        try:
+            r = reader() or {}
+        except Exception:
+            r = {}
+        for c in r.get("controls") or []:
+            m = re.match(r"display value:\s*(.+)$", str(c).strip(), re.I)
+            if m and m.group(1).strip():
+                return m.group(1).strip()
+    text = page_text or ""
+    after_eq = re.findall(r"=\s*(-?\d+(?:\.\d+)?)(?![\w.])", text)     # "7 + 2 =\n9": the answer follows the last '='
+    if after_eq:
+        return after_eq[-1]
+    nums = re.findall(r"(?<![\w.])-?\d+(?:\.\d+)?(?![\w.])", text)     # else the display, before any keypad digits
+    return nums[0] if nums else None
+
+
 def _screen_steps(ctx, text):
     """Do the steps of `text` that are plain screen actions; return (the steps left for the model, notes of what was done,
     captured page text after the last key press if any, result value extracted from page if requested)."""
@@ -472,11 +494,9 @@ def _screen_steps(ctx, text):
             rest = re.sub(r"^(?:and|then|,)\s+", "", rest).strip()
             if rest:
                 # Check if the rest is a result question - if so, extract the result
-                if re.match(r"^(?:tell|show|read|what|what'?s?|and\s+(?:tell|show|read|what))\b", rest, re.I) and page_text:
-                    # Extract the displayed number from the page
-                    m = re.search(r"\b(\d+(?:\.\d+)?)\b", page_text)
-                    if m:
-                        result_value = m.group(1)
+                if re.match(r"^(?:tell|show|read|what|what'?s?|and\s+(?:tell|show|read|what))\b", rest, re.I) and (page_text or hasattr(ctx, "app_read")):
+                    # the number the app shows now (its display), not the history line before it
+                    result_value = _shown_result(ctx, page_text) or result_value
                     # Don't add the result question to left, we've handled it
                 else:
                     left.append(rest)
@@ -509,11 +529,9 @@ def _screen_steps(ctx, text):
             continue
 
         # Check if this is a result-asking step at the end
-        if re.match(r"^(?:and\s+)?(?:tell|show|read|what|what'?s?)\b", st, re.I) and page_text and i == len(steps) - 1:
-            # Extract the displayed number from the page
-            m = re.search(r"\b(\d+(?:\.\d+)?)\b", page_text)
-            if m:
-                result_value = m.group(1)
+        if re.match(r"^(?:and\s+)?(?:tell|show|read|what|what'?s?)\b", st, re.I) and (page_text or hasattr(ctx, "app_read")) and i == len(steps) - 1:
+            # the number the app shows now (its display), not the history line before it
+            result_value = _shown_result(ctx, page_text) or result_value
             left.append(st)
         else:
             left.append(st)
