@@ -26,7 +26,7 @@ def find_session(arg):
     for f in sorted(glob.glob(os.path.join(PROJ, "*.jsonl")), key=os.path.getmtime, reverse=True):
         with open(f) as fh:
             head = fh.read(200000)
-        if '"sessionKind":"bg"' in head and "llmos-orchestrator" in head:
+        if '{"type":"agent-setting","agentSetting":"llmos-orchestrator"' in head:
             return f
         best = best or f
     return best
@@ -190,7 +190,7 @@ def main():
 
         def do_GET(self):
             if self.path.startswith("/api/state"):
-                body = json.dumps(state(sp)).encode()
+                body = json.dumps(state(find_session(a.session) or sp)).encode()
                 ctype = "application/json"
             else:
                 body = open(os.path.join(HERE, "swarm-view.html"), "rb").read()
