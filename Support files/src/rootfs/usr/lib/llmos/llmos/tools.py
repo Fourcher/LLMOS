@@ -3608,9 +3608,10 @@ def click(a, ctx):
         r = ctx.app_press(label)                   # one of the OS's own apps: its control, pressed exactly
         if r and r.get("ok"):
             return f"pressed {label!r} in the app. It now shows: " + " ".join(str(r.get("page", "")).split())[:700]
+    by_atspi = False
     if label:
         try:
-            d = control.find(label)
+            d = control.find(label)        # AT-SPI first; the screen is read (OCR) only when AT-SPI has no match
         except RuntimeError as e:
             return f"error: {e}"
         if not d and a.get("x") is not None and a.get("y") is not None:
@@ -3618,6 +3619,7 @@ def click(a, ctx):
         if not d:
             return f"error: '{label}' is not on the screen now. The screen shows:\n" + _screen_after(60)
         x, y = d["x"], d["y"]
+        by_atspi = bool(d.get("atspi"))
     elif a.get("x") is not None and a.get("y") is not None:
         x, y = int(a["x"]), int(a["y"])
     else:
@@ -3625,6 +3627,9 @@ def click(a, ctx):
     button = "right" if str(a.get("button", "")).lower().startswith("r") else "left"
     if not control.click(x, y, button, bool(a.get("double"))):
         return "error: the click did not go through (the pointer could not be moved)"
+    if by_atspi:
+        # handled through the accessibility tree: no screen read here (call look_at_screen to see the result)
+        return f"clicked {label!r} (through the program's accessible controls; the screen was not read)."
     return f"clicked {repr(label) if label else ''} at [{x},{y}]. Now on screen:\n" + _screen_after()
 
 
@@ -3647,12 +3652,18 @@ def type_text(a, ctx):
 def fill_in(a, ctx):
     from . import control
     field = str(a.get("field") or "").strip()
+    by_atspi = False
     if field:
         want = " ".join(w for w in re.split(r"\s+", field.lower())
                         if w not in ("box", "field", "input", "bar", "area", "the", "a", "text", "in", "into"))
         try:
-            lines = control.read_screen()
-            d = control.field_for(want or field, lines) or control.find(want or field, lines)
+            # AT-SPI first. An empty line list means "AT-SPI only, no screen read" to field_for and find.
+            d = control.field_for(want or field, []) or control.find(want or field, [])
+            if d and d.get("atspi"):
+                by_atspi = True
+            else:
+                lines = control.read_screen()          # OCR only when AT-SPI did not find the box
+                d = control.field_for(want or field, lines) or control.find(want or field, lines)
         except RuntimeError as e:
             return f"error: {e}"
         if not d:
@@ -3664,6 +3675,9 @@ def fill_in(a, ctx):
         return f"error: typing failed: {err}"
     if a.get("submit"):
         control.press("enter")
+    if by_atspi:
+        # handled through the accessibility tree: no screen read here (call look_at_screen to see the result)
+        return "wrote it" + (" and sent it" if a.get("submit") else "") + " (through the program's accessible controls; the screen was not read)."
     return ("wrote it" + (" and sent it" if a.get("submit") else "") + ". Now on screen:\n") + _screen_after()
 
 
