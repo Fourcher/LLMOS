@@ -277,7 +277,7 @@ PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpag
             "show_screen", "schedule_task", "manage_tasks", "note_add", "notes_show", "note_done", "note_remove",
             "set_appearance", "change_setting", "show_panel", "open_app", "play_media", "media_control", "set_volume",
             "set_brightness", "show_files", "open_file", "delete_file", "restore_file", "empty_trash", "screenshot",
-            "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program", "security_check", "scan_network", "web_security_scan",
+            "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program", "security_check", "scan_network", "web_security_scan", "capture_traffic",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
             "mail_delete", "mail_triage", "mail_setup", "show_image", "system_panel", "set_wallpaper",
             "manage_models", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
@@ -549,6 +549,24 @@ def web_security_scan(a, ctx):
     if not findings:
         return f"No known problems were reported for {url} by this check."
     return f"{len(findings)} things to look at on {url}: " + " ".join(f"({i}) {f}" for i, f in enumerate(findings, 1))
+
+
+@tool("capture_traffic", "Record this computer's network traffic for a few seconds (tshark) and say, in plain words, what "
+      "it talked to: the addresses and the most-used ports. Read-only; the capture is kept in the owner's Downloads folder.",
+      {"seconds": {"type": "integer"}}, [], risk=CHANGE, available=lambda: shutil.which("tshark") is not None)
+def capture_traffic(a, ctx):
+    secs = max(3, min(int(a.get("seconds") or 10), 60))
+    out = os.path.join(config.home(), "Downloads", time.strftime("traffic-%Y%m%d-%H%M%S.pcapng"))
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    try:
+        subprocess.run(["timeout", str(secs), "tshark", "-q", "-w", out], capture_output=True, text=True, timeout=secs + 20)
+        p = subprocess.run(["tshark", "-r", out, "-q", "-z", "conv,ip"], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"error: the capture could not run: {e}"
+    talked = [ln.split()[0] + " <-> " + ln.split()[2] for ln in p.stdout.splitlines()
+              if "<->" in ln and len(ln.split()) > 3][:8]
+    head = f"Recorded {secs} seconds of traffic to {os.path.basename(out)} in Downloads."
+    return head + (" It talked to: " + ", ".join(talked) + "." if talked else " No IP conversations were seen.")
 
 
 @tool("analyze_program", "Look inside a program or app the owner has (an Electron/JavaScript app folder, or a file) to see "
