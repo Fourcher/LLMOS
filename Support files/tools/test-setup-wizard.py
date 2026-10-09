@@ -59,6 +59,17 @@ on, off = desk._model_tiers(True), desk._model_tiers(False)
 names = {t["tier"]: t["name"] for t in on}
 check([t["tier"] for t in on] == ["fast", "balanced", "capable"], f"16 GB: three tiers {names}")
 check(on[0]["installed"] and on[0]["id"] == "ministral-3-3b", "Fast is the installed model (ready at once)")
+check([t["id"] for t in on][1:] == ["lfm2.5-8b-a1b", "ministral-3-14b"], f"installed Fast: Balanced and Most capable unchanged {[t['id'] for t in on]}")
+RAM[0] = 31.0
+installed = {"gemma-4-e4b"}          # 4.6 GB: quick, but more than 1.5x the smallest (hermes 2.0 GB): not Fast
+on = desk._model_tiers(True)
+check(on[0]["id"] == "hermes-3-3b" and not on[0]["installed"], f"a larger installed model is not Fast {[t['id'] for t in on]}")
+installed = {"ministral-3-14b"}      # installed but slow: never Fast
+on = desk._model_tiers(True)
+check(on[0]["id"] == "hermes-3-3b", f"an installed slow model is not Fast {[t['id'] for t in on]}")
+installed = {"ministral-3-3b"}
+RAM[0] = 15.3
+on = desk._model_tiers(True)
 check(all(t["need_gb"] <= 15.3 - 1 for t in on), "every choice fits the memory with 1 GB left for the system")
 check(all(not t.get("tight") for t in on), "nothing is marked tight when it fits")
 check([t["id"] for t in off] == ["ministral-3-3b"], "offline: only what is already installed")

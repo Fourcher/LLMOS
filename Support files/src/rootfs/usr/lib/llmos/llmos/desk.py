@@ -296,20 +296,25 @@ def _system_check():
 
 def _model_tiers(allow_download):
     """The on-device models behind Fast / Balanced / Most capable on this computer: those that fit its memory
-    (1 GB left for the system); offline, only those already here. Fast is the smallest (the installed one first),
-    Balanced the largest of the quick ones, Most capable the largest. A tier that would repeat a model is dropped."""
+    (1 GB left for the system); offline, only those already here. Fast is the smallest (or an installed quick one in the
+    same size band), Balanced the largest of the other quick ones, Most capable the largest. A tier that would repeat a model is dropped."""
     ram = models.ram_gb()
     inst = {m["id"] for m in models.installed()}
     fits = [m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (allow_download or m["id"] in inst)]
-    fits.sort(key=lambda m: (round(m["size"] / 1e9, 1), m["id"] not in inst))
+    fits.sort(key=lambda m: round(m["size"] / 1e9, 1))
     if not fits:
         # too little memory for any of them: the installed one is what runs anyway (slowly), so it is the choice
         here = sorted((m for m in models.catalog() if m["id"] in inst), key=lambda m: m["size"])
         return [{"tier": "fast", "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"], "size_gb": round(m["size"] / 1e9, 1),
                  "installed": True, "tight": True} for m in here[:1]]
     quick = [m for m in fits if m.get("speed") in ("fast", "fastest")]
+    # Fast is the smallest; but an installed quick model no bigger than 1.5x the smallest is the same band, and it is
+    # ready at once, so it is Fast instead (a bigger installed model keeps its place in the order)
+    fast = next((m for m in quick if m["id"] in inst and m["size"] <= fits[0]["size"] * 1.5), fits[0])
+    rest = [m for m in fits if m is not fast]
+    rest_quick = [m for m in quick if m is not fast]
     out, seen = [], set()
-    for tier, m in (("fast", fits[0]), ("balanced", (quick or fits)[-1]), ("capable", fits[-1])):
+    for tier, m in (("fast", fast), ("balanced", (rest_quick or rest or [fast])[-1]), ("capable", fits[-1])):
         if m["id"] in seen:
             continue
         seen.add(m["id"])
@@ -3718,13 +3723,13 @@ class Desk:
                 inst = {m["id"] for m in models.installed()}
                 want = str(p.get("model") or "")
                 pick = None
-                if want and any(x["id"] == want for x in _model_tiers(net_pol != "no")):
+                tiers = _model_tiers(net_pol != "no")
+                if want and any(x["id"] == want for x in tiers):
                     pick = next((m for m in models.catalog() if m["id"] == want), None)
-                else:
-                    fits = sorted([m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (net_pol != "no" or m["id"] in inst)],
-                                  key=lambda m: round(m["size"] / 1e9, 1))
-                    if fits:
-                        pick = fits[0] if cap < 34 else fits[len(fits) // 2] if cap < 67 else fits[-1]
+                elif tiers:
+                    # no model named (an older page): the tier the capability slider points at
+                    name = "fast" if cap < 34 else "balanced" if cap < 67 else "capable"
+                    pick = next((t for t in tiers if t["tier"] == name), tiers[-1])
                 cur = models.active()
                 self.wizard_model = pick["id"] if pick and (not cur or pick["id"] != cur["id"]) else None
                 self.apply_theme()
