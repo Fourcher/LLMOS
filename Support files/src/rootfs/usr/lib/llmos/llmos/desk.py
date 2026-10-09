@@ -2298,11 +2298,15 @@ class Desk:
             self.last_reply = self._said = "Playing the next one."
             return True
         if re.fullmatch(r"(?:skip|next)(?: (?:this|the|that|current))?(?: (?:song|track|one|video|tune))?[.!]?|skip it|next song|next track", low):
-            if shutil.which("playerctl") and subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=5).stdout.strip() == "Playing":
-                subprocess.run(["playerctl", "next"], capture_output=True, timeout=5)
-                self.last_reply = self._said = "Playing the next one."
-            else:
-                self.last_reply = self._said = "Nothing is playing."
+            playing = False
+            if shutil.which("playerctl"):
+                try:
+                    playing = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=5).stdout.strip() == "Playing"
+                    if playing:
+                        subprocess.run(["playerctl", "next"], capture_output=True, timeout=5)
+                except (OSError, subprocess.TimeoutExpired):
+                    playing = False
+            self.last_reply = self._said = "Playing the next one." if playing else "Nothing is playing."
             return True
         if re.fullmatch(r"(?:pause|resume|unpause|play ?pause|pause (?:the |my )?(?:music|video|song)|resume (?:the |my )?(?:music|video|song)|keep playing)[.!]?", low):
             if not media.playing():
