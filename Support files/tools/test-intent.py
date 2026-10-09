@@ -164,6 +164,8 @@ CASES = {
     "remove my folder old-stuff": ("delete_file", {"path": "~/old-stuff"}),
     "open the file cabinet": None,
     "show my files to Bob": None,
+    "remove the folder ..": None,
+    "remove the folder .": None,
     # lists, notes, trash
     "add milk to my shopping list": ("note_add", {"text": "milk", "list": "shopping"}),
     "put call the dentist on my to-do list": ("note_add", {"text": "call the dentist", "list": "to-do"}),
