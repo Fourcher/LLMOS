@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orchestrator Live View</title>
+<style>
+:root{--bg:#f6f6f4;--panel:#fff;--ink:#1d1d1b;--mute:#6b6b66;--line:#e2e1dc;--orch:#6b4fd8;--work:#1f7ae0;--done:#2e9a5a;--stall:#d08a12;--open:#8a8a84;--fail:#d0453a;--chip:#efeee9}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--panel:#1d1d1b;--ink:#ecebe6;--mute:#9b9a94;--line:#2f2e2b;--orch:#9d86ff;--work:#4b9cff;--done:#4cc27e;--stall:#f0a93a;--open:#8a8a84;--fail:#ff6b5e;--chip:#2a2926}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+h1{font-size:16px;margin:0}
+.pill{padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600;color:#fff}
+.mute{color:var(--mute)}
+#now{flex:1 1 100%;font-size:15px;padding:10px 12px;border-left:4px solid var(--orch);background:var(--chip);border-radius:6px}
+#now b{color:var(--orch)}
+main{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:16px;padding:16px 20px}
+@media (max-width:900px){main{grid-template-columns:1fr;padding:12px 16px}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:0 0 10px}
+svg text{fill:var(--ink);font-size:11px}
+.node{cursor:pointer}
+.pulse{animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+.flow{stroke-dasharray:6 6;animation:flow 1s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-12}}
+#feed{max-height:70vh;overflow:auto;display:flex;flex-direction:column;gap:8px}
+.ev{border-left:3px solid var(--line);padding:4px 10px}
+.ev .t{font-size:11px;color:var(--mute)}
+.ev .h{font-weight:600}
+.ev .b{white-space:pre-wrap;word-break:break-word;font-size:12.5px;color:var(--mute);max-height:9em;overflow:auto}
+.ev.say{border-color:var(--orch)} .ev.tool{border-color:var(--work)} .ev.agent{border-color:var(--done)}
+.ev.result{border-color:var(--line)} .ev.notify{border-color:var(--stall)} .ev.inbox,.ev.user{border-color:var(--fail)}
+.spec{white-space:pre-wrap;font-size:12.5px;background:var(--chip);padding:8px 10px;border-radius:6px;max-height:14em;overflow:auto;margin-bottom:10px}
+#lanes{display:flex;flex-direction:column;gap:4px}
+.lane{display:grid;grid-template-columns:220px 1fr;gap:8px;align-items:center;cursor:pointer;font-size:12px}
+.lane .bar{position:relative;height:14px;background:var(--chip);border-radius:3px}
+.lane .bar i{position:absolute;top:0;bottom:0;border-radius:3px}
+.lane span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+@media (max-width:900px){#board{grid-template-columns:1fr}}
+.col h3{font-size:12px;margin:0 0 6px}
+.task{background:var(--chip);border-radius:6px;padding:6px 8px;margin-bottom:6px;font-size:12px;max-height:7.5em;overflow:hidden}
+.full{grid-column:1/-1}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--mute);flex-wrap:wrap}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+</style>
+</head>
+<body>
+<header>
+  <h1>LLM OS orchestrator</h1>
+  <span id="state" class="pill" style="background:var(--open)">…</span>
+  <span id="meta" class="mute"></span>
+  <div id="now">Loading…</div>
+</header>
+<main>
+  <section class="card">
+    <h2>Agents <span class="mute" style="text-transform:none">— click one to see its activity</span></h2>
+    <svg id="graph" viewBox="0 0 640 420" width="100%"></svg>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--orch)"></i>orchestrator (Opus)</span>
+      <span><i class="dot" style="background:var(--work)"></i>working</span>
+      <span><i class="dot" style="background:var(--done)"></i>finished</span>
+      <span><i class="dot" style="background:var(--stall)"></i>no activity 2+ min</span>
+    </div>
+  </section>
+  <section class="card">
+    <h2 id="feedtitle">Orchestrator activity</h2>
+    <div id="spec"></div>
+    <div id="feed"></div>
+  </section>
+  <section class="card full">
+    <h2>Worker timeline <span class="mute" style="text-transform:none" id="span"></span></h2>
+    <div id="lanes"></div>
+  </section>
+  <section class="card full">
+    <h2>Task queue (docs/tasks/queue.md)</h2>
+    <div id="board"></div>
+  </section>
+</main>
+<script>
+let S=null, sel='orch', pinnedBottom=true;
+const C=s=>({working:'var(--work)',done:'var(--done)',stalled:'var(--stall)'}[s]||'var(--open)');
+const ago=t=>{if(!t)return'—';let s=Math.max(0,Math.round(S.now-t));return s<60?s+' s ago':s<3600?Math.round(s/60)+' min ago':(s/3600).toFixed(1)+' h ago'};
+const clock=t=>new Date(t*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+function header(){
+  const busy=S.bg==='busy'||(S.now-S.last<ACTIVE);
+  const st=document.getElementById('state');
+  st.textContent=S.bg==='busy'?'working':S.bg; st.style.background=busy?'var(--work)':'var(--open)';
+  const w=S.workers.filter(x=>x.status==='working').length;
+  document.getElementById('meta').textContent=`${S.model||''} · last step ${ago(S.last)} · ${w} worker${w==1?'':'s'} running · ${S.workers.length} dispatched · session ${S.session.slice(0,8)}`;
+  const d=S.doing;
+  document.getElementById('now').innerHTML=d?`<b>Now:</b> ${esc(d.kind==='say'?d.body.slice(0,300):d.title)} <span class="mute">(${ago(d.t)})</span>`:'Idle';
+}
+const ACTIVE=120;
+
+function graph(){
+  const g=document.getElementById('graph'); const W=640,H=420,cx=W/2,cy=H/2;
+  const ws=S.workers.slice(-16); const n=ws.length; let h='';
+  ws.forEach((w,i)=>{
+    const a=-Math.PI/2+2*Math.PI*i/Math.max(n,1), r=155;
+    w.x=cx+Math.cos(a)*r*1.45; w.y=cy+Math.sin(a)*r;
+    h+=`<line x1="${cx}" y1="${cy}" x2="${w.x}" y2="${w.y}" stroke="${C(w.status)}" stroke-width="${w.status==='working'?2.5:1}" class="${w.status==='working'?'flow':''}" opacity="${w.status==='done'?.4:.9}"/>`;
+  });
+  ws.forEach(w=>{
+    const on=sel===w.id;
+    h+=`<g class="node" onclick="pick('${w.id}')"><circle cx="${w.x}" cy="${w.y}" r="${on?17:13}" fill="${C(w.status)}" class="${w.status==='working'?'pulse':''}" stroke="var(--ink)" stroke-width="${on?2:0}"/>
+    <text x="${w.x}" y="${w.y+(w.y<cy?-20:28)}" text-anchor="middle">${esc(w.desc.slice(0,30))}</text></g>`;
+  });
+  h+=`<g class="node" onclick="pick('orch')"><circle cx="${cx}" cy="${cy}" r="${sel==='orch'?34:30}" fill="var(--orch)" class="${S.bg==='busy'?'pulse':''}" stroke="var(--ink)" stroke-width="${sel==='orch'?2:0}"/>
+  <text x="${cx}" y="${cy+4}" text-anchor="middle" style="fill:#fff;font-weight:600">Orchestrator</text></g>`;
+  g.innerHTML=h;
+}
+
+function feed(){
+  const f=document.getElementById('feed'), sp=document.getElementById('spec');
+  pinnedBottom=f.scrollHeight-f.scrollTop-f.clientHeight<40;
+  let evs, title;
+  if(sel==='orch'){evs=S.events; title='Orchestrator activity'; sp.innerHTML='';}
+  else{const w=S.workers.find(x=>x.id===sel); if(!w){sel='orch';return feed();}
+    evs=w.events; title=`Worker: ${w.desc} — ${w.status} · ${w.model} · ${w.tools} steps`;
+    sp.innerHTML=`<div class="mute" style="font-size:12px">Spec from orchestrator · branch ${esc(w.branch)}</div><div class="spec">${esc(w.spec)}</div>`;}
+  document.getElementById('feedtitle').textContent=title;
+  f.innerHTML=evs.map(e=>`<div class="ev ${e.kind}"><div class="t">${clock(e.t)} · ${e.kind}</div><div class="h">${esc(e.kind==='say'?'':e.title)}</div>${e.body?`<div class="b">${esc(e.body)}</div>`:''}</div>`).join('');
+  if(pinnedBottom) f.scrollTop=f.scrollHeight;
+}
+
+function lanes(){
+  const ws=S.workers; if(!ws.length){document.getElementById('lanes').innerHTML='<span class="mute">No workers yet</span>';return;}
+  const t0=Math.min(...ws.map(w=>w.start)), t1=S.now, span=Math.max(t1-t0,60);
+  document.getElementById('span').textContent=`${clock(t0)} → now`;
+  document.getElementById('lanes').innerHTML=ws.slice().reverse().map(w=>{
+    const l=(w.start-t0)/span*100, r=Math.max(((w.status==='working'?t1:w.last)-w.start)/span*100,.6);
+    return `<div class="lane" onclick="pick('${w.id}')"><span title="${esc(w.desc)}">${esc(w.desc)}</span><div class="bar"><i style="left:${l}%;width:${r}%;background:${C(w.status)}" class="${w.status==='working'?'pulse':''}"></i></div></div>`;}).join('');
+}
+
+function board(){
+  const cols=['open','running','failed','done'];
+  document.getElementById('board').innerHTML=cols.map(c=>{const ts=S.queue.filter(q=>q.status===c);
+    return `<div class="col"><h3>${c} (${ts.length})</h3>${(c==='done'?ts.slice().reverse():ts).map(q=>`<div class="task">${esc(q.goal)}</div>`).join('')}</div>`}).join('');
+}
+
+function pick(id){sel=id; pinnedBottom=true; render();}
+function render(){header();graph();feed();lanes();board();}
+async function tick(){try{S=await (await fetch('/api/state')).json(); render();}catch(e){document.getElementById('now').textContent='Viewer server not reachable — is swarm-view.py running?';}}
+tick(); setInterval(tick,2000);
+</script>
+</body>
+</html>
