@@ -912,10 +912,16 @@ def _plain_error(text):
     low = t.lower()
     for raw, words in _ERRNO_WORDS:
         if raw in low:
-            head = re.split(r":\s*\[errno|\s*\(\[errno|\[errno", t, maxsplit=1, flags=re.I)[0].strip(" :(")
-            return (head + ": " + words) if head and "errno" not in head.lower() and len(head) < 80 else words[0].upper() + words[1:]
+            head = re.split(r"\s*[:(]?\s*\[errno", t, maxsplit=1, flags=re.I)[0]
+            i = head.lower().find(raw)
+            if i >= 0:
+                head = head[:i]
+            head = head.strip(" :(")
+            return (head + ": " + words) if head and len(head) < 80 else words[0].upper() + words[1:]
     t = re.sub(r"\[Errno -?\d+\]\s*", "", t)
     t = re.sub(r"\b[A-Z][A-Za-z]+(?:Error|Exception)\b:?\s*", "", t)
+    if t.strip().lower() in ("none", "null", "false"):
+        return "That didn't work"
     return t.strip() or "That didn't work"
 
 

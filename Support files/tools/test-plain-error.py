@@ -21,6 +21,14 @@ CASES = [
     ("error: the disk is busy", "The disk is busy."),
 ]
 
+PLAIN_CASES = [
+    ("could not connect: Connection refused", "could not connect: the other side isn't answering"),
+    ("None", "That didn't work"),
+    ("[Errno 2] No such file or directory", "That file or folder isn't there"),
+    ("could not read a.txt: [Errno 2] No such file or directory: '/root/a.txt'",
+     "could not read a.txt: that file or folder isn't there"),
+]
+
 failed = 0
 for raw, want in CASES:
     got = agent._shortcut_words("x", {}, raw)
@@ -29,6 +37,14 @@ for raw, want in CASES:
     else:
         failed += 1
         print("FAIL", repr(raw), "got", repr(got), "want", repr(want))
+
+for raw, want in PLAIN_CASES:
+    got = agent._plain_error(raw)
+    if got == want:
+        print("ok _plain_error", repr(raw), "->", repr(got))
+    else:
+        failed += 1
+        print("FAIL _plain_error", repr(raw), "got", repr(got), "want", repr(want))
 
 if failed:
     print("%d failed" % failed)
