@@ -4,6 +4,17 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.3
+- The first-run wizard starts on "On its own" (hands-off).
+- Tool errors and desk messages are in plain words.
+- Wi-Fi connects without a fixed 4-second wait.
+- "Delete the folder X" works without the model.
+- Facts like a capital are looked up, not guessed.
+- "Skip" with nothing playing, "unlock" when not locked, and "hello" are answered at once.
+- Common typos in commands are fixed before matching.
+- "What did I say" is answered from the conversation.
+- Desk diagnostics are saved to /run/llmos/desk.log.
+
 ## 1.7.1 — in progress
 The owner decides how much it asks, and is never second-guessed.
 
