@@ -436,6 +436,9 @@ class DeskCtx:
     def close_window(self, wid):
         self.d.close_window(wid)
 
+    def open_mail_setup(self):
+        self.d.mail_form()
+
     def app_press(self, text):
         """An open app's control pressed by its label: {"ok", "page"} or None when no app is open."""
         return self.d.app_call("press", text)
