@@ -164,8 +164,22 @@ check("exact match wins over 'Save As' listed first", hit is not None and hit[0]
       hit and hit[1])
 hit = control.find_element(control._scope(ATSPI, ""), "  SAVE  ", ROLES)
 check("case and spaces are ignored for the exact match", hit is not None and hit[0] is N["save"])
-hit = control.find_element(control._scope(ATSPI, ""), "save a", ROLES)
-check("partial match when there is no exact one", hit is not None and hit[0] is N["as"], hit and hit[1])
+hit = control.find_element(control._scope(ATSPI, ""), "save as", ROLES)
+check("partial match (whole word) when there is no exact one", hit is not None and hit[0] is N["as"], hit and hit[1])
+# 1.7.2: whole-word partial, GTK menubar role "menu", and mnemonic underscores
+def _fe(tree, target, roles=control._CLICK_ROLES):
+    return control.find_element([tree], target, roles)
+_dock = Node("Dockerfile", "menu item")
+_file_menu = Node("File", "menu")
+check("(a) 'File' finds the menubar menu, not 'Dockerfile'",
+      _fe(Node("win", "frame", children=[_dock, _file_menu]), "File")[0] is _file_menu)
+check("(b) only 'Dockerfile' in the tree: 'File' is None",
+      _fe(Node("win", "frame", children=[_dock]), "File") is None)
+_edit_menu = Node("_Edit", "menu")
+check("(c) '_Edit' with role menu matches 'edit'",
+      _fe(Node("win", "frame", children=[_edit_menu]), "edit")[0] is _edit_menu)
+check("(d) 'Save As…' still matches partial 'save as'",
+      _fe(Node("win", "frame", children=[Node("Save As…", "push button")]), "save as") is not None)
 check("the desk's own window is never searched",
       control.find_element(control._scope(ATSPI, ""), "LLM OS", ROLES) is None)
 check("an inactive window is not searched by default",
