@@ -892,6 +892,33 @@ def _shortcut_reply(name, args, out):
     return _guard_words(out) or scrub(_MODEL_NOTE.sub(".", str(_shortcut_words(name, args, out))).strip())
 
 
+_ERRNO_WORDS = (("no such file or directory", "that file or folder isn't there"),
+                ("permission denied", "the system won't allow that"),
+                ("is a directory", "that's a folder, not a file"),
+                ("not a directory", "that's a file, not a folder"),
+                ("file exists", "something with that name is already there"),
+                ("no space left on device", "the disk is full"),
+                ("connection refused", "the other side isn't answering"),
+                ("timed out", "it took too long and was stopped"),
+                ("name or service not known", "that address can't be found"),
+                ("temporary failure in name resolution", "the internet isn't reachable right now"))
+
+
+def _plain_error(text):
+    """A tool's error in words for a person: no errno codes, no Python exception names, no 'no such tool'."""
+    t = str(text or "").strip()
+    if re.match(r"no such tool\b", t, re.I):
+        return "I can't do that on this computer yet"
+    low = t.lower()
+    for raw, words in _ERRNO_WORDS:
+        if raw in low:
+            head = re.split(r":\s*\[errno|\s*\(\[errno|\[errno", t, maxsplit=1, flags=re.I)[0].strip(" :(")
+            return (head + ": " + words) if head and "errno" not in head.lower() and len(head) < 80 else words[0].upper() + words[1:]
+    t = re.sub(r"\[Errno -?\d+\]\s*", "", t)
+    t = re.sub(r"\b[A-Z][A-Za-z]+(?:Error|Exception)\b:?\s*", "", t)
+    return t.strip() or "That didn't work"
+
+
 def _shortcut_words(name, args, out):
     low = str(out).lower()
     if name == "mail_read" and low.startswith("error: no message matches"):
@@ -899,7 +926,7 @@ def _shortcut_words(name, args, out):
         who = re.sub(r"^my\s+", "your ", who, flags=re.I)
         return f"No email from {who} that I can find." if who else "I couldn't find that email."
     if low.startswith("error: "):
-        return _cap(str(out)[7:].rstrip(".")) + "."
+        return _cap(_plain_error(str(out)[7:]).rstrip(".")) + "."
     if low.startswith("the owner declined this"):
         return "Okay, I left it alone."
     if low.startswith("the owner declined internet"):
