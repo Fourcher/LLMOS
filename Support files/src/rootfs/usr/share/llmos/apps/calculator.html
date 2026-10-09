@@ -11,7 +11,7 @@
 .keys .wide{grid-column:span 2}
 </style>
 <div class="calc">
-  <div class="screen"><div class="hist" id="hist"></div><div class="cur" id="cur">0</div></div>
+  <div class="screen"><div class="hist" id="hist"></div><div class="cur" id="cur" data-key="display">0</div></div>
   <div class="keys" id="keys"></div>
 </div>
 <script>
@@ -19,7 +19,7 @@ const K=[["C","fn"],["±","fn"],["%","fn"],["÷","op"],["7"],["8"],["9"],["×","
 let cur="0",acc=null,op=null,fresh=true,hist="";
 const $=id=>document.getElementById(id);
 function fmt(n){if(!isFinite(n))return"Error";const s=String(+n.toPrecision(12));return s.length>14?n.toExponential(8):s}
-function show(){$("cur").textContent=cur;$("hist").textContent=hist}
+function show(){$("cur").textContent=cur;$("cur").setAttribute("aria-label","display value: "+cur);$("hist").textContent=hist}
 function apply(a,b,o){return o==="+"?a+b:o==="−"?a-b:o==="×"?a*b:o==="÷"?a/b:b}
 function press(k){
  if(/[0-9]/.test(k)){cur=fresh||cur==="0"?k:cur+k;fresh=false}
