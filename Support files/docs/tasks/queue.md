@@ -17,9 +17,9 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [open] Computer control M2 (the AT-SPI goal): add at-spi2-core (Alpine signed repo; Atspi-2.0 GI typelib, py3-gobject3 already present) and make control.py use AT-SPI first for native windows' buttons/fields, OCR only as fallback (foot/non-a11y stay OCR). Design: docs/research/computer-control.md. Files: src/install.sh (package), control.py. Test (VM): click a named button in a native GTK window via AT-SPI; foot still via OCR.
 
 Notes:
-- docs/tasks/orchestration.md was written by a worker, not the owner. It is NOT adopted: its "parallel workers / worktrees / standing blanket consent" policy contradicts the owner's standing instructions above. No blanket consent for outside downloads, publishes, or shared-remote pushes is assumed.
+- docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Ask the owner only before an outside-Alpine download, a publish, or a shared-remote push.
 
 Session state note (2026-10-09):
 - dist/ is an INCOHERENT INTERMEDIATE: arm64 qcow2 was rebuilt to 1.7.2 to test M1, but RELEASE.json/SHA256SUMS still say 1.7.1 and the x86 image is the old 1.7.1 build. check-fresh says STALE (source now fb26f07). dist/SHA256SUMS is modified-uncommitted on purpose. Do NOT ship from dist/ until a full `tools/release.sh all` regenerates a coherent 1.7.2 (after M1/M2 land). The 1.7.1 zip on ~/Desktop is the real shipped 1.7.1.
 - M1 wizard experiment: do NOT dismiss onboarding by `pkill labwc` — it leaves a stale desk socket (Connection refused). Instead pre-set `onboarded:true` in the image build (or drive the wizard to completion via the desk's wizard_step) and boot fresh, then test the calculator.
-- Untracked and NOT adopted: docs/tasks/orchestration.md (worker-written policy that contradicts the owner's instructions).
+- docs/tasks/orchestration.md is adopted and tracked in git.
