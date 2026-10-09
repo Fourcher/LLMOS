@@ -406,6 +406,8 @@ TYPO_CASES = {
     "join wifi Home password teh1234": "join wifi Home password teh1234",
     "send mum a message saying wat a day": "send mum a message saying wat a day",
     "set an alarm for 7 pls": "set an alarm for 7 pls",
+    "join wifi teh-net": "join wifi teh-net",
+    "rename the folder teh to docs": "rename the folder teh to docs",
 }
 tbad = 0
 for text, want in TYPO_CASES.items():
