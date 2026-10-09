@@ -277,7 +277,7 @@ PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpag
             "show_screen", "schedule_task", "manage_tasks", "note_add", "notes_show", "note_done", "note_remove",
             "set_appearance", "change_setting", "show_panel", "open_app", "play_media", "media_control", "set_volume",
             "set_brightness", "show_files", "open_file", "delete_file", "restore_file", "empty_trash", "screenshot",
-            "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program",
+            "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program", "security_check", "scan_network", "web_security_scan",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
             "mail_delete", "mail_triage", "mail_setup", "show_image", "system_panel", "set_wallpaper",
             "manage_models", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
@@ -492,6 +492,65 @@ def _flatpak(app_id):
     return False, f"install failed: {clip(err, 500)}"
 
 
+@tool("security_check", "Check this computer's security in plain words: scan the home folder for viruses (ClamAV), "
+      "and list the network ports that are open on this computer. Read-only: it changes nothing.",
+      {}, [], risk=SAFE, available=lambda: shutil.which("clamscan") is not None)
+def security_check(a, ctx):
+    home = config.home()
+    lines = []
+    try:
+        p = subprocess.run(["clamscan", "-r", "--no-summary", "-i", home], capture_output=True, text=True, timeout=900)
+        infected = [ln for ln in p.stdout.splitlines() if ln.strip().endswith("FOUND")]
+        lines.append(f"Virus scan of your home folder: {len(infected)} infected file{'s' if len(infected) != 1 else ''} found."
+                     + ("".join(f" {ln.split(':', 1)[0]} ({ln.rsplit(':', 1)[-1].strip().replace(' FOUND', '')})" for ln in infected[:5])
+                        if infected else " Nothing harmful was found."))
+    except (OSError, subprocess.SubprocessError) as e:
+        lines.append(f"The virus scan could not run: {e}")
+    if shutil.which("nmap"):
+        try:
+            p = subprocess.run(["nmap", "-Pn", "--open", "-p", "1-1024", "127.0.0.1"], capture_output=True, text=True, timeout=300)
+            ports = [ln.split("/")[0] for ln in p.stdout.splitlines() if "/tcp" in ln and " open " in ln]
+            lines.append("Open ports on this computer: " + (", ".join(ports) if ports else "none in the common range (1-1024).") + ".")
+        except (OSError, subprocess.SubprocessError) as e:
+            lines.append(f"The port check could not run: {e}")
+    return " ".join(lines)
+
+
+@tool("scan_network", "Scan a machine on the owner's own network for open ports, to see what it offers. Only the owner's own "
+      "devices: a private address (192.168.x.x, 10.x.x.x, 172.16-31.x.x) or this computer. Read-only.",
+      {"address": STR}, ["address"], risk=CHANGE, network=True, available=lambda: shutil.which("nmap") is not None)
+def scan_network(a, ctx):
+    addr = str(a.get("address", "")).strip()
+    if not re.fullmatch(r"(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|127\.0\.0\.1|localhost)", addr):
+        return "error: only a private address on the owner's own network (or this computer) can be scanned"
+    try:
+        p = subprocess.run(["nmap", "-Pn", "--open", "-T4", "-p", "1-1024", addr], capture_output=True, text=True, timeout=600)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"error: the scan could not run: {e}"
+    ports = [ln.strip() for ln in p.stdout.splitlines() if "/tcp" in ln and " open " in ln]
+    return f"Open ports on {addr}: " + (", ".join(ports) if ports else "none in the common range (1-1024).")
+
+
+@tool("web_security_scan", "Check a website or web app for known security problems (nikto), in plain words. Only for a "
+      "site the owner runs or has written permission to test: a local address, or the owner's own domain. Read-only checks.",
+      {"address": STR}, ["address"], risk=CHANGE, network=True,
+      available=lambda: shutil.which("nikto.pl") is not None or shutil.which("nikto") is not None)
+def web_security_scan(a, ctx):
+    addr = str(a.get("address", "")).strip()
+    if not re.fullmatch(r"(?:https?://)?[\w.-]+(?::\d{1,5})?(?:/\S*)?", addr):
+        return "error: give a web address to check"
+    url = addr if addr.startswith("http") else "http://" + addr
+    tool = shutil.which("nikto") or shutil.which("nikto.pl")
+    try:
+        p = subprocess.run([tool, "-h", url, "-Tuning", "1234", "-maxtime", "300"], capture_output=True, text=True, timeout=600)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"error: the web check could not run: {e}"
+    findings = [ln[2:].strip() for ln in p.stdout.splitlines() if ln.startswith("+ ") and "Target" not in ln][:12]
+    if not findings:
+        return f"No known problems were reported for {url} by this check."
+    return f"{len(findings)} things to look at on {url}: " + " ".join(f"({i}) {f}" for i, f in enumerate(findings, 1))
+
+
 @tool("analyze_program", "Look inside a program or app the owner has (an Electron/JavaScript app folder, or a file) to see "
       "how it is built, what it does and what it calls: REA, an open analysis tool. Only files and folders in the owner's "
       "home folder. Use it to find out how a feature of a real app works, so the same feature can be built here. "
@@ -511,8 +570,17 @@ def analyze_program(a, ctx):
     if p.returncode != 0:
         msg = " ".join((p.stdout or p.stderr or "").split())[:400]
         return f"error: the analysis did not finish: {msg}"
-    text = "\n".join(out)[:4000]
-    return f"analysed {os.path.basename(target)}. Result (evidence hashed and kept by REA):\n{text}"
+    text = "\n".join(out)
+    files = sorted(set(re.findall(r"(?m)^\s*(?:path|file|name):\s*(\S+\.(?:js|cjs|mjs|ts|json|html|css|png|txt|md))", text)))
+    funcs = len(re.findall(r"(?i)\bfunction|=>|class\s", text))
+    lines = [f"Analysed {os.path.basename(target)}: a {'folder' if os.path.isdir(target) else 'file'} of "
+             f"{len(files) or 'some'} source file{'s' if len(files) != 1 else ''}."]
+    if files:
+        lines.append("Files: " + ", ".join(os.path.basename(f) for f in files[:12]) + ".")
+    if funcs:
+        lines.append(f"It defines about {funcs} functions or classes.")
+    lines.append("The full analysis is recorded with a hash by REA.")
+    return " ".join(lines)
 
 
 @tool("install_app", "Install a program: an Alpine package name, or what people call it ('spotify', 'vs code', 'zoom', 'gimp'); apps that are not Alpine packages come from Flathub. Then open it with open_app.",
