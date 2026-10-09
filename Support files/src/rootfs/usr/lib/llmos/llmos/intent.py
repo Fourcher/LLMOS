@@ -10,6 +10,22 @@ import re
 
 from . import i18n
 
+_TYPOS = {"opn": "open", "oepn": "open", "chang": "change", "chnage": "change", "volum": "volume", "voluem": "volume",
+          "wat": "what", "waht": "what", "hwo": "how", "teh": "the", "remindme": "remind me", "pls": "please", "plz": "please",
+          "brightnes": "brightness", "screne": "screen", "musci": "music", "pley": "play", "stpo": "stop", "timr": "timer",
+          "settigns": "settings", "setings": "settings", "wifi's": "wifi", "calender": "calendar", "calcualtor": "calculator"}
+_TYPO_RE = re.compile(r"\b(" + "|".join(re.escape(k) for k in sorted(_TYPOS, key=len, reverse=True)) + r")\b", re.I)
+
+
+def fix_typos(text):
+    """Common misspellings of command words, fixed before matching (the owner's words are otherwise kept as typed)."""
+    t = str(text or "")
+    if re.search(r"\b(?:password|passphrase|pin|saying|says|that says|message|email|text|note|write|type)\b|[\"“”']", t, re.I):
+        return t                              # the owner's own words (a message, a secret) are never touched
+    words = t.split(" ")
+    head = " ".join(words[:3])                # only the command words at the start
+    return _TYPO_RE.sub(lambda m: _TYPOS[m.group(1).lower()], head) + ("" if len(words) <= 3 else " " + " ".join(words[3:]))
+
 # "remember (that) X", "don't forget (that) X", "keep in mind (that) X",
 # "make a note (that) X", "note (that) X". The connector is captured: a "to"
 # connector ("remember to buy milk") is a reminder/task, not a fact, so we

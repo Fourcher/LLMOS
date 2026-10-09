@@ -2141,7 +2141,7 @@ class Desk:
         """Queue a request; `done` (an Event) is set when its turn is over. While the model is still working on an
         earlier one, something the OS does by itself (open the settings, show the lists, dark mode…) is done at once
         instead of waiting behind it."""
-        text = text.strip()
+        text = intent.fix_typos(text.strip())
         if not text:
             if done:
                 done.set()
