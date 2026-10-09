@@ -206,11 +206,11 @@ def _find_key(want, lines):
     return None
 
 
-def field_for(target, lines=None):
+def field_for(target, lines=None, atspi=True):
     """The box to write in for these words: the box whose own words (a grey hint inside it) match, else the empty box
     nearest to the matching words (a label beside or above it), else the only box on the screen."""
     want = str(target or "").lower()
-    if want:
+    if want and atspi:
         d = _atspi_find(want, _FIELD_ROLES)
         if d:
             return dict(d, field=True)
@@ -221,20 +221,21 @@ def field_for(target, lines=None):
     for d in fields:
         if d["text"] and want and want in d["text"].lower():
             return d
-    near = find(want, [d for d in lines if d["text"]]) if want else None
+    near = find(want, [d for d in lines if d["text"]], atspi=False) if want else None
     if near:
         return min(fields, key=lambda f: abs(f["x"] - near["x"]) / 3 + abs(f["y"] - near["y"]) + (0 if f["y"] >= near["y"] - 4 else 200))
     return fields[0] if len(fields) == 1 else max(fields, key=lambda f: f["w"])
 
 
-def find(target, lines=None):
+def find(target, lines=None, atspi=True):
     """The place on the screen that best matches the words: a whole line, or a word inside a line."""
     want = re.sub(r"\s+", " ", str(target or "")).strip().lower()
     if not want:
         return None
-    d = _atspi_find(want, _CLICK_ROLES + _FIELD_ROLES)
-    if d is not None:
-        return d
+    if atspi:
+        d = _atspi_find(want, _CLICK_ROLES + _FIELD_ROLES)
+        if d is not None:
+            return d
     _log(f"ocr find {want!r} (no accessible match)")
     lines = read_screen() if lines is None else lines
     if len(want) <= 2:

@@ -3663,7 +3663,7 @@ def fill_in(a, ctx):
                 by_atspi = True
             else:
                 lines = control.read_screen()          # OCR only when AT-SPI did not find the box
-                d = control.field_for(want or field, lines) or control.find(want or field, lines)
+                d = control.field_for(want or field, lines, atspi=False) or control.find(want or field, lines, atspi=False)
         except RuntimeError as e:
             return f"error: {e}"
         if not d:

@@ -64,8 +64,8 @@ class FakeControl:
         lines = self.read_screen() if lines is None else lines
         return "screen 1x1\n" + "\n".join(f"[{d['x']},{d['y']}] {d['text']}" for d in lines[:limit])
 
-    def find(self, target, lines=None):
-        d = self._atspi(target)
+    def find(self, target, lines=None, atspi=True):
+        d = self._atspi(target) if atspi else None
         if d is not None:
             return d
         lines = self.read_screen() if lines is None else lines
@@ -74,8 +74,8 @@ class FakeControl:
                 return d
         return None
 
-    def field_for(self, target, lines=None):
-        d = self._atspi(target)
+    def field_for(self, target, lines=None, atspi=True):
+        d = self._atspi(target) if atspi else None
         if d is not None:
             return dict(d, field=True)
         lines = self.read_screen() if lines is None else lines
@@ -193,6 +193,34 @@ with patch.object(REAL_CONTROL, "_atspi_req", side_effect=fake_bus), \
     check("(c) real control: fill_in AT-SPI miss falls back to OCR (2 reads, as before)", ocr_count["n"] == 2,
           f"ocr={ocr_count['n']}")
     check("(c) real control: fill_in AT-SPI miss clicks the OCR box", ("click", 320, 410) in real_actions, real_actions)
+
+# ---------------------------------------------------------------- (d) AT-SPI misses: no repeated AT-SPI lookups in fill_in
+# AT-SPI has no match for the field: the real field_for and find each ask AT-SPI once (a timeout costs 2.5 s each),
+# and the OCR path after them asks AT-SPI no more times.
+_real_atspi_find = REAL_CONTROL._atspi_find
+atspi_calls = {"n": 0}
+
+
+def counting_atspi_find(target, roles, window=""):
+    atspi_calls["n"] += 1
+    return _real_atspi_find(target, roles, window)
+
+
+real_actions.clear()
+ocr_count["n"] = 0
+with patch.object(REAL_CONTROL, "_atspi_req", return_value={"ok": False, "why": "no match"}), \
+        patch.object(REAL_CONTROL, "_atspi_find", side_effect=counting_atspi_find), \
+        patch.object(REAL_CONTROL, "read_screen", side_effect=counting_read_screen), \
+        patch.object(REAL_CONTROL, "click", side_effect=lambda x, y, b="left", d=False: real_actions.append(("click", x, y)) or True), \
+        patch.object(REAL_CONTROL, "type_text", side_effect=lambda t: real_actions.append(("type", t)) or (True, "")), \
+        patch.object(REAL_CONTROL, "press", side_effect=lambda k: real_actions.append(("press", k)) or (True, "")), \
+        patch.object(REAL_CONTROL, "_scale", return_value=1.0):
+    atspi_calls["n"] = 0
+    out = run_with(REAL_CONTROL, lambda: FILL({"field": "search box", "text": "hi"}, CTX))
+    check("(d) fill_in AT-SPI miss: at most 2 control._atspi_find calls (field_for + find)", atspi_calls["n"] <= 2,
+          f"atspi_find={atspi_calls['n']} out={out!r}")
+    check("(d) fill_in AT-SPI miss: the OCR box is still clicked and typed in", ("click", 320, 410) in real_actions
+          and ("type", "hi") in real_actions, real_actions)
 
 print("OK" if not FAILS else f"FAILED: {len(FAILS)}")
 sys.exit(1 if FAILS else 0)
