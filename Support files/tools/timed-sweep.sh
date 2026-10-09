@@ -5,11 +5,17 @@
 set -u
 
 PHRASES_FILE=${1:?usage: tools/timed-sweep.sh PHRASES_FILE [IMG]}
+case "$PHRASES_FILE" in /*) ;; *) PHRASES_FILE="$PWD/$PHRASES_FILE" ;; esac
+[ -f "$PHRASES_FILE" ] || { echo "no such phrases file: $PHRASES_FILE"; exit 2; }
 cd "/Volumes/Files/Claude Work Area/LLMOS/Support files" || exit 1
 IMG=${2:-dist/llmos-arm64.qcow2}
 mkdir -p run
 
+# Stop the VM on any exit.
+stop_vm() { python3 -c "import socket;s=socket.socket(socket.AF_UNIX);s.connect('run/tmon.sock');s.recv(999);s.sendall(b'quit\n')" 2>/dev/null || true; }
+
 LLMOS_TESTSHELL=1 tools/boot-target.sh "$IMG" 4096
+trap stop_vm EXIT
 
 # Run a command in the VM test shell. The split "OK""tag" keeps the echoed
 # command line from matching the expected OK<tag> marker.
@@ -62,8 +68,5 @@ echo "timed-sweep: $rows phrase(s), $fast took <=3 s, $slow took >3 s"
 echo "phrases over 3 s, slowest first:"
 tail -n +2 "$TSV" | awk -F'\t' '$2>3' | sort -t$'\t' -k2,2nr | cut -f1-3 | sed 's/^/  /'
 echo "results: $TSV"
-
-# Stop the VM.
-python3 -c "import socket;s=socket.socket(socket.AF_UNIX);s.connect('run/tmon.sock');s.recv(999);s.sendall(b'quit\n')"
 
 exit 0
