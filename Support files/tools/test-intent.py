@@ -159,8 +159,13 @@ CASES = {
     "take a screenshot": ("screenshot", {}),
     "open the file ~/Documents/notes.txt": ("open_file", {"path": "~/Documents/notes.txt"}),
     "delete the file /root/Downloads/report.pdf": ("delete_file", {"path": "/root/Downloads/report.pdf"}),
+    "delete the folder Test": ("delete_file", {"path": "~/Test"}),
+    "delete the file called notes.txt": ("delete_file", {"path": "~/notes.txt"}),
+    "remove my folder old-stuff": ("delete_file", {"path": "~/old-stuff"}),
     "open the file cabinet": None,
     "show my files to Bob": None,
+    "remove the folder ..": None,
+    "remove the folder .": None,
     # lists, notes, trash
     "add milk to my shopping list": ("note_add", {"text": "milk", "list": "shopping"}),
     "put call the dentist on my to-do list": ("note_add", {"text": "call the dentist", "list": "to-do"}),

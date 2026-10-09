@@ -770,7 +770,7 @@ _EDIT_FILE = re.compile(r"^\s*(?:please\s+)?(?:edit|change|modify)\s+(?:the\s+)?
 _PRINT_FILE = re.compile(r"^\s*(?:please\s+)?print\s+(?:the\s+)?(?:file\s+)?(?P<p>(?:~|/)\S.*?)\s*$", re.I)
 _WALL_FILE = re.compile(r"^\s*(?:please\s+)?(?:set|use|make)\s+(?P<p>(?:~|/)\S.*?)\s+(?:as|my)\s+(?:my\s+|the\s+)?(?:wallpaper|background|desktop background)\s*$", re.I)
 _OPEN_FILE = re.compile(r"^\s*(?:please\s+)?(?:open|show|read|view)\s+(?:me\s+)?(?:the\s+)?file\s+(?P<p>(?:~|/).*?)\s*$", re.I)
-_DEL_FILE = re.compile(r"^\s*(?:please\s+)?(?:delete|remove|trash)\s+(?:the\s+)?(?:file|folder)\s+(?P<p>(?:~|/)\S*)\s*[.!]?\s*$", re.I)
+_DEL_FILE = re.compile(r"^\s*(?:please\s+)?(?:delete|remove|trash)\s+(?:the\s+|my\s+)?(?:file|folder)\s+(?:called\s+|named\s+)?(?P<p>(?:~|/)\S*|\w[\w.-]*)\s*[.!]?\s*$", re.I)
 
 
 _LIST_W = r"[\w' -]+?"
@@ -991,7 +991,8 @@ def _files(text):
         return ("open_file", {"path": m.group("p")})
     m = _DEL_FILE.match(text)
     if m:
-        return ("delete_file", {"path": m.group("p")})
+        p = m.group("p")
+        return ("delete_file", {"path": p if p.startswith(("~", "/")) else "~/" + p})
     m = _FILES.match(text)
     if not m:
         return None
