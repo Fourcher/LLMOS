@@ -5,13 +5,15 @@
 #     Start Here (Mac).command    Start Here (Windows).bat    Start Here (Linux).sh
 #     Support files/              LLM OS Setup, the two ISOs (PCs and Intel Macs / ARM), checksums, the guide
 #
-# usage: tools/package.sh [output.zip]      (default: ~/Desktop/LLM OS <version>.zip)
+# usage: tools/package.sh [output.zip]      (default: <repo>/packages/LLM OS <version>.zip)
+# Never writes to the Desktop or anywhere outside the project working folder.
 # Refuses to package images that don't match the current OS source (tools/check-fresh.py).
 set -euo pipefail
 cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 TOP=..
 VER=$(cat VERSION)
-OUT=${1:-"$HOME/Desktop/LLM OS $VER.zip"}
+OUT=${1:-"$TOP/packages/LLM OS $VER.zip"}
+mkdir -p "$(dirname "$OUT")"
 python3 tools/check-fresh.py >/dev/null || { python3 tools/check-fresh.py; echo "!! rebuild first (tools/release.sh), then package"; exit 1; }
 for f in dist/llmos-x86_64.iso dist/llmos-arm64.iso dist/SHA256SUMS dist/setup/llmos-setup.py dist/setup/index.html \
          dist/setup/start.sh dist/setup/start.ps1 "$TOP/Start Here (Mac).command" "$TOP/Start Here (Windows).bat" "$TOP/Start Here (Linux).sh"; do

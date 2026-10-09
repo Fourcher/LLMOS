@@ -12,3 +12,5 @@ models/
 delivered/
 *.gguf
 .claude/worktrees/
+/packages/
+dist/*.zip
