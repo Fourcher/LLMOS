@@ -24,7 +24,7 @@ _LAST = {"lines": [], "at": 0.0, "size": (0, 0)}
 ATSPI_ENV = os.environ.get("LLMOS_A11Y_ENV", "/run/llmos/a11y.env")
 _ATSPI_TIMEOUT = 2.5
 _CLICK_ROLES = ("push button", "toggle button", "check box", "radio button", "menu item", "check menu item",
-                "radio menu item", "link", "button")
+                "radio menu item", "menu", "link", "button")
 _FIELD_ROLES = ("entry", "text", "password text")
 _DESK_APPS = ("llmos", "llmos-desk", "python3", "python")       # the desk's own webview: the OS's apps have their own bridge
 _HIT = {}                                                       # the AT-SPI element the last find() returned
@@ -415,12 +415,12 @@ def find_element(frames, target, roles, children=_children, max_nodes=1500):
             role = (node.get_role_name() or "").lower()
         except Exception:
             raw, role = "", ""
-        name = _norm(raw)
+        name = _norm(raw.replace("_", ""))
         if name and role in roles:
             if name == want:
                 exact = (node, raw, role)
                 break
-            if partial is None and want in name:
+            if partial is None and re.search(r"(?<!\w)" + re.escape(want) + r"(?!\w)", name):
                 partial = (node, raw, role)
         queue.extend(children(node))
     return exact or partial
