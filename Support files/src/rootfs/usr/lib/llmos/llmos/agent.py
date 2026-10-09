@@ -1154,7 +1154,13 @@ def execute(ctx, name, arguments):
     if not tool.available():
         # For gated tools that are unavailable, give a helpful message
         if name.startswith("mail_"):
-            return "error: set up email to use this tool"
+            opener = getattr(ctx, "open_mail_setup", None)
+            if callable(opener):
+                try:
+                    opener()
+                except Exception:
+                    pass
+            return "Email isn't set up yet. Type your address and password in the Set up email window."
         return f"error: no such tool '{name}'"
     if name == "make_app" and not _APP_WORDS.search(str(getattr(ctx, "current_request", "") or "")):
         # "write a birthday message" is words, not an app: the reply itself is the answer
