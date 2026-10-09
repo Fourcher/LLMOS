@@ -39,6 +39,15 @@ for raw, want in [("org.mozilla.firefox", "Firefox"), ("foot", "Foot"), ("org.gn
     got = eval("str(raw)" + NAME_EXPR, {"raw": raw})
     check("name: %s -> %s" % (raw, want), got == want)
 
+names = ["Calculator", "calculator", "Firefox", "Firefox", ""]
+seen, uniq = set(), []
+for n in names:
+    if n.strip() and n.lower() not in seen:
+        seen.add(n.lower())
+        uniq.append(n)
+names = uniq
+check("dedup: case and repeats -> %s" % names, names == ["Calculator", "Firefox"])
+
 py_compile.compile(DESK, doraise=True)
 check("py_compile desk.py", True)
 

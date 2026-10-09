@@ -2294,6 +2294,12 @@ class Desk:
             except Exception:
                 pass
             names += [str(s.get("title")) for s in self.windows.values() if s.get("title") and str(s.get("title")) not in names]
+            seen, uniq = set(), []
+            for n in names:
+                if n.strip() and n.lower() not in seen:
+                    seen.add(n.lower())
+                    uniq.append(n)
+            names = uniq
             self.last_reply = self._said = ("Open now: " + ", ".join(names) + ".") if names else "Nothing is open, just the desk."
             return True
         r = self._system_shortcut(low, line)
