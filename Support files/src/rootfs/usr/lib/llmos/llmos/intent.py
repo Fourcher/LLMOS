@@ -1414,8 +1414,8 @@ def _everyday2(text):
                  r"(?:i|that\s+i)\s+(?:just\s+)?(?:downloaded|got|saved)(?:\s+(?:today|yesterday|last night))?$", t, re.I)
     if m:
         return ("open_latest", {"where": "downloads", "kind": m.group("k").lower()})
-    # email said plainly: "send craig@x.com an email saying …", "reply to the last email saying …", "email my resume to craig@x.com"
-    m = re.match(r"^(?:please\s+)?send\s+(?P<to>[\w.+-]+@[\w.-]+)\s+(?:an?\s+)?e-?mail\s+(?:saying|that|to\s+say|telling\s+(?:him|her|them)|with)\s+(?P<b>.+)$", t, re.I)
+    # email said plainly: "send craig@x.com an email saying …", "send bob@x.com a quick email saying …", "reply to the last email saying …", "email my resume to craig@x.com"
+    m = re.match(r"^(?:please\s+)?send\s+(?P<to>[\w.+-]+@[\w.-]+)\s+(?:an?\s+)?(?:(?:quick|short|brief|little)\s+)?e-?mail\s+(?:saying|that|to\s+say|telling\s+(?:him|her|them)|with)\s+(?P<b>.+)$", t, re.I)
     if m:
         body = m.group("b").strip().strip("'\"")
         body = body[:1].upper() + body[1:]

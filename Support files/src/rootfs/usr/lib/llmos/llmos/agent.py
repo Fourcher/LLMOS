@@ -1058,7 +1058,12 @@ def execute(ctx, name, arguments):
     if cancel is not None and cancel.is_set():        # the owner pressed Stop: no further step of this turn runs
         raise Cancelled()
     tool = tools.REGISTRY.get(name)
-    if not tool or not tool.available():
+    if not tool:
+        return f"error: no such tool '{name}'"
+    if not tool.available():
+        # For gated tools that are unavailable, give a helpful message
+        if name.startswith("mail_"):
+            return "error: set up email to use this tool"
         return f"error: no such tool '{name}'"
     if name == "make_app" and not _APP_WORDS.search(str(getattr(ctx, "current_request", "") or "")):
         # "write a birthday message" is words, not an app: the reply itself is the answer
