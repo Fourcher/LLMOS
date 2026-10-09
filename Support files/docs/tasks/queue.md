@@ -46,16 +46,20 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [open] (process) PROBE own record (5 rounds reached): re-specs, worker stalls, VERIFY outcomes, idle gaps from git log + queue | role: probe | files: none | test: report
 - [done] (RUN: "timed-sweep: 45 phrase(s), 26 took <=3 s, 19 took >3 s"; run/timed-sweep.tsv) RUN tools/timed-sweep.sh docs/research/sweep-phrases.txt on 1.7.2 | role: run | files: none | test: run/timed-sweep.tsv
 - [done] (merged e02ff67 after VERIFY PASS: "GUARD_PASSED") package.sh: accept `check-fresh.py --built-commit` when HEAD moved on | role: fix | files: tools/package.sh | test: package.sh writes packages/LLM OS 1.7.2.zip
-- [open] (capability) WRONG: "what's the capital of australia" -> "Sydney" (71 s). Facts should come from a lookup, not a guess (BRIEF: research rather than guess) | role: fix after probe | test: VM reply "Canberra"
+- [done] (merged f5c6b83 after VERIFY PASS: line 42 + line 1255 no longer contradict; VM confirm in next sweep) (capability) WRONG: "what's the capital of australia" -> "Sydney" (71 s). Facts should come from a lookup, not a guess (BRIEF: research rather than guess) | role: fix after probe | test: VM reply "Canberra"
 - [open] (capability) WRONG: "show my biggest files" -> "18 items in /." | role: fix after probe
 - [open] (capability) WRONG: "click File" with nothing open -> "18 items in /." (21 s) | role: fix after probe
-- [open] (capability) WRONG: "skip this song" with nothing playing -> "Song stopped." | role: fix after probe
-- [open] (ui) SLOP: "unlock the screen" (not locked) -> model wrote /tmp/unlock_notice (14 s) | role: fix after probe
-- [open] (ui) "hello" -> "(checking the model)" | role: fix after probe
+- [done] (merged ee8bb24 + 0df554d after VERIFY PASS: "ok skip with nothing playing says 'Nothing is playing.'") (capability) WRONG: "skip this song" with nothing playing -> "Song stopped." | role: fix after probe
+- [done] (merged ee8bb24 VERIFY PASS: "The screen isn't locked.") (ui) SLOP: "unlock the screen" (not locked) -> model wrote /tmp/unlock_notice (14 s) | role: fix after probe
+- [done] (merged ee8bb24 VERIFY PASS: "Hi. What would you like to do?") (ui) "hello" -> "(checking the model)" | role: fix after probe
 - [open] (speed) TIMEOUT 240 s: "delete the folder Test" (answer came late: "The folder Test does not exist"), "what did I say a minute ago" | role: fix after probe
 - [open] (speed) slow model paths: translate 108 s, "chang the volum up" 48 s, "what's on my screen" 27 s, "opn firefox" 11 s, "wat time is it" 8 s, remind typo 12 s | role: fix after probe
-- [open] (reliability) timed-sweep harness: a timeout leaves the late reply to be read by the next phrase (row 10 shows row 8's reply); wait for the desk to be idle (desk-state busy=false) before the next phrase | role: fix | files: tools/timed-sweep.sh
-- [running] (reliability) desk.log empty: labwc -s does not apply the 2>> redirect; dup2 in /usr/bin/llmos desk-app | role: fix | files: src/rootfs/usr/bin/llmos
+- [done] (merged dae63d0 VERIFY PASS) (reliability) timed-sweep harness: a timeout leaves the late reply to be read by the next phrase (row 10 shows row 8's reply); wait for the desk to be idle (desk-state busy=false) before the next phrase | role: fix | files: tools/timed-sweep.sh
+- [done] (merged f72a34c VERIFY PASS: simulated dup2 wrote x and y to the log; VM confirm in next RUN) (reliability) desk.log empty: labwc -s does not apply the 2>> redirect; dup2 in /usr/bin/llmos desk-app | role: fix | files: src/rootfs/usr/bin/llmos
+- [open] (speed) typo words go to the model (48 s "chang the volum up", 11 s "opn firefox", 8 s "wat time is it", 12 s "remindme…"): add intent.fix_typos(text) word map applied in desk.say before queueing | role: fix (after the intent.py delete branch merges) | files: src/rootfs/usr/lib/llmos/llmos/intent.py src/rootfs/usr/lib/llmos/llmos/desk.py tools/test-intent.py
+- [open] (capability) "what did I say a minute ago" timed out (240 s): answer from this chat's history without the model | role: probe then fix
+- [open] (speed) "translate thank you to french" 108 s | role: probe (model time vs tool calls) via desk.log on the next build
+- [open] (reliability) next build 1.7.3 after this round's merges; RUN smokes + timed sweep again | role: run
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
