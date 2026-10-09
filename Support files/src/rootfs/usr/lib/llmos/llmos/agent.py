@@ -547,6 +547,26 @@ def _screen_steps(ctx, text):
     return ", ".join(left), notes + model_notes, page_text, result_value
 
 
+_BARE_CLICK = re.compile(r"^(?:please\s+)?(?:click|tap|press)\s+(?:on\s+)?(?:the\s+)?(?P<t>.+?)(?:\s+(?:button|menu|link|tab|item))?[.!]?$", re.I)
+
+
+def _bare_click(ctx, user_text):
+    """'click File' / 'click the Save button': one click by the control's words, no model. None when it isn't one
+    or the click failed (then the model takes it)."""
+    m = _BARE_CLICK.match(str(user_text or "").strip())
+    if not m or " then " in user_text.lower() or "," in user_text:
+        return None
+    t = m.group("t").strip()
+    if not t or len(t) > 40 or _one_key(t)[0]:
+        return None          # a single key ("press 7") is _screen_steps' job
+    if "click" not in tools.REGISTRY or not tools.REGISTRY["click"].available():
+        return None
+    out = execute(ctx, "click", {"text": t})
+    if _failed(out):
+        return None
+    return f"Clicked {t}."
+
+
 def run(ctx, user_text, history):
     """Run one user turn. Streams text through ctx, executes tools under the
     autonomy policy, appends to history, returns the final text."""
@@ -662,6 +682,15 @@ def run(ctx, user_text, history):
             history.append({"role": "user", "content": _for_history(user_text)})
             history.append({"role": "assistant", "content": reply})
             return reply
+
+    reply = _bare_click(ctx, user_text)
+    if reply:
+        st = ctx.new_stream()
+        ctx.on_text(st, reply)
+        ctx.end_stream(st)
+        history.append({"role": "user", "content": _for_history(user_text)})
+        history.append({"role": "assistant", "content": reply})
+        return reply
 
     # The same short request as before, whose tool calls depended on nothing that may have changed: they
     # run straight away and only the answer is written (see _replay). Not when the owner named a route.
