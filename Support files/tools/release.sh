@@ -15,6 +15,13 @@ for a in "$@"; do case "$a" in
 esac; done
 step() { printf '\n==== %s (%s) ====\n' "$1" "$(date +%H:%M:%S)"; }
 
+# Pre-check before any build: VERSION and __init__.py must agree (install.sh stamps the image from one,
+# build-iso.sh and release-json.py read the other). Abort here rather than ship mismatched artifacts.
+if ! python3 tools/test-version.py; then
+    echo "ABORT: version mismatch between VERSION and src/rootfs/usr/lib/llmos/llmos/__init__.py. Fix it, then re-run." >&2
+    exit 1
+fi
+
 if [ "$ARCH" = all ] || [ "$ARCH" = arm64 ]; then
     step "arm64 image"; tools/build-image.sh
     step "arm64 ISO";   tools/build-iso.sh arm64
