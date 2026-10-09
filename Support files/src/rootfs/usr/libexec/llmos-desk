@@ -13,9 +13,13 @@ export XDG_RUNTIME_DIR=/run/llmos
 mkdir -p "$XDG_RUNTIME_DIR" && chmod 700 "$XDG_RUNTIME_DIR"
 export XDG_CONFIG_DIRS=/etc/xdg XDG_DATA_DIRS=/usr/share:/usr/local/share
 export XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=wlroots   # (the screen-sharing portal for calls looks for it)
-# GTK and WebKit look for an accessibility bus and a settings portal at
-# start-up and wait for them to time out; there are none here
-export GTK_A11Y=none NO_AT_BRIDGE=1 GTK_USE_PORTAL=0
+# GTK and WebKit look for a settings portal at start-up and wait for it to time out; there is none here.
+# The accessibility bus (AT-SPI) is NOT disabled: native programs publish their buttons and fields on it, and
+# control.py presses them there before it falls back to reading the screen. (Earlier builds set GTK_A11Y=none
+# and NO_AT_BRIDGE=1 to skip the bus; the bus is now started below, so there is nothing to wait for.)
+export GTK_USE_PORTAL=0
+A11Y_ENV=/run/llmos/a11y.env   # the session bus address, read by control.py (the agent process cannot see this bus otherwise)
+rm -f "$A11Y_ENV"
 
 gpu=""
 for c in /sys/class/drm/card0 /sys/class/drm/card1; do
@@ -34,6 +38,14 @@ fi
 rm -f /run/seatd.sock
 # a private session bus for the desk (GTK/WebKit expect one; nothing else uses it)
 if command -v dbus-run-session >/dev/null 2>&1; then
-    exec dbus-run-session -- seatd-launch -- labwc -s "/usr/bin/llmos desk-app"
+    # inside the session bus: publish its address for control.py, start the AT-SPI registry (org.a11y.Bus, so GTK and
+    # WebKit programs can publish their windows), then run the compositor. The address file goes when the session ends.
+    dbus-run-session -- sh -c '
+        printf "DBUS_SESSION_BUS_ADDRESS=%s\n" "$DBUS_SESSION_BUS_ADDRESS" > '"$A11Y_ENV"'
+        [ -x /usr/libexec/at-spi-bus-launcher ] && /usr/libexec/at-spi-bus-launcher --launch-immediately >/dev/null 2>&1 &
+        seatd-launch -- labwc -s "/usr/bin/llmos desk-app"
+        rm -f '"$A11Y_ENV"'
+    '
+    exit $?
 fi
 exec seatd-launch -- labwc -s "/usr/bin/llmos desk-app"

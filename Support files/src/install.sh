@@ -120,7 +120,7 @@ PKGS="
   eudev udev-init-scripts
   iwd dbus wireless-regdb
   sfdisk lsblk blkid wipefs partx efibootmgr rsync os-prober
-  labwc gtk4.0 webkit2gtk-6.0 py3-gobject3 grim wtype
+  labwc gtk4.0 webkit2gtk-6.0 py3-gobject3 grim wtype at-spi2-core py3-gobject3-atspi
   gst-plugins-good gst-plugins-bad gst-libav
   mesa-dri-gallium mesa-egl mesa-gles mesa-gbm
   font-inter font-jetbrains-mono font-noto font-noto-emoji font-noto-cjk
