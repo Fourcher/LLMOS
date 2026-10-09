@@ -47,15 +47,29 @@ while IFS= read -r line || [ -n "$line" ]; do
     phrase="$line"
     esc=$(printf '%s' "$phrase" | sed 's/"/\\"/g')
 
+    # Wait until the desk is idle, so a late reply to a timed-out phrase is not read as this one's.
+    busy=$(R 'for i in $(seq 280); do llmos desk-state 2>/dev/null | grep -q "\"busy\": false" && break; sleep 1; done; llmos desk-state | grep -o "\"busy\": [a-z]*"' "W$n" 300)
+    busy_note=""
+    if ! printf '%s' "$busy" | grep -q '"busy": false'; then
+        busy_note="[desk still busy] "
+    fi
+
     # Reset the assistant's conversation state before each phrase.
     R "llmos desk-ctl testreset >/dev/null 2>&1; true" "Z$n" 30 >/dev/null
 
     t0=$(date +%s)
-    reply=$(R "llmos say \"$esc\" | grep -o '\"reply\": \"[^\"]*\"'" "S$n" 240)
+    raw=$(R "llmos say \"$esc\" | grep -o '\"reply\": \"[^\"]*\"'" "S$n" 240)
     t1=$(date +%s)
     secs=$((t1 - t0))
 
-    reply=$(printf '%s' "$reply" | tr '\t\r\n' '   ' | cut -c1-300)
+    # vmctl prints "[vmctl: TIMEOUT ...]" when the say call does not finish in time.
+    if printf '%s' "$raw" | grep -q 'vmctl: TIMEOUT'; then
+        reply="[timeout]"
+    else
+        reply="$raw"
+    fi
+
+    reply="$busy_note$(printf '%s' "$reply" | tr '\t\r\n' '   ' | cut -c1-300)"
     printf '%s\t%s\t%s\t%s\n' "$n" "$secs" "$phrase" "$reply" >> "$TSV"
     echo "[$n] ${secs}s  $phrase"
 done < "$PHRASES_FILE"
