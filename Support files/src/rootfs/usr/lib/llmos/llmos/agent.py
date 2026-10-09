@@ -427,12 +427,32 @@ def _one_key(tok):
 
 
 def _screen_steps(ctx, text):
-    """Do the steps of `text` that are plain screen actions; return (the steps left for the model, notes of what was done)."""
+    """Do the steps of `text` that are plain screen actions; return (the steps left for the model, notes of what was done,
+    captured page text after the last key press if any, result value extracted from page if requested)."""
     if "look_at_screen" not in tools.REGISTRY or not tools.REGISTRY["look_at_screen"].available():
-        return text, []
-    steps = [x.strip(" .") for x in re.split(r",\s*(?:and\s+)?(?:then\s+)?|\s+and\s+then\s+|\s+then\s+|\s+and\s+(?=(?:send|click|press|download|write|type)\b)", text) if x.strip(" .")]
-    left, notes, in_keys = [], [], False
-    for st in steps:
+        return text, [], None, None
+    steps = [x.strip(" .") for x in re.split(r",\s*(?:and\s+)?(?:then\s+)?|\s+and\s+then\s+|\s+then\s+|\s+and\s+(?=(?:open|send|click|press|download|write|type)\b)", text) if x.strip(" .")]
+    left, notes, in_keys, page_text, result_value = [], [], False, None, None
+    for i, st in enumerate(steps):
+        # Handle "open the <app>" / "open <app>" steps
+        if re.match(r"^(?:open|launch|show)\s+(?:the\s+)?", st, re.I):
+            shortcut = intent.match(st)
+            if shortcut and shortcut[0] == "open_app":
+                out = execute(ctx, "open_app", shortcut[1])
+                if not _failed(out):
+                    notes.append(f"opened the {shortcut[1].get('command', 'app')}.")
+                    in_keys = False
+                    time.sleep(0.5)
+                    continue
+                else:
+                    notes.append(f"could not open the app.")
+                    left.append(st)
+                    in_keys = False
+                    continue
+            left.append(st)
+            in_keys = False
+            continue
+
         # an explicit key sequence ("press 7 then + then 2 then =") on the OS's own app or any field: each key pressed
         # exactly, no model guessing. A key is a digit, an operator, or its word; trailing words ("= and tell me…") stay.
         km = re.match(r"^(?:press|type|hit|enter|tap)\s+(?P<k>.+)$", st, re.I)
@@ -440,11 +460,26 @@ def _screen_steps(ctx, text):
         key, rest = _one_key(tok)
         if key and (km or in_keys):
             out = execute(ctx, "click", {"text": key})
-            notes.append(f"pressed {key}." if not _failed(out) else f"could not press {key}.")
+            if not _failed(out):
+                notes.append(f"pressed {key}.")
+                # Capture page text from click result (format: "pressed '7' in the app. It now shows: <page>")
+                m = re.search(r"It now shows:\s*(.+?)(?:\[path for|$)", out, re.S)
+                if m:
+                    page_text = " ".join(m.group(1).split())  # collapse whitespace
+            else:
+                notes.append(f"could not press {key}.")
             in_keys = True
             rest = re.sub(r"^(?:and|then|,)\s+", "", rest).strip()
             if rest:
-                left.append(rest)
+                # Check if the rest is a result question - if so, extract the result
+                if re.match(r"^(?:tell|show|read|what|what'?s?|and\s+(?:tell|show|read|what))\b", rest, re.I) and page_text:
+                    # Extract the displayed number from the page
+                    m = re.search(r"\b(\d+(?:\.\d+)?)\b", page_text)
+                    if m:
+                        result_value = m.group(1)
+                    # Don't add the result question to left, we've handled it
+                else:
+                    left.append(rest)
                 in_keys = False
             continue
         in_keys = False
@@ -472,7 +507,16 @@ def _screen_steps(ctx, text):
             out = execute(ctx, "click", {"text": m.group("t")})
             notes.append(f"clicked {m.group('t')}." if not _failed(out) else f"could not find {m.group('t')} on the screen.")
             continue
-        left.append(st)
+
+        # Check if this is a result-asking step at the end
+        if re.match(r"^(?:and\s+)?(?:tell|show|read|what|what'?s?)\b", st, re.I) and page_text and i == len(steps) - 1:
+            # Extract the displayed number from the page
+            m = re.search(r"\b(\d+(?:\.\d+)?)\b", page_text)
+            if m:
+                result_value = m.group(1)
+            left.append(st)
+        else:
+            left.append(st)
     # the screen as it is now goes to the MODEL for the leftover steps only, never into the owner's reply
     model_notes = []
     if notes and left:
@@ -482,7 +526,7 @@ def _screen_steps(ctx, text):
             model_notes.append("(For you, the model, not the owner: the screen now shows " + control.describe(limit=50) + ")")
         except Exception:
             pass
-    return ", ".join(left), notes + model_notes
+    return ", ".join(left), notes + model_notes, page_text, result_value
 
 
 def run(ctx, user_text, history):
@@ -541,6 +585,7 @@ def run(ctx, user_text, history):
     # (explicit "remember X"). Runs the same tool through the same policy path.
     # "open <page>, then click Download": the first step is one the OS knows, so it is done here and the model is
     # given only the rest (a small model otherwise loses the first step and works on whatever is on the screen)
+    # Also handle "open the calculator, then press 7 then + then 2 then = and tell me the result" completely
     if not intent.match(user_text):
         lead = re.match(r"^(?P<first>.+?)(?:,\s*|\s+)(?:and\s+)?then\s+(?P<rest>.+)$", user_text, re.I | re.S)
         first = intent.match(lead.group("first")) if lead else None
@@ -550,8 +595,19 @@ def run(ctx, user_text, history):
                 done = _cap(_shortcut_reply(first[0], first[1], out1))
                 ctx.status(done)
                 time.sleep(2)                      # a page or program that was just opened has time to show
-                rest, notes = _screen_steps(ctx, lead.group("rest").strip())
+                rest, notes, page_text, result_value = _screen_steps(ctx, lead.group("rest").strip())
                 done = " ".join([done] + notes)
+                # If nothing is left or only result questions remain, and we have a result, answer directly
+                if not rest or (result_value and re.match(r"^(?:and\s+)?(?:tell|show|read|what)", rest, re.I)):
+                    final_reply = done
+                    if result_value:
+                        final_reply = f"{done} {result_value}."
+                    st = ctx.new_stream()
+                    ctx.on_text(st, final_reply)
+                    ctx.end_stream(st)
+                    history.append({"role": "user", "content": _for_history(user_text)})
+                    history.append({"role": "assistant", "content": final_reply})
+                    return final_reply
                 if rest and re.match(r"(?i)\s*(?:tell me|say|what|read|did|is|does)\b", rest):
                     note = "Answer it from what the screen shows above; do not click, open or write anything."
                 else:
@@ -571,6 +627,23 @@ def run(ctx, user_text, history):
         history.append({"role": "user", "content": _for_history(user_text)})
         history.append({"role": "assistant", "content": reply})
         return reply
+
+    # Handle bare screen steps like "press 7" without "then" (deterministic, no model)
+    if re.match(r"^(?:press|tap|hit|type|enter)\s+", user_text, re.I):
+        rest, notes, page_text, result_value = _screen_steps(ctx, user_text)
+        if notes and not rest:
+            # All steps were handled, no leftover for the model
+            reply = " ".join(notes).rstrip(".")
+            if result_value:
+                reply = f"{reply} {result_value}."
+            else:
+                reply += "."
+            st = ctx.new_stream()
+            ctx.on_text(st, reply)
+            ctx.end_stream(st)
+            history.append({"role": "user", "content": _for_history(user_text)})
+            history.append({"role": "assistant", "content": reply})
+            return reply
 
     # The same short request as before, whose tool calls depended on nothing that may have changed: they
     # run straight away and only the answer is written (see _replay). Not when the owner named a route.
