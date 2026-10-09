@@ -13,6 +13,14 @@ if __name__ == "__main__":
     elif arg == "desk":                       # the graphical interface on this screen
         os.execv("/usr/libexec/llmos-desk", ["/usr/libexec/llmos-desk"])
     elif arg == "desk-app":                   # (started by the compositor)
+        try:                                  # the desk's diagnostics go to a log (the compositor's -s string has no shell redirect)
+            os.makedirs("/run/llmos", exist_ok=True)
+            fd = os.open("/run/llmos/desk.log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            os.dup2(fd, 2)
+            os.close(fd)
+            sys.stderr = os.fdopen(2, "w", buffering=1)
+        except OSError:
+            pass
         from llmos import desk
         desk.main()
     elif arg in ("say", "desk-state", "desk-ctl"):   # talk to the running desk
