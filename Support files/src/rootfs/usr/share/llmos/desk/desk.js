@@ -319,7 +319,7 @@
         const rec = () => (online() ? recAll.on : recAll.off) || {};
         if (!this.answers.profile) {
           const r = rec();
-          this.answers.profile = { autonomy: 50, internet: 0, brain: 0, capability: val(Q[3], Math.max(0, TIER.indexOf(r.capability))),
+          this.answers.profile = { autonomy: 0, internet: 0, brain: 0, capability: val(Q[3], Math.max(0, TIER.indexOf(r.capability))),
                                    guidance: 0, motion: val(Q[5], r.motion == null ? 2 : r.motion), model: "" };
         }
         const P = this.answers.profile;
