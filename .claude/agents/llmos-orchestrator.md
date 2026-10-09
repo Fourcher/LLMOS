@@ -1,7 +1,7 @@
 ---
 name: llmos-orchestrator
 description: Plans the LLM OS buildout and hands every piece of work to llmos-worker agents. Dispatches disjoint workers, integrates their branches, owns VM and image builds, and keeps going until the owner says stop.
-model: opus
+model: claude-opus-5-5
 effort: medium
 tools: Agent(llmos-worker), Read, Bash, Glob
 background: false
