@@ -20,7 +20,7 @@ _TYPO_RE = re.compile(r"\b(" + "|".join(re.escape(k) for k in sorted(_TYPOS, key
 def fix_typos(text):
     """Common misspellings of command words, fixed before matching (the owner's words are otherwise kept as typed)."""
     t = str(text or "")
-    if re.search(r"\b(?:password|passphrase|pin|saying|says|that says|message|email|text|note|write|type)\b|[\"“”']", t, re.I):
+    if re.search(r"\b(?:password|passphrase|pin|saying|says|that says|message|email|text|note|write|type|wi-?fi|network|join|connect|ssid|name|called|named|rename)\b|[\"“”']", t, re.I):
         return t                              # the owner's own words (a message, a secret) are never touched
     words = t.split(" ")
     head = " ".join(words[:3])                # only the command words at the start
