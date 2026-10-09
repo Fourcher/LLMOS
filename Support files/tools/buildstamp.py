@@ -41,6 +41,18 @@ def source_hash():
     return h.hexdigest()
 
 
+def source_hash_at(commit):
+    """The same digest as source_hash(), over src/ as committed at `commit` (not the working tree)."""
+    names = sorted(f for f in _git("ls-tree", "-r", "--name-only", commit, "--", SRC).split("\n") if f)
+    h = hashlib.sha256()
+    for f in names:
+        h.update(f.encode("utf-8") + b"\0")
+        p = subprocess.run(["git", "-C", ROOT, "show", f"{commit}:./{f}"], capture_output=True)
+        h.update(p.stdout if p.returncode == 0 else b"<unreadable>")
+        h.update(b"\0")
+    return h.hexdigest()
+
+
 def source_commit():
     """The short HEAD commit, with -dirty when src/ has uncommitted changes."""
     rev = _git("rev-parse", "--short", "HEAD").strip() or "unknown"
