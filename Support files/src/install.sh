@@ -130,6 +130,7 @@ PKGS="
   cups cups-filters avahi bluez
   pipewire wireplumber pipewire-pulse pipewire-alsa pavucontrol
   wlr-randr wlrctl lswt wl-clipboard flatpak mako libnotify swayidle wlopm wlsunset slurp playerctl xdg-desktop-portal xdg-desktop-portal-wlr poppler-utils wf-recorder imagemagick gvfs-mtp gvfs-gphoto2 wvkbd openssh-client git rsync tesseract-ocr tesseract-ocr-data-eng smartmontools adwaita-icon-theme
+  nmap clamav tshark tcpdump nikto john hydra aircrack-ng wireshark zaproxy ffuf
 "
 # shellcheck disable=SC2086
 apk add --root $TARGET --no-cache -q $PKGS
