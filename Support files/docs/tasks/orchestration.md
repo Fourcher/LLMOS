@@ -36,3 +36,4 @@ download packages from Alpine's signed repositories, and run installs that may b
 - Don't freeze merges during a build. A build is pinned to the commit in dist/RELEASE.json (source_commit). Smokes check that commit's artifacts; merging src afterwards only makes check-fresh say STALE, which is expected until the next build. (A 94-minute merge freeze happened during the 1.7.2 build.)
 - Worker shells refuse `cd <path> &&` and `git -C <path>`. Specs give paths relative to the worktree root ("Support files/tools/x.py") and run commands without cd. RUN workers in the main checkout use absolute paths.
 - Prune merged worktrees regularly (46 worktrees, 115 MB on 2026-10-09).
+- While release.sh is RUNNING, do not merge into the main checkout: the build reads src/ from the working tree, so a mid-build merge can mix two sources into one image. Merge between builds; check-fresh --built-commit covers smokes and packaging afterwards.
