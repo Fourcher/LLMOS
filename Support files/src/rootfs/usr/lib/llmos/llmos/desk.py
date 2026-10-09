@@ -2282,6 +2282,11 @@ class Desk:
         if re.fullmatch(r"unlock(?: the)? (?:screen|computer|desk)[.!]?", low) and self.screen != "lock":
             self.last_reply = self._said = "The screen isn't locked."
             return True
+        if re.fullmatch(r"what (?:did|was it) i (?:just )?(?:say|ask|type|write)(?: (?:you|to you))?(?: (?:a (?:minute|moment|second|bit) ago|before|earlier|last|just now|before that))?|"
+                        r"what was my (?:last|previous) (?:question|request|message)|what did i ask you(?: (?:before|last|earlier))?", low.rstrip("?.! ")):
+            prev = [m["content"] for m in self.chat().msgs if m["role"] == "user" and m["content"].strip().lower().rstrip("?.! ") != low.rstrip("?.! ")]
+            self.last_reply = self._said = (f"You said: “{prev[-1]}”" if prev else "You haven't asked me anything yet in this conversation.")
+            return True
         r = self._system_shortcut(low, line)
         if r:
             return True
