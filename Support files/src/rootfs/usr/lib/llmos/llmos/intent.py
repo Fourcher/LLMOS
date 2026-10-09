@@ -1227,6 +1227,15 @@ def _everyday(text):
         return None                       # many files by some other rule: the model decides
     if m and not re.search(r"\b(?:wifi|network|computer|keyboard)\b", m.group("n"), re.I):
         return ("rename_file", {"name": m.group("n").strip().strip("'\""), "to": m.group("to").strip().strip("'\"")})
+    # "make a copy of report.txt from my downloads in my documents": a copy, the source folder named before the destination
+    m = re.match(r"^\s*(?:please\s+)?(?:make|put|create)\s+a\s+copy\s+of\s+(?:the\s+|my\s+)?(?P<what>.+?)"
+                 r"(?:\s+(?:from|out\s+of)\s+(?:my\s+|the\s+)?(?P<frm>documents|downloads|desktop|home|pictures|photos|music|videos))?"
+                 r"\s+(?:in|into|to|onto|on)\s+(?:my\s+|the\s+)?(?P<to>documents|downloads|desktop|home|pictures|photos|music|videos)\s*[.!]?\s*$", text, re.I)
+    if m:
+        args = {"what": m.group("what").strip(), "to": m.group("to").lower(), "copy": True}
+        if m.group("frm"):
+            args["from"] = m.group("frm").lower()
+        return ("move_files", args)
     m = _MOVE.match(text)
     if m:
         to = m.group("to").lower()
