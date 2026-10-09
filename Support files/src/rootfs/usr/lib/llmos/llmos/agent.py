@@ -473,14 +473,16 @@ def _screen_steps(ctx, text):
             notes.append(f"clicked {m.group('t')}." if not _failed(out) else f"could not find {m.group('t')} on the screen.")
             continue
         left.append(st)
+    # the screen as it is now goes to the MODEL for the leftover steps only, never into the owner's reply
+    model_notes = []
     if notes and left:
         time.sleep(1)
         try:
             from . import control
-            notes.append("The screen now shows: " + control.describe(limit=50))
+            model_notes.append("(For you, the model, not the owner: the screen now shows " + control.describe(limit=50) + ")")
         except Exception:
             pass
-    return ", ".join(left), notes
+    return ", ".join(left), notes + model_notes
 
 
 def run(ctx, user_text, history):
