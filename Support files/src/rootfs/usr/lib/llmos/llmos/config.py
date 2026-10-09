@@ -61,6 +61,19 @@ def home():
     return os.environ.get("LLMOS_HOME") or os.path.expanduser("~")
 
 
+STANDARD_FOLDERS = ("Documents", "Downloads", "Pictures", "Music", "Videos")
+
+
+def ensure_folders():
+    """The usual folders in the home folder, made once if missing (inside the vault when there is one)."""
+    h = home()
+    for n in STANDARD_FOLDERS:
+        try:
+            os.makedirs(os.path.join(h, n), exist_ok=True)
+        except OSError:
+            pass
+
+
 def personal_env():
     """For programs the owner runs (a browser, a terminal, a player): their caches and settings go to the home
     folder -- inside the vault when there is one -- not to /var/cache/llmos, where the desk keeps its own (so that
