@@ -54,3 +54,28 @@ Run after any model or OS change, on the VM, one request at a time (`tools/useca
 | S48 | "help" | how to use it, short | P0 |
 | S49 | "thanks" | a short reply, nothing done | P0 |
 | S50 | "stop" | nothing running is stopped, said plainly | P1 |
+
+## Results — 2026-10-09, on the shipped 1.7.1 arm64 image (overlay, test shell, CPU model)
+
+Run: `tools/usecase-run.py --file docs/research/basic-sweep.md --out run/basic --yes S19,S20,S40,S47 --timeout 300`.
+Every reply read by hand (raw: `run/basic/<id>.json` + `.png`, `run/basic/summary.json`). 43 of 50 pass outright.
+
+Pass (P0 basics all work): S01 hello, S02 what-can-you-do, S03 time, S04 files window ('Home' opened),
+S05 terminal, S06 firefox, S07 calculator, S08 weather, S09/S10 volume, S11 bigger text, S12/S13 dark/light,
+S14 ip, S15 internet, S16 battery, S17 files ('Home' window), S18 downloads, S19 make folder, S20 delete folder,
+S21 reminder, S22 timer, S23 recall, S24 poem (4 lines), S25 merci, S26 36, S27 6.21 mi, S29 web search,
+S30 youtube, S31 play music, S33 screen desc, S34 screenshot, S38 mail setup window, S41/S42 notes,
+S43/S44 shopping, S45 shopping window ('Shopping'), S46 date, S47 install vlc, S49 thanks, S50 stop.
+
+Issues found:
+
+| ID | reply | problem | class | action |
+|---|---|---|---|---|
+| S40 | "No such tool 'mail_send'." | "send <addr> an email saying <body>" (address-first) misses `_mail_send_direct`, falls to the model, which calls `mail_send`; the tool is gated off (no account) so the dispatcher returns the raw `error: no such tool`. Harsh + wrong. | real bug | fix: route address-first phrasing; when mail unset, say "set up email first" / route to mail_setup, never "no such tool" |
+| S48 | "Done." | 'Try saying' window opens, but the spoken reply for "help" is just "Done." — not "how to use it, short". | real bug | fix: speak a short how-to for "help" |
+| S32 | "Nothing is playing." | right after S31 "Now playing"; headless VM has `-audiodev none`, so mpv likely never sustained playback. | likely harness artifact | re-test with an audio sink before treating as a bug |
+| S35/S36 | lock "Done." then unlock "already unlocked" | lock/unlock in a serial test-shell has no real graphical lock session. | likely harness artifact | re-test in a graphical session before treating as a bug |
+| S04 | "Your home folder is empty." | window opened (passes), but the text is wrong — the home has folders (S18 lists them). | minor | tidy the empty-home wording/accuracy |
+| S28 | "Rishi Sunak … as of mid-2024" | stale, but caveated with a date — acceptable per the P1 criterion for an on-device model. | note only | none |
+| S37 | wifi off, 84.5 s | correct ("no wireless interface"), but slow. | note only | watch |
+| S39 | "Which email do you use?" | asked, because mail is not set up (no sensible default without an account). | note only | improves once S40/mail setup lands |
