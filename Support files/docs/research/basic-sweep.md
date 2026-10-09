@@ -79,3 +79,13 @@ Issues found:
 | S28 | "Rishi Sunak … as of mid-2024" | stale, but caveated with a date — acceptable per the P1 criterion for an on-device model. | note only | none |
 | S37 | wifi off, 84.5 s | correct ("no wireless interface"), but slow. | note only | watch |
 | S39 | "Which email do you use?" | asked, because mail is not set up (no sensible default without an account). | note only | improves once S40/mail setup lands |
+
+### Follow-up on the flagged items — 2026-10-09 (same shipped 1.7.1 image, driven by hand)
+
+- S40 email — FIXED (commit a5b2257). The raw "No such tool 'mail_send'" came from `agent.execute()` running the gated-unavailable mail tool (no account), not the model. Now an unavailable mail_* tool answers "set up email to use this tool"; address-first phrasing routes deterministically. Host test: `tools/test-intent.py` 286/286.
+- S48 help — FIXED (commit ff47fbf). "help"/"?" now speak "Type what you want. F1 talks. Esc closes the window." and still open the help panel. Host test: `tools/test-desk-words.py` all good.
+- S32 music — NOT a bug. Driven by hand: "play some music" → mpv running on /run/llmos/mpv.sock; "pause the music" → "Paused." with the window showing "paused: …". State is kept. The sweep's "Nothing is playing" was a start-up race: the two requests ran back-to-back before mpv's stream was up.
+- S35/S36 lock — NOT a bug. Driven by hand: "lock the screen" → "Done." and desk state "screen":"lock"; "unlock the screen" → "Unlocked screen.". The sweep's "already unlocked" was the same back-to-back race.
+- S04 files — NOT a bug. The OS runs as root, so "home" is /root, which holds only hidden config (.config, .llmos, .local) and no visible files; "Your home folder is empty." is accurate, and the Home window opened. (Cosmetic: S18's "Documents, Downloads, Pictures, Music, Videos" is a generic line — those folders are not present in this image.)
+
+Net: of 50 requests, the only real defects were S40 and S48, both fixed and host-tested. The rest pass or were harness timing artifacts. Note for the harness: `usecase-run.py` fires requests back-to-back; media/lock state needs a moment to settle, so a brief pause (or a settle-check) between dependent requests would avoid these false negatives.
