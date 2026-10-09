@@ -44,8 +44,18 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [open] (freedom) RUN tools/refusal-probe.py against the VM model; report every refusal/hedge | role: run | files: none | test: report
 - [open] (reliability) PROBE: which tools/*.sh harnesses still reference the Desktop or hard-coded 1.7.1 | role: probe | files: none | test: report
 - [open] (process) PROBE own record (5 rounds reached): re-specs, worker stalls, VERIFY outcomes, idle gaps from git log + queue | role: probe | files: none | test: report
-- [running] (capability/speed) RUN tools/timed-sweep.sh docs/research/sweep-phrases.txt on 1.7.2 | role: run | files: none | test: run/timed-sweep.tsv
+- [done] (RUN: "timed-sweep: 45 phrase(s), 26 took <=3 s, 19 took >3 s"; run/timed-sweep.tsv) RUN tools/timed-sweep.sh docs/research/sweep-phrases.txt on 1.7.2 | role: run | files: none | test: run/timed-sweep.tsv
 - [open] (reliability) package.sh: accept `check-fresh.py --built-commit` when HEAD moved on | role: fix | files: tools/package.sh | test: package.sh writes packages/LLM OS 1.7.2.zip
+- [open] (capability) WRONG: "what's the capital of australia" -> "Sydney" (71 s). Facts should come from a lookup, not a guess (BRIEF: research rather than guess) | role: fix after probe | test: VM reply "Canberra"
+- [open] (capability) WRONG: "show my biggest files" -> "18 items in /." | role: fix after probe
+- [open] (capability) WRONG: "click File" with nothing open -> "18 items in /." (21 s) | role: fix after probe
+- [open] (capability) WRONG: "skip this song" with nothing playing -> "Song stopped." | role: fix after probe
+- [open] (ui) SLOP: "unlock the screen" (not locked) -> model wrote /tmp/unlock_notice (14 s) | role: fix after probe
+- [open] (ui) "hello" -> "(checking the model)" | role: fix after probe
+- [open] (speed) TIMEOUT 240 s: "delete the folder Test" (answer came late: "The folder Test does not exist"), "what did I say a minute ago" | role: fix after probe
+- [open] (speed) slow model paths: translate 108 s, "chang the volum up" 48 s, "what's on my screen" 27 s, "opn firefox" 11 s, "wat time is it" 8 s, remind typo 12 s | role: fix after probe
+- [open] (reliability) timed-sweep harness: a timeout leaves the late reply to be read by the next phrase (row 10 shows row 8's reply); wait for the desk to be idle (desk-state busy=false) before the next phrase | role: fix | files: tools/timed-sweep.sh
+- [running] (reliability) desk.log empty: labwc -s does not apply the 2>> redirect; dup2 in /usr/bin/llmos desk-app | role: fix | files: src/rootfs/usr/bin/llmos
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
