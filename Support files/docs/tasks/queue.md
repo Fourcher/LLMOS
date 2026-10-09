@@ -18,3 +18,8 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 
 Notes:
 - docs/tasks/orchestration.md was written by a worker, not the owner. It is NOT adopted: its "parallel workers / worktrees / standing blanket consent" policy contradicts the owner's standing instructions above. No blanket consent for outside downloads, publishes, or shared-remote pushes is assumed.
+
+Session state note (2026-10-09):
+- dist/ is an INCOHERENT INTERMEDIATE: arm64 qcow2 was rebuilt to 1.7.2 to test M1, but RELEASE.json/SHA256SUMS still say 1.7.1 and the x86 image is the old 1.7.1 build. check-fresh says STALE (source now fb26f07). dist/SHA256SUMS is modified-uncommitted on purpose. Do NOT ship from dist/ until a full `tools/release.sh all` regenerates a coherent 1.7.2 (after M1/M2 land). The 1.7.1 zip on ~/Desktop is the real shipped 1.7.1.
+- M1 wizard experiment: do NOT dismiss onboarding by `pkill labwc` — it leaves a stale desk socket (Connection refused). Instead pre-set `onboarded:true` in the image build (or drive the wizard to completion via the desk's wizard_step) and boot fresh, then test the calculator.
+- Untracked and NOT adopted: docs/tasks/orchestration.md (worker-written policy that contradicts the owner's instructions).
