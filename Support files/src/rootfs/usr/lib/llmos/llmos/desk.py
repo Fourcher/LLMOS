@@ -706,7 +706,7 @@ class Desk:
                 f.write(base64.b64decode(m.group(2)))
             self.emit({"t": "toast", "text": T("d_saved_to", path=path.replace(config.home(), "~"))})
         except (OSError, ValueError) as e:
-            self.emit({"t": "toast", "text": f"{T('error')}: {e}"})
+            self.emit({"t": "toast", "text": agent._plain_error(str(e))})
 
     def _decide_policy(self, view, decision, kind):
         """The desk and the apps in it are local pages: nothing in them may navigate to the web (an app sending what
@@ -1076,7 +1076,7 @@ class Desk:
                         self.push_status()
                     except Exception as e:
                         self.emit({"t": "toast", "text": "", "sticky": "vault"})
-                        self.emit({"t": "toast", "text": f"{T('error')}: {e}", "long": True})
+                        self.emit({"t": "toast", "text": agent._plain_error(str(e)), "long": True})
                 threading.Thread(target=make, daemon=True).start()
         elif t == "vault.change":
             p0, p1, p2 = str(msg.get("p0", "")), str(msg.get("p1", "")), str(msg.get("p2", ""))
@@ -1206,7 +1206,7 @@ class Desk:
                             if "panel-connectors" in self.windows:
                                 self.open_panel("connectors")
                     except Exception as e:
-                        note = f"{T('error')}: {e}"
+                        note = agent._plain_error(str(e))
                     self.emit({"t": "toast", "text": "", "sticky": "conn"})
                     self.emit({"t": "toast", "text": note, "long": True})
                 threading.Thread(target=go, daemon=True).start()
@@ -1232,7 +1232,7 @@ class Desk:
                     if "panel-settings" in self.windows:
                         self.open_panel("settings")
                 except OSError as e:
-                    note = f"{T('error')}: {e}"
+                    note = agent._plain_error(str(e))
                 self.emit({"t": "toast", "text": note, "long": True})
         elif t == "dialog":
             d = self.dialogs.get(str(msg.get("id")))
@@ -2227,7 +2227,7 @@ class Desk:
             if reply and reply not in ("Here it is.", "(done)"):
                 self.emit({"t": "toast", "text": reply[:240]})
         except Exception as e:
-            self.emit({"t": "toast", "text": f"{T('error')}: {e}"})
+            self.emit({"t": "toast", "text": agent._plain_error(str(e))})
 
     def _worker(self):
         while True:
@@ -2236,7 +2236,7 @@ class Desk:
             try:
                 self.turn(text, chat)
             except Exception as e:      # never let the worker die
-                self.emit({"t": "reply.error", "text": f"{T('error')}: {e}"})
+                self.emit({"t": "reply.error", "text": agent._plain_error(str(e))})
             finally:
                 self.turn_done.set()
                 if done:
@@ -3419,13 +3419,13 @@ class Desk:
                 finally:
                     self.emit({"t": "speaking", "on": False})
         except llm.ModelError as e:
-            self.emit({"t": "reply.error", "text": f"{T('error')}: {e}", "chat": chat})
+            self.emit({"t": "reply.error", "text": agent._plain_error(str(e)), "chat": chat})
         except llm.ModelDown:
             self.emit({"t": "reply.error", "text": T("model_down"), "chat": chat})
         except agent.Cancelled:
             self.emit({"t": "reply.error", "text": T("stopped"), "chat": chat})
         except Exception as e:
-            self.emit({"t": "reply.error", "text": f"{T('error')}: {e}", "chat": chat})
+            self.emit({"t": "reply.error", "text": agent._plain_error(str(e)), "chat": chat})
         finally:
             self.ctx.chat_id, self.ctx.topic_note = "main", ""
             self.busy = False
@@ -3814,7 +3814,7 @@ class Desk:
         except (ValueError, vault.VaultError) as e:
             err(str(e))
         except Exception as e:
-            err(f"{T('error')}: {e}")
+            err(agent._plain_error(str(e)))
 
     # ---- apps and terminals (windows in the compositor)
 
