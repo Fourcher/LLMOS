@@ -394,4 +394,21 @@ for (page, title), want in REPLY_CASES:
         print(f"MISMATCH app_reading {title!r}\n   got    {got!r}\n   wanted {want!r}")
 print(f"app questions: {len(APP_CASES) - app_bad}/{len(APP_CASES)} as expected; "
       f"readbacks: {len(REPLY_CASES) - reply_bad}/{len(REPLY_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad else 0)
+
+# typo fixes: common misspellings of command words are corrected before matching
+TYPO_CASES = {
+    "chang the volum up": "change the volume up",
+    "opn firefox": "open firefox",
+    "wat time is it": "what time is it",
+    "remindme to feed the cat at 6": "remind me to feed the cat at 6",
+    "what is the wattage": "what is the wattage",
+    "Opn Firefox": "open Firefox",
+}
+tbad = 0
+for text, want in TYPO_CASES.items():
+    got = intent.fix_typos(text)
+    if got != want:
+        tbad += 1
+        print(f"TYPO MISMATCH {text!r}\n   got    {got!r}\n   wanted {want!r}")
+print(f"typos: {len(TYPO_CASES) - tbad}/{len(TYPO_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad or tbad else 0)
