@@ -2235,6 +2235,8 @@ class Desk:
         line = intent.plain(line)
         low = line.lower().strip()
         if low in ("settings", "models", "tasks", "memory", "audit", "help", "connectors", "?"):
+            if low in ("help", "?"):
+                self._said = "Type what you want. F1 talks. Esc closes the window."
             self.open_panel("help" if low == "?" else low)
             return True
         if re.fullmatch(r"(?:please )?close (?:all (?:the |my |of the )?(?:windows|apps)|everything|all of them|every window)(?: please)?[.!]?", low):

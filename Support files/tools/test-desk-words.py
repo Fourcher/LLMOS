@@ -62,6 +62,14 @@ for q, g in (("close the browser window", "closew"), ("switch to the files app",
     check(bool(m and m.group(g)), f"{q!r}")
 check(not W._WIN.fullmatch("close the door"), "'close the door' is not a window")
 
+print("help shortcut speaks a how-to, not just done")
+help_match = re.search(r'if low in \("help", "\?"\):\s+self\._said = "([^"]+)"', src)
+check(bool(help_match), "help shortcut sets self._said")
+if help_match:
+    said = help_match.group(1)
+    has_hint = any(hint in said for hint in ("F1", "Esc", "Type what you want", "close"))
+    check(has_hint, f"help _said contains helpful cue: {said!r}")
+
 print("every tool's decorator sits on its own function (a helper slipped in between takes the tool's place)")
 tsrc = open(os.path.join(os.path.dirname(SRC), "tools.py"), encoding="utf-8").read()
 for m in re.finditer(r'@tool\("(\w+)"', tsrc):
