@@ -3,6 +3,7 @@ name: llmos-worker
 description: One LLM OS task from llmos-orchestrator, done in its own git worktree: edit the owned files, run the named test, commit on its branch, and report the evidence.
 model: claude-haiku-5-5
 effort: medium
+permissionMode: bypassPermissions
 tools: Read, Edit, Write, Bash, Grep, Glob
 background: true
 isolation: worktree
