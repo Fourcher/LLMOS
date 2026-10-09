@@ -1699,6 +1699,17 @@ def match(text):
     return _fix_schedule(_match(text))
 
 
+def _analyze_program(t):
+    """'analyze the app in my reatest folder', 'look inside the program reatest/app': the analysis tool, deterministic."""
+    m = re.match(r"^\s*(?:please\s+)?(?:analy[sz]e|inspect|look\s+inside|open\s+up|take\s+apart|reverse\s+engineer|how\s+is)\s+"
+                 r"(?:the\s+|this\s+|that\s+|my\s+)?(?:app|program|application|file|folder|package|software)\s*"
+                 r"(?:in|from|at|called|named)?\s*(?:my\s+|the\s+)?(?P<path>[\w./ -]+?)\s*(?:folder|directory)?\s*[.!?]?\s*$", t, re.I)
+    if not m:
+        return None
+    path = re.sub(r"\s+(?:built|made|works?|made up|done|work|folder|directory)$", "", m.group("path").strip().rstrip("/"), flags=re.I)
+    return ("analyze_program", {"path": path})
+
+
 def _mail_send_direct(t):
     # email straight to an address: "email craig@example.com saying the meeting moved", "write a short email to X saying … and send it"
     m = re.match(r"^(?:please\s+)?(?:e-?mail|send\s+(?:an?\s+)?e-?mail\s+to|write\s+(?:an?\s+)?(?:short\s+|quick\s+|brief\s+|new\s+|nice\s+|little\s+)?e-?mail\s+to|message)\s+(?P<to>[\w.+-]+@[\w.-]+)\s*,?\s+"
@@ -1722,6 +1733,9 @@ def _match(text):
     ms = _mail_setup(t)
     if ms:
         return ms
+    ap2 = _analyze_program(t)
+    if ap2:
+        return ap2
     em = _mail_send_direct(t)                 # "write an email to X saying … and send it": one action, not a chain
     if em:
         return em

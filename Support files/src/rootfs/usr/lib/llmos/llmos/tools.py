@@ -277,7 +277,7 @@ PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpag
             "show_screen", "schedule_task", "manage_tasks", "note_add", "notes_show", "note_done", "note_remove",
             "set_appearance", "change_setting", "show_panel", "open_app", "play_media", "media_control", "set_volume",
             "set_brightness", "show_files", "open_file", "delete_file", "restore_file", "empty_trash", "screenshot",
-            "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window",
+            "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
             "mail_delete", "mail_triage", "mail_setup", "show_image", "system_panel", "set_wallpaper",
             "manage_models", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
@@ -490,6 +490,29 @@ def _flatpak(app_id):
     if re.search(r"(?i)no remote refs|nothing matches|not found|arch|no ref", err):
         return False, f"{app_id} is not made for this kind of computer ({os.uname().machine}) or is not on Flathub"
     return False, f"install failed: {clip(err, 500)}"
+
+
+@tool("analyze_program", "Look inside a program or app the owner has (an Electron/JavaScript app folder, or a file) to see "
+      "how it is built, what it does and what it calls: REA, an open analysis tool. Only files and folders in the owner's "
+      "home folder. Use it to find out how a feature of a real app works, so the same feature can be built here. "
+      "Only analyse software the owner has the right to examine.",
+      {"path": {"type": "string", "description": "the app folder or file, in the owner's home folder"}},
+      ["path"], risk=CHANGE, available=lambda: shutil.which("rea") is not None)
+def analyze_program(a, ctx):
+    target = _path(str(a.get("path", "")))
+    if not target or not os.path.exists(target) or not _in_home(target):
+        return "error: that program is not in the owner's home folder (or it does not exist)"
+    cmd = ["rea", "analyze", target] if os.path.isdir(target) else ["rea", "inspect-artifact", target]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"error: the analysis could not run: {e}"
+    out = [ln for ln in (p.stdout or "").splitlines() if not ln.lstrip().startswith('{"rea_progress"')]
+    if p.returncode != 0:
+        msg = " ".join((p.stdout or p.stderr or "").split())[:400]
+        return f"error: the analysis did not finish: {msg}"
+    text = "\n".join(out)[:4000]
+    return f"analysed {os.path.basename(target)}. Result (evidence hashed and kept by REA):\n{text}"
 
 
 @tool("install_app", "Install a program: an Alpine package name, or what people call it ('spotify', 'vs code', 'zoom', 'gimp'); apps that are not Alpine packages come from Flathub. Then open it with open_app.",
