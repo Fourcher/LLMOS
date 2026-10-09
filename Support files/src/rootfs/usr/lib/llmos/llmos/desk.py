@@ -2290,11 +2290,11 @@ class Desk:
         if re.fullmatch(r"what(?:'s| is) on (?:my |the )?screen(?: now| right now)?|what(?:'s| is) open(?: now| right now)?|which (?:windows|apps|programs) are open", low.rstrip("?.! ")):
             names = []
             try:
-                names += [str(w) for w in wm.windows()]
+                names += [str(w).split(".")[-1].replace("-", " ").replace("_", " ").title() for w in wm.windows() if str(w).strip()]
             except Exception:
                 pass
             names += [str(s.get("title")) for s in self.windows.values() if s.get("title") and str(s.get("title")) not in names]
-            self.last_reply = self._said = ("Open now: " + ", ".join(names) + ". Say “read the screen” to hear the words on it.") if names else "Nothing is open, just the desk."
+            self.last_reply = self._said = ("Open now: " + ", ".join(names) + ".") if names else "Nothing is open, just the desk."
             return True
         r = self._system_shortcut(low, line)
         if r:

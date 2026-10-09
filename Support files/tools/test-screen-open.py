@@ -32,6 +32,12 @@ with open(DESK, encoding="utf-8") as f:
     src = f.read()
 check("desk.py has 'Open now: '", "Open now: " in src)
 check("desk.py has 'Nothing is open, just the desk.'", "Nothing is open, just the desk." in src)
+check("desk.py no longer says 'read the screen'", "read the screen" not in src)
+
+NAME_EXPR = '.split(".")[-1].replace("-", " ").replace("_", " ").title()'
+for raw, want in [("org.mozilla.firefox", "Firefox"), ("foot", "Foot"), ("org.gnome.Calculator", "Calculator")]:
+    got = eval("str(raw)" + NAME_EXPR, {"raw": raw})
+    check("name: %s -> %s" % (raw, want), got == want)
 
 py_compile.compile(DESK, doraise=True)
 check("py_compile desk.py", True)
