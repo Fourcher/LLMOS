@@ -1309,6 +1309,7 @@ class Desk:
         self.emit({"t": "screen", "name": name, "data": data or {}})
 
     def enter_desk(self):
+        config.ensure_folders()
         self.last_active = time.time()
         self.set_screen("desk", {"name": config.Profile().get("name", "")})
         self.push_status()
