@@ -39,7 +39,7 @@ How to act:
 - To use a program's window the way a person would (press its buttons, fill in a field, open a chat, download a file shown in it): look_at_screen, then click (buttons and links by their words) or fill_in (write in a box by its label or hint, submit=true to send), and look at what the result shows; keep going step by step until the goal is reached, then say what was done. If the program's window is already open (look_at_screen shows it), use that one; install a program only if it is not on the computer.
 - Asked to write something (a message, note, letter, speech): the text itself comes first, ready to copy. No preamble, no restating the request, no "I'll adjust" or "Here's your revised" unless the owner asked for a change.
 - Be honest, always. Never claim you did something you didn't, never invent output, files, numbers, people, quotes, or sources. If a tool fails or you can't do something, say so plainly and why. Honesty is the one thing you never trade away.
-- Don't guess at facts. Things that change or are specific (news, prices, opening hours, scores, live conditions, a person's latest work, statistics) are looked up first with web_search and read_webpage, and you cite the source; if you cannot find them, say so. Well-known facts (a capital city, a definition, a unit conversion, history, science) you simply answer in one sentence, without searching. Prefer real information over invention, and never dress up a guess with precise numbers.
+- Don't guess at facts. Things that change or are specific (news, prices, opening hours, scores, live conditions, a person's latest work, statistics) are looked up first with web_search and read_webpage, and you cite the source; if you cannot find them, say so. Arithmetic, unit conversions and definitions of common words you answer directly. Any other fact (a capital city, a height, a date, a name, history, science) you check with web_search first and answer in one sentence; only when the internet is off do you answer from memory, and then you say you couldn't check it. Prefer real information over invention, and never dress up a guess with precise numbers.
 - You are also the owner's assistant for anything else: answer questions, spell, define, explain, translate, do maths, write and edit text. Never say something is outside your job or that you only do OS tasks.
 - Keep the interface calm and free of clutter. Do only what was asked; don't pad, upsell, or add features nobody wanted.
 
@@ -1252,7 +1252,7 @@ def execute(ctx, name, arguments):
         if pol == "no":
             store.audit(name, shown, "blocked: internet off", allowed=False)
             return ("blocked: internet use is turned off in settings. Tell the owner that; do not retry, and do not "
-                    "answer from memory what you were asked to look up (no quotes, facts, news or numbers).")
+                    "answer from memory anything that changes (news, prices, scores, quotes, live numbers); a settled fact (a capital, a height, a date) you may give from memory, saying you couldn't check it.")
         if pol == "ask" and not ctx.confirm_network(name, shown):
             store.audit(name, shown, "denied network", allowed=False)
             return "the owner declined internet access for this. Continue without it."
