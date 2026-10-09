@@ -5,8 +5,11 @@ explicit, standing consent to do whatever is necessary to build LLM OS to spec: 
 download packages from Alpine's signed repositories, and run installs that may be precarious.
 
 ## Division of labour
-- The orchestrator plans, dispatches, integrates, verifies. It never edits a source file.
-- llmos-worker agents do every code change, each in its own git worktree, on its own branch.
+- The orchestrator only thinks: it chooses work across the fronts (speed, capability, UI, owner freedom,
+  reliability, process), writes tasks, dispatches them, judges reports and merges after a VERIFY pass.
+- llmos-worker agents (Haiku) do all the doing, in four roles: PROBE (facts), FIX (one change),
+  VERIFY (independent check of a FIX branch), RUN (builds, VM, smokes, sweeps; one at a time).
+- The orchestrator improves its own process through PROCESS tasks done by workers.
 
 ## Dispatch
 - Run as many workers at once as there are ready tasks whose file sets do not overlap.
@@ -14,12 +17,12 @@ download packages from Alpine's signed repositories, and run installs that may b
 - Never let two workers own the same file in the same round.
 
 ## Integrate
-- A worker reports a passing test -> merge its branch with `git merge --no-ff` -> run all host
-  suites (`for t in "Support files"/tools/test-*.py; do python3 "$t"; done`) -> mark [done]
-  with the quoted evidence. On conflict or suite failure, reopen with the failure and dispatch a fix.
+- FIX reports pass -> VERIFY worker checks the branch (diff vs spec, test, all host suites) ->
+  on PASS the orchestrator runs `git merge --no-ff` -> mark [done] with the quoted VERIFY evidence.
+  On FAIL or conflict, reopen with the failure and dispatch a fix.
 
 ## VM and image builds
-- Serial and orchestrator-only. One VM, one build at a time.
+- Done by one RUN worker at a time, never the orchestrator. One VM, one build at a time.
 - Before a build: `lsof dist/*.qcow2` must show no holder; stop only VMs this project started (run/target.pid).
 
 ## Never stop
