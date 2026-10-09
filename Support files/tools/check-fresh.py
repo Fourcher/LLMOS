@@ -26,6 +26,17 @@ def main():
         print("STALE: no dist/RELEASE.json — nothing has been built yet. Run tools/release.sh.")
         return 2
     built = rel.get("source_hash")
+    if "--built-commit" in sys.argv:
+        commit = (rel.get("source_commit") or "").replace("-dirty", "")
+        if not commit:
+            print("UNKNOWN: no source_commit recorded")
+            return 2
+        at = buildstamp.source_hash_at(commit)
+        if at == built:
+            print(f"BUILT-FROM: dist/ matches commit {commit} (v{rel.get('version', '?')}); later source changes are not in it.")
+            return 0
+        print(f"MISMATCH: dist/ does not match commit {commit}.")
+        return 1
     now = buildstamp.source_hash()
     imgs = ", ".join(i["file"] for i in rel.get("images", []))
     if not built:
