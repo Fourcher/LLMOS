@@ -19,6 +19,7 @@ import urllib.parse
 from . import config
 
 MATCH = re.compile(
+    r"^how much (?:free |disk )?(?:space|storage|room)(?: is| do i have)?(?: (?:left|free|remaining))?(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?(?: (?:left|free|remaining))?$|^how much (?:disk )?space (?:is )?(?:left|free)$|"
     r"^(?:turn|switch) (?:on|off) (?:the |my )?bluetooth$|^(?:turn|switch) (?:the |my )?bluetooth (?:on|off)$|^bluetooth (?:on|off)$|^(?:yes|yeah|yep|yup|sure|ok|okay)$|(?:the |my )?(?:screen|computer|pc|laptop|everything) (?:has |have )?(?:froze|frozen|locked up|is stuck)$|"
     r"(?:computer|pc|laptop|machine) (?:is |has been |got |feels )?(?:really |very |so |quite )?slow\b|"
     r"\b(?:days? (?:until|till|to|left)|is (?!it\b|this\b|my\b|that\b|the (?:computer|screen|wifi|sound|mouse|printer|keyboard|battery|camera)\b)[a-z][a-z .'-]{1,30} (?:down|broken|having (?:issues|problems|an outage))\b|what time does [a-z' .-]{2,40} (?:open|close)\b|who won (?:the )?[a-z' .-]{2,40}(?: last night| yesterday| today| this week)?\b|countdown|how long (?:until|till)|work timer|^clock (?:in|out)$|i'?m clocking (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
@@ -1517,6 +1518,20 @@ def open_mail(desk, line, low):
     return _say(desk, line, agent._shortcut_reply("mail_inbox", {}, out))
 
 
+def free_space(desk, line, low):
+    """How much space is left: the real numbers from the disk, in words (never guessed)."""
+    if not re.fullmatch(r"how much (?:free |disk )?(?:space|storage|room)(?: is)? (?:left|free|remaining|do i have)(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?|how much (?:disk )?space (?:is )?(?:left|free)", low):
+        return False
+    import shutil
+    try:
+        u = shutil.disk_usage(config.home())
+    except OSError:
+        return _say(desk, line, "I couldn't read the disk just now.")
+    def gb(n):
+        return f"{n / 1e9:.1f} GB" if n < 1e11 else f"{n / 1e9:.0f} GB"
+    return _say(desk, line, f"You have {gb(u.free)} free out of {gb(u.total)} on this computer.")
+
+
 def small_answers(desk, line, low):
     """Words that need no model: a 'yes' with nothing waiting, a frozen screen, a slow computer."""
     m = re.fullmatch(r"(?:turn|switch) (?P<v>on|off) (?:the |my )?bluetooth|bluetooth (?P<w>on|off)", low)
@@ -1563,7 +1578,7 @@ def small_answers(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (small_answers, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True
