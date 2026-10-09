@@ -403,6 +403,9 @@ TYPO_CASES = {
     "remindme to feed the cat at 6": "remind me to feed the cat at 6",
     "what is the wattage": "what is the wattage",
     "Opn Firefox": "open Firefox",
+    "join wifi Home password teh1234": "join wifi Home password teh1234",
+    "send mum a message saying wat a day": "send mum a message saying wat a day",
+    "set an alarm for 7 pls": "set an alarm for 7 pls",
 }
 tbad = 0
 for text, want in TYPO_CASES.items():

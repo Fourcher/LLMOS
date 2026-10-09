@@ -19,7 +19,12 @@ _TYPO_RE = re.compile(r"\b(" + "|".join(re.escape(k) for k in sorted(_TYPOS, key
 
 def fix_typos(text):
     """Common misspellings of command words, fixed before matching (the owner's words are otherwise kept as typed)."""
-    return _TYPO_RE.sub(lambda m: _TYPOS[m.group(1).lower()], str(text or ""))
+    t = str(text or "")
+    if re.search(r"\b(?:password|passphrase|pin|saying|says|that says|message|email|text|note|write|type)\b|[\"“”']", t, re.I):
+        return t                              # the owner's own words (a message, a secret) are never touched
+    words = t.split(" ")
+    head = " ".join(words[:3])                # only the command words at the start
+    return _TYPO_RE.sub(lambda m: _TYPOS[m.group(1).lower()], head) + ("" if len(words) <= 3 else " " + " ".join(words[3:]))
 
 # "remember (that) X", "don't forget (that) X", "keep in mind (that) X",
 # "make a note (that) X", "note (that) X". The connector is captured: a "to"
