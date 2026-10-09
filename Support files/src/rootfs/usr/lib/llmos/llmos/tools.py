@@ -3931,7 +3931,7 @@ def wifi_scan(a, ctx):
     if not dev:
         return "no Wi-Fi adapter found on this machine"
     subprocess.run(["iwctl", "station", dev, "scan"], capture_output=True, timeout=30)
-    time.sleep(3)
+    time.sleep(1.5)
     p = subprocess.run(["iwctl", "station", dev, "get-networks"], capture_output=True, text=True, timeout=30)
     return clip(p.stdout.strip() or p.stderr.strip() or "nothing found", 2000)
 
@@ -3949,9 +3949,13 @@ def wifi_connect(a, ctx):
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     if p.returncode != 0:
         return f"could not connect: {(p.stderr or p.stdout).strip()[:300]}"
-    time.sleep(4)
-    ip = subprocess.run(["ip", "-4", "-o", "addr", "show", dev], capture_output=True, text=True).stdout
-    m = re.search(r"inet (\S+)", ip)
+    m, deadline = None, time.time() + 8
+    while time.time() < deadline:          # the address usually comes in well under a second: don't wait a fixed 4 s
+        ip = subprocess.run(["ip", "-4", "-o", "addr", "show", dev], capture_output=True, text=True).stdout
+        m = re.search(r"inet (\S+)", ip)
+        if m:
+            break
+        time.sleep(0.25)
     return f"connected to {a.get('ssid')} on {dev}" + (f", address {m.group(1)}" if m else " (waiting for an address)")
 
 
