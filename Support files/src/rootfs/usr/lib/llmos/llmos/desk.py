@@ -2279,6 +2279,9 @@ class Desk:
             else:
                 self.instant_reply(line, intent.app_reading(self.app_call("read", "", a["id"]), a["title"]))
             return True
+        if re.fullmatch(r"unlock(?: the)? (?:screen|computer|desk)[.!]?", low) and self.screen != "lock":
+            self.last_reply = self._said = "The screen isn't locked."
+            return True
         r = self._system_shortcut(low, line)
         if r:
             return True
@@ -2293,6 +2296,13 @@ class Desk:
                     self.emit({"t": "toast", "text": f"Couldn't skip: {e}"})
             threading.Thread(target=skip, daemon=True).start()
             self.last_reply = self._said = "Playing the next one."
+            return True
+        if re.fullmatch(r"(?:skip|next)(?: (?:this|the|that|current))?(?: (?:song|track|one|video|tune))?[.!]?|skip it|next song|next track", low):
+            if shutil.which("playerctl") and subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=5).stdout.strip() == "Playing":
+                subprocess.run(["playerctl", "next"], capture_output=True, timeout=5)
+                self.last_reply = self._said = "Playing the next one."
+            else:
+                self.last_reply = self._said = "Nothing is playing."
             return True
         if re.fullmatch(r"(?:pause|resume|unpause|play ?pause|pause (?:the |my )?(?:music|video|song)|resume (?:the |my )?(?:music|video|song)|keep playing)[.!]?", low):
             if not media.playing():
@@ -2652,8 +2662,11 @@ class Desk:
                                                                                  "; say \u201cset a passphrase\u201d to lock them.") +
                                " Say \u201caudit\u201d to see everything I did.")
             return True
+        if re.fullmatch(r"(?:hi|hello|hey|good (?:morning|afternoon|evening))(?: there)?[.!]*", l2):
+            self._said = "Hi. What would you like to do?"
+            return True
         if re.fullmatch(r"(?:the )?(?:model|ai|assistant|you) (?:is ?n'?t|is not|isnt|aren'?t|are not|stopped|has stopped|keeps not) (?:responding|answering|working|replying)|"
-                        r"(?:you'?re|you are|it'?s|it is) (?:stuck|not answering|not responding|frozen)|why (?:aren'?t|are) you (?:not )?(?:answering|responding)|are you (?:there|alive|working)|hello\?*", l2):
+                        r"(?:you'?re|you are|it'?s|it is) (?:stuck|not answering|not responding|frozen)|why (?:aren'?t|are) you (?:not )?(?:answering|responding)|are you (?:there|alive|working)|hello\?+", l2):
             def check():
                 if llm.health():
                     self.instant_reply(line, "I'm here and working. " + ("I'm still busy with the last request; say \u201cstop\u201d to cancel it." if self.busy
