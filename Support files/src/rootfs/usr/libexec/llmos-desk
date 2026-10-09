@@ -36,6 +36,7 @@ if ! command -v labwc >/dev/null 2>&1 || ! python3 -c "import gi; gi.require_ver
     exec /usr/bin/llmos console
 fi
 rm -f /run/seatd.sock
+mkdir -p /run/llmos; : >> /run/llmos/desk.log; chmod 600 /run/llmos/desk.log
 # a private session bus for the desk (GTK/WebKit expect one; nothing else uses it)
 if command -v dbus-run-session >/dev/null 2>&1; then
     # inside the session bus: publish its address for control.py, start the AT-SPI registry (org.a11y.Bus, so GTK and
@@ -43,9 +44,9 @@ if command -v dbus-run-session >/dev/null 2>&1; then
     dbus-run-session -- sh -c '
         printf "DBUS_SESSION_BUS_ADDRESS=%s\n" "$DBUS_SESSION_BUS_ADDRESS" > '"$A11Y_ENV"'
         [ -x /usr/libexec/at-spi-bus-launcher ] && /usr/libexec/at-spi-bus-launcher --launch-immediately >/dev/null 2>&1 &
-        seatd-launch -- labwc -s "/usr/bin/llmos desk-app"
+        seatd-launch -- labwc -s "/usr/bin/llmos desk-app 2>>/run/llmos/desk.log"
         rm -f '"$A11Y_ENV"'
     '
     exit $?
 fi
-exec seatd-launch -- labwc -s "/usr/bin/llmos desk-app"
+exec seatd-launch -- labwc -s "/usr/bin/llmos desk-app 2>>/run/llmos/desk.log"
