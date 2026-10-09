@@ -1252,7 +1252,7 @@ def execute(ctx, name, arguments):
         if pol == "no":
             store.audit(name, shown, "blocked: internet off", allowed=False)
             return ("blocked: internet use is turned off in settings. Tell the owner that; do not retry, and do not "
-                    "answer from memory what you were asked to look up (no quotes, facts, news or numbers).")
+                    "answer from memory anything that changes (news, prices, scores, quotes, live numbers); a settled fact (a capital, a height, a date) you may give from memory, saying you couldn't check it.")
         if pol == "ask" and not ctx.confirm_network(name, shown):
             store.audit(name, shown, "denied network", allowed=False)
             return "the owner declined internet access for this. Continue without it."
