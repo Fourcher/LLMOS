@@ -22,6 +22,27 @@
   ]
  },
  {
+  "id": "hermes-3-3b",
+  "name": "Hermes 3 3B",
+  "maker": "Nous Research",
+  "origin": "USA",
+  "license": "Llama 3.2 Community",
+  "repo": "NousResearch/Hermes-3-Llama-3.2-3B-GGUF",
+  "file": "Hermes-3-Llama-3.2-3B.Q4_K_M.gguf",
+  "size": 2019373888,
+  "sha256": "91776fe0f6cd7483d9d5e06162fdd1f8f0262c15ced269791b4d96a655e8a5a2",
+  "ram_gb": 3,
+  "note": "steerable and does what you ask, with few refusals",
+  "speed": "fast",
+  "good_at": [
+   "does what the owner asks, rarely refuses",
+   "function calling"
+  ],
+  "limits": [
+   "Llama licence (ships its notice)"
+  ]
+ },
+ {
   "id": "gemma-4-e2b",
   "name": "Gemma 4 E2B",
   "maker": "Google",
@@ -48,26 +69,28 @@
   ]
  },
  {
-  "id": "granite-4.1-3b",
-  "name": "Granite 4.1 3B",
+  "id": "granite-4.2-3b",
+  "name": "Granite 4.2 3B",
   "maker": "IBM",
   "origin": "USA",
   "license": "Apache-2.0",
-  "repo": "ibm-granite/granite-4.1-3b-GGUF",
-  "file": "granite-4.1-3b-Q4_K_M.gguf",
-  "size": 2099501664,
-  "sha256": "662b0626cd58f443baea23559b469df6576a81d349649c59413b36a9fb32eb29",
+  "repo": "ibm-granite/granite-4.2-3b-GGUF",
+  "file": "granite-4.2-3b-Q4_K_M.gguf",
+  "size": 2244011552,
+  "sha256": "e0406663965846ae22a403456eb826ccce5f450840491f71952f18a7cb78e7d5",
   "ram_gb": 3,
-  "note": "conservative, business-oriented",
+  "note": "trained for using tools over many steps",
   "speed": "fast",
   "good_at": [
-   "business and office tasks",
+   "using the computer's tools step by step",
    "concise, factual"
   ],
   "limits": [
-   "cautious: refuses more than the others",
    "weaker at creative writing"
-  ]
+  ],
+  "chat_kwargs": {
+   "enable_thinking": false
+  }
  },
  {
   "id": "gemma-4-e4b",
@@ -114,6 +137,28 @@
   ],
   "limits": [
    "needs a capable machine (7 GB)"
+  ]
+ },
+ {
+  "id": "dolphin-3-8b",
+  "name": "Dolphin 3.0 8B",
+  "maker": "Cognitive Computations",
+  "origin": "USA",
+  "license": "Llama 3.1 Community",
+  "repo": "dphn/Dolphin3.0-Llama3.1-8B-GGUF",
+  "file": "Dolphin3.0-Llama3.1-8B-Q4_K_M.gguf",
+  "size": 4920745856,
+  "sha256": "4c001f29d4edbd9327a6df8e16e2b7907a64e0e31b0a7abe9c779a96773f304e",
+  "ram_gb": 8,
+  "note": "the most willing: does not impose its own ethics on you",
+  "speed": "medium",
+  "good_at": [
+   "answers anything the owner asks",
+   "function calling"
+  ],
+  "limits": [
+   "8B, so wants 16 GB of memory",
+   "Llama licence (ships its notice)"
   ]
  },
  {
