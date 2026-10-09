@@ -1330,6 +1330,53 @@ def _apps(text):
     return None
 
 
+# An open app of the OS's own (calculator, timer…): closing it and reading what it shows are done by the OS itself.
+# The app's name is resolved by desk.py (apps.find); here only the wording counts.
+_APP_NAME = r"[a-z][a-z0-9 -]{1,30}?"
+_APP_READ_RE = re.compile(
+    r"what(?:'s| does| is) (?:on |showing on |shown on )?(?:the |my |this )?(?P<r1>" + _APP_NAME + r") (?:show|shows|say|says|display|displays)"
+    r"|what(?:'s| is) (?:the |my )?(?P<r2>" + _APP_NAME + r") (?:showing|displaying|saying)"
+    r"|what(?:'s| is) (?:on|showing on|shown on) (?:the |my |this )?(?P<r3>" + _APP_NAME + r")"
+    r"|read (?:the |my |this )?(?P<r4>" + _APP_NAME + r")")
+_APP_CLOSE_RE = re.compile(r"(?:please )?(?:close|quit|exit) (?:the |my |this )?(?P<c1>" + _APP_NAME + r")(?: app| program| window)?")
+_NOT_AN_APP = {"window", "windows", "app", "program", "tab", "it", "that", "one", "everything", "all", "screen", "page",
+               "answer", "reply", "text", "message", "last", "settings", "files", "browser", "terminal", "the", "this"}
+
+
+def app_question(text):
+    """("read", name) for 'what does the calculator show' / 'what's on the calculator' / 'read the calculator',
+    ("close", name) for 'close the calculator'; None for anything else. The name is looked up by the desk."""
+    low = plain(text).lower().strip().rstrip("?.!").strip()
+    m = _APP_CLOSE_RE.fullmatch(low)
+    if m and not _generic(m.group("c1")):
+        return ("close", m.group("c1").strip())
+    m = _APP_READ_RE.fullmatch(low)
+    if m:
+        name = next(g for g in (m.group("r1"), m.group("r2"), m.group("r3"), m.group("r4")) if g).strip()
+        if not _generic(name):
+            return ("read", name)
+    return None
+
+
+def _generic(name):
+    """'window', 'all windows', 'the last answer': words about the OS's own windows or replies, not an app's name."""
+    return all(w in _NOT_AN_APP for w in str(name).split())
+
+
+def app_reading(page, title):
+    """What an open app shows, in words: its display (the calculator's number) when it has one, else its text.
+    `page` is the app's read result {"text", "controls", "none"}; the display is the control apps label
+    'display value: …' (calculator.html), so no keypad label is ever mistaken for it."""
+    name = str(title or "the app").lower()
+    if not page or page.get("none"):
+        return f"I could not read the {name}."
+    shown = [str(c)[len("display value: "):] for c in (page.get("controls") or []) if str(c).lower().startswith("display value: ")]
+    if shown:
+        return f"The {name} shows {shown[0]}."
+    text = " ".join(str(page.get("text") or "").split())[:300]
+    return f"The {name} shows: {text}." if text else f"The {name} shows nothing readable."
+
+
 def plain(text):
     """Typed text as the patterns expect it: phones and Macs turn ' and " into curly quotes (what’s, “this”)."""
     return str(text or "").translate({0x2019: "'", 0x2018: "'", 0x201C: '"', 0x201D: '"', 0x2032: "'"})

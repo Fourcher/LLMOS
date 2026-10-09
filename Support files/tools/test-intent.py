@@ -338,4 +338,55 @@ for text, want in CASES.items():
         bad += 1
         print(f"MISMATCH {text!r}\n   got    {got}\n   wanted {want}")
 print(f"intent shortcuts: {len(CASES) - bad}/{len(CASES)} as expected")
-sys.exit(1 if bad else 0)
+
+# an open app of the OS's own: close it, or read what it shows (the desk resolves the name to an installed app)
+APP_CASES = {
+    "close the calculator": ("close", "calculator"),
+    "close the calculator app.": ("close", "calculator"),
+    "quit my timer": ("close", "timer"),
+    "close window": None,
+    "close the window": None,
+    "close all windows": None,
+    "close this": None,
+    "close the browser": None,                  # a program, not an app of the OS's: the old path
+    "what does the calculator show": ("read", "calculator"),
+    "What does the calculator show?": ("read", "calculator"),
+    "what's on the calculator": ("read", "calculator"),
+    "what is on my calculator?": ("read", "calculator"),
+    "what's the calculator showing": ("read", "calculator"),
+    "read the calculator": ("read", "calculator"),
+    "what does it show": None,
+    "what does the weather show": ("read", "weather"),
+    "what time is it": None,
+    "what's on the screen": None,
+    "what's on the agenda": ("read", "agenda"),  # name-blind here: the desk finds no app called agenda and falls through
+    "read this": None,
+    "read the last answer": None,
+}
+app_bad = 0
+for text, want in APP_CASES.items():
+    got = intent.app_question(text)
+    if got != want:
+        app_bad += 1
+        print(f"MISMATCH app_question {text!r}\n   got    {got}\n   wanted {want}")
+
+# the reply: the display of the calculator (its labelled control), never a keypad label; generic apps: their text
+calc_page = {"text": "7 + 2 =\n79\nC\n±\n%\n÷\n7\n8\n9\n×", "controls": ["display value: 79", "C", "±", "%", "÷", "7", "8", "9", "×"]}
+REPLY_CASES = [
+    ((calc_page, "Calculator"), "The calculator shows 79."),
+    (({"text": "", "controls": ["display value: 9", "9", "="]}, "Calculator"), "The calculator shows 9."),
+    (({"text": "0\nC\n7\n8\n9", "controls": ["display value: 0", "9"]}, "Calculator"), "The calculator shows 0."),
+    (({"text": "Hello world\nSave", "controls": ["Save"]}, "Notes"), "The notes shows: Hello world Save."),
+    (({"text": "", "controls": []}, "Notes"), "The notes shows nothing readable."),
+    ((None, "Calculator"), "I could not read the calculator."),
+    (({"none": True}, "Calculator"), "I could not read the calculator."),
+]
+reply_bad = 0
+for (page, title), want in REPLY_CASES:
+    got = intent.app_reading(page, title)
+    if got != want:
+        reply_bad += 1
+        print(f"MISMATCH app_reading {title!r}\n   got    {got!r}\n   wanted {want!r}")
+print(f"app questions: {len(APP_CASES) - app_bad}/{len(APP_CASES)} as expected; "
+      f"readbacks: {len(REPLY_CASES) - reply_bad}/{len(REPLY_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad else 0)
