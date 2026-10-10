@@ -375,13 +375,16 @@ def warm_up():
     real request doesn't pay for it. Called in the background at startup.
     The prefix must match the first real turn exactly: the context size (which picks the tool list) is waited for
     while the model server is still starting, and the thinking setting is the one a turn uses."""
+    t0 = time.time()
     for i in range(10):
+        if time.time() - t0 >= 15:    # 15 s in all, however slowly the server answers
+            break
         try:
-            if llm.context_size():
+            if llm.context_size(fresh=True):
                 break
         except Exception:
             pass
-        if i < 9:
+        if i < 9 and time.time() - t0 + 1 < 15:
             time.sleep(1)
     try:
         try:

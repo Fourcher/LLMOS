@@ -82,10 +82,13 @@ def health():
 _ctx_cache = [0.0, None]
 
 
-def context_size():
+def context_size(fresh=False):
     """The model server's context window in tokens (from llama-server's /props), or None if it cannot say.
-    Checked at most once a minute: switching models restarts the server, possibly with another size."""
-    if _ctx_cache[1] is not None and time.time() - _ctx_cache[0] < 60:
+    A number is checked at most once a minute: switching models restarts the server, possibly with another size.
+    A failed check (None) is kept only 5 s, so a server still starting is asked again soon. fresh=True skips the
+    cache read (warm-up's retries). The /props fetch is bounded by a 3 s timeout."""
+    age = time.time() - _ctx_cache[0]
+    if not fresh and age < (60 if _ctx_cache[1] is not None else 5):
         return _ctx_cache[1]
     n = None
     try:
@@ -97,8 +100,7 @@ def context_size():
         n = int((d.get("default_generation_settings") or {}).get("n_ctx") or d.get("n_ctx") or 0) or None
     except (OSError, ValueError):
         n = None
-    if n is not None:                 # a failed check is not cached: the server may not be ready yet
-        _ctx_cache[:] = [time.time(), n]
+    _ctx_cache[:] = [time.time(), n]
     return n
 
 
