@@ -10,7 +10,7 @@ Versions are in `VERSION`; every image and ISO carries its version in
 - Typos like "opn firefox" are understood.
 - "Always open PDFs in Firefox" sets the default app.
 - The files window shows icons or a list, and remembers which you chose.
-- "Turn word doc into PDF", "show my to do list", and "my pics from Christmas" go straight to the right place.
+- "Turn word doc into PDF" and "show my to do list" go straight to the right place.
 - Plain error messages instead of raw codes.
 - "Click File" answers faster when nothing matches.
 - Test-shell measurement works on the first-run wizard.
