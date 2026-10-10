@@ -54,3 +54,8 @@ Before dispatching a FIX, add a "must also handle" line listing, as applicable:
 - for anything built into a shell command: a quote, a space and a newline in the argument;
 - for task/grader files: the real path of the state, read from source (paste file:line into the spec), never guessed;
 - for word filters: phrase forms, not just single words, and a substring false positive (sudo/sudoku).
+
+## Lesson (2026-10-10 01:38): a FIX worker booted a VM by running a new tool
+A FIX worker ran its new realuser-smoke.py "to check --help"; main() ignored argv and booted the test VM from the main checkout's run/ during the 1.7.7 build (the build's x86 TCG VM survived). Rules:
+- Every new tool that can boot a VM must refuse to boot unless given an explicit `--run` flag; with no args or `--help` it prints usage and exits 0.
+- FIX and VERIFY specs say: never execute a VM-touching script (anything calling boot-target.sh, tsh, vmctl, qmp sockets); test only the pure functions with fakes.
