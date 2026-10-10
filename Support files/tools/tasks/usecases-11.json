@@ -3,111 +3,6 @@
   "tasks": [
     {
       "id": "uc-401",
-      "instruction": "touchscreen not working",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-402",
-      "instruction": "headphones plugged in but sound from speakers",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-403",
-      "instruction": "read my sd card",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-404",
-      "instruction": "computer is slow",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-405",
-      "instruction": "why is everything laggy",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-406",
       "instruction": "fan is loud",
       "evaluator": {
         "func": "include_exclude",
@@ -128,7 +23,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-407",
+      "id": "uc-402",
       "instruction": "what's using my memory",
       "evaluator": {
         "func": "include_exclude",
@@ -149,7 +44,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-408",
+      "id": "uc-403",
       "instruction": "task manager",
       "evaluator": {
         "func": "include_exclude",
@@ -170,7 +65,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-409",
+      "id": "uc-404",
       "instruction": "activity monitor",
       "evaluator": {
         "func": "include_exclude",
@@ -191,7 +86,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-410",
+      "id": "uc-405",
       "instruction": "disk is full",
       "evaluator": {
         "func": "include_exclude",
@@ -212,7 +107,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-411",
+      "id": "uc-406",
       "instruction": "free up space",
       "evaluator": {
         "func": "include_exclude",
@@ -233,7 +128,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-412",
+      "id": "uc-407",
       "instruction": "clean up",
       "evaluator": {
         "func": "include_exclude",
@@ -254,7 +149,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-413",
+      "id": "uc-408",
       "instruction": "wifi not working",
       "evaluator": {
         "func": "include_exclude",
@@ -275,7 +170,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-414",
+      "id": "uc-409",
       "instruction": "connected but no internet",
       "evaluator": {
         "func": "include_exclude",
@@ -296,7 +191,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-415",
+      "id": "uc-410",
       "instruction": "internet keeps dropping",
       "evaluator": {
         "func": "include_exclude",
@@ -317,7 +212,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-416",
+      "id": "uc-411",
       "instruction": "no sound",
       "evaluator": {
         "func": "include_exclude",
@@ -338,7 +233,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-417",
+      "id": "uc-412",
       "instruction": "my speakers dont work",
       "evaluator": {
         "func": "include_exclude",
@@ -359,7 +254,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-418",
+      "id": "uc-413",
       "instruction": "app keeps crashing",
       "evaluator": {
         "func": "include_exclude",
@@ -380,7 +275,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-419",
+      "id": "uc-414",
       "instruction": "X won't open",
       "evaluator": {
         "func": "include_exclude",
@@ -401,7 +296,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-420",
+      "id": "uc-415",
       "instruction": "something popped up and I don't know what it is",
       "evaluator": {
         "func": "include_exclude",
@@ -422,7 +317,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-421",
+      "id": "uc-416",
       "instruction": "is this a virus",
       "evaluator": {
         "func": "include_exclude",
@@ -443,7 +338,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-422",
+      "id": "uc-417",
       "instruction": "screen is frozen",
       "evaluator": {
         "func": "include_exclude",
@@ -464,7 +359,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-423",
+      "id": "uc-418",
       "instruction": "it won't boot",
       "evaluator": {
         "func": "include_exclude",
@@ -485,7 +380,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-424",
+      "id": "uc-419",
       "instruction": "black screen after update",
       "evaluator": {
         "func": "include_exclude",
@@ -506,7 +401,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-425",
+      "id": "uc-420",
       "instruction": "check my hard drive health",
       "evaluator": {
         "func": "include_exclude",
@@ -527,7 +422,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-426",
+      "id": "uc-421",
       "instruction": "is my battery dying",
       "evaluator": {
         "func": "include_exclude",
@@ -548,7 +443,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-427",
+      "id": "uc-422",
       "instruction": "the model isn't responding",
       "evaluator": {
         "func": "include_exclude",
@@ -569,7 +464,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-428",
+      "id": "uc-423",
       "instruction": "offline",
       "evaluator": {
         "func": "include_exclude",
@@ -590,7 +485,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-429",
+      "id": "uc-424",
       "instruction": "you're slow",
       "evaluator": {
         "func": "include_exclude",
@@ -611,7 +506,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-430",
+      "id": "uc-425",
       "instruction": "start fresh",
       "evaluator": {
         "func": "include_exclude",
@@ -632,7 +527,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-431",
+      "id": "uc-426",
       "instruction": "why is the battery draining fast",
       "evaluator": {
         "func": "include_exclude",
@@ -653,7 +548,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-432",
+      "id": "uc-427",
       "instruction": "check for viruses",
       "evaluator": {
         "func": "include_exclude",
@@ -674,7 +569,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-433",
+      "id": "uc-428",
       "instruction": "is my computer safe",
       "evaluator": {
         "func": "include_exclude",
@@ -695,7 +590,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-434",
+      "id": "uc-429",
       "instruction": "computer is hot",
       "evaluator": {
         "func": "include_exclude",
@@ -716,7 +611,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-435",
+      "id": "uc-430",
       "instruction": "temperature",
       "evaluator": {
         "func": "include_exclude",
@@ -737,7 +632,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-436",
+      "id": "uc-431",
       "instruction": "turn on the firewall",
       "evaluator": {
         "func": "include_exclude",
@@ -758,7 +653,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-437",
+      "id": "uc-432",
       "instruction": "am I protected",
       "evaluator": {
         "func": "include_exclude",
@@ -779,7 +674,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-438",
+      "id": "uc-433",
       "instruction": "which apps can use my camera/mic/location",
       "evaluator": {
         "func": "include_exclude",
@@ -800,7 +695,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-439",
+      "id": "uc-434",
       "instruction": "block camera",
       "evaluator": {
         "func": "include_exclude",
@@ -821,8 +716,113 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-440",
+      "id": "uc-435",
       "instruction": "encrypt my disk",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-436",
+      "instruction": "if my laptop gets stolen can they see my files",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-437",
+      "instruction": "is my data private",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-438",
+      "instruction": "what do you remember about me",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-439",
+      "instruction": "forget that",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-440",
+      "instruction": "lock automatically after 5 minutes",
       "evaluator": {
         "func": "include_exclude",
         "result": {

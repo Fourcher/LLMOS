@@ -3,153 +3,6 @@
   "tasks": [
     {
       "id": "uc-481",
-      "instruction": "install an IDE",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-482",
-      "instruction": "show system logs",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-483",
-      "instruction": "why did that service fail",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-484",
-      "instruction": "journalctl",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-485",
-      "instruction": "install the nvidia driver",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-486",
-      "instruction": "use my gpu",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-487",
-      "instruction": "make a virtual machine",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-488",
       "instruction": "run docker container X",
       "evaluator": {
         "func": "include_exclude",
@@ -170,7 +23,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-489",
+      "id": "uc-482",
       "instruction": "mount my nas / smb share",
       "evaluator": {
         "func": "include_exclude",
@@ -191,7 +44,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-490",
+      "id": "uc-483",
       "instruction": "connect to \\\\\\\\server\\\\share",
       "evaluator": {
         "func": "include_exclude",
@@ -212,7 +65,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-491",
+      "id": "uc-484",
       "instruction": "set an environment variable",
       "evaluator": {
         "func": "include_exclude",
@@ -233,7 +86,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-492",
+      "id": "uc-485",
       "instruction": "add to PATH",
       "evaluator": {
         "func": "include_exclude",
@@ -254,7 +107,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-493",
+      "id": "uc-486",
       "instruction": "change the default shell to zsh",
       "evaluator": {
         "func": "include_exclude",
@@ -275,7 +128,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-494",
+      "id": "uc-487",
       "instruction": "install oh-my-zsh",
       "evaluator": {
         "func": "include_exclude",
@@ -296,7 +149,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-495",
+      "id": "uc-488",
       "instruction": "give me root",
       "evaluator": {
         "func": "include_exclude",
@@ -317,7 +170,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-496",
+      "id": "uc-489",
       "instruction": "play solitaire / chess / minesweeper / sudoku",
       "evaluator": {
         "func": "include_exclude",
@@ -338,7 +191,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-497",
+      "id": "uc-490",
       "instruction": "install steam",
       "evaluator": {
         "func": "include_exclude",
@@ -359,7 +212,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-498",
+      "id": "uc-491",
       "instruction": "play my steam games",
       "evaluator": {
         "func": "include_exclude",
@@ -380,7 +233,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-499",
+      "id": "uc-492",
       "instruction": "play a game with me",
       "evaluator": {
         "func": "include_exclude",
@@ -401,7 +254,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-500",
+      "id": "uc-493",
       "instruction": "tell me a joke",
       "evaluator": {
         "func": "include_exclude",
@@ -422,7 +275,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-501",
+      "id": "uc-494",
       "instruction": "im bored",
       "evaluator": {
         "func": "include_exclude",
@@ -443,7 +296,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-502",
+      "id": "uc-495",
       "instruction": "make a drawing app",
       "evaluator": {
         "func": "include_exclude",
@@ -464,7 +317,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-503",
+      "id": "uc-496",
       "instruction": "kids mode",
       "evaluator": {
         "func": "include_exclude",
@@ -485,7 +338,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-504",
+      "id": "uc-497",
       "instruction": "only let my kid use these apps",
       "evaluator": {
         "func": "include_exclude",
@@ -506,7 +359,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-505",
+      "id": "uc-498",
       "instruction": "trivia quiz on history",
       "evaluator": {
         "func": "include_exclude",
@@ -527,7 +380,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-506",
+      "id": "uc-499",
       "instruction": "how do I take a screenshot",
       "evaluator": {
         "func": "include_exclude",
@@ -548,7 +401,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-507",
+      "id": "uc-500",
       "instruction": "how do I copy and paste",
       "evaluator": {
         "func": "include_exclude",
@@ -569,7 +422,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-508",
+      "id": "uc-501",
       "instruction": "explain this error",
       "evaluator": {
         "func": "include_exclude",
@@ -590,7 +443,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-509",
+      "id": "uc-502",
       "instruction": "what does this message mean",
       "evaluator": {
         "func": "include_exclude",
@@ -611,7 +464,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-510",
+      "id": "uc-503",
       "instruction": "help me with my homework",
       "evaluator": {
         "func": "include_exclude",
@@ -632,7 +485,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-511",
+      "id": "uc-504",
       "instruction": "explain photosynthesis",
       "evaluator": {
         "func": "include_exclude",
@@ -653,7 +506,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-512",
+      "id": "uc-505",
       "instruction": "check my essay",
       "evaluator": {
         "func": "include_exclude",
@@ -674,7 +527,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-513",
+      "id": "uc-506",
       "instruction": "teach me to type",
       "evaluator": {
         "func": "include_exclude",
@@ -695,7 +548,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-514",
+      "id": "uc-507",
       "instruction": "typing practice",
       "evaluator": {
         "func": "include_exclude",
@@ -716,7 +569,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-515",
+      "id": "uc-508",
       "instruction": "what's this button do",
       "evaluator": {
         "func": "include_exclude",
@@ -737,7 +590,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-516",
+      "id": "uc-509",
       "instruction": "what is this icon",
       "evaluator": {
         "func": "include_exclude",
@@ -758,7 +611,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-517",
+      "id": "uc-510",
       "instruction": "show me what you can do",
       "evaluator": {
         "func": "include_exclude",
@@ -779,7 +632,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-518",
+      "id": "uc-511",
       "instruction": "learn spanish",
       "evaluator": {
         "func": "include_exclude",
@@ -800,7 +653,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-519",
+      "id": "uc-512",
       "instruction": "flashcards",
       "evaluator": {
         "func": "include_exclude",
@@ -821,8 +674,155 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-520",
+      "id": "uc-513",
       "instruction": "is there a shortcut for this",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-514",
+      "instruction": "keyboard shortcuts",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-515",
+      "instruction": "talk to me",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-516",
+      "instruction": "pon modo oscuro",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-517",
+      "instruction": "log into my bank",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-518",
+      "instruction": "order more printer ink",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-519",
+      "instruction": "shop for shoes",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-520",
+      "instruction": "book a doctor's appointment",
       "evaluator": {
         "func": "include_exclude",
         "result": {

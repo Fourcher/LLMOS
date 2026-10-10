@@ -3,48 +3,6 @@
   "tasks": [
     {
       "id": "uc-81",
-      "instruction": "connect to google drive / onedrive / dropbox",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-82",
-      "instruction": "put this on the desktop",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-83",
       "instruction": "add a shortcut to this folder",
       "evaluator": {
         "func": "include_exclude",
@@ -65,7 +23,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-84",
+      "id": "uc-82",
       "instruction": "hide this file",
       "evaluator": {
         "func": "include_exclude",
@@ -86,7 +44,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-85",
+      "id": "uc-83",
       "instruction": "open the internet",
       "evaluator": {
         "func": "include_exclude",
@@ -107,7 +65,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-86",
+      "id": "uc-84",
       "instruction": "browser",
       "evaluator": {
         "func": "include_exclude",
@@ -128,7 +86,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-87",
+      "id": "uc-85",
       "instruction": "go online",
       "evaluator": {
         "func": "include_exclude",
@@ -149,7 +107,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-88",
+      "id": "uc-86",
       "instruction": "go to youtube",
       "evaluator": {
         "func": "include_exclude",
@@ -170,7 +128,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-89",
+      "id": "uc-87",
       "instruction": "open bbc.co.uk",
       "evaluator": {
         "func": "include_exclude",
@@ -191,7 +149,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-90",
+      "id": "uc-88",
       "instruction": "amazon",
       "evaluator": {
         "func": "include_exclude",
@@ -212,7 +170,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-91",
+      "id": "uc-89",
       "instruction": "search for cheap flights to rome",
       "evaluator": {
         "func": "include_exclude",
@@ -233,7 +191,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-92",
+      "id": "uc-90",
       "instruction": "google how to boil an egg",
       "evaluator": {
         "func": "include_exclude",
@@ -254,7 +212,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-93",
+      "id": "uc-91",
       "instruction": "make the text bigger on this page",
       "evaluator": {
         "func": "include_exclude",
@@ -275,7 +233,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-94",
+      "id": "uc-92",
       "instruction": "zoom in",
       "evaluator": {
         "func": "include_exclude",
@@ -296,7 +254,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-95",
+      "id": "uc-93",
       "instruction": "bookmark this",
       "evaluator": {
         "func": "include_exclude",
@@ -317,7 +275,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-96",
+      "id": "uc-94",
       "instruction": "save this page for later",
       "evaluator": {
         "func": "include_exclude",
@@ -338,7 +296,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-97",
+      "id": "uc-95",
       "instruction": "open my bookmarks",
       "evaluator": {
         "func": "include_exclude",
@@ -359,7 +317,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-98",
+      "id": "uc-96",
       "instruction": "go back",
       "evaluator": {
         "func": "include_exclude",
@@ -380,7 +338,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-99",
+      "id": "uc-97",
       "instruction": "reload",
       "evaluator": {
         "func": "include_exclude",
@@ -401,7 +359,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-100",
+      "id": "uc-98",
       "instruction": "open a new tab",
       "evaluator": {
         "func": "include_exclude",
@@ -422,7 +380,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-101",
+      "id": "uc-99",
       "instruction": "close this tab",
       "evaluator": {
         "func": "include_exclude",
@@ -443,7 +401,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-102",
+      "id": "uc-100",
       "instruction": "block ads",
       "evaluator": {
         "func": "include_exclude",
@@ -464,7 +422,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-103",
+      "id": "uc-101",
       "instruction": "too many popups",
       "evaluator": {
         "func": "include_exclude",
@@ -485,7 +443,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-104",
+      "id": "uc-102",
       "instruction": "clear my history",
       "evaluator": {
         "func": "include_exclude",
@@ -506,7 +464,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-105",
+      "id": "uc-103",
       "instruction": "private window",
       "evaluator": {
         "func": "include_exclude",
@@ -527,7 +485,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-106",
+      "id": "uc-104",
       "instruction": "incognito",
       "evaluator": {
         "func": "include_exclude",
@@ -548,7 +506,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-107",
+      "id": "uc-105",
       "instruction": "where did that download go",
       "evaluator": {
         "func": "include_exclude",
@@ -569,7 +527,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-108",
+      "id": "uc-106",
       "instruction": "show my downloads",
       "evaluator": {
         "func": "include_exclude",
@@ -590,7 +548,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-109",
+      "id": "uc-107",
       "instruction": "this website wont load",
       "evaluator": {
         "func": "include_exclude",
@@ -611,7 +569,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-110",
+      "id": "uc-108",
       "instruction": "page is broken",
       "evaluator": {
         "func": "include_exclude",
@@ -632,7 +590,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-111",
+      "id": "uc-109",
       "instruction": "save this page as pdf",
       "evaluator": {
         "func": "include_exclude",
@@ -653,7 +611,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-112",
+      "id": "uc-110",
       "instruction": "print this page",
       "evaluator": {
         "func": "include_exclude",
@@ -674,7 +632,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-113",
+      "id": "uc-111",
       "instruction": "make browser dark",
       "evaluator": {
         "func": "include_exclude",
@@ -695,7 +653,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-114",
+      "id": "uc-112",
       "instruction": "change homepage",
       "evaluator": {
         "func": "include_exclude",
@@ -716,7 +674,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-115",
+      "id": "uc-113",
       "instruction": "change search engine",
       "evaluator": {
         "func": "include_exclude",
@@ -737,7 +695,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-116",
+      "id": "uc-114",
       "instruction": "translate this page",
       "evaluator": {
         "func": "include_exclude",
@@ -758,7 +716,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-117",
+      "id": "uc-115",
       "instruction": "is this site safe",
       "evaluator": {
         "func": "include_exclude",
@@ -779,7 +737,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-118",
+      "id": "uc-116",
       "instruction": "help me reply to this",
       "evaluator": {
         "func": "include_exclude",
@@ -800,7 +758,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-119",
+      "id": "uc-117",
       "instruction": "add my outlook account",
       "evaluator": {
         "func": "include_exclude",
@@ -821,8 +779,50 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-120",
+      "id": "uc-118",
       "instruction": "start a video call",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-119",
+      "instruction": "open zoom",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-120",
+      "instruction": "join this meet link",
       "evaluator": {
         "func": "include_exclude",
         "result": {

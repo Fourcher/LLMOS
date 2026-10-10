@@ -3,111 +3,6 @@
   "tasks": [
     {
       "id": "uc-281",
-      "instruction": "move the dock/taskbar to the left",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-282",
-      "instruction": "hide the bar",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-283",
-      "instruction": "make icons smaller",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-284",
-      "instruction": "turn off the startup sound",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-285",
-      "instruction": "change notification sound",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-286",
       "instruction": "no clicking sounds",
       "evaluator": {
         "func": "include_exclude",
@@ -128,7 +23,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-287",
+      "id": "uc-282",
       "instruction": "make it look like windows/mac",
       "evaluator": {
         "func": "include_exclude",
@@ -149,7 +44,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-288",
+      "id": "uc-283",
       "instruction": "retro look",
       "evaluator": {
         "func": "include_exclude",
@@ -170,7 +65,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-289",
+      "id": "uc-284",
       "instruction": "make it cozy",
       "evaluator": {
         "func": "include_exclude",
@@ -191,7 +86,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-290",
+      "id": "uc-285",
       "instruction": "pin the calculator to the dock",
       "evaluator": {
         "func": "include_exclude",
@@ -212,7 +107,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-291",
+      "id": "uc-286",
       "instruction": "put my apps on the desktop",
       "evaluator": {
         "func": "include_exclude",
@@ -233,7 +128,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-292",
+      "id": "uc-287",
       "instruction": "change my profile picture",
       "evaluator": {
         "func": "include_exclude",
@@ -254,7 +149,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-293",
+      "id": "uc-288",
       "instruction": "change my name",
       "evaluator": {
         "func": "include_exclude",
@@ -275,7 +170,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-294",
+      "id": "uc-289",
       "instruction": "set a screensaver",
       "evaluator": {
         "func": "include_exclude",
@@ -296,7 +191,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-295",
+      "id": "uc-290",
       "instruction": "show a clock when idle",
       "evaluator": {
         "func": "include_exclude",
@@ -317,7 +212,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-296",
+      "id": "uc-291",
       "instruction": "make the windows rounder/less transparent",
       "evaluator": {
         "func": "include_exclude",
@@ -338,7 +233,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-297",
+      "id": "uc-292",
       "instruction": "call me Sam",
       "evaluator": {
         "func": "include_exclude",
@@ -359,7 +254,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-298",
+      "id": "uc-293",
       "instruction": "talk less",
       "evaluator": {
         "func": "include_exclude",
@@ -380,7 +275,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-299",
+      "id": "uc-294",
       "instruction": "be more casual",
       "evaluator": {
         "func": "include_exclude",
@@ -401,7 +296,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-300",
+      "id": "uc-295",
       "instruction": "open calculator",
       "evaluator": {
         "func": "include_exclude",
@@ -422,7 +317,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-301",
+      "id": "uc-296",
       "instruction": "i need to do some maths",
       "evaluator": {
         "func": "include_exclude",
@@ -443,7 +338,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-302",
+      "id": "uc-297",
       "instruction": "make me a calculator app",
       "evaluator": {
         "func": "include_exclude",
@@ -464,7 +359,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-303",
+      "id": "uc-298",
       "instruction": "build a tip calculator",
       "evaluator": {
         "func": "include_exclude",
@@ -485,7 +380,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-304",
+      "id": "uc-299",
       "instruction": "scientific calculator please",
       "evaluator": {
         "func": "include_exclude",
@@ -506,7 +401,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-305",
+      "id": "uc-300",
       "instruction": "set a timer for 10 minutes",
       "evaluator": {
         "func": "include_exclude",
@@ -527,7 +422,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-306",
+      "id": "uc-301",
       "instruction": "pasta timer",
       "evaluator": {
         "func": "include_exclude",
@@ -548,7 +443,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-307",
+      "id": "uc-302",
       "instruction": "remind me in 10 min",
       "evaluator": {
         "func": "include_exclude",
@@ -569,7 +464,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-308",
+      "id": "uc-303",
       "instruction": "stopwatch",
       "evaluator": {
         "func": "include_exclude",
@@ -590,7 +485,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-309",
+      "id": "uc-304",
       "instruction": "alarm for 7am",
       "evaluator": {
         "func": "include_exclude",
@@ -611,7 +506,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-310",
+      "id": "uc-305",
       "instruction": "world clock tokyo",
       "evaluator": {
         "func": "include_exclude",
@@ -632,7 +527,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-311",
+      "id": "uc-306",
       "instruction": "notes app",
       "evaluator": {
         "func": "include_exclude",
@@ -653,7 +548,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-312",
+      "id": "uc-307",
       "instruction": "show my notes",
       "evaluator": {
         "func": "include_exclude",
@@ -674,7 +569,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-313",
+      "id": "uc-308",
       "instruction": "unit converter",
       "evaluator": {
         "func": "include_exclude",
@@ -695,7 +590,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-314",
+      "id": "uc-309",
       "instruction": "how many cups in a liter",
       "evaluator": {
         "func": "include_exclude",
@@ -716,7 +611,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-315",
+      "id": "uc-310",
       "instruction": "100 usd in euros",
       "evaluator": {
         "func": "include_exclude",
@@ -737,7 +632,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-316",
+      "id": "uc-311",
       "instruction": "install spotify/vlc/zoom/steam/vs code",
       "evaluator": {
         "func": "include_exclude",
@@ -758,7 +653,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-317",
+      "id": "uc-312",
       "instruction": "get me gimp",
       "evaluator": {
         "func": "include_exclude",
@@ -779,7 +674,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-318",
+      "id": "uc-313",
       "instruction": "get rid of candy crush",
       "evaluator": {
         "func": "include_exclude",
@@ -800,7 +695,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-319",
+      "id": "uc-314",
       "instruction": "what apps do i have",
       "evaluator": {
         "func": "include_exclude",
@@ -821,8 +716,113 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-320",
+      "id": "uc-315",
       "instruction": "show all apps",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-316",
+      "instruction": "close this",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-317",
+      "instruction": "quit firefox",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-318",
+      "instruction": "this app is frozen",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-319",
+      "instruction": "force quit",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-320",
+      "instruction": "change the calculator i made to have bigger buttons",
       "evaluator": {
         "func": "include_exclude",
         "result": {

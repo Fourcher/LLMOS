@@ -27,6 +27,19 @@ EXCLUDE_RE = re.compile(
     r"password|passphrase|shut|shutdown|reboot|restart|sleep|log out|power off|reset|factory",
     re.IGNORECASE,
 )
+# Destructive or power/process actions that must never reach the agent as tasks.
+DROP_PATTERNS = [
+    r"\bturn (?:it |the computer |the pc |the machine )?off\b",
+    r"\bpower (?:off|down)\b",
+    r"\brm\s+-",
+    r"\bsudo\b",
+    r"\bdd\s+if=",
+    r"\bmkfs\b",
+    r"\bkill(?:all)?\b",
+    r"\bhalt\b",
+    r"\bpoweroff\b",
+]
+DROP_RE = re.compile("|".join("(?:%s)" % p for p in DROP_PATTERNS), re.IGNORECASE)
 PER_FILE = 40
 EXCLUDE_OUTPUT = ["No such tool", "error:", "Traceback", "I couldn't finish that"]
 
@@ -43,11 +56,10 @@ def is_row_or_item(line):
     return bool(re.match(r"^([-*+]|\d+[.)])\s", stripped))
 
 
-def collect(path):
+def collect(path, seen):
     with open(path, encoding="utf-8") as f:
         lines = f.read().splitlines()
     phrases = []
-    seen = set()
     for line in lines:
         if not is_row_or_item(line):
             continue
@@ -56,7 +68,7 @@ def collect(path):
             if not key or key in seen:
                 continue
             seen.add(key)
-            if EXCLUDE_RE.search(phrase):
+            if EXCLUDE_RE.search(phrase) or DROP_RE.search(phrase):
                 continue
             phrases.append(phrase.strip())
     return phrases
@@ -79,9 +91,14 @@ def make_task(prefix, n, phrase):
 
 def main():
     written = []
+    # Remove stale generated files so no orphan usecases-N/parity-N remains.
+    for stale in os.listdir(HERE):
+        if re.match(r"^(usecases|parity)-\d+\.json$", stale):
+            os.remove(os.path.join(HERE, stale))
+    seen = set()  # de-duplicate across both sources; first occurrence (use-cases) wins
     for name, path in SOURCES:
         prefix = "uc" if name == "usecases" else "par"
-        phrases = collect(path)
+        phrases = collect(path, seen)
         tasks = [make_task(prefix, i, p) for i, p in enumerate(phrases, start=1)]
         chunks = [tasks[i:i + PER_FILE] for i in range(0, len(tasks), PER_FILE)]
         for index, chunk in enumerate(chunks, start=1):

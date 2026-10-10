@@ -3,258 +3,6 @@
   "tasks": [
     {
       "id": "par-41",
-      "instruction": "bluetooth",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-42",
-      "instruction": "printers",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-43",
-      "instruction": "take a screenshot",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-44",
-      "instruction": "clipboard history",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-45",
-      "instruction": "show my files",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-46",
-      "instruction": "make a folder called Parity Test",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-47",
-      "instruction": "find my files called parity",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-48",
-      "instruction": "show the trash",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-49",
-      "instruction": "what's on my usb stick",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-50",
-      "instruction": "eject the usb stick",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-51",
-      "instruction": "lock the screen",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-52",
-      "instruction": "open the calculator",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-53",
       "instruction": "open the calendar",
       "evaluator": {
         "func": "include_exclude",
@@ -275,7 +23,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-54",
+      "id": "par-42",
       "instruction": "open the image viewer",
       "evaluator": {
         "func": "include_exclude",
@@ -296,7 +44,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-55",
+      "id": "par-43",
       "instruction": "keep the screen on",
       "evaluator": {
         "func": "include_exclude",
@@ -317,7 +65,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-56",
+      "id": "par-44",
       "instruction": "what can I do here",
       "evaluator": {
         "func": "include_exclude",
@@ -338,7 +86,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-57",
+      "id": "par-45",
       "instruction": "show all my programs",
       "evaluator": {
         "func": "include_exclude",

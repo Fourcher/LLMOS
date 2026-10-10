@@ -24,27 +24,6 @@
     },
     {
       "id": "par-2",
-      "instruction": "open a terminal",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-3",
       "instruction": "open the text editor",
       "evaluator": {
         "func": "include_exclude",
@@ -65,7 +44,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-4",
+      "id": "par-3",
       "instruction": "open the browser",
       "evaluator": {
         "func": "include_exclude",
@@ -86,7 +65,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-5",
+      "id": "par-4",
       "instruction": "new tab",
       "evaluator": {
         "func": "include_exclude",
@@ -107,7 +86,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-6",
+      "id": "par-5",
       "instruction": "maximize the browser",
       "evaluator": {
         "func": "include_exclude",
@@ -128,7 +107,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-7",
+      "id": "par-6",
       "instruction": "minimize the browser",
       "evaluator": {
         "func": "include_exclude",
@@ -149,28 +128,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-8",
-      "instruction": "switch to the browser",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-9",
+      "id": "par-7",
       "instruction": "show the desktop",
       "evaluator": {
         "func": "include_exclude",
@@ -191,7 +149,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-10",
+      "id": "par-8",
       "instruction": "close the browser",
       "evaluator": {
         "func": "include_exclude",
@@ -212,28 +170,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-11",
-      "instruction": "task manager",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-12",
+      "id": "par-9",
       "instruction": "how much disk space do i have",
       "evaluator": {
         "func": "include_exclude",
@@ -254,28 +191,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-13",
-      "instruction": "about this computer",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-14",
+      "id": "par-10",
       "instruction": "check for updates",
       "evaluator": {
         "func": "include_exclude",
@@ -296,7 +212,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-15",
+      "id": "par-11",
       "instruction": "displays",
       "evaluator": {
         "func": "include_exclude",
@@ -317,7 +233,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-16",
+      "id": "par-12",
       "instruction": "set the resolution to 1024x768",
       "evaluator": {
         "func": "include_exclude",
@@ -338,7 +254,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-17",
+      "id": "par-13",
       "instruction": "set the resolution to 1280x800",
       "evaluator": {
         "func": "include_exclude",
@@ -359,7 +275,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-18",
+      "id": "par-14",
       "instruction": "rotate the screen",
       "evaluator": {
         "func": "include_exclude",
@@ -380,7 +296,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-19",
+      "id": "par-15",
       "instruction": "the screen is upside down",
       "evaluator": {
         "func": "include_exclude",
@@ -401,7 +317,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-20",
+      "id": "par-16",
       "instruction": "make the mouse faster",
       "evaluator": {
         "func": "include_exclude",
@@ -422,7 +338,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-21",
+      "id": "par-17",
       "instruction": "mouse normal speed",
       "evaluator": {
         "func": "include_exclude",
@@ -443,7 +359,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-22",
+      "id": "par-18",
       "instruction": "turn on natural scrolling",
       "evaluator": {
         "func": "include_exclude",
@@ -464,7 +380,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-23",
+      "id": "par-19",
       "instruction": "natural scrolling off",
       "evaluator": {
         "func": "include_exclude",
@@ -485,7 +401,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-24",
+      "id": "par-20",
       "instruction": "keyboard layout",
       "evaluator": {
         "func": "include_exclude",
@@ -506,7 +422,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-25",
+      "id": "par-21",
       "instruction": "set my time zone to tokyo",
       "evaluator": {
         "func": "include_exclude",
@@ -527,7 +443,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-26",
+      "id": "par-22",
       "instruction": "set my time zone to UTC",
       "evaluator": {
         "func": "include_exclude",
@@ -548,7 +464,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-27",
+      "id": "par-23",
       "instruction": "turn the screen off after 5 minutes",
       "evaluator": {
         "func": "include_exclude",
@@ -569,7 +485,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-28",
+      "id": "par-24",
       "instruction": "turn the screen off after 10 minutes",
       "evaluator": {
         "func": "include_exclude",
@@ -590,7 +506,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-29",
+      "id": "par-25",
       "instruction": "turn on night light",
       "evaluator": {
         "func": "include_exclude",
@@ -611,91 +527,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-30",
-      "instruction": "turn off night light",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-31",
-      "instruction": "do not disturb",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-32",
-      "instruction": "turn off do not disturb",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-33",
-      "instruction": "dark mode",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "par-34",
+      "id": "par-26",
       "instruction": "use a serif font",
       "evaluator": {
         "func": "include_exclude",
@@ -716,7 +548,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-35",
+      "id": "par-27",
       "instruction": "go back to the default theme",
       "evaluator": {
         "func": "include_exclude",
@@ -737,7 +569,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-36",
+      "id": "par-28",
       "instruction": "make the text bigger",
       "evaluator": {
         "func": "include_exclude",
@@ -758,7 +590,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-37",
+      "id": "par-29",
       "instruction": "normal text size",
       "evaluator": {
         "func": "include_exclude",
@@ -779,7 +611,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-38",
+      "id": "par-30",
       "instruction": "turn the volume up",
       "evaluator": {
         "func": "include_exclude",
@@ -800,7 +632,7 @@
       "timeout_s": 120
     },
     {
-      "id": "par-39",
+      "id": "par-31",
       "instruction": "unmute",
       "evaluator": {
         "func": "include_exclude",
@@ -821,8 +653,176 @@
       "timeout_s": 120
     },
     {
-      "id": "par-40",
+      "id": "par-32",
       "instruction": "sound settings",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-33",
+      "instruction": "bluetooth",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-34",
+      "instruction": "printers",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-35",
+      "instruction": "make a folder called Parity Test",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-36",
+      "instruction": "find my files called parity",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-37",
+      "instruction": "show the trash",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-38",
+      "instruction": "what's on my usb stick",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-39",
+      "instruction": "eject the usb stick",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-40",
+      "instruction": "open the calculator",
       "evaluator": {
         "func": "include_exclude",
         "result": {

@@ -3,48 +3,6 @@
   "tasks": [
     {
       "id": "uc-161",
-      "instruction": "make the title bold",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-162",
-      "instruction": "recover my unsaved document",
-      "evaluator": {
-        "func": "include_exclude",
-        "result": {
-          "type": "reply"
-        },
-        "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
-        }
-      },
-      "weak": true,
-      "reachable_by_agent": true,
-      "timeout_s": 120
-    },
-    {
-      "id": "uc-163",
       "instruction": "the app crashed and i lost my work",
       "evaluator": {
         "func": "include_exclude",
@@ -65,7 +23,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-164",
+      "id": "uc-162",
       "instruction": "show my photos",
       "evaluator": {
         "func": "include_exclude",
@@ -86,7 +44,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-165",
+      "id": "uc-163",
       "instruction": "open pictures",
       "evaluator": {
         "func": "include_exclude",
@@ -107,7 +65,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-166",
+      "id": "uc-164",
       "instruction": "my pics from christmas",
       "evaluator": {
         "func": "include_exclude",
@@ -128,7 +86,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-167",
+      "id": "uc-165",
       "instruction": "play some music",
       "evaluator": {
         "func": "include_exclude",
@@ -149,7 +107,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-168",
+      "id": "uc-166",
       "instruction": "put on some jazz",
       "evaluator": {
         "func": "include_exclude",
@@ -170,7 +128,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-169",
+      "id": "uc-167",
       "instruction": "play my music",
       "evaluator": {
         "func": "include_exclude",
@@ -191,7 +149,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-170",
+      "id": "uc-168",
       "instruction": "next song",
       "evaluator": {
         "func": "include_exclude",
@@ -212,7 +170,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-171",
+      "id": "uc-169",
       "instruction": "stop the music",
       "evaluator": {
         "func": "include_exclude",
@@ -233,7 +191,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-172",
+      "id": "uc-170",
       "instruction": "play this video",
       "evaluator": {
         "func": "include_exclude",
@@ -254,7 +212,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-173",
+      "id": "uc-171",
       "instruction": "open this mp4/mkv",
       "evaluator": {
         "func": "include_exclude",
@@ -275,7 +233,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-174",
+      "id": "uc-172",
       "instruction": "watch netflix",
       "evaluator": {
         "func": "include_exclude",
@@ -296,7 +254,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-175",
+      "id": "uc-173",
       "instruction": "open spotify",
       "evaluator": {
         "func": "include_exclude",
@@ -317,7 +275,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-176",
+      "id": "uc-174",
       "instruction": "youtube music",
       "evaluator": {
         "func": "include_exclude",
@@ -338,7 +296,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-177",
+      "id": "uc-175",
       "instruction": "crop this photo",
       "evaluator": {
         "func": "include_exclude",
@@ -359,7 +317,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-178",
+      "id": "uc-176",
       "instruction": "rotate it",
       "evaluator": {
         "func": "include_exclude",
@@ -380,7 +338,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-179",
+      "id": "uc-177",
       "instruction": "make it brighter",
       "evaluator": {
         "func": "include_exclude",
@@ -401,7 +359,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-180",
+      "id": "uc-178",
       "instruction": "resize to 1080 wide",
       "evaluator": {
         "func": "include_exclude",
@@ -422,7 +380,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-181",
+      "id": "uc-179",
       "instruction": "take a screenshot",
       "evaluator": {
         "func": "include_exclude",
@@ -443,7 +401,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-182",
+      "id": "uc-180",
       "instruction": "screenshot this window",
       "evaluator": {
         "func": "include_exclude",
@@ -464,7 +422,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-183",
+      "id": "uc-181",
       "instruction": "record my screen",
       "evaluator": {
         "func": "include_exclude",
@@ -485,7 +443,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-184",
+      "id": "uc-182",
       "instruction": "record my voice",
       "evaluator": {
         "func": "include_exclude",
@@ -506,7 +464,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-185",
+      "id": "uc-183",
       "instruction": "voice memo",
       "evaluator": {
         "func": "include_exclude",
@@ -527,7 +485,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-186",
+      "id": "uc-184",
       "instruction": "make a slideshow of these photos",
       "evaluator": {
         "func": "include_exclude",
@@ -548,7 +506,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-187",
+      "id": "uc-185",
       "instruction": "set this photo as my wallpaper",
       "evaluator": {
         "func": "include_exclude",
@@ -569,7 +527,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-188",
+      "id": "uc-186",
       "instruction": "cut the first 10 seconds off this video",
       "evaluator": {
         "func": "include_exclude",
@@ -590,7 +548,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-189",
+      "id": "uc-187",
       "instruction": "convert to mp4",
       "evaluator": {
         "func": "include_exclude",
@@ -611,7 +569,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-190",
+      "id": "uc-188",
       "instruction": "listen to the radio",
       "evaluator": {
         "func": "include_exclude",
@@ -632,7 +590,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-191",
+      "id": "uc-189",
       "instruction": "play bbc radio 4",
       "evaluator": {
         "func": "include_exclude",
@@ -653,7 +611,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-192",
+      "id": "uc-190",
       "instruction": "podcasts",
       "evaluator": {
         "func": "include_exclude",
@@ -674,7 +632,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-193",
+      "id": "uc-191",
       "instruction": "play this on my tv",
       "evaluator": {
         "func": "include_exclude",
@@ -695,7 +653,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-194",
+      "id": "uc-192",
       "instruction": "cast to chromecast",
       "evaluator": {
         "func": "include_exclude",
@@ -716,7 +674,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-195",
+      "id": "uc-193",
       "instruction": "import photos from my camera/phone",
       "evaluator": {
         "func": "include_exclude",
@@ -737,7 +695,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-196",
+      "id": "uc-194",
       "instruction": "rip this cd",
       "evaluator": {
         "func": "include_exclude",
@@ -758,7 +716,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-197",
+      "id": "uc-195",
       "instruction": "play this dvd",
       "evaluator": {
         "func": "include_exclude",
@@ -779,7 +737,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-198",
+      "id": "uc-196",
       "instruction": "open settings",
       "evaluator": {
         "func": "include_exclude",
@@ -800,7 +758,7 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-199",
+      "id": "uc-197",
       "instruction": "connect to wifi",
       "evaluator": {
         "func": "include_exclude",
@@ -821,8 +779,50 @@
       "timeout_s": 120
     },
     {
-      "id": "uc-200",
+      "id": "uc-198",
       "instruction": "the internet isnt working",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-199",
+      "instruction": "forget this network",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-200",
+      "instruction": "switch to my phone hotspot",
       "evaluator": {
         "func": "include_exclude",
         "result": {
