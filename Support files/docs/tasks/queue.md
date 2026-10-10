@@ -156,5 +156,6 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 ## 1.7.7 build + post-build merges (2026-10-10 02:25)
 - [done] (reliability) P1-7 1.7.7 build | evidence: "==== done (02:23:07) ==== dist/ is current"; RELEASE.json "1.7.7 2937f9d" (contains P1-4 rect, P2-14 testreset-min, P3-2 sampling)
 - [done] (capability/speed/UI) merged b1ee0a5, bd3a962, f2b6cec, 059904f, 769a120 | evidence: VERIFY 84e4e76 "compiled 38 files OK", "node check OK", 82 suites no FAIL; router spot-check all 7 phrases routed
-- [running] (reliability) 1.7.7 isosmoke + calc-smoke | role: run
-- [open] (top) P1-8/P1-9 gate on 1.7.7: rect #in, QMP click centre, type "hello world", rect value check, Enter, desk-ctl wait, desk-state reply | role: run | after: smokes
+- [done] (reliability) 1.7.7 smokes | evidence: isosmoke "desk socket: yes"; calc-smoke "all good"
+- [done] (top) P1-8/P1-9 GATE on 1.7.7 | evidence: RUN "rect2 value: 'hello world' (P1-8 PASS)"; "Enter-to-reply: 30.4 s"; desk-state reply "Hello! What would you like me to do?" (P1-9 PASS); click at 662,744 on 1280x800
+- [open] (speed) "hello world" typed in the desk took 30.4 s to answer (greeting should be instant) | role: probe
