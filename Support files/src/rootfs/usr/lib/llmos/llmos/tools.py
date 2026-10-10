@@ -4227,6 +4227,13 @@ def _recent_when(m):
       [], risk=READ)
 def last_saved(a, ctx):
     import datetime as _dt
+
+    def _opened(r):
+        # open_file's success replies only: "opened X in P. Done: ...", "opened X with P. Say ...",
+        # "now playing X. Say ...", "X is shown (as text) on the owner's screen ..."
+        return bool(re.match(r"(opened .+ in .+\. Done: |opened .+ with \S+\. Say one sentence at most\.$|"
+                             r"now playing .+\. Say one sentence at most\.$|.+ is shown (as text )?on the owner's screen)", r))
+
     home = config.home()
     since = str(a.get("since") or "").strip().lower()
     now = time.time()
@@ -4239,7 +4246,7 @@ def last_saved(a, ctx):
         ago = "just now" if mins < 1 else f"{mins} minute{'s' if mins != 1 else ''} ago"
         if a.get("open"):
             r = open_file({"path": best}, ctx)
-            if str(r).lower().startswith(("error", "not done")):
+            if not _opened(str(r)):
                 return str(r)
             return f"Opened {os.path.basename(best)} (saved {ago})."
         return f"It's {'~' + best[len(home):] if best.startswith(home) else best} (saved {ago})."
@@ -4256,7 +4263,7 @@ def last_saved(a, ctx):
     if a.get("open"):
         m, best = hits[0]
         r = open_file({"path": best}, ctx)
-        if str(r).lower().startswith(("error", "not done")):
+        if not _opened(str(r)):
             return str(r)
         return f"Opened {os.path.basename(best)} (saved {_recent_when(m)})."
     lines = []

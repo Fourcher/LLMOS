@@ -54,6 +54,8 @@ def names(out):
 
 
 bad = 0
+# a real open_file success reply (launched in an app)
+OK_REPLY = "opened new.txt in Mousepad. Done: if the request asked for more, do the next step now; otherwise tell the owner in one sentence."
 
 
 def check(label, got, want):
@@ -115,7 +117,7 @@ finally:
 # open=True: the open tool (tools.open_file) is called with the newest file and nothing else is opened
 opened = []
 real_open = tools.open_file
-tools.open_file = lambda a, ctx: opened.append(a["path"]) or "opened"
+tools.open_file = lambda a, ctx: opened.append(a["path"]) or OK_REPLY
 try:
     home3 = make_home({"old.txt": (NOW - 3600, "Documents"), "new.txt": (NOW - 600, "Documents")})
     out = run(home3, {"open": True})
@@ -135,7 +137,30 @@ try:
     tools.open_file = lambda a, ctx: opened.append(a["path"]) or "error: there is no file " + a["path"]
     out = run(home3, {"open": True})
     check("open failed", (opened, out), ([os.path.join(home3, "Documents", "new.txt")], "error: there is no file " + os.path.join(home3, "Documents", "new.txt")))
-    tools.open_file = lambda a, ctx: opened.append(a["path"]) or "opened"
+    tools.open_file = lambda a, ctx: opened.append(a["path"]) or OK_REPLY
+    opened.clear()
+    # open_file replies that are NOT successes come back unchanged, never "Opened ..."
+    not_success = [
+        ("newest is a PDF", "report.pdf", "report.pdf is a PDF, 12 KB; it cannot be shown as text (say 'install mupdf' to get a PDF viewer)"),
+        ("mp3 with no sound", "song.mp3", "there is no screen or sound device to play it on"),
+        ("5 MB text", "big.txt", "big.txt is 5.0 MB of text, too big to show whole; read_file can take part of it"),
+        ("error reply", "report.pdf", "error: there is no file /elsewhere/report.pdf"),
+        ("file named opened...", "opened.pdf", "opened.pdf is a PDF, 12 KB; it cannot be shown as text"),
+    ]
+    for label, fname, reply in not_success:
+        h5 = make_home({fname: (NOW - 300, "Documents")})
+        p5 = os.path.join(h5, "Documents", fname)
+        tools.open_file = lambda a, ctx, reply=reply: opened.append(a["path"]) or reply
+        opened.clear()
+        out = run(h5, {"open": True})
+        check(f"not success: {label}", (opened, out), ([p5], reply))
+    h5 = make_home({"report.pdf": (NOW - 300, "Documents")})
+    p5 = os.path.join(h5, "Documents", "report.pdf")
+    # the success reply, with a real success text from open_file
+    tools.open_file = lambda a, ctx: opened.append(a["path"]) or "opened report.pdf in Firefox. Done: say one sentence."
+    opened.clear()
+    check("success: PDF opened", (opened, run(h5, {"open": True})), ([p5], "Opened report.pdf (saved 5 minutes ago)."))
+    tools.open_file = lambda a, ctx: opened.append(a["path"]) or OK_REPLY
     opened.clear()
     # no open flag: the same replies, and no open call
     check("no open flag", (run(home3, {}).startswith("It's ~/Documents/new.txt"), opened), (True, []))
