@@ -264,9 +264,18 @@ def main(argv=None):
     ap.add_argument("--repeat", type=int, default=1,
                     help="run the whole suite N times; repeats 2..N each start on a fresh overlay "
                          "(flake runs: use 3)")
+    ap.add_argument("--run", action="store_true", help="boot the test VM and run the suite (required)")
     args = ap.parse_args(argv)
     if args.repeat < 1:
         ap.error("--repeat must be >= 1")
+    if not args.run:
+        tasks = tasklib.load(args.suite)["tasks"]
+        if args.ids:
+            wanted = set(args.ids)
+            tasks = [t for t in tasks if t["id"] in wanted]
+        print("dry: would run %d tasks from %s" % (len(tasks), args.suite))
+        print("add --run to boot the test VM")
+        return 0
 
     from qmp import QMP
     from realuser import RealUser

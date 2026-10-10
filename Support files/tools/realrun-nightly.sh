@@ -1,11 +1,28 @@
 #!/bin/bash
 # realrun-nightly.sh: run ONE task suite per night as a real user in a fresh test VM,
 # then triage the failures into docs/tasks/queue.md. The VM is always quit on exit.
-#   usage: tools/realrun-nightly.sh [suite.json]     (no argument: the nightly rotation)
-#   NIGHTLY_DRY=1          print the chosen suite path and exit 0, no boot
+#   usage: tools/realrun-nightly.sh --run [suite.json]   (no argument: the nightly rotation)
+#   without --run: print the chosen suite path and exit 0, no boot
+#   NIGHTLY_DRY=1          print the chosen suite path and exit 0, no boot (same as no --run)
 #   NIGHTLY_DATE=YYYY-MM-DD  use this date instead of today (tests)
 # Output: run/realrun-nightly/<YYYY-MM-DD>/ (records) and .../triage (bundles)
 set -u
+
+# -h/--help anywhere in the arguments: print usage and exit before anything else
+for a in "$@"; do
+  case "$a" in
+    -h|--help)
+      echo "usage: realrun-nightly.sh [--run] [suite.json]"
+      echo "  --run boots the nightly test VM and runs the suite; without it only the chosen suite path is printed"
+      echo "  NIGHTLY_DRY=1 prints the chosen suite path and exits (no boot)"
+      echo "  NIGHTLY_DATE=YYYY-MM-DD uses this date instead of today (tests)"
+      exit 0 ;;
+  esac
+done
+
+# --run is required to boot; without it the script only prints the chosen suite
+RUN=0
+if [ "${1:-}" = "--run" ]; then RUN=1; shift; fi
 
 # resolve a suite argument before leaving the caller's directory
 ARG=""
@@ -35,6 +52,11 @@ if [ ! -f "$SUITE" ]; then
   exit 1
 fi
 if [ "${NIGHTLY_DRY:-0}" = 1 ]; then
+  echo "$SUITE"
+  exit 0
+fi
+if [ "$RUN" != 1 ]; then
+  echo "add --run to boot the nightly test VM"
   echo "$SUITE"
   exit 0
 fi
@@ -79,7 +101,7 @@ ONBOARD='cd /usr/lib/llmos && python3 -c "from llmos import config; config.setti
 tools/tsh "$ONBOARD" 120 || true
 
 # 6. run the suite once as a real user, then triage whatever failed
-python3 tools/realrun.py "$SUITE" --outdir "$OUT" --repeat 1
+python3 tools/realrun.py "$SUITE" --run --outdir "$OUT" --repeat 1
 RR=$?
 python3 tools/triage.py "$OUT" --suite "$SUITE" --out "$OUT/triage" --queue docs/tasks/queue.md || true
 echo "realrun-nightly: suite $SUITE exit $RR, output $OUT"

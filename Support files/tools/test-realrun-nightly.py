@@ -52,6 +52,33 @@ onboard_cmd = onboard_line.split("R '", 1)[1].rsplit("' W2 90", 1)[0]
 check("onboarding command equals calc-smoke.sh line 21", onboard_cmd in src, onboard_cmd)
 check("no /Volumes/ literal", "/Volumes/" not in src)
 
+def pid_files():
+    found = set()
+    run_dir = os.path.join(ROOT, "run")
+    if os.path.isdir(run_dir):
+        for dp, _, fns in os.walk(run_dir):
+            if "target.pid" in fns:
+                found.add(os.path.join(dp, "target.pid"))
+    return found
+
+
+# 1b. no arguments: no --run, so nothing boots; prints the chosen suite and exits 0
+before = pid_files()
+r = run_script([])
+last = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
+check("no args exits 0 and names --run", r.returncode == 0 and "--run" in r.stdout, "rc=%s out=%r err=%s"
+      % (r.returncode, r.stdout, r.stderr))
+check("no args prints a suite json", last.endswith(".json"), repr(last))
+check("no args creates no target.pid", not (pid_files() - before), str(pid_files() - before))
+
+# 1c. -h and --help: usage on stdout, exit 0, no target.pid
+for flag in ["--help", "-h"]:
+    before = pid_files()
+    r = run_script([flag])
+    check("%s exits 0 and names --run" % flag, r.returncode == 0 and "--run" in r.stdout,
+          "rc=%s out=%r err=%s" % (r.returncode, r.stdout, r.stderr))
+    check("%s creates no target.pid" % flag, not (pid_files() - before), str(pid_files() - before))
+
 # 2. rotation: script dry mode vs independent computation, three dates
 for date_str in ["2026-01-01", "2026-10-10", "2027-03-15"]:
     want = expected_suite(date_str)
@@ -76,7 +103,7 @@ try:
     long_suite = os.path.join(tmp, "long suite.json")  # a name with a space
     with open(long_suite, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
-    r = run_script([long_suite])
+    r = run_script(["--run", long_suite])
     check("time guard exits 2", r.returncode == 2, "rc=%s out=%r err=%s" % (r.returncode, r.stdout, r.stderr))
     check("time guard prints suite too long", "suite too long" in r.stdout, r.stdout)
 finally:

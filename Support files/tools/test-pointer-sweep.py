@@ -108,8 +108,30 @@ def check(cond, msg):
     print("ok " + msg)
 
 
+def pid_files():
+    found = set()
+    run_dir = os.path.join(os.path.dirname(HERE), "run")
+    if os.path.isdir(run_dir):
+        for dp, _, fns in os.walk(run_dir):
+            if "target.pid" in fns:
+                found.add(os.path.join(dp, "target.pid"))
+    return found
+
+
+def test_no_args_no_boot():
+    import subprocess
+    script = os.path.join(HERE, "pointer-sweep.py")
+    before = pid_files()
+    p = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=60,
+                       cwd=os.path.dirname(HERE))
+    check(p.returncode == 0, "pointer-sweep no args exits 0 (rc=%s, stderr=%s)" % (p.returncode, p.stderr.strip()[:200]))
+    check("--run" in p.stdout, "pointer-sweep no args prints --run (stdout=%s)" % p.stdout.strip()[:200])
+    check(not (pid_files() - before), "pointer-sweep no args creates no target.pid (new: %s)" % sorted(pid_files() - before))
+
+
 def main():
-    # 1. list_buttons: skips Restart (regex), zero-size, disabled
+    test_no_args_no_boot()
+# 1. list_buttons: skips Restart (regex), zero-size, disabled
     desk = FakeDesk(ITEMS)
     listed = ps.list_buttons(desk.run_in_vm)
     texts = [it["text"] for it in listed]

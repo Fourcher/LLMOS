@@ -88,7 +88,41 @@ def state_task(tid="state-1"):
                           "result": {"type": "vm_command_line", "command": "ls /root/Desktop"}}}
 
 
+def pid_files():
+    found = set()
+    run_dir = os.path.join(os.path.dirname(HERE), "run")
+    if os.path.isdir(run_dir):
+        for dp, _, fns in os.walk(run_dir):
+            if "target.pid" in fns:
+                found.add(os.path.join(dp, "target.pid"))
+    return found
+
+
+def test_no_args_no_boot():
+    import subprocess
+    script = os.path.join(HERE, "realrun.py")
+    basic = os.path.join(HERE, "tasks", "basic.json")
+    tmp = tempfile.mkdtemp(prefix="realrun-dry-")
+    try:
+        with open(basic, encoding="utf-8") as fh:
+            data = json.load(fh)
+        data["tasks"] = data["tasks"][:2]
+        suite = os.path.join(tmp, "two tasks.json")
+        with open(suite, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        before = pid_files()
+        p = subprocess.run([sys.executable, script, suite], capture_output=True, text=True, timeout=60,
+                           cwd=os.path.dirname(HERE))
+        check("realrun dry exits 0", p.returncode == 0, "rc=%s err=%s" % (p.returncode, p.stderr))
+        check("realrun dry prints --run", "--run" in p.stdout, p.stdout)
+        check("realrun dry counts the suite", "dry: would run 2 tasks from" in p.stdout, p.stdout)
+        check("realrun dry creates no target.pid", not (pid_files() - before), str(pid_files() - before))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
+    test_no_args_no_boot()
     outroot = tempfile.mkdtemp(prefix="realrun-test-")
     try:
         # 1. reply task PASSes
