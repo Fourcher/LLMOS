@@ -629,8 +629,8 @@ def install_app(a, ctx):
     pkgs = [named] if named else [p for p in re.split(r"[\s,]+", raw) if re.fullmatch(r"[a-z0-9][a-z0-9+._-]*", p)]
     if not pkgs:
         return "error: no valid package names"
-    p = subprocess.run(["apk", "add", "--no-progress", *pkgs], capture_output=True, text=True, timeout=900)
-    if p.returncode != 0:
+    rc, out, err = system.apk_add(pkgs, quiet=False, timeout=900)
+    if rc != 0:
         if shutil.which("flatpak") and len(pkgs) == 1:          # not an Alpine package: look on Flathub
             s = subprocess.run(["flatpak", "search", "--columns=application", pkgs[0]], capture_output=True, text=True, timeout=60)
             # only an app whose own name is what was asked for (never just the first search hit)
@@ -642,7 +642,7 @@ def install_app(a, ctx):
                     return words + " -- it is now in the programs list; open it by name."
         s = subprocess.run(["apk", "search", "-q", pkgs[0]], capture_output=True, text=True)
         hint = ", ".join(s.stdout.split()[:8])
-        return f"install failed: {clip(p.stderr.strip() or p.stdout.strip(), 800)}" + \
+        return f"install failed: {clip(err.strip() or out.strip(), 800)}" + \
             (f"\nsimilar packages: {hint}" if hint else "")
     return "installed: " + " ".join(pkgs) + " -- open it by name."
 
@@ -3291,10 +3291,9 @@ def remove_software(a, ctx):
     core = named in base or named in ("python3", "labwc", "llama-server", "webkit2gtk-6.0", "gtk4.0", "alpine-base", "linux-lts", "musl")
     if world and named not in world and not core:
         return f"{named} is not installed (or it is part of something else)"
-    p = subprocess.run(["apk", "del", "--no-progress"] + (["--force-broken-world"] if core else []) + [named],
-                       capture_output=True, text=True, timeout=600)
-    if p.returncode != 0:
-        return f"could not remove it: {(p.stderr or p.stdout).strip()[:200]}"
+    rc, out, err = system.apk_del(named, force=core, timeout=600)
+    if rc != 0:
+        return f"could not remove it: {(err or out).strip()[:200]}"
     return f"removed {named}" + (" -- it was part of LLM OS itself, so parts of the system may stop working until it is "
                                  "installed again ('install " + named + "')" if core else "")
 
