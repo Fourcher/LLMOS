@@ -109,6 +109,8 @@ Boot the VM and drive it like a person (real clicks, real typing, real outcomes)
 - [open] (reliability) build 1.7.6 once browser dark/home + recent-files land; RUN smokes + both sweeps | role: fix (bump) then run
 - [running] (capability) VERIFY PASS 4b0da11: "show my files as a list" no longer opens the notes list (shopping/notes/reading lists unchanged; a notes list literally named "music" now goes to the model — accepted). Merge after the 1.7.6 build.
 - [running] (reliability) 4a1d859 test-start ignores git-ignored packages/ — VERIFY in flight; merge after the build.
+- [running] (ui) i18n: 4cd0312 (contains 2fb1001 clock tooltip + 8726f50 12 desk strings) — VERIFY PASS: every language has all 440 EN keys, 0 placeholder mismatches; merge after the 1.7.6 build. Then 1.7.7.
+- [open] (reliability) i18n.py has pre-existing duplicate keys d_remove, d_done, d_open in every language block (Python keeps the last) — probe which value is intended, remove the dead one | role: probe+fix
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
