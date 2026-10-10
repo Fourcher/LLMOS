@@ -2719,7 +2719,7 @@ class Desk:
                                                                                  "; say \u201cset a passphrase\u201d to lock them.") +
                                " Say \u201caudit\u201d to see everything I did.")
             return True
-        if re.fullmatch(r"(?:hi|hello|hey|good (?:morning|afternoon|evening))(?: there)?[.!]*", l2):
+        if re.fullmatch(r"(?:hi|hello|hey|hiya|howdy|good (?:morning|afternoon|evening|day))(?:\s+(?:there|world|again|friend|friends|everyone|everybody|all|computer|buddy|mate|you))?[\s.!,]*", l2):
             self._said = "Hi. What would you like to do?"
             return True
         if re.fullmatch(r"(?:the )?(?:model|ai|assistant|you) (?:is ?n'?t|is not|isnt|aren'?t|are not|stopped|has stopped|keeps not) (?:responding|answering|working|replying)|"
