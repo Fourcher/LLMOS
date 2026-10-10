@@ -245,6 +245,59 @@ def main():
         shutil.rmtree(say_suite_dir, ignore_errors=True)
         print("ok path say summary %s pass=%s" % (say_summary["path"], say_summary["pass"]))
 
+        # 8b. shot path: relative outdir with a space is made absolute and created; repeat subfolders exist
+        class ShotUser(FakeUser):
+            def __init__(self):
+                super().__init__()
+                self.seen = []
+
+            def shot(self, path):
+                self.seen.append((path, os.path.isdir(os.path.dirname(path))))
+                self.shots.append(path)
+
+        shot_suite = os.path.join(outroot, "shot-suite.json")
+        with open(shot_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [reply_task("shot-abs")]}, f)
+        shot_user = ShotUser()
+        shot_cur = {"vm": make_vm()}
+        cwd_before = os.getcwd()
+        os.chdir(outroot)
+        try:
+            shot_summary = realrun.run_suite(
+                shot_suite, shot_user, lambda c: shot_cur["vm"](c),
+                outdir=os.path.join("rel dir", "out dir"), repeat=2,
+                fresh=lambda: shot_cur.update(vm=make_vm()))
+        finally:
+            os.chdir(cwd_before)
+        check("shot path is absolute", len(shot_user.seen) == 2 and
+              all(os.path.isabs(p) for p, _ in shot_user.seen), repr(shot_user.seen))
+        check("shot folder exists before the shot (repeat subfolders)",
+              len(shot_user.seen) == 2 and all(ok for _, ok in shot_user.seen), repr(shot_user.seen))
+        check("repeat shots land in r1 and r2",
+              [os.path.basename(os.path.dirname(p)) for p, _ in shot_user.seen] == ["r1", "r2"],
+              repr(shot_user.seen))
+        check("shot run verdicts unaffected", shot_summary["pass"] == 1 and shot_summary["repeat"] == 2,
+              json.dumps(shot_summary)[:200])
+
+        # 8c. a shot that raises: verdict still comes from evaluate, shot_error recorded, shot still timed
+        class BadShotUser(FakeUser):
+            def shot(self, path):
+                raise RuntimeError("QMP screendump failed")
+
+        bad = realrun.run_task(reply_task("shot-err"), BadShotUser(), make_vm(),
+                               clock=FakeClock(), outdir=outroot)
+        check("shot raises -> evaluate verdict PASS", bad["verdict"] == "PASS" and bad["step_failed"] is None,
+              json.dumps(bad)[:300])
+        check("shot raises -> shot_error recorded",
+              bad["shot_error"] is not None and "QMP screendump failed" in bad["shot_error"],
+              repr(bad.get("shot_error")))
+        check("shot raises -> shot step still timed", "shot" in bad["steps"] and "grade" in bad["steps"],
+              repr(bad["steps"]))
+        ok_rec = realrun.run_task(reply_task("shot-none"), FakeUser(), make_vm(),
+                                  clock=FakeClock(), outdir=outroot)
+        check("no shot error -> shot_error is None", ok_rec["shot_error"] is None, repr(ok_rec["shot_error"]))
+        print("ok shot error: verdict %s from evaluate, shot_error set" % bad["verdict"])
+
         # 9. --repeat: scripted outcomes per repeat (True = reply right, False = reply wrong)
         def scripted(outcomes):
             cur = {"vm": make_vm(after="Canberra" if outcomes[0] else "Wrong")}

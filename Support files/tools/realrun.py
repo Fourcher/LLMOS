@@ -36,6 +36,9 @@ PATHS = ("page", "say")
 def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="page"):
     if path not in PATHS:
         raise ValueError("path must be one of %s, got %r" % (PATHS, path))
+    # QMP resolves the screendump filename in QEMU's own working directory, so the shot path must be absolute
+    outdir = os.path.abspath(outdir)
+    os.makedirs(outdir, exist_ok=True)
     tid = task["id"]
     steps = {}
     state = {"step": None}
@@ -45,6 +48,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
     reason = ""
     observed = ""
     typed_ok = None
+    shot_error = None
     ctx = {"before_reply": "", "stale": False}
     start = clock()
 
@@ -96,7 +100,10 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
             verdict = "FAIL"
             reason = "still busy after %ss" % timeout_s
         shot_path = os.path.join(outdir, "%s.png" % tid)
-        timed("shot", lambda: user.shot(shot_path))
+        try:
+            timed("shot", lambda: user.shot(shot_path))
+        except Exception as e:  # noqa: BLE001 - recorded; the verdict comes from evaluate
+            shot_error = repr(e)[:200]
         if not busy:
             graded = timed("grade", lambda: evaluators.evaluate(task, getter))
             verdict = graded["verdict"]
@@ -123,6 +130,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
         "error": error,
         "stale_reply": ctx["stale"],
         "path": path,
+        "shot_error": shot_error,
     }
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "%s.json" % tid), "w", encoding="utf-8") as f:
@@ -143,6 +151,8 @@ def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", r
     repeat == 1 writes {outdir}/<id>.json; otherwise {outdir}/r{r}/<id>.json."""
     if repeat < 1:
         raise ValueError("repeat must be >= 1, got %r" % repeat)
+    outdir = os.path.abspath(outdir)
+    os.makedirs(outdir, exist_ok=True)
     data = tasklib.load(path)
     tasks = data["tasks"]
     if ids:
@@ -154,6 +164,7 @@ def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", r
         if fresh is not None and r > 1:
             fresh()
         rdir = outdir if repeat == 1 else os.path.join(outdir, "r%d" % r)
+        os.makedirs(rdir, exist_ok=True)
         for task in tasks:
             rec = run_task(task, user, run_in_vm, outdir=rdir, path=run_path)
             per[rec["id"]]["seconds"] += rec["seconds"]
