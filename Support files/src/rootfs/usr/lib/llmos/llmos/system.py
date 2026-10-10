@@ -9,7 +9,7 @@ import tempfile
 import time
 
 from . import config, rootd, rootd_client
-from .rootd import HOSTS_NAME_RE
+from .rootd import HOSTS_NAME_RE, PRINTER_NAME_RE, PRINTER_URI_RE
 
 NFT_RULES = "/etc/nftables.nft"
 HOSTS = "/etc/hosts"
@@ -453,6 +453,63 @@ def radio(kind, on):
         return _radio_root(kind, on)
     try:
         rc, out, err = json.loads(rootd_client.call("radio", kind=kind, on=on, _timeout=40))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
+def _printer_name_ok(name):
+    return isinstance(name, str) and PRINTER_NAME_RE.fullmatch(name) is not None
+
+
+def _printer_uri_ok(uri):
+    return isinstance(uri, str) and not uri.startswith("-") and PRINTER_URI_RE.fullmatch(uri) is not None
+
+
+def _lp_root(argv, timeout):
+    """Run one CUPS command as root (never a shell). Returns (returncode, stdout, stderr)."""
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", "it took too long to answer"
+    except OSError:
+        return 1, "", "this system doesn't have " + argv[0] + " installed"
+    except subprocess.SubprocessError as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def _printer_add_root(name, uri):
+    """Add a printer queue with lpadmin, as root. Returns (returncode, stdout, stderr)."""
+    return _lp_root(["lpadmin", "-p", name, "-E", "-v", uri, "-m", "everywhere"], 60)
+
+
+def _printer_default_root(name, timeout):
+    """Make a printer the default with lpadmin, as root. Returns (returncode, stdout, stderr)."""
+    return _lp_root(["lpadmin", "-d", name], timeout)
+
+
+def printer_add(name, uri):
+    """Add a printer: directly as root, else through rootd's printer_add verb. Returns (rc, out, err)."""
+    if not _printer_name_ok(name) or not _printer_uri_ok(uri):
+        return 1, "", "bad args: printer name or address"
+    if os.geteuid() == 0:
+        return _printer_add_root(name, uri)
+    try:
+        rc, out, err = json.loads(rootd_client.call("printer_add", name=name, uri=uri, _timeout=120))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
+def printer_default(name, timeout=20):
+    """Make a printer the default: directly as root, else through rootd's printer_default verb. Returns (rc, out, err)."""
+    if not _printer_name_ok(name) or isinstance(timeout, bool) or not isinstance(timeout, int) or not 5 <= timeout <= 120:
+        return 1, "", "bad args: printer name or timeout"
+    if os.geteuid() == 0:
+        return _printer_default_root(name, timeout)
+    try:
+        rc, out, err = json.loads(rootd_client.call("printer_default", name=name, timeout=timeout, _timeout=timeout + 30))
         return rc, out, err
     except rootd_client.RootdError as e:
         return 1, "", str(e)

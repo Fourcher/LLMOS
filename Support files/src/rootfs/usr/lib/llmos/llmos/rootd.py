@@ -333,6 +333,50 @@ def radio(args):
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
+# Printer queue names (lpadmin's -p NAME) and CUPS device addresses. A name never starts with "-" (lpadmin would
+# read it as an option), and a URI must start with a CUPS scheme and contain no whitespace.
+PRINTER_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,63}")
+PRINTER_URI_RE = re.compile(r"(ipp|ipps|http|https|socket|lpd|dnssd)://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]{1,500}")
+
+
+def _printer_name(args):
+    name = args.get("name")
+    if not isinstance(name, str) or not PRINTER_NAME_RE.fullmatch(name):
+        raise ValueError("bad args: name")
+    return name
+
+
+def _printer_uri(args):
+    uri = args.get("uri")
+    if not isinstance(uri, str) or uri.startswith("-") or not PRINTER_URI_RE.fullmatch(uri):
+        raise ValueError("bad args: uri")
+    return uri
+
+
+def printer_add(args):
+    args = _args_dict(args)
+    if set(args) - {"name", "uri"}:
+        raise ValueError("bad args: unexpected argument")
+    name = _printer_name(args)
+    uri = _printer_uri(args)
+    from . import system
+    rc, out, err = system._printer_add_root(name, uri)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
+def printer_default(args):
+    args = _args_dict(args)
+    if set(args) - {"name", "timeout"}:
+        raise ValueError("bad args: unexpected argument")
+    name = _printer_name(args)
+    timeout = args.get("timeout", 20)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 5 <= timeout <= 120:
+        raise ValueError("bad args: timeout")
+    from . import system
+    rc, out, err = system._printer_default_root(name, timeout)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
 def service(args):
     args = _args_dict(args)
     name = args.get("name")
@@ -447,6 +491,8 @@ VERBS = {
     "apk_del": apk_del,
     "power": power,
     "radio": radio,
+    "printer_add": printer_add,
+    "printer_default": printer_default,
     "service": service,
     "set_timezone": set_timezone,
     "set_hostname": set_hostname,

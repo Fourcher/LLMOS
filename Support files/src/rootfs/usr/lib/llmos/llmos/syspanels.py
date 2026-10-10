@@ -376,10 +376,10 @@ def printers():
 
 def add_printer(uri):
     name = re.sub(r"[^A-Za-z0-9_-]+", "_", re.sub(r"^\w+://", "", uri).split("/")[0].split(".")[0])[:30] or "printer"
-    rc, out, err = _run(["lpadmin", "-p", name, "-E", "-v", uri, "-m", "everywhere"], 60)
+    rc, out, err = system.printer_add(name, uri)
     if rc:
         return False, (err.strip() or "the printer could not be added")[:200]
-    _run(["lpadmin", "-d", name])
+    system.printer_default(name, timeout=10)
     return True, f"{name} is set up and is the default printer"
 
 
@@ -392,7 +392,7 @@ def test_page(name):
 
 
 def default_printer(name):
-    rc, out, err = _run(["lpadmin", "-d", name], 20)
+    rc, out, err = system.printer_default(name, timeout=20)
     return (True, f"{name} is now the default printer.") if rc == 0 else (False, (err.strip() or "That did not work.")[:200])
 
 
