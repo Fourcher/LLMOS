@@ -1492,9 +1492,11 @@ def _everyday2(text):
                  r"^(?:please\s+)?(?:find|get|look\s+up|search\s+for|show)\s+(?:me\s+)?(?:a\s+|an\s+)?recipes?\s+(?:for|on)\s+(?P<q2>.+?)\s*[.!?]?$", low)
     if m:
         return ("browse", {"search": ((m.group("q") or m.group("q2")) + " recipe").strip()})
+    if re.match(r"^\s*(?:please\s+)?print\s+(?:\d+\s+cop(?:y|ies)|(?:it|this)\s+(?:double|single)[- ]sided|(?:double|single)[- ]sided)\b", t, re.I):
+        return ("which_file", {"request": t})
     m = re.match(r"^(?:please\s+)?print\s+(?:me\s+)?(?:my\s+|the\s+|that\s+|a\s+)?(?P<f>[\w .'()-]+?)\s*[.!]?$", t, re.I)
     if m and m.group("f").lower() not in ("this", "that", "it", "this page", "this document", "page", "it out") \
-            and not re.search(r"\b(?:how|what|why|where|which)\b", m.group("f"), re.I):
+            and not re.search(r"\b(?:how|what|why|where|which)\b|^\d+\s+cop(?:y|ies)\b|\b(?:double|single)[- ]sided\b|\bin colou?r\b|\bblack and white\b|\blandscape\b|\bportrait\b", m.group("f"), re.I):
         return ("print_file", {"path": m.group("f").strip()})
     # the newest PDF I downloaded: "open the pdf I downloaded today"
     m = re.match(r"^(?:please\s+)?(?:open|show|view)\s+(?:the\s+|my\s+|that\s+)?(?P<k>pdf|picture|photo|image|video|song|document|file)\s+"

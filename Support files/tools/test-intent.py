@@ -25,6 +25,8 @@ CASES = {
     "unzip ~/Downloads/photos.zip": ("extract_archive", {"path": "~/Downloads/photos.zip"}),
     "edit the file ~/notes.txt": ("open_file", {"path": "~/notes.txt", "edit": True}),
     "print the file ~/a.pdf": ("print_file", {"path": "~/a.pdf"}),
+    "print recipe.pdf": ("print_file", {"path": "recipe.pdf"}),
+    "print 2 copies double sided": ("which_file", {"request": "print 2 copies double sided"}),
     "set ~/Pictures/beach.jpg as my wallpaper": ("set_wallpaper", {"subject": "~/Pictures/beach.jpg"}),
     "snip": ("screenshot", {"area": True}),
     "screenshot this window": ("screenshot", {}),
