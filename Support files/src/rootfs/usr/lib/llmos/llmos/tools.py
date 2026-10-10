@@ -2082,6 +2082,7 @@ def _human_size(n):
 
 
 _LAST_FOLDER = None
+_LAST_MADE = {"path": "", "at": 0.0}
 _SHOW_HIDDEN = False
 
 
@@ -4110,6 +4111,7 @@ def make_folder(a, ctx):
     if os.path.exists(p):
         return f"error: {p.replace(config.home(), '~')} already exists"
     os.makedirs(p)
+    _LAST_MADE.update(path=p, at=time.time())
     _undo_push("made", p)
     show_files({"path": base}, ctx)
     return f"made the folder {p.replace(config.home(), '~')}. Say one sentence at most."
@@ -4118,6 +4120,12 @@ def make_folder(a, ctx):
 @tool("rename_file", "Rename one of the owner's files or folders; the extension is kept unless a new one is given.",
       {"name": {"type": "string", "description": "the current name (or part of it) or path"}, "to": STR}, ["name", "to"], risk=CHANGE)
 def rename_file(a, ctx):
+    name0 = str(a.get("name") or "").strip().lower()
+    if name0 in ("", "it", "this", "that", "this folder", "that folder", "this file", "that file"):
+        if _LAST_MADE["path"] and time.time() - _LAST_MADE["at"] < 600 and os.path.exists(_LAST_MADE["path"]):
+            a = dict(a, name=_LAST_MADE["path"])
+        else:
+            return "error: which one? Say its name (for example “rename notes.txt to todo.txt”)."
     src = _path(a["name"]) if "/" in str(a.get("name", "")) else None
     if not src or not os.path.exists(src):
         hits = find_paths(a.get("name", ""))
@@ -4137,6 +4145,8 @@ def rename_file(a, ctx):
     if os.path.exists(dst):
         return f"error: {new} already exists there"
     os.rename(src, dst)
+    if src == _LAST_MADE["path"]:
+        _LAST_MADE["path"] = dst
     _undo_push("move", [(dst, src)])
     return f"renamed {os.path.basename(src)} to {new}. Say one sentence at most."
 

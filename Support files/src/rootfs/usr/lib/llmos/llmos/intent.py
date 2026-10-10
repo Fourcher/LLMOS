@@ -1229,6 +1229,9 @@ def _everyday(text):
         if m.group("where"):
             args["where"] = m.group("where").lower()
         return ("make_folder", args)
+    m2 = re.match(r"^\s*(?:please\s+)?(?:call|name)\s+it\s+(?P<to>[\w .()-]{1,60}?)(?:\s+instead)?\s*[.!]?\s*$", text, re.I)
+    if m2:
+        return ("rename_file", {"name": "it", "to": m2.group("to").strip()})
     m = _RENAME.match(text)
     if m and re.search(r"\b(?:every|all|each)\b.*\b(?:files?|photos?|pictures?|documents?|songs?)\b|\b(?:files|photos|pictures|documents|songs)\b", m.group("n"), re.I):
         # many files by a rule ("rename every file on my desktop to lowercase with dashes instead of spaces")
@@ -1257,7 +1260,7 @@ def _everyday(text):
             return ("rename_files", args)
         return None                       # many files by some other rule: the model decides
     if m and not re.search(r"\b(?:wifi|network|computer|keyboard)\b", m.group("n"), re.I):
-        if m.group("n").strip().strip("'\"").lower() in ("this", "that", "it", "these", "those", "them", "this file", "that file", "this folder", "that folder"):
+        if m.group("n").strip().strip("'\"").lower() in ("these", "those", "them"):
             return ("which_file", {"request": text.strip()})
         return ("rename_file", {"name": m.group("n").strip().strip("'\""), "to": m.group("to").strip().strip("'\"")})
     # "make a copy of report.txt from my downloads in my documents": a copy, the source folder named before the destination
