@@ -603,6 +603,7 @@ class Desk:
         self.app = None
         self.ready = False
         self._pending = []           # messages emitted before the page was ready
+        self._rect_wait = {}         # test shell: "rect <id> <selector>" waiting for the page's answer
 
     # ---- GTK / WebKit
 
@@ -1024,6 +1025,11 @@ class Desk:
                 self._reloaded = False
                 for wid, spec in list(self.windows.items()):    # the windows that were open before the page ended
                     self.emit({"t": "window", "id": wid, "spec": spec})
+        elif t == "rect.result":
+            slot = self._rect_wait.get(str(msg.get("id")))
+            if slot is not None:
+                slot[1] = msg
+                slot[0].set()
         elif t == "say":
             self.last_active = time.time()
             self.say(str(msg.get("text", "")))
@@ -4121,6 +4127,20 @@ class Desk:
                 self.chat().new_topic()
                 self.push_status()
                 out = {"ok": True}
+            elif cmd == "rect" and _fwcfg("testshell"):   # tests: "rect <id> <css selector>": the element's box on the page, for a real click
+                words = line.split()
+                rid = words[1] if len(words) > 1 else ""
+                sel = " ".join(words[2:])
+                ev = threading.Event()
+                self._rect_wait[rid] = [ev, None]
+                js = ('(function(){var e=document.querySelector(' + json.dumps(sel) + ');var r=e?e.getBoundingClientRect():null;'
+                      'window.webkit.messageHandlers.llmos.postMessage({t:"rect.result",id:' + json.dumps(rid) + ',found:!!e,x:r?r.x:0,y:r?r.y:0,w:r?r.width:0,h:r?r.height:0,'
+                      'text:e?(e.innerText||"").slice(0,500):"",value:e&&("value" in e)?String(e.value).slice(0,500):null,'
+                      'dpr:window.devicePixelRatio,vw:window.innerWidth,vh:window.innerHeight});})()')
+                self.emit({"t": "eval", "js": js})
+                ev.wait(5)
+                got = self._rect_wait.pop(rid, [ev, None])[1]
+                out = got if got is not None else {"ok": False, "error": "timeout"}
             elif cmd == "act":            # press a button by its words, as the page does (tests)
                 self.act(arg)
                 out = {"ok": True, "windows": [w.get("title", "") for w in self.windows.values()], "reply": getattr(self, "last_reply", "")}
