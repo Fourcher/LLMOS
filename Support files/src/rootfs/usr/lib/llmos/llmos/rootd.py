@@ -223,6 +223,13 @@ def _apk_name(name):
     return name
 
 
+def _apk_timeout(args, default):
+    t = args.get("timeout", default)
+    if isinstance(t, bool) or not isinstance(t, int) or not 30 <= t <= 1800:
+        raise ValueError("bad args: timeout")
+    return t
+
+
 def apk_add(args):
     args = _args_dict(args)
     names = args.get("names")
@@ -232,8 +239,9 @@ def apk_add(args):
     names = [_apk_name(n) for n in names]
     if not isinstance(quiet, bool):
         raise ValueError("bad args: quiet")
+    timeout = _apk_timeout(args, 900)
     from . import system
-    rc, out, err = system._apk_add_root(names, quiet=quiet)
+    rc, out, err = system._apk_add_root(names, quiet=quiet, timeout=timeout)
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
@@ -243,8 +251,9 @@ def apk_del(args):
     force = args.get("force", False)
     if not isinstance(force, bool):
         raise ValueError("bad args: force")
+    timeout = _apk_timeout(args, 600)
     from . import system
-    rc, out, err = system._apk_del_root(name, force=force)
+    rc, out, err = system._apk_del_root(name, force=force, timeout=timeout)
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
