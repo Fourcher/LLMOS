@@ -220,6 +220,8 @@ APK_NAME_RE = re.compile(r"[a-z0-9][a-z0-9+._-]{0,99}")
 def _apk_name(name):
     if not isinstance(name, str) or not APK_NAME_RE.fullmatch(name):
         raise ValueError("bad args: name")
+    if ".." in name or name.lower().endswith(".apk"):
+        raise ValueError("bad args: name")
     return name
 
 

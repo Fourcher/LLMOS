@@ -125,6 +125,23 @@ try:
             raise AssertionError(f"apk_del accepted force {bad_flag!r}")
     print("ok rootd apk verbs reject", ", ".join(repr(b) for b in bad_names))
 
+    # ---- local package files (.apk suffix) and ".." rejected; dotted real package names accepted
+    for bad in ("evil.apk", "EVIL.APK", "a..b"):
+        for verb, args in (("apk_add", {"names": [bad]}), ("apk_del", {"name": bad})):
+            try:
+                rootd.VERBS[verb](args)
+            except ValueError as e:
+                assert "bad args" in str(e), e
+            else:
+                raise AssertionError(f"{verb} accepted {bad!r}")
+    print("ok rootd apk verbs reject 'evil.apk', 'EVIL.APK', 'a..b'")
+    as_uid(0)
+    dotted = ["py3-pip", "py3.12-foo", "libstdc++", "gst-plugins-good1.0"]
+    for good_name in dotted:
+        rootd.VERBS["apk_del"]({"name": good_name})
+        assert calls[-1][0][-1] == good_name, calls[-1]
+    print("ok rootd apk verbs accept dotted names", ", ".join(dotted))
+
     # ---- rootd verbs: good names accepted, output truncated to the last 20000 chars
     good = ["firefox", "py3-pip", "gst-plugins-good", "libreoffice-writer"]
     as_uid(0)
