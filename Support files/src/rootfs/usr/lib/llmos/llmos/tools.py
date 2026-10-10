@@ -2227,12 +2227,14 @@ def rename_series(a, ctx):
         t = os.path.join(folder, f".llmos-ren-{len(tmp)}-{old}")
         os.rename(os.path.join(folder, old), t)
         tmp.append((t, new))
+    done_names = []
     for t, new in tmp:
         dest = _free_path(os.path.join(folder, new))
         os.rename(t, dest)
+        done_names.append(os.path.basename(dest))
     if _LAST_FOLDER == folder:
         show_files({"path": folder}, ctx)
-    return f"renamed {len(plan)} file(s) in {folder}: {plan[0][1]} … {plan[-1][1]}. Done: tell the owner in one sentence."
+    return f"renamed {len(plan)} file(s) in {folder}: {done_names[0]} … {done_names[-1]}. Done: tell the owner in one sentence."
 
 
 def _newest(folders, exts):

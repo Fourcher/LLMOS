@@ -50,6 +50,34 @@ for name in ("edit_image", "edit_images", "convert_to_pdf", "rename_series"):
     body = tools_src[m.end(): end if end != -1 else len(tools_src)]
     check(f"{name} uses _free_path(", "_free_path(" in body)
 
+# behaviour: rename_series must not overwrite a non-series entry that already holds the planned name,
+# and its reply must name the files as they really ended up on disk.
+from llmos import tools as llmos_tools  # noqa: E402
+
+f = tempfile.mkdtemp(prefix="llmos-series-")
+try:
+    for n in ("x1.jpg", "x2.jpg"):
+        open(os.path.join(f, n), "wb").write(b"series " + n.encode())
+    # an existing entry named exactly 'Holiday 1.jpg' that rename_series does not pick up (it is not a
+    # regular file, so pick() skips it); a regular file of that name would itself be swept into the series
+    unrelated = os.path.join(f, "Holiday 1.jpg")
+    os.mkdir(unrelated)
+    keep = os.path.join(unrelated, "keep.txt")
+    open(keep, "wb").write(b"owner bytes \x00\x01")
+    before = open(keep, "rb").read()
+    reply = str(llmos_tools.REGISTRY["rename_series"].fn({"name": "Holiday", "folder": f, "kind": "photos"}, None))
+    check("series: reply is not an error", not reply.startswith("error"), reply)
+    check("series: unrelated entry bytes unchanged", os.path.isfile(keep) and open(keep, "rb").read() == before)
+    m = re.search(r"in .*?: (.+?) … (.+?)\. Done", reply)
+    names = [m.group(1), m.group(2)] if m else []
+    check("series: reply names parsed", len(names) == 2, reply)
+    check("series: every name in reply exists on disk",
+          bool(names) and all(os.path.lexists(os.path.join(f, n)) for n in names), reply)
+    check("series: first name is not the unrelated entry", bool(names) and names[0] != "Holiday 1.jpg", reply)
+    print(f"ok series reply: {reply}")
+finally:
+    shutil.rmtree(f, ignore_errors=True)
+
 if fails:
     print(f"{fails} FAIL(s)")
     sys.exit(1)
