@@ -1457,10 +1457,15 @@ def edit_conduct(a, ctx):
             "prompt the owner controls.)")
 
 
+def _guard_on(value):
+    """One reading of a guard_untrusted value, shared by change_setting and _policy_risk so they cannot disagree."""
+    return not re.search(r"\b(off|no|disable|stop|false|0|never|don'?t)\b", str(value), re.I)
+
+
 def _policy_risk(setting, value):
     """Only LOOSENING a security policy, relative to what is set now, needs
-    the owner's confirmation (more autonomy, more internet, Tor off).
-    Tightening never asks."""
+    the owner's confirmation (more autonomy, more internet, Tor off, the web-page
+    check off). Tightening never asks."""
     v = str(value or "").lower().strip()
     s = config.settings.all()
     if setting == "autonomy":
@@ -1474,6 +1479,8 @@ def _policy_risk(setting, value):
     if setting == "brain":      # sending more to the online model is the loosening direction
         new = _norm_brain(v)
         return SECURITY if new and _BRAIN_RANK.get(new, 0) > _BRAIN_RANK.get(s.get("brain", "local"), 2) else SAFE
+    if setting == "guard_untrusted":   # switching off the web-page check is loosening: text read on a page must not turn it off unasked
+        return SECURITY if (not _guard_on(value)) and s.get("guard_untrusted", True) else SAFE
     return SAFE
 
 
@@ -1602,7 +1609,7 @@ def change_setting(a, ctx):
         return f"{what} after {mins} minute{'s' if mins != 1 else ''} without use" if mins else \
             ("the screen stays on" if s == "screen_off" else "the computer never sleeps by itself")
     if s == "guard_untrusted":
-        on = not re.search(r"\b(off|no|disable|stop|false|0|never|don'?t)\b", str(v), re.I)
+        on = _guard_on(v)
         config.settings.set("guard_untrusted", on)
         return ("anything a web page, file or email tells me to do is shown to you first" if on else
                 "instructions found in web pages, files and emails are followed like yours, without showing you first")
