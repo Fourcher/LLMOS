@@ -2,11 +2,47 @@
 # run a shell command inside the arm64 test VM's console and wait for its end
 # marker; the marker is typed as DONE_""nnn (echo shows the quotes, the shell
 # prints it without), so the typed line can never satisfy the wait itself.
+# The command is framed by a start marker the same way (BEGIN_""nnn), and only
+# the lines strictly between the echoed BEGIN_nnn and DONE_nnn are printed, so
+# a console-wrapped echo of the typed command never leaks into the output.
 # At the LLM OS console a command needs the "!" escape; at the plain test
 # shell (LLMOS_TESTSHELL boots, prompt "llmos:/#") it does not: whichever
-# prompt appeared last in the log decides.
+# prompt appeared last in the log decides. If the "!" was wrong ("!llmos: not
+# found" / "/bin/sh: !..."), the same command is re-sent once without it.
+# The vmctl trailer line is always printed last.
 cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
-N=$RANDOM$RANDOM
+VMCTL=${VMCTL:-tools/vmctl.py}
+TMO=${2:-120}
 P=$(tail -c 4000 run/boot-serial.log 2>/dev/null | tr -d '\r' | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' | grep -aoE 'llmos:[^ ]*# |› ' | tail -1)
 case "$P" in llmos:*) P='' ;; *) P='!' ;; esac
-python3 tools/vmctl.py run run/tser.sock run/boot-serial.log "$P$1; echo; echo DONE_\"\"$N" "^DONE_$N" "${2:-120}" --quiet 1 | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g' | grep -vE "^\s*$|DONE_|^78|^!|LLM OS$|Ministral 3 3B ·|^llmos:[^ ]*# *$"
+
+# send_cmd PREFIX COMMAND: sets RUN_N (unique marker number) and RAW (cleaned console text)
+send_cmd() {
+  local pre=$1 cmd=$2
+  RUN_N=$RANDOM$RANDOM
+  RAW=$(python3 "$VMCTL" run run/tser.sock run/boot-serial.log "${pre}echo BEGIN_\"\"$RUN_N; $cmd; echo; echo DONE_\"\"$RUN_N" "^DONE_$RUN_N" "$TMO" --quiet 1 | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g')
+}
+
+# emit: print the answer held in RAW for RUN_N, then the vmctl trailer
+emit() {
+  local trailer body
+  trailer=$(printf '%s\n' "$RAW" | grep -a '^\[vmctl: ' | tail -1)
+  if printf '%s\n' "$RAW" | grep -aq "^BEGIN_${RUN_N}[[:space:]]*\$"; then
+    body=$(printf '%s\n' "$RAW" | awk -v b="BEGIN_$RUN_N" -v d="DONE_$RUN_N" '
+      { t = $0; sub(/[ \t]+$/, "", t) }
+      !seen && t == b { seen = 1; next }
+      seen && t == d { exit }
+      seen { print }')
+  else
+    # no start marker seen (timeout): fall back to everything the console printed
+    body=$(printf '%s\n' "$RAW" | grep -av '^\[vmctl: ')
+  fi
+  printf '%s\n' "$body" | grep -vE "^\s*$|DONE_|^78|^!|LLM OS$|Ministral 3 3B ·|^llmos:[^ ]*# *$"
+  if [ -n "$trailer" ]; then printf '%s\n' "$trailer"; fi
+}
+
+send_cmd "$P" "$1"
+if printf '%s\n' "$RAW" | grep -aqE '!llmos: not found|^/bin/sh: !'; then
+  send_cmd "" "$1"
+fi
+emit
