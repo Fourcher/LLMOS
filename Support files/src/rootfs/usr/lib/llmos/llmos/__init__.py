@@ -1,5 +1,5 @@
 """LLM OS: an operating system you talk to."""
-VERSION = "1.7.9"
+VERSION = "1.8.0"
 RELEASE_FILE = "/etc/llmos-release"
 
 

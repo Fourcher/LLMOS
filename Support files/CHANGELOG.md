@@ -4,6 +4,13 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.8.0
+- Clean jokes come back at once, without waiting for the model. Jokes about today's news still go to the model.
+- Text boxes and the switch knob are easy to read in both the dark and light themes.
+- Settings has a switch for "ask before acting on things I read online or in emails", in all 6 languages.
+- Turning off that check, based on text the OS has just read, now asks first. The owner on hands-off mode is not asked.
+- "Stop the music" is answered at once.
+
 ## 1.7.9
 - The first reply after start-up is faster: the model is warmed up with exactly what the first request sends.
 - Test resets close other programs and bring the desk back to the front.
