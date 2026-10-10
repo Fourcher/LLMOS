@@ -192,6 +192,30 @@ try:
           '["rfkill", "list", "wifi"]' in src and '["rfkill", "-n", "-o", "SOFT"]' in src)
     # The verb-level validation also rejects every kind desk could never send.
     check("desk only sends allowed kinds", set(kinds) <= set(system.RADIO_KINDS), kinds)
+
+    # The on/off boolean each desk call sends, checked by name in the AST.
+    def arg_call_name(call, idx):
+        a = call.args[idx] if len(call.args) > idx else None
+        return a.func.id if isinstance(a, ast.Call) and isinstance(a.func, ast.Name) else None
+    desk_radio = {}
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "radio" and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "system" and node.args and isinstance(node.args[0], ast.Constant)):
+            desk_radio[node.args[0].value] = arg_call_name(node, 1)
+    check("wifi call passes _wifi_radio_on(v)", desk_radio.get("wifi") == "_wifi_radio_on", desk_radio)
+    check("airplane call passes _airplane_radio_on(v)", desk_radio.get("all") == "_airplane_radio_on", desk_radio)
+
+    # Pure helpers: pulled out of desk.py by AST and exec'd alone (desk.py itself is not imported).
+    helpers = {n.name: n for n in tree.body
+               if isinstance(n, ast.FunctionDef) and n.name in ("_wifi_radio_on", "_airplane_radio_on")}
+    ns = {}
+    exec(compile(ast.Module(body=list(helpers.values()), type_ignores=[]), desk_path, "exec"), ns)
+    wifi_on, airplane_on = ns["_wifi_radio_on"], ns["_airplane_radio_on"]
+    check("airplane on -> radio flag False", airplane_on("on") is False, airplane_on("on"))
+    check("airplane off -> radio flag True", airplane_on("off") is True, airplane_on("off"))
+    check("wifi on -> radio flag True", wifi_on("on") is True, wifi_on("on"))
+    check("wifi off -> radio flag False", wifi_on("off") is False, wifi_on("off"))
 finally:
     subprocess.run = real_run
     rootd_client.call = real_call
