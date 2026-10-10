@@ -28,6 +28,25 @@ from .system import _hosts_name_ok, _write_hosts
 NAME_BAD = "that name isn't allowed: use letters, numbers and dashes"
 
 
+def _web_err(e):
+    """A web.WebError as plain words. Its messages are mostly plain already (passed through, first line, no period);
+    raw curl text becomes the owner's words, and anything with a URL, path or curl exit code becomes "something went wrong"."""
+    raw = str(e).strip()
+    text = raw.splitlines()[0][:120].strip() if raw else ""
+    low = text.lower()
+    if "curl" in low or re.search(r"\((6|7|28)\)", text) or "resolve host" in low or "timed out" in low or "failed to connect" in low:
+        if "(6)" in text or "resolve host" in low:
+            return "no internet connection"
+        if "(28)" in text or "timed out" in low:
+            return "no answer from the internet"
+        if "(7)" in text or "failed to connect" in low:
+            return "couldn't reach the site"
+        return "something went wrong"
+    if not text or "/" in text or "://" in text:
+        return "something went wrong"
+    return text.rstrip(". ") or "something went wrong"
+
+
 def _plain_err(e, bad="that name or value isn't allowed"):
     """A short plain-words reason for an error, so the owner never sees Python's raw text (no errno, no paths).
     A system-helper refusal ("bad args: …") gives `bad`; the helper's other plain messages are shown as they are."""
@@ -37,6 +56,12 @@ def _plain_err(e, bad="that name or value isn't allowed"):
             return bad
         if isinstance(e, rootd_client.RootdError) and text:
             return text.splitlines()[0][:120]
+    try:
+        from . import web  # lazy: everyday still imports without web
+    except ImportError:
+        web = None
+    if web is not None and isinstance(e, web.WebError):
+        return _web_err(e)
     if isinstance(e, PermissionError):
         return "it isn't allowed here"
     if isinstance(e, FileNotFoundError):
