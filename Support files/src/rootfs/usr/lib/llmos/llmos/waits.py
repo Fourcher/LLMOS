@@ -2,14 +2,20 @@
 import time
 
 
-def scan_settled(read, limit=3.0, step=0.25, ready=None, default=""):
+def scan_settled(read, limit=3.0, step=0.25, ready=None, default="", before=None):
     """Poll read() every `step` seconds until it gives a ready value that is the same as the previous poll.
 
     read() returns whatever the caller parses (for example iwctl get-networks text). A value counts as ready when
     ready(value) is true (default: any truthy value). An exception from read() counts as not ready. Gives up after
     `limit` seconds and returns the last value read (or `default` if none could be read), as the old fixed sleep did.
+
+    `before` is the value read just before the scan started. iwd can keep showing the previous scan's list for a
+    moment, so when `before` is ready (a cached list), a poll only counts once it differs from `before`; if the list
+    never changes, the full `limit` passes and the last read is returned. When `before` is None or not ready, the
+    rule is simply ready and stable.
     """
     ready = ready or (lambda v: bool(v))
+    cached = before is not None and ready(before)
     end = time.monotonic() + limit
     prev, cur = None, None
     while True:
@@ -17,7 +23,8 @@ def scan_settled(read, limit=3.0, step=0.25, ready=None, default=""):
             cur = read()
         except Exception:
             cur = None
-        if cur is not None and ready(cur) and cur == prev:
+        fresh = (not cached) or cur != before
+        if cur is not None and ready(cur) and cur == prev and fresh:
             return cur
         prev = cur
         if time.monotonic() >= end:

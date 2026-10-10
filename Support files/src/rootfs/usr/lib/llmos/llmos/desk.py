@@ -139,8 +139,6 @@ def _wifi_scan():
     dev = _wifi_device()
     if not dev:
         return []
-    subprocess.run(["iwctl", "station", dev, "scan"], capture_output=True, timeout=30)
-
     def read():
         p = subprocess.run(["iwctl", "station", dev, "get-networks"], capture_output=True, text=True, timeout=30)
         nets, seen = [], set()
@@ -150,8 +148,14 @@ def _wifi_scan():
                 seen.add(m.group(1).strip())
                 nets.append({"ssid": m.group(1).strip(), "secured": m.group(2).lower() != "open", "signal": len(m.group(3))})
         return nets
+    # read the list before scanning, so a stale (cached) list is not taken as the new result
+    try:
+        before = read()
+    except Exception:
+        before = None
+    subprocess.run(["iwctl", "station", dev, "scan"], capture_output=True, timeout=30)
     # poll every 0.25 s until networks are listed and the list has stopped changing (old fixed wait: 3 s)
-    return waits.scan_settled(read, limit=3.0, step=0.25, default=[])
+    return waits.scan_settled(read, limit=3.0, step=0.25, default=[], before=before)
 
 
 def _wifi_connect(ssid, password):

@@ -3985,14 +3985,18 @@ def wifi_scan(a, ctx):
     dev = _wifi_device()
     if not dev:
         return "no Wi-Fi adapter found on this machine"
-    subprocess.run(["iwctl", "station", dev, "scan"], capture_output=True, timeout=30)
-
     def read():
         p = subprocess.run(["iwctl", "station", dev, "get-networks"], capture_output=True, text=True, timeout=30)
         return p.stdout, p.stderr      # plain values, so two polls can be compared
+    ready = lambda r: bool(re.search(r"\b(psk|open|8021x|wep)\b", r[0]))
+    # read the list before scanning, so a stale (cached) list is not taken as the new result
+    try:
+        before = read()
+    except Exception:
+        before = None
+    subprocess.run(["iwctl", "station", dev, "scan"], capture_output=True, timeout=30)
     # poll every 0.25 s until a network line is listed and the list has stopped changing (old fixed wait: 1.5 s)
-    out, err = waits.scan_settled(read, limit=1.5, step=0.25,
-                                  ready=lambda r: bool(re.search(r"\b(psk|open|8021x|wep)\b", r[0])), default=("", ""))
+    out, err = waits.scan_settled(read, limit=1.5, step=0.25, ready=ready, default=("", ""), before=before)
     return clip(out.strip() or err.strip() or "nothing found", 2000)
 
 
