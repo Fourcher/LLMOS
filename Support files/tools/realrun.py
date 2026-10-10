@@ -128,20 +128,52 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
     return record
 
 
-def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page"):
+def _label(passes, repeat):
+    if passes == repeat:
+        return "pass"
+    if passes == 0:
+        return "fail"
+    return "flaky"
+
+
+def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", repeat=1, fresh=None):
+    """Run every task `repeat` times. Before repeat r > 1, fresh() is called (a fresh overlay).
+    repeat == 1 writes {outdir}/<id>.json; otherwise {outdir}/r{r}/<id>.json."""
+    if repeat < 1:
+        raise ValueError("repeat must be >= 1, got %r" % repeat)
     data = tasklib.load(path)
     tasks = data["tasks"]
     if ids:
         wanted = set(ids)
         tasks = [t for t in tasks if t["id"] in wanted]
     t0 = time.monotonic()
+    per = {t["id"]: {"passes": 0, "seconds": 0.0} for t in tasks}
+    for r in range(1, repeat + 1):
+        if fresh is not None and r > 1:
+            fresh()
+        rdir = outdir if repeat == 1 else os.path.join(outdir, "r%d" % r)
+        for task in tasks:
+            rec = run_task(task, user, run_in_vm, outdir=rdir, path=run_path)
+            per[rec["id"]]["seconds"] += rec["seconds"]
+            if rec["verdict"] == "PASS":
+                per[rec["id"]]["passes"] += 1
     rows = []
     for task in tasks:
-        rec = run_task(task, user, run_in_vm, outdir=outdir, path=run_path)
-        rows.append({"id": rec["id"], "verdict": rec["verdict"], "seconds": rec["seconds"]})
+        tid = task["id"]
+        k = per[tid]["passes"]
+        rows.append({
+            "id": tid,
+            "verdict": "PASS" if k == repeat else "FAIL",
+            "seconds": per[tid]["seconds"],
+            "runs": repeat,
+            "passes": k,
+            "rate": round(k / repeat, 2),
+            "label": _label(k, repeat),
+        })
     summary = {
         "suite": os.path.basename(path),
         "path": run_path,
+        "repeat": repeat,
         "total": len(rows),
         "pass": sum(1 for r in rows if r["verdict"] == "PASS"),
         "fail": sum(1 for r in rows if r["verdict"] != "PASS"),
@@ -165,6 +197,63 @@ def _vm_runner(timeout=900):
     return run_in_vm
 
 
+FRESH_IMAGE = "dist/llmos-arm64.qcow2"  # a shipped image: boot-target.sh makes a new throwaway overlay for it
+
+
+def _fresh_overlay():
+    """Quit the running VM, then reboot the shipped image on a new overlay (tools/boot-target.sh
+    deletes run/target-overlay.qcow2 and recreates it from the image when the image is under dist/)."""
+    env = dict(os.environ, LLMOS_TESTSHELL="1")
+    subprocess.run(["tools/boot-target.sh", FRESH_IMAGE, "4096"], env=env, check=True,
+                   stdout=subprocess.DEVNULL)
+
+
+# the onboarding command, quoted exactly as tools/calc-smoke.sh:21 sends it (the \" are literal)
+ONBOARD_CMD = ('cd /usr/lib/llmos && python3 -c "from llmos import config; '
+               'config.settings.set(\\"onboarded\\", True)"')
+WIZARD_SCREEN = "wizard"  # desk.py:1289 set_screen("wizard"); desk.py:4038 _state() reports self.screen
+DESK_SCREEN = "desk"      # desk.py:1315 set_screen("desk"); desk.py:4038 _state() reports self.screen
+
+
+def _poll(probe, limit, clock, sleep):
+    """Call probe() until it returns True; False when `limit` seconds of `clock()` have passed.
+    A probe that raises counts as not ready. The only place that sleeps between tries."""
+    deadline = clock() + limit
+    while True:
+        try:
+            if probe():
+                return True
+        except Exception:
+            pass
+        if clock() >= deadline:
+            return False
+        sleep(2)
+
+
+def _slow():
+    return float(os.environ.get("LLMOS_SLOW", "1") or "1")
+
+
+def _desk_ready(out):
+    try:
+        data = json.loads(out)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("screen") == DESK_SCREEN
+
+
+def fresh_overlay(run_in_vm, boot=_fresh_overlay, clock=time.monotonic, sleep=time.sleep):
+    """Reboot onto a fresh overlay, then wait until the VM answers, onboard it (as calc-smoke does)
+    and wait until the desk is past the first-run wizard. Raises RuntimeError if either wait times out."""
+    slow = _slow()
+    boot()
+    if not _poll(lambda: "up" in run_in_vm("echo up"), 300 * slow, clock, sleep):
+        raise RuntimeError("fresh: VM not ready")
+    run_in_vm(ONBOARD_CMD)
+    if not _poll(lambda: _desk_ready(run_in_vm("llmos desk-state")), 120 * slow, clock, sleep):
+        raise RuntimeError("fresh: desk not ready")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Run a task suite as a real user through QMP.")
     ap.add_argument("suite", help="task file (JSON with a tasks list)")
@@ -172,7 +261,12 @@ def main(argv=None):
     ap.add_argument("--outdir", default=OUTDIR)
     ap.add_argument("--path", choices=PATHS, default="page",
                     help="page: type into the page and press Enter; say: llmos say <instruction>")
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="run the whole suite N times; repeats 2..N each start on a fresh overlay "
+                         "(flake runs: use 3)")
     args = ap.parse_args(argv)
+    if args.repeat < 1:
+        ap.error("--repeat must be >= 1")
 
     from qmp import QMP
     from realuser import RealUser
@@ -180,12 +274,20 @@ def main(argv=None):
     q = QMP("run/tqmp.sock")
     run_in_vm = _vm_runner()
     user = RealUser(q, run_in_vm)
+
+    def fresh():
+        # the reboot kills the old QMP socket: close it, reboot on a new overlay, reconnect
+        q.close()
+        fresh_overlay(run_in_vm)
+        user.qmp = QMP("run/tqmp.sock")
+
     try:
         summary = run_suite(args.suite, user, run_in_vm, ids=args.ids, outdir=args.outdir,
-                            run_path=args.path)
+                            run_path=args.path, repeat=args.repeat,
+                            fresh=fresh if args.repeat > 1 else None)
     finally:
-        q.close()
-    print(json.dumps({k: summary[k] for k in ("suite", "total", "pass", "fail", "seconds")}))
+        user.qmp.close()
+    print(json.dumps({k: summary[k] for k in ("suite", "repeat", "total", "pass", "fail", "seconds")}))
     return 0
 
 

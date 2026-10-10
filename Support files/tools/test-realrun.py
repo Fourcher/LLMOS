@@ -142,7 +142,11 @@ def main():
         # 6. no fixed sleeps in realrun.py
         with open(os.path.join(HERE, "realrun.py"), encoding="utf-8") as f:
             src = f.read()
-        check("no sleep( in realrun.py", "sleep(" not in src)
+        poll_at = src.index("def _poll(")
+        poll_end = src.index("def _slow(")
+        check("sleep( only inside _poll", src.count("sleep(") == 1 and
+              src.count("sleep(", poll_at, poll_end) == 1,
+              "total=%d in_poll=%d" % (src.count("sleep("), src.count("sleep(", poll_at, poll_end)))
 
         # 7a. wait reports the desk still busy -> FAIL at step "wait", evaluate skipped
         rec = realrun.run_task(reply_task("busy-1"), FakeUser(),
@@ -206,6 +210,162 @@ def main():
               repr(page_summary.get("path")))
         shutil.rmtree(say_suite_dir, ignore_errors=True)
         print("ok path say summary %s pass=%s" % (say_summary["path"], say_summary["pass"]))
+
+        # 9. --repeat: scripted outcomes per repeat (True = reply right, False = reply wrong)
+        def scripted(outcomes):
+            cur = {"vm": make_vm(after="Canberra" if outcomes[0] else "Wrong")}
+            calls = []
+
+            def run_in_vm(cmd):
+                return cur["vm"](cmd)
+
+            def fresh():
+                calls.append(1)
+                i = len(calls)
+                cur["vm"] = make_vm(after="Canberra" if outcomes[i] else "Wrong")
+            return run_in_vm, fresh, calls
+
+        def one_task_suite(tid):
+            p = os.path.join(outroot, "suite-%s.json" % tid)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"tasks": [reply_task(tid)]}, f)
+            return p
+
+        rep_dir = os.path.join(outroot, "rep-flaky")
+        run_in_vm, fresh, calls = scripted([True, False, True])
+        s = realrun.run_suite(one_task_suite("rep-flaky"), FakeUser(), run_in_vm,
+                              outdir=rep_dir, repeat=3, fresh=fresh)
+        row = s["tasks"][0]
+        check("flaky 2 of 3 -> rate 0.67", row["rate"] == 0.67 and row["passes"] == 2 and row["runs"] == 3,
+              json.dumps(row))
+        check("flaky label", row["label"] == "flaky", repr(row["label"]))
+        check("summary repeat field", s["repeat"] == 3, repr(s.get("repeat")))
+        check("fresh called repeat-1 times (flaky)", len(calls) == 2, repr(len(calls)))
+        check("repeat writes r{r}/<id>.json",
+              all(os.path.exists(os.path.join(rep_dir, "r%d" % r, "rep-flaky.json")) for r in (1, 2, 3)))
+
+        run_in_vm, fresh, calls = scripted([True, True, True])
+        s = realrun.run_suite(one_task_suite("rep-pass"), FakeUser(), run_in_vm,
+                              outdir=os.path.join(outroot, "rep-pass"), repeat=3, fresh=fresh)
+        row = s["tasks"][0]
+        check("3 of 3 -> pass", row["label"] == "pass" and row["rate"] == 1.0, json.dumps(row))
+        check("fresh called repeat-1 times (pass)", len(calls) == 2, repr(len(calls)))
+
+        run_in_vm, fresh, calls = scripted([False, False, False])
+        s = realrun.run_suite(one_task_suite("rep-fail"), FakeUser(), run_in_vm,
+                              outdir=os.path.join(outroot, "rep-fail"), repeat=3, fresh=fresh)
+        row = s["tasks"][0]
+        check("0 of 3 -> fail", row["label"] == "fail" and row["rate"] == 0.0 and row["passes"] == 0,
+              json.dumps(row))
+        check("fresh called repeat-1 times (fail)", len(calls) == 2, repr(len(calls)))
+
+        # repeat=1: flat layout, no fresh call, no repeat dirs
+        one_dir = os.path.join(outroot, "rep-one")
+        run_in_vm, fresh, calls = scripted([True])
+        s = realrun.run_suite(one_task_suite("rep-one"), FakeUser(), run_in_vm, outdir=one_dir,
+                              fresh=fresh)
+        check("repeat=1 writes {outdir}/<id>.json",
+              os.path.exists(os.path.join(one_dir, "rep-one.json"))
+              and not os.path.exists(os.path.join(one_dir, "r1")))
+        check("repeat=1 never calls fresh", calls == [] and s["repeat"] == 1 and s["tasks"][0]["label"] == "pass",
+              repr((calls, s.get("repeat"))))
+        print("ok repeat=1 summary label=%s" % s["tasks"][0]["label"])
+
+        # 10. fresh_overlay: readiness, onboarding, desk-ready polls with a fake clock (sleep advances it)
+        class FakeTime:
+            def __init__(self):
+                self.t = 0.0
+
+            def clock(self):
+                return self.t
+
+            def sleep(self, s):
+                self.t += s
+
+        def scripted_vm(answers):
+            calls = []
+
+            def vm(cmd):
+                calls.append(cmd)
+                if cmd == "echo up":
+                    out = answers["up"].pop(0)
+                    if isinstance(out, Exception):
+                        raise out
+                    return out
+                if cmd == realrun.ONBOARD_CMD:
+                    return ""
+                if cmd == "llmos desk-state":
+                    return answers["desk"].pop(0)
+                raise AssertionError("unexpected command %r" % cmd)
+            return vm, calls
+
+        onboard_literal = 'cd /usr/lib/llmos && python3 -c "from llmos import config; config.settings.set(\\"onboarded\\", True)"'
+        check("onboard command quoted as calc-smoke", realrun.ONBOARD_CMD == onboard_literal, repr(realrun.ONBOARD_CMD))
+
+        wizard = json.dumps({"screen": "wizard", "busy": False, "reply": ""})
+        desk = json.dumps({"screen": "desk", "busy": False, "reply": ""})
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": [RuntimeError("no answer"), OSError("refused"), "up\n"],
+                                 "desk": [wizard, desk]})
+        realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+        onboard_calls = [c for c in calls if c == realrun.ONBOARD_CMD]
+        check("fresh: VM up after two failures, onboarded once, desk after wizard",
+              len(onboard_calls) == 1 and calls.count("echo up") == 3 and
+              calls.count("llmos desk-state") == 2,
+              repr(calls))
+        print("ok fresh succeeds: onboard issued %d time, polls up=%d desk=%d" %
+              (len(onboard_calls), calls.count("echo up"), calls.count("llmos desk-state")))
+
+        # desk-state that is not JSON keeps polling
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": ["up"], "desk": ["Traceback: nope", desk]})
+        realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+        check("fresh: non-JSON desk-state keeps polling", calls.count("llmos desk-state") == 2,
+              repr(calls))
+
+        # VM never answers -> RuntimeError
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": [RuntimeError("never")] * 10000, "desk": []})
+        try:
+            realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+            err = None
+        except RuntimeError as e:
+            err = str(e)
+        check("fresh: VM never up -> RuntimeError", err == "fresh: VM not ready", repr(err))
+        check("fresh: never-up does not onboard", realrun.ONBOARD_CMD not in calls, repr(calls[-3:]))
+
+        # desk never leaves the wizard -> RuntimeError
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": ["up"], "desk": [wizard] * 10000})
+        try:
+            realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+            err = None
+        except RuntimeError as e:
+            err = str(e)
+        check("fresh: desk never ready -> RuntimeError", err == "fresh: desk not ready", repr(err))
+        print("ok fresh timeouts raise RuntimeError")
+
+        # desk-ready requires screen == "desk": lock keeps polling, missing screen keeps polling
+        lock = json.dumps({"screen": "lock", "busy": False, "reply": ""})
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": ["up"], "desk": [lock, lock, desk]})
+        realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+        check("fresh: lock then desk succeeds after 3 desk-state polls",
+              calls.count("llmos desk-state") == 3, repr(calls))
+        print("ok fresh lock-then-desk polls=%d" % calls.count("llmos desk-state"))
+
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": ["up"], "desk": [lock] * 10000})
+        try:
+            realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+            err = None
+        except RuntimeError as e:
+            err = str(e)
+        check("fresh: lock forever -> RuntimeError", err == "fresh: desk not ready", repr(err))
+        print("ok fresh lock-only raises RuntimeError")
+
+        check("desk-ready: missing screen key is not ready",
+              realrun._desk_ready(json.dumps({"busy": False, "reply": ""})) is False)
     finally:
         shutil.rmtree(outroot, ignore_errors=True)
 
