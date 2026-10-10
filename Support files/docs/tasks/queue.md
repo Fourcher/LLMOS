@@ -148,3 +148,4 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - c18ff22 (contains f11631a + open_app verb strip; b01e1ea to-do list route fix; b14adc7 + notes "as a list" fix; contains 2d76e55 set_default_app + files view list/icons tool+routes; VERIFY PASS)
 - bd3a962 (files icon grid in desk.js/desk.css; VERIFY PASS)
 - [done] (capability) "open the task list app" (c18ff22 VERIFY PASS: "open_app task list") -> open_app command "open the task list" (verb kept in command) | role: fix | files: intent.py _OPEN_APP
+- 059904f (web search: engines in parallel, 10 s cap, plain error text; VERIFY PASS: "search failed: DuckDuckGo returned 503; Brave returned 429")
