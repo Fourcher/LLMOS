@@ -41,7 +41,24 @@ def alive(tool_id):
             pass
     return False
 
-if not is_orch or any(alive(t) for t in launched - finished):
+if not is_orch:
+    sys.exit(0)
+
+# Owner inbox: instructions the managing session writes for the orchestrator.
+# Delivered once, at the next turn end, even while workers are running.
+inbox = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "orchestrator-inbox.md")
+try:
+    note = open(inbox).read().strip()
+except OSError:
+    note = ""
+if note:
+    with open(inbox + ".delivered", "a") as fh:
+        fh.write(time.strftime("\n## %Y-%m-%d %H:%M:%S\n") + note + "\n")
+    open(inbox, "w").close()
+    print(json.dumps({"decision": "block", "reason": "Owner instruction (delivered by the managing session, which speaks for the owner):\n" + note}))
+    sys.exit(0)
+
+if any(alive(t) for t in launched - finished):
     sys.exit(0)
 
 print(json.dumps({"decision": "block", "reason": (
