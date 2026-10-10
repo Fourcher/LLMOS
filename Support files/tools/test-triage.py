@@ -88,7 +88,8 @@ def main():
         check("bundle-step-trace", os.path.exists(os.path.join(d, "step-trace.json")))
         with open(os.path.join(d, "rerun.txt")) as f:
             rerun = f.read().strip()
-        check("bundle-rerun", rerun == "python3 tools/realrun.py suite.json --ids t4", rerun)
+        check("bundle-rerun", rerun == "python3 tools/realrun.py suite.json --ids t4 --run", rerun)
+        print("ok bundle-rerun contains --run")
 
         # --queue: append one open line + one draft line per new cluster, deduped by hash.
         runq = os.path.join(tmp, "runq")
@@ -134,7 +135,7 @@ def main():
                  "task_ids": ["t9"], "signature": sig, "examples": [{"step_failed": "s1"}]}
         os.makedirs(os.path.join(bdir, "abc123"))
         with open(os.path.join(bdir, "abc123", "rerun.txt"), "w") as f:
-            f.write("python3 tools/realrun.py suite.json --ids t9\n")
+            f.write("python3 tools/realrun.py suite.json --ids t9 --run\n")
         blk = triage.queue_block([entry], bdir, "suite.json", "",
                                  now=triage.datetime.datetime(2026, 1, 2, 3, 4))
         blines = [l for l in blk.splitlines() if l.startswith("- [open] (reliability) realrun cluster ")]
@@ -143,6 +144,8 @@ def main():
         check("queue-sig-no-pipe-and-short", parts and "|" not in parts[0]
               and "…" in parts[0] and len(triage.queue_sig(sig)) <= 100,
               repr(triage.queue_sig(sig)))
+        check("queue-test-field-run", "| test: python3 tools/realrun.py suite.json --ids t9 --run" in blk, repr(blk))
+        print("ok queue test field contains --run")
         check("queue-header-singular", "## Triage 2026-01-02 03:04 (1 cluster)\n" in blk, repr(blk[:120]))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
