@@ -6,6 +6,7 @@ focus mode that blocks distracting sites for a while.
 handle(desk, line) -> True when it answered. MATCH is a quick test the desk uses to decide the request is instant."""
 import collections
 import datetime as dt
+import errno
 import glob
 import json
 import os
@@ -13,14 +14,35 @@ import random
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.parse
 
 from . import config, rootd_client
 from . import system as _system
 from .system import _hosts_name_ok, _write_hosts
+
+def _plain_err(e):
+    """A short plain-words reason for an error, so the owner never sees Python's raw text (no errno, no paths)."""
+    if isinstance(e, PermissionError):
+        return "it isn't allowed here"
+    if isinstance(e, FileNotFoundError):
+        return "it isn't there"
+    if isinstance(e, FileExistsError):
+        return "something with that name already exists"
+    if isinstance(e, IsADirectoryError):
+        return "that's a folder"
+    if isinstance(e, NotADirectoryError):
+        return "that isn't a folder"
+    if isinstance(e, OSError) and getattr(e, "errno", None) == errno.ENOSPC:
+        return "the disk is full"
+    if isinstance(e, (socket.timeout, TimeoutError, urllib.error.URLError)):
+        return "no answer from the internet"
+    return "something went wrong"
+
 
 _JOKE_PAT = (r"(?:^(?:please\s+)?(?:tell|give)\s+me\s+(?:a\s+|another\s+|one\s+more\s+)?"
              r"(?:(?:good|funny|short|clean|dad|bad)\s+)?joke(?:\s+please)?[.!?]*$|"
@@ -484,9 +506,9 @@ def hostname(desk, line, low):
             hosts = re.sub(rf"\b{re.escape(old)}\b", n, hosts)
             _write_hosts(hosts)
         except OSError as e:
-            return _say(desk, line, f"Couldn't rename it: {e}.")
+            return _say(desk, line, f"Couldn't rename it: {_plain_err(e)}.")
         except rootd_client.RootdError as e:
-            return _say(desk, line, f"Couldn't rename it: {e}.")
+            return _say(desk, line, f"Couldn't rename it: {_plain_err(e)}.")
         return _say(desk, line, f"This computer is now called “{n}” (it was “{old}”). Other devices on the network see the new name after a restart.")
     if re.search(r"what(?:'?s| is) (?:the |this |my )?computer(?:'?s)? name|what(?:'?s| is) (?:the |my )?hostname|^hostname$", low):
         return _say(desk, line, f"This computer is called “{os.uname().nodename}”. Say “call this computer …” to change it.")
@@ -984,7 +1006,7 @@ def system_more(desk, line, low):
                 with open("/etc/shells", "a") as f:
                     f.write(path + "\n")
         except OSError as e:
-            return _say(desk, line, f"Couldn't change it: {e}.")
+            return _say(desk, line, f"Couldn't change it: {_plain_err(e)}.")
         extra = " For oh-my-zsh, say “run the oh-my-zsh installer”." if sh == "zsh" else ""
         return _say(desk, line, f"New terminals now use {sh} ({path}).{extra}")
     return False
@@ -1357,7 +1379,7 @@ def weather(desk, line, low):
                + ("&temperature_unit=fahrenheit" if us else ""))
         f = json.loads(web.fetch(url, max_bytes=200000, timeout=8)[3])
     except Exception as e:
-        return _say(desk, line, f"I couldn't get the forecast just now ({e}).")
+        return _say(desk, line, f"I couldn't get the forecast just now: {_plain_err(e)}.")
     unit = "°F" if us else "°C"
     d = f["daily"]
     idx = 1 if "tomorrow" in when else 0
@@ -1694,6 +1716,6 @@ def handle(desk, line):
             if fn(desk, line, low):
                 return True
         except Exception as e:  # an everyday helper must never break the desk
-            desk.instant_reply(line, f"That didn't work: {e}")
+            desk.instant_reply(line, f"That didn't work: {_plain_err(e)}.")
             return True
     return False
