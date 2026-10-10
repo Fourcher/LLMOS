@@ -558,9 +558,8 @@ def storage():
 
 def clear_caches():
     freed = 0
-    for c in (os.path.join(config.home(), ".cache"), "/var/cache/apk"):
-        if not os.path.isdir(c):
-            continue
+    c = os.path.join(config.home(), ".cache")
+    if os.path.isdir(c):
         for n in os.listdir(c):
             p = os.path.join(c, n)
             try:
@@ -569,16 +568,18 @@ def clear_caches():
                 freed += size
             except OSError:
                 pass
+    apk_freed, _ = system.clear_apk_cache()
+    freed += apk_freed
     return f"cleared {_human(freed)} of caches"
 
 
 # ---- updates (Alpine's signed package repositories)
 
 def updates_check():
-    rc, out, err = _run(["apk", "update"], 120)
+    rc, out, err = system.apk_update()
     if rc:
         return None, (err.strip() or "could not reach the update server (is the internet on?)")[:200]
-    rc, out, err = _run(["apk", "upgrade", "--simulate"], 120)
+    rc, out, err = system.apk_upgrade(simulate=True)
     pk = re.findall(r"Upgrading (\S+) \((\S+) -> (\S+)\)", out)
     return pk, ""
 
@@ -597,7 +598,7 @@ def updates_panel():
 
 
 def updates_apply():
-    rc, out, err = _run(["apk", "upgrade", "--no-interactive"], 1800)
+    rc, out, err = system.apk_upgrade(simulate=False)
     if rc:
         return False, (err.strip() or out.strip())[-300:]
     kernel = "linux" in out or "vmlinuz" in out
