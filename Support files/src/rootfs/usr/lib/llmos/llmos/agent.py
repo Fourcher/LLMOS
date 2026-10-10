@@ -563,7 +563,7 @@ def _bare_click(ctx, user_text):
         return None          # a single key ("press 7") is _screen_steps' job
     if "click" not in tools.REGISTRY or not tools.REGISTRY["click"].available():
         return None
-    out = execute(ctx, "click", {"text": t})
+    out = execute(ctx, "click", {"text": t, "describe_miss": False})
     if _failed(out):
         return f"I can't see “{t}” on the screen."
     return f"Clicked {t}."

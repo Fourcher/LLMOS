@@ -3644,6 +3644,8 @@ def click(a, ctx):
         if not d and a.get("x") is not None and a.get("y") is not None:
             d = {"x": int(a["x"]), "y": int(a["y"])}       # the words were not read, but the place was given
         if not d:
+            if a.get("describe_miss", True) is False:
+                return f"error: '{label}' is not on the screen now."     # the caller does not want the screen read
             return f"error: '{label}' is not on the screen now. The screen shows:\n" + _screen_after(60)
         x, y = d["x"], d["y"]
         by_atspi = bool(d.get("atspi"))

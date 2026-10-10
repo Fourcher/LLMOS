@@ -39,7 +39,7 @@ def check(label, got, want):
 try:
     calls.clear()
     check("click File -> Clicked File.", agent._bare_click(None, "click File"), "Clicked File.")
-    check("click File calls execute(click, text=File)", calls, [("click", {"text": "File"})])
+    check("click File calls execute(click, text=File, describe_miss=False)", calls, [("click", {"text": "File", "describe_miss": False})])
 
     calls.clear()
     check("click the Save button -> Clicked Save.", agent._bare_click(None, "click the Save button"), "Clicked Save.")
@@ -58,7 +58,7 @@ try:
     result["out"] = "error: nothing named File"
     calls.clear()
     check("failed click -> can't-see sentence", agent._bare_click(None, "click File"), "I can't see “File” on the screen.")
-    check("failed click was attempted once", calls, [("click", {"text": "File"})])
+    check("failed click was attempted once", calls, [("click", {"text": "File", "describe_miss": False})])
 finally:
     tools.REGISTRY["click"].available = _saved_available
 

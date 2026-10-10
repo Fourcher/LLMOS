@@ -54,7 +54,7 @@ tools.REGISTRY["click"].available = lambda: True
 try:
     check("failed bare click -> can't-see sentence",
           agent._bare_click(None, "click File"), "I can't see “File” on the screen.")
-    check("failed bare click was attempted once", calls, [("click", {"text": "File"})])
+    check("failed bare click was attempted once", calls, [("click", {"text": "File", "describe_miss": False})])
 finally:
     tools.REGISTRY["click"].available = _saved_available
 
