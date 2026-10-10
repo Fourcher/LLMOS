@@ -8,11 +8,15 @@ import py_compile
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import deskre
+
 tools_dir = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.join(os.path.dirname(tools_dir), "src/rootfs")
 DESK = os.path.join(_ROOT, "usr/lib/llmos/llmos/desk.py")
 
-WIFI_RE = r"(?:turn |switch )?(?:the )?wi-?fi (?P<v>on|off)|(?:turn|switch) (?P<v2>on|off) (?:the )?wi-?fi|(?P<v3>enable|disable) (?:the )?wi-?fi"
+WIFI_RE = deskre.pattern_containing("(?P<v3>enable|disable) (?:the )?wi-?fi")
+print("pattern:", WIFI_RE)
 
 failures = []
 

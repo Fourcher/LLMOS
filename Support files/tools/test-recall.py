@@ -3,12 +3,16 @@
 import os
 import py_compile
 import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import deskre
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DESK = os.path.join(HERE, "..", "src", "rootfs", "usr", "lib", "llmos", "llmos", "desk.py")
 
-PATTERN = (r"what (?:did|was it) i (?:just )?(?:say|ask|type|write)(?: (?:you|to you))?(?: (?:a (?:minute|moment|second|bit) ago|before|earlier|last|just now|before that))?|"
-           r"what was my (?:last|previous) (?:question|request|message)|what did i ask you(?: (?:before|last|earlier))?")
+PATTERN = deskre.pattern_containing("what was my (?:last|previous) (?:question|request|message)")
+print("pattern:", PATTERN)
 
 for phrase in ["what did i say a minute ago", "what did i just say", "what was my last question", "what did i ask you before"]:
     assert re.fullmatch(PATTERN, phrase), "should match: " + phrase

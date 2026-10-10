@@ -5,7 +5,11 @@ import py_compile
 import re
 import sys
 
-PATTERN = r"what(?:'s| is) on (?:my |the )?screen(?: now| right now)?|what(?:'s| is) open(?: now| right now)?|which (?:windows|apps|programs) are open"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import deskre
+
+PATTERN = deskre.pattern_containing("which (?:windows|apps|programs) are open")
+print("pattern:", PATTERN)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DESK = os.path.normpath(os.path.join(HERE, "..", "src", "rootfs", "usr", "lib", "llmos", "llmos", "desk.py"))
