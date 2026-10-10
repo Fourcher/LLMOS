@@ -1443,7 +1443,7 @@ def edit_conduct(a, ctx):
             ("\n\n(this is the owner's own text)" if agent.custom_conduct() else "\n\n(this is the built-in default)")
     if act == "reset":
         try:
-            os.unlink(config.conduct_path())
+            config.remove_conduct()
         except OSError:
             pass
         store.audit("edit_conduct", {}, "conduct reset to default", who="owner")
