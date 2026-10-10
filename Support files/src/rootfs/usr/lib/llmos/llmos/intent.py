@@ -820,6 +820,12 @@ def _notes(text):
     m = _NOTES_SHOW.match(text)
     if m and not re.search(r"\b(?:files?|folders?|documents|downloads|pictures|photos|music|videos|icons?)\b", m.group("list") or m.group("list2") or "", re.I):
         lst = m.group("list") or m.group("list2")
+        if lst:
+            lst = re.sub(r"\s+(?:as|in)\s+(?:a\s+)?(?:list|grid|icons?)\s*$", "", lst, flags=re.I)
+            lst = re.sub(r"\s+(?:as|in)(?:\s+a)?\s*$", "", lst, flags=re.I)
+            lst = re.sub(r"\s+list\s*$", "", lst, flags=re.I).strip()
+            if lst.lower() in ("notes", "my notes"):
+                return ("notes_show", {"list": "notes"})   # same form as "show my notes" (line ~1608)
         return ("notes_show", {"list": lst.strip()} if lst else {})
     m = _NOTE_REMOVE.match(text)
     if m:
