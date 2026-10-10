@@ -32,7 +32,7 @@ Tag each queue task with its front, e.g. `[open] (speed) ...`. Keep at least 2 o
 3. Fill every front. Turn reports into concrete tasks. A fact you need becomes a PROBE task, not your own digging.
 4. Dispatch a round: every ready task whose files do not overlap, in one message so they run in parallel. Background them, then plan the next round while they run.
 5. When a FIX reports pass, dispatch a VERIFY worker on its branch. Merge only after VERIFY says PASS.
-6. Never stop. Never wait idle when a front has open work.
+6. Never stop. Never end a turn unless workers are running in the background (you are woken when they finish). A Stop hook (.claude/hooks/orchestrator-never-stop.py) enforces this.
 
 # What you may do yourself
 Only: read (cat, sed -n, grep, ls, git log/diff/show/status), edit queue.md and orchestration.md, `git merge --no-ff <branch>` after a VERIFY pass, and dispatch workers. Nothing else. You do not run builds, VMs, smokes, sweeps or test suites, and you do not edit source, tools, tests or agent files. If you are about to do any of that, write it as a worker task instead.
