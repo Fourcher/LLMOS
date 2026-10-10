@@ -59,6 +59,22 @@ check("Errno" not in said, "no Errno in the reply")
 check("/root/" not in said, "no /root/ path in the reply")
 check("isn't allowed" in said, "the reply says it isn't allowed")
 
+print("the system helper's refusals in plain words")
+check(everyday._plain_err(rootd_client.RootdError("the system helper is not running")) == "the system helper is not running",
+      "RootdError('the system helper is not running') -> same text")
+check(everyday._plain_err(rootd_client.RootdError("bad args: zone")) == "that name or value isn't allowed",
+      "RootdError('bad args: zone') -> that name or value isn't allowed")
+check(everyday._plain_err(ValueError("bad args: zone")) == "that name or value isn't allowed",
+      "ValueError('bad args: zone') -> that name or value isn't allowed")
+dk = Desk()
+with mock.patch.object(rootd_client, "call", side_effect=rootd_client.RootdError("bad args: name")):
+    everyday.hostname(dk, "call this computer kitchen-pc", "call this computer kitchen-pc")
+check(dk.said == "Couldn't rename it: that name isn't allowed: use letters, numbers and dashes.", f"rename site bad args -> {dk.said!r}")
+dk = Desk()
+with mock.patch.object(rootd_client, "call", side_effect=rootd_client.RootdError("the system helper is not running")):
+    everyday.hostname(dk, "call this computer kitchen-pc", "call this computer kitchen-pc")
+check(dk.said == "Couldn't rename it: the system helper is not running.", f"rename site not running -> {dk.said!r}")
+
 print()
 print("all good" if fails == 0 else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

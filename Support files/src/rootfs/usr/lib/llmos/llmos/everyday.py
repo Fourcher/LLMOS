@@ -25,8 +25,18 @@ from . import config, rootd_client
 from . import system as _system
 from .system import _hosts_name_ok, _write_hosts
 
-def _plain_err(e):
-    """A short plain-words reason for an error, so the owner never sees Python's raw text (no errno, no paths)."""
+NAME_BAD = "that name isn't allowed: use letters, numbers and dashes"
+
+
+def _plain_err(e, bad="that name or value isn't allowed"):
+    """A short plain-words reason for an error, so the owner never sees Python's raw text (no errno, no paths).
+    A system-helper refusal ("bad args: …") gives `bad`; the helper's other plain messages are shown as they are."""
+    if isinstance(e, rootd_client.RootdError) or isinstance(e, ValueError):
+        text = str(e).strip()
+        if text.startswith("bad args"):
+            return bad
+        if isinstance(e, rootd_client.RootdError) and text:
+            return text.splitlines()[0][:120]
     if isinstance(e, PermissionError):
         return "it isn't allowed here"
     if isinstance(e, FileNotFoundError):
@@ -508,7 +518,7 @@ def hostname(desk, line, low):
         except OSError as e:
             return _say(desk, line, f"Couldn't rename it: {_plain_err(e)}.")
         except rootd_client.RootdError as e:
-            return _say(desk, line, f"Couldn't rename it: {_plain_err(e)}.")
+            return _say(desk, line, f"Couldn't rename it: {_plain_err(e, bad=NAME_BAD)}.")
         return _say(desk, line, f"This computer is now called “{n}” (it was “{old}”). Other devices on the network see the new name after a restart.")
     if re.search(r"what(?:'?s| is) (?:the |this |my )?computer(?:'?s)? name|what(?:'?s| is) (?:the |my )?hostname|^hostname$", low):
         return _say(desk, line, f"This computer is called “{os.uname().nodename}”. Say “call this computer …” to change it.")

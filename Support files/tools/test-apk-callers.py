@@ -156,7 +156,7 @@ try:
     scripted.append(OUT["ok"])
     everyday.system_more(desk, "line", "change my shell to zsh")
     check("shell ok call", calls[0] == ("apk_add", ["zsh"], {"quiet": True, "timeout": 600}), calls)
-    check("shell ok reached the shell step", desk.replies == ["Couldn't change it: denied."], desk.replies)
+    check("shell ok reached the shell step", desk.replies == ["Couldn't change it: something went wrong."], desk.replies)
 finally:
     restore()
 
