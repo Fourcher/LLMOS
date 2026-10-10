@@ -1582,6 +1582,10 @@ def _everyday2(text):
                  r"(?P<h>24|12|twenty[- ]four|twelve)[- ]?hour\s+(?:clock|time|format)(?:\s+please)?$", low)
     if m:
         return ("change_setting", {"setting": "clock", "value": "24" if m.group("h") in ("24", "twenty four", "twenty-four", "twenty") else "12"})
+    # "stop the music": media_control stop, not the slow model
+    if re.match(r"^(?:please\s+)?(?:stop|turn\s+off|kill|end)\s+(?:the\s+|my\s+|this\s+)?(?:music|song|audio|sound|playback|podcast|video|radio|playing)(?:\s+playing)?\s*[.!]?$", low) \
+            or re.match(r"^(?:please\s+)?stop\s+playing(?:\s+(?:music|that|this|it))?\s*[.!]?$", low):
+        return ("media_control", {"action": "stop"})
     # a quick look at the volume; the newest video or song
     if re.match(r"^how\s+(?:loud|high)\s+is\s+(?:the\s+)?(?:volume|sound|it|the\s+sound|the\s+speakers?)(?:\s+(?:right\s+)?now)?$|"
                 r"^what(?:'s|\s+is)\s+the\s+volume(?:\s+(?:right\s+)?now)?$", low):
