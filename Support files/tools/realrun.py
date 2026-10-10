@@ -29,7 +29,12 @@ def _add(steps, name, seconds):
     steps[name] = steps.get(name, 0.0) + seconds
 
 
-def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR):
+PATHS = ("page", "say")
+
+
+def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="page"):
+    if path not in PATHS:
+        raise ValueError("path must be one of %s, got %r" % (PATHS, path))
     tid = task["id"]
     steps = {}
     state = {"step": None}
@@ -71,8 +76,12 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR):
             timed("setup", lambda c=cmd: run_in_vm(c))
         before = timed("state", lambda: json.loads(run_in_vm("llmos desk-state")))
         ctx["before_reply"] = before.get(REPLY_KEY) or ""
-        typed_ok = timed("type", lambda: user.type_into(INPUT, task["instruction"]))
-        timed("press", lambda: user.press("ret"))
+        if path == "say":
+            timed("say", lambda: run_in_vm("llmos say " + shlex.quote(task["instruction"])))
+            typed_ok = True
+        else:
+            typed_ok = timed("type", lambda: user.type_into(INPUT, task["instruction"]))
+            timed("press", lambda: user.press("ret"))
         timeout_s = task.get("timeout_s", 120)
         waited = timed("wait", lambda: run_in_vm("llmos desk-ctl wait %s" % timeout_s))
         try:
@@ -111,6 +120,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR):
         "step_failed": step_failed,
         "error": error,
         "stale_reply": ctx["stale"],
+        "path": path,
     }
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "%s.json" % tid), "w", encoding="utf-8") as f:
@@ -118,7 +128,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR):
     return record
 
 
-def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR):
+def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page"):
     data = tasklib.load(path)
     tasks = data["tasks"]
     if ids:
@@ -127,10 +137,11 @@ def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR):
     t0 = time.monotonic()
     rows = []
     for task in tasks:
-        rec = run_task(task, user, run_in_vm, outdir=outdir)
+        rec = run_task(task, user, run_in_vm, outdir=outdir, path=run_path)
         rows.append({"id": rec["id"], "verdict": rec["verdict"], "seconds": rec["seconds"]})
     summary = {
         "suite": os.path.basename(path),
+        "path": run_path,
         "total": len(rows),
         "pass": sum(1 for r in rows if r["verdict"] == "PASS"),
         "fail": sum(1 for r in rows if r["verdict"] != "PASS"),
@@ -159,6 +170,8 @@ def main(argv=None):
     ap.add_argument("suite", help="task file (JSON with a tasks list)")
     ap.add_argument("--ids", nargs="+", default=None, help="only these task ids")
     ap.add_argument("--outdir", default=OUTDIR)
+    ap.add_argument("--path", choices=PATHS, default="page",
+                    help="page: type into the page and press Enter; say: llmos say <instruction>")
     args = ap.parse_args(argv)
 
     from qmp import QMP
@@ -168,7 +181,8 @@ def main(argv=None):
     run_in_vm = _vm_runner()
     user = RealUser(q, run_in_vm)
     try:
-        summary = run_suite(args.suite, user, run_in_vm, ids=args.ids, outdir=args.outdir)
+        summary = run_suite(args.suite, user, run_in_vm, ids=args.ids, outdir=args.outdir,
+                            run_path=args.path)
     finally:
         q.close()
     print(json.dumps({k: summary[k] for k in ("suite", "total", "pass", "fail", "seconds")}))
