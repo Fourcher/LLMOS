@@ -3,6 +3,7 @@ agent: the firewall (internet on/off), Tor routing, and focus mode."""
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 
@@ -219,6 +220,105 @@ def apk_del(name, force=False, timeout=600):
         return rc, out, err
     except rootd_client.RootdError as e:
         return 1, "", str(e)
+
+
+APK_CACHE = "/var/cache/apk"
+
+
+def _apk_run_root(argv, timeout):
+    """Run an apk command as root. Returns (returncode, stdout, stderr)."""
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timed out after {timeout} s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def _apk_update_root():
+    """Refresh the package index with apk (120 s), as root. Returns (returncode, stdout, stderr)."""
+    return _apk_run_root(["apk", "update"], 120)
+
+
+def _apk_upgrade_root(simulate=False):
+    """Upgrade with apk, as root: simulate=True only lists the changes (120 s); otherwise installs (1800 s)."""
+    if simulate:
+        return _apk_run_root(["apk", "upgrade", "--simulate"], 120)
+    return _apk_run_root(["apk", "upgrade", "--no-interactive"], 1800)
+
+
+def _tree_size(path):
+    """Bytes of files under path. Symlinks are counted as links (their own size), never followed."""
+    total = 0
+    for d, dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(d, f)).st_size
+            except OSError:
+                pass
+        for f in dirs:  # a symlink to a directory is listed in dirs: count the link, do not walk it
+            p = os.path.join(d, f)
+            if os.path.islink(p):
+                try:
+                    total += os.lstat(p).st_size
+                except OSError:
+                    pass
+    return total
+
+
+def _clear_apk_cache_root():
+    """Delete the entries directly inside APK_CACHE (the apk cache that the Storage panel clears), as root.
+    Returns (freed_bytes, msg). A symlink is unlinked, never followed, so its target is untouched; real
+    directories are removed with shutil.rmtree, which does not follow symlinks inside them."""
+    if os.path.islink(APK_CACHE) or not os.path.isdir(APK_CACHE):
+        return 0, "cleared 0 bytes of apk cache"
+    freed = 0
+    for n in os.listdir(APK_CACHE):
+        p = os.path.join(APK_CACHE, n)
+        try:
+            real_dir = os.path.isdir(p) and not os.path.islink(p)
+            size = _tree_size(p) if real_dir else os.lstat(p).st_size
+            shutil.rmtree(p) if real_dir else os.unlink(p)
+            freed += size
+        except OSError:
+            pass
+    return freed, f"cleared {freed} bytes of apk cache"
+
+
+def apk_update():
+    """Refresh the package index: directly as root, else through rootd's apk_update verb. Returns (rc, out, err)."""
+    if os.geteuid() == 0:
+        return _apk_update_root()
+    try:
+        rc, out, err = json.loads(rootd_client.call("apk_update", _timeout=120 + 60))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
+def apk_upgrade(simulate=False):
+    """Upgrade (or simulate the upgrade): directly as root, else through rootd's apk_upgrade verb. Returns (rc, out, err)."""
+    simulate = bool(simulate)
+    if os.geteuid() == 0:
+        return _apk_upgrade_root(simulate=simulate)
+    try:
+        rc, out, err = json.loads(rootd_client.call("apk_upgrade", simulate=simulate,
+                                                    _timeout=(120 if simulate else 1800) + 60))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
+def clear_apk_cache():
+    """Clear the apk cache: directly as root, else through rootd's clear_apk_cache verb. Returns (freed_bytes, msg)."""
+    if os.geteuid() == 0:
+        return _clear_apk_cache_root()
+    try:
+        freed, msg = json.loads(rootd_client.call("clear_apk_cache"))
+        return freed, msg
+    except rootd_client.RootdError as e:
+        return 0, str(e)
 
 
 POWER_ACTIONS = ("poweroff", "reboot", "suspend")

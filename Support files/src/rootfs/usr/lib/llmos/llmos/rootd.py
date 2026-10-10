@@ -316,6 +316,35 @@ def set_backlight(args):
     return "ok"
 
 
+def _no_args(args):
+    args = _args_dict(args)
+    if args:
+        raise ValueError("bad args: this verb takes no arguments")
+
+
+def apk_update(args):
+    _no_args(args)
+    from . import system
+    rc, out, err = system._apk_update_root()
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
+def apk_upgrade(args):
+    args = _args_dict(args)
+    if set(args) != {"simulate"} or not isinstance(args["simulate"], bool):
+        raise ValueError("bad args: simulate")
+    from . import system
+    rc, out, err = system._apk_upgrade_root(simulate=args["simulate"])
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
+def clear_apk_cache(args):
+    _no_args(args)
+    from . import system
+    freed, msg = system._clear_apk_cache_root()
+    return json.dumps([freed, msg])
+
+
 VERBS = {
     "apk_add": apk_add,
     "apk_del": apk_del,
@@ -329,6 +358,9 @@ VERBS = {
     "firewall_apply": firewall_apply,
     "set_tor": set_tor,
     "set_backlight": set_backlight,
+    "apk_update": apk_update,
+    "apk_upgrade": apk_upgrade,
+    "clear_apk_cache": clear_apk_cache,
 }
 
 
