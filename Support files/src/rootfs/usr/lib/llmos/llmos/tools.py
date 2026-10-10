@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import threading
 
-from . import apps, config, devices, programs, themes, i18n, llm, mail, media, models, store, system, ui, uispec, web
+from . import apps, config, devices, programs, themes, i18n, llm, mail, media, models, store, system, ui, uispec, web, waits
 
 SAFE, READ, CHANGE, DESTRUCTIVE, SECURITY = "safe", "read", "change", "destructive", "security"
 
@@ -3986,9 +3986,14 @@ def wifi_scan(a, ctx):
     if not dev:
         return "no Wi-Fi adapter found on this machine"
     subprocess.run(["iwctl", "station", dev, "scan"], capture_output=True, timeout=30)
-    time.sleep(1.5)
-    p = subprocess.run(["iwctl", "station", dev, "get-networks"], capture_output=True, text=True, timeout=30)
-    return clip(p.stdout.strip() or p.stderr.strip() or "nothing found", 2000)
+
+    def read():
+        p = subprocess.run(["iwctl", "station", dev, "get-networks"], capture_output=True, text=True, timeout=30)
+        return p.stdout, p.stderr      # plain values, so two polls can be compared
+    # poll every 0.25 s until a network line is listed and the list has stopped changing (old fixed wait: 1.5 s)
+    out, err = waits.scan_settled(read, limit=1.5, step=0.25,
+                                  ready=lambda r: bool(re.search(r"\b(psk|open|8021x|wep)\b", r[0])), default=("", ""))
+    return clip(out.strip() or err.strip() or "nothing found", 2000)
 
 
 @tool("wifi_connect", "Connect to a Wi-Fi network (remembered for next time).",
