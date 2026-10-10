@@ -194,12 +194,34 @@ def remove_setting_file(args):
     return "ok"
 
 
+def firewall_apply(args):
+    args = _args_dict(args)
+    internet = args.get("internet")
+    if internet is not None and internet not in ("yes", "ask", "no"):
+        raise ValueError("bad args: internet")
+    from . import system
+    ok, err = system._apply_firewall_root(internet)
+    return json.dumps([ok, err])
+
+
+def set_tor(args):
+    args = _args_dict(args)
+    on = args.get("on")
+    if not isinstance(on, bool):
+        raise ValueError("bad args: on")
+    from . import system
+    ok, note = system._set_tor_root(on)
+    return json.dumps([ok, note])
+
+
 VERBS = {
     "set_timezone": set_timezone,
     "set_hostname": set_hostname,
     "write_setting_file": write_setting_file,
     "remove_setting_file": remove_setting_file,
     "write_hosts": write_hosts,
+    "firewall_apply": firewall_apply,
+    "set_tor": set_tor,
 }
 
 
