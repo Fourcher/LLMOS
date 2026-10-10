@@ -61,6 +61,15 @@ check(risk_with({"guard_untrusted": True}, "guard_untrusted", "don't check web p
 check(risk_with({"guard_untrusted": True}, "guard_untrusted", "stop") == tools.SECURITY,
       "'stop' reads as off -> SECURITY")
 
+# _guard_on reads the RAW value: False/0/"off" mean off, None/True/"on" mean on
+for raw, want in ((False, "off"), (0, "off"), (None, "on"), (True, "on"), ("off", "off"), ("on", "on")):
+    got = "on" if tools._guard_on(raw) else "off"
+    check(got == want, f"_guard_on({raw!r}) -> {want}")
+check(risk_with({"guard_untrusted": True}, "guard_untrusted", False) == tools.SECURITY,
+      "_policy_risk guard_untrusted False (raw) with check on -> SECURITY")
+check(risk_with({"autonomy": "hands-off"}, "autonomy", "hands-on") == tools.SAFE,
+      "_policy_risk autonomy hands-on while currently hands-off -> SAFE (unchanged)")
+
 # the gate: under full trust the owner's own request runs unasked; a tainted turn asks (the gate uses SECURITY)
 with mock.patch.object(config, "settings", Settings(autonomy="hands-off")):
     check(agent.needs_confirm(tools.SECURITY) is False,

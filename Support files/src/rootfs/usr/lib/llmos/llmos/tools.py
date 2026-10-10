@@ -1459,7 +1459,7 @@ def edit_conduct(a, ctx):
 
 def _guard_on(value):
     """One reading of a guard_untrusted value, shared by change_setting and _policy_risk so they cannot disagree."""
-    return not re.search(r"\b(off|no|disable|stop|false|0|never|don'?t)\b", str(value or ""), re.I)
+    return not re.search(r"\b(off|no|disable|stop|false|0|never|don'?t)\b", str(value), re.I)
 
 
 def _policy_risk(setting, value):
@@ -1480,7 +1480,7 @@ def _policy_risk(setting, value):
         new = _norm_brain(v)
         return SECURITY if new and _BRAIN_RANK.get(new, 0) > _BRAIN_RANK.get(s.get("brain", "local"), 2) else SAFE
     if setting == "guard_untrusted":   # switching off the web-page check is loosening: text read on a page must not turn it off unasked
-        return SECURITY if (not _guard_on(v)) and s.get("guard_untrusted", True) else SAFE
+        return SECURITY if (not _guard_on(value)) and s.get("guard_untrusted", True) else SAFE
     return SAFE
 
 
