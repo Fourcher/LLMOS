@@ -199,3 +199,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [note] (speed) 7225986 merged: compound open waits for a changed app page; caveat — an already-open app whose page updates itself (clock/timer) can end the wait early. Watch in VM runs.
 - [open] (ui) web.py error texts still technical when passed through: "DuckDuckGo returned 503", "Hugging Face returned HTTP 503" -> "the search service is busy; try again in a minute" | role: fix | files: web.py
 - [done] (capability) PROBE case loss in paths: not real — intent.match gets original text on every path; false alarm from VERIFY spec premise.
+- [note] process: 729037a merged — orchestrator agent file now requires Keep identical / Adversarial inputs lines; applies to me after restart.
