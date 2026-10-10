@@ -1231,12 +1231,11 @@ class Desk:
                 text = str(msg.get("text", "")).strip()
                 try:
                     if text:
-                        with open(config.conduct_path(), "w", encoding="utf-8") as f:
-                            f.write(text + "\n")
+                        config.write_conduct(text + "\n")
                         note = T("d_conduct_saved")
                     else:
                         try:
-                            os.unlink(config.conduct_path())
+                            config.remove_conduct()
                         except OSError:
                             pass
                         note = T("d_conduct_reset")
