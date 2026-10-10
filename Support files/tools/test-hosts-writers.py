@@ -170,6 +170,31 @@ try:
     assert read() == before, read()
     print(f"ok web_block all skipped: reply {reply!r}, nothing written")
 
+    # 8d. one-token targets: a domain, a single word, a URL and a list still block
+    config.settings.set("web_block", {})
+    reply = web("block youtube.com")
+    assert reply == "Blocked youtube.com. Say “unblock youtube” to undo.", reply
+    print(f"ok web_block domain: reply {reply!r}")
+
+    config.settings.set("web_block", {})
+    reply = web("block https://youtube.com/watch")
+    assert reply == "Blocked youtube.com. Say “unblock youtube” to undo.", reply
+    print(f"ok web_block URL: reply {reply!r}")
+
+    config.settings.set("web_block", {})
+    reply = web("block youtube and reddit")
+    assert reply == "Blocked youtube.com, reddit.com. Say “unblock youtube” to undo.", reply
+    print(f"ok web_block list: reply {reply!r}")
+
+    # 8e. not website names: fall through (web_block returns False, nothing stored, nothing written)
+    for text in ["block 10.0.0.1:22", "block port 8080", "block the camera", "block my email"]:
+        config.settings.set("web_block", {})
+        before = read()
+        desk.replies.clear()
+        assert everyday.web_block(desk, text, text.lower()) is False, text
+        assert not desk.replies and not config.settings.get("web_block") and read() == before, text
+        print(f"ok web_block falls through: {text!r}")
+
     everyday._hosts_block([])
     config.settings.set("web_block", {})
     assert read() == ORIGINAL, repr(read())

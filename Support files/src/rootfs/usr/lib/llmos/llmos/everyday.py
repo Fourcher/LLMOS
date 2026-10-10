@@ -564,8 +564,9 @@ def web_block(desk, line, low):
         config.settings.set("web_block", wb)
         _hosts_block(_focus_sites())
         return _say(desk, line, f"{', '.join(sorted(drop))} open again.")
-    m = re.search(r"^(?:please\s+)?block\s+(?P<s>(?!every|all\b)[\w.,/: -]+?)(?:\s+(?:forever|for good|permanently|from now on))?$", low)
-    if m and not re.search(r"\b(?:for|until|while)\b", m.group("s")):
+    m = re.search(r"^(?:please\s+)?block\s+(?P<s>(?!every|all\b)(?:https?://|[\w.,/ -])+?)(?:\s+(?:forever|for good|permanently|from now on))?$", low)
+    if m and not re.search(r"\b(?:for|until|while)\b", m.group("s")) \
+            and all(_one_token(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()):
         wb = dict(config.settings.get("web_block") or {})
         typed = [_typed_site(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()]
         add = [s for s in typed if _hosts_name_ok(s)]          # only names that will really be written
@@ -582,6 +583,13 @@ def web_block(desk, line, low):
             reply += f" I couldn't block {', '.join(skipped)}: they aren't website names."
         return _say(desk, line, reply)
     return False
+
+
+def _one_token(word):
+    """A web_block target is one token: no space inside (so "port 8080" or "the camera" falls through) and no colon
+    outside a leading http:// or https:// (so "10.0.0.1:22" falls through)."""
+    w = word.strip()
+    return " " not in w and ":" not in re.sub(r"^https?://", "", w)
 
 
 def _typed_site(word):
