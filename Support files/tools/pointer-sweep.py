@@ -33,7 +33,9 @@ SKIP = re.compile(r"shut ?down|restart|reboot|sleep|lock\b|end process|eject|for
                   r"install the updates|install llm os|erase|uninstall|clear the caches|sign in|join wifi|add printer|"
                   r"bluetooth (?:connect|forget)|use the online model|connect another|set up my email|"
                   r"install a web browser|play some|open the file|show the folder|"
-                  r"power|log ?out|sign out|reset", re.I)
+                  r"power|log ?out|sign out|reset|empty\b|trash|format|turn (?:it )?off|wipe|install|update|upgrade|"
+                  r"send|buy|pay|purchase|order|post|publish|share|upload|kill|quit|close all|discard|overwrite|"
+                  r"replace all|factory|firewall|password|passphrase|delete account|unpair|disconnect", re.I)
 
 
 def _rects(run_in_vm, sel):
@@ -109,7 +111,10 @@ def sweep(user, run_in_vm, grab, items, clock=time.monotonic):
             ratio = _ratio(before, after)
             state_changed = _state_key(before_state) != _state_key(after_state)
         finally:
-            user.press("esc")
+            try:
+                user.press("esc")
+            except Exception as e:  # the reset below must still run
+                print("esc failed: %s" % e, file=sys.stderr)
             run_in_vm("llmos desk-ctl testreset-min")
         results.append({
             "i": it.get("i"),

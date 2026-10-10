@@ -152,6 +152,29 @@ def main():
     except RuntimeError as e:
         check("no desk open" in str(e), "rects error raises with its message")
 
+    # 6. machine-changing and irreversible labels are skipped; harmless labels are not (case-insensitive)
+    dangerous = ["Restart", "Shut down", "Power off", "Log out", "Sign out", "Reset everything", "Erase disk",
+                 "Delete", "Remove", "Empty trash", "Uninstall", "Format", "Factory reset", "Turn off", "Wipe",
+                 "Install update", "Send", "Buy", "Send feedback", "Share", "EMPTY TRASH"]
+    for label in dangerous:
+        check(ps.SKIP.search(label) is not None, "skipped label: %r" % label)
+    harmless = ["Open", "Notes", "Settings", "Calculator", "Back", "Next"]
+    for label in harmless:
+        check(ps.SKIP.search(label) is None, "harmless label not skipped: %r" % label)
+    items = [{"x": 10 * k, "y": 0, "w": 8, "h": 8, "text": t} for k, t in enumerate(dangerous + harmless)]
+    desk = FakeDesk(items)
+    listed = [it["text"] for it in ps.list_buttons(desk.run_in_vm)]
+    check(listed == harmless, "list_buttons drops every dangerous label: %r" % listed)
+
+    # 7. an esc press that raises must not stop testreset-min
+    class EscRaises(FakeUser):
+        def press(self, key):
+            raise OSError("esc failed")
+
+    desk = FakeDesk(ITEMS)
+    res = ps.sweep(EscRaises(desk), desk.run_in_vm, grab_for(desk), ps.list_buttons(desk.run_in_vm), clock)
+    check(desk.resets == len(res) == 3, "testreset-min still runs after esc raises (%d resets)" % desk.resets)
+
     print("all good")
     return 0
 
