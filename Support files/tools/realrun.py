@@ -39,6 +39,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR):
     reason = ""
     observed = ""
     typed_ok = None
+    ctx = {"before_reply": "", "stale": False}
     start = clock()
 
     def timed(name, fn):
@@ -55,7 +56,11 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR):
             return run_in_vm(spec["command"])
         if rtype == "reply":
             obj = json.loads(run_in_vm("llmos desk-state"))
-            return obj[REPLY_KEY]
+            cur = obj[REPLY_KEY]
+            if ctx["before_reply"] and cur == ctx["before_reply"]:
+                ctx["stale"] = True  # reply left by the previous task: no new reply
+                return ""
+            return cur
         if rtype == "rect":
             return user.rect(spec["selector"])["text"]
         raise ValueError("unknown result type %r" % rtype)
@@ -64,15 +69,28 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR):
         timed("reset", lambda: run_in_vm("llmos desk-ctl testreset"))
         for cmd in task.get("setup", []):
             timed("setup", lambda c=cmd: run_in_vm(c))
+        before = timed("state", lambda: json.loads(run_in_vm("llmos desk-state")))
+        ctx["before_reply"] = before.get(REPLY_KEY) or ""
         typed_ok = timed("type", lambda: user.type_into(INPUT, task["instruction"]))
         timed("press", lambda: user.press("ret"))
-        timed("wait", lambda: run_in_vm("llmos desk-ctl wait %s" % task.get("timeout_s", 120)))
+        timeout_s = task.get("timeout_s", 120)
+        waited = timed("wait", lambda: run_in_vm("llmos desk-ctl wait %s" % timeout_s))
+        try:
+            wait_state = json.loads(waited)
+        except (TypeError, ValueError):
+            wait_state = None
+        busy = isinstance(wait_state, dict) and bool(wait_state.get("busy"))
+        if busy:
+            step_failed = "wait"
+            verdict = "FAIL"
+            reason = "still busy after %ss" % timeout_s
         shot_path = os.path.join(outdir, "%s.png" % tid)
         timed("shot", lambda: user.shot(shot_path))
-        graded = timed("grade", lambda: evaluators.evaluate(task, getter))
-        verdict = graded["verdict"]
-        reason = graded["reason"]
-        observed = graded["observed"]
+        if not busy:
+            graded = timed("grade", lambda: evaluators.evaluate(task, getter))
+            verdict = graded["verdict"]
+            reason = graded["reason"]
+            observed = graded["observed"]
     except Exception as e:  # noqa: BLE001 - recorded, remaining steps skipped
         step_failed = state["step"]
         error = repr(e)[:300]
@@ -92,6 +110,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR):
         "steps": steps,
         "step_failed": step_failed,
         "error": error,
+        "stale_reply": ctx["stale"],
     }
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "%s.json" % tid), "w", encoding="utf-8") as f:
@@ -129,6 +148,8 @@ def _vm_runner(timeout=900):
     def run_in_vm(cmd):
         p = subprocess.run(["tools/tsh", cmd, str(timeout)], capture_output=True, text=True,
                            timeout=timeout + 30)
+        if p.returncode != 0 and not p.stdout:
+            raise RuntimeError(f"tsh exit {p.returncode}: {p.stderr[:200]}")
         return p.stdout
     return run_in_vm
 
