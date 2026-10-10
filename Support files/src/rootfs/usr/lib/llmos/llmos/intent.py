@@ -818,7 +818,7 @@ def _notes(text):
     if m and not _QUESTION.search(text):
         return ("note_add", {"text": m.group("item").strip(), "list": m.group("list").strip()})
     m = _NOTES_SHOW.match(text)
-    if m:
+    if m and not re.search(r"\b(?:files?|folders?|documents|downloads|pictures|photos|music|videos|icons?)\b", m.group("list") or m.group("list2") or "", re.I):
         lst = m.group("list") or m.group("list2")
         return ("notes_show", {"list": lst.strip()} if lst else {})
     m = _NOTE_REMOVE.match(text)

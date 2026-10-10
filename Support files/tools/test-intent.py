@@ -444,4 +444,14 @@ for text in GUARD_CASES:
         gbad += 1
         print(f"GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"volume guards: {len(GUARD_CASES) - gbad}/{len(GUARD_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad else 0)
+
+# notes guards: "show my files as a list" and "show big icons" are not notes lists
+NOTES_GUARD_CASES = ["show my files as a list", "show big icons"]
+nbad = 0
+for text in NOTES_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "notes_show":
+        nbad += 1
+        print(f"NOTES GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"notes guards: {len(NOTES_GUARD_CASES) - nbad}/{len(NOTES_GUARD_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad else 0)
