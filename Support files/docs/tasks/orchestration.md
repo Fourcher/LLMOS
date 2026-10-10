@@ -38,3 +38,4 @@ download packages from Alpine's signed repositories, and run installs that may b
 - Prune merged worktrees regularly (46 worktrees, 115 MB on 2026-10-09).
 - While release.sh is RUNNING, do not merge into the main checkout: the build reads src/ from the working tree, so a mid-build merge can mix two sources into one image. Merge between builds; check-fresh --built-commit covers smokes and packaging afterwards.
 - RUN spec template: invoke scripts as `/bin/bash "/Volumes/Files/Claude Work Area/LLMOS/Support files/tools/<script>" <args>` with the path written out literally (the guard refuses computed paths and plain `<script>` calls in agent shells). Env vars via `env VAR=1 /bin/bash "<literal path>"`.
+- Spec regexes: I have written `what\s+(?:is|'s)`, `why (?:is|'s)` and `i\s+(?:'ve…)` three times today — each needs no space before the apostrophe. Write contractions as `what(?:\s+is|'s)` / `i(?:\s+have|['’]ve)` and list one contracted example in every test.
