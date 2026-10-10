@@ -234,9 +234,15 @@ def _power_root(action):
             rc = os.system("reboot")
             return rc == 0, "" if rc == 0 else f"exit {rc}"
         if action == "suspend":
-            subprocess.run(["sync"], timeout=30)
-            with open("/sys/power/state", "w") as f:
-                f.write("mem")
+            try:
+                subprocess.run(["sync"], timeout=30)
+            except (OSError, subprocess.SubprocessError):
+                pass  # a failed or slow sync must not block the suspend, as before
+            try:
+                with open("/sys/power/state", "w") as f:
+                    f.write("mem")
+            except OSError as e:
+                return False, str(e)
             return True, ""
     except (OSError, subprocess.SubprocessError) as e:
         return False, str(e)
