@@ -4128,9 +4128,11 @@ class Desk:
                 self.push_status()
                 out = {"ok": True}
             elif cmd == "testreset-min" and _fwcfg("testshell"):   # tests: only close the open windows and start a new topic (no settings, no blanking)
+                self.decline_dialogs()
                 for wid in list(self.windows):
                     self.close_window(wid)
                 self.chat().new_topic()
+                self.push_status()
                 out = {"ok": True}
             elif cmd == "rect" and _fwcfg("testshell"):   # tests: "rect <id> <css selector>": the element's box on the page, for a real click
                 words = line.split()
