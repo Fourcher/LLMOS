@@ -586,6 +586,28 @@ def _bare_click(ctx, user_text):
     return f"Clicked {t}."
 
 
+def _app_showing(ctx):
+    """True once the open app has a page to read (its read bridge reports text or controls). None or an empty
+    page means it is not ready yet. Exceptions are the caller's 'not ready yet' (see _wait_ready)."""
+    r = ctx.app_read() or {}
+    return bool(r.get("text") or r.get("controls"))
+
+
+def _wait_ready(check, limit=2.0, step=0.1):
+    """Poll check() every `step` seconds, up to `limit` seconds in total. Returns as soon as check() is truthy;
+    an exception from check() counts as 'not ready yet'. Returns True if ready, False if the limit ran out."""
+    start = time.monotonic()
+    while True:
+        time.sleep(step)
+        try:
+            if check():
+                return True
+        except Exception:
+            pass
+        if time.monotonic() - start >= limit:
+            return False
+
+
 def run(ctx, user_text, history):
     """Run one user turn. Streams text through ctx, executes tools under the
     autonomy policy, appends to history, returns the final text."""
@@ -651,7 +673,10 @@ def run(ctx, user_text, history):
             if not _failed(out1):
                 done = _cap(_shortcut_reply(first[0], first[1], out1))
                 ctx.status(done)
-                time.sleep(2)                      # a page or program that was just opened has time to show
+                if first[0] == "open_app" and hasattr(ctx, "app_read"):
+                    _wait_ready(lambda: _app_showing(ctx))   # continue as soon as the app shows a page (2 s at most)
+                else:
+                    time.sleep(2)                  # no readiness signal for this step: the old fixed wait
                 rest, notes, page_text, result_value = _screen_steps(ctx, lead.group("rest").strip())
                 done = " ".join([done] + notes)
                 # If nothing is left or only result questions remain, and we have a result, answer directly
