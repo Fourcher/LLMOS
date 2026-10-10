@@ -2562,10 +2562,14 @@ def biggest_files(a, ctx):
     n = max(1, min(int(a.get("count") or 10), 50))
     skip = ("/proc", "/sys", "/dev", "/run", "/tmp/.X11-unix")
     big = []
+    home_scope = os.path.abspath(root).startswith(os.path.abspath(config.home()))
     for d, dirs, fs in os.walk(root):
         if d.startswith(skip):
             dirs[:] = []
             continue
+        if home_scope:
+            dirs[:] = [x for x in dirs if not x.startswith(".")]
+            fs = [x for x in fs if not x.startswith(".")]
         for f in fs:
             p = os.path.join(d, f)
             try:
