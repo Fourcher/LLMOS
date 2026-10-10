@@ -543,4 +543,9 @@ for text in DOC_GUARD_CASES:
         dbad += 1
         print(f"DOC GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"doc guards: {len(DOC_GUARD_CASES) - dbad}/{len(DOC_GUARD_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad or fbad or dbad else 0)
+total = bad + app_bad + reply_bad + tbad + gbad + nbad + rbad + fbad + dbad
+if total:
+    print(f"{total} FAILED")
+else:
+    print("all good")
+sys.exit(1 if total else 0)
