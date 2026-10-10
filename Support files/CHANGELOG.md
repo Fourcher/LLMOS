@@ -4,6 +4,15 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.6
+- Replies say "you", never "the owner".
+- "Why is my disk full" opens the storage view at once.
+- "Open my bookmarks" opens them.
+- "Find the file I was working on" and "show my recent files" list the newest files first.
+- "How do I keep this without the USB stick" is answered at once.
+- A program that isn't installed is named plainly, with how to get it.
+- "Make the browser dark" and "change my homepage" are answered at once.
+
 ## 1.7.5
 - "Turn wifi on/off" works at once.
 - Reading the screen is faster (its text recognition runs in parallel).
