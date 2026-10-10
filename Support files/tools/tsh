@@ -20,7 +20,7 @@ case "$P" in llmos:*) P='' ;; *) P='!' ;; esac
 send_cmd() {
   local pre=$1 cmd=$2
   RUN_N=$RANDOM$RANDOM
-  RAW=$(python3 "$VMCTL" run run/tser.sock run/boot-serial.log "${pre}echo BEGIN_\"\"$RUN_N; $cmd; echo; echo DONE_\"\"$RUN_N" "^DONE_$RUN_N" "$TMO" --quiet 1 | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g')
+  RAW=$(python3 "$VMCTL" run run/tser.sock run/boot-serial.log "${pre}echo BEGIN_\"\"$RUN_N; $cmd; echo; echo DONE_\"\"$RUN_N" "^DONE_$RUN_N" "$TMO" --quiet 1 --fast | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g')
 }
 
 # emit: print the answer held in RAW for RUN_N, then the vmctl trailer
