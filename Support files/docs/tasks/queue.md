@@ -82,8 +82,16 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [done] (RUN 1.7.5: "dist/ matches commit dc1d241 (v1.7.5)"; arm64+x86 ISO "VERSION=1.7.5 … desk socket yes"; calc-smoke "all good"; read_screen 3.76 s / 3.55 s (was 18 s); sweep "36 ≤3 s, 9 >3 s", max 11 s ("click File" -> "I can't see “File” on the screen."); capital 5 s in sweep (58 s cold right after boot, prompt eval 3981 tokens @46 tok/s); "../packages/LLM OS 1.7.5.zip (7.2G)"; manifest 4edd0b3) (reliability) build 1.7.5 (bump + CHANGELOG), RUN smokes, timed sweep, and time control.read_screen() on the VM (was 18 s) | role: fix then run
 - [done] (RUN: prompt eval 3981 tokens @46 tok/s cold; warm requests 4-5 s → cache works; keep the full tool set) (speed) each model request = system 5.3k chars + 78 tool schemas 25.3k chars (~8.5k tokens), cache_prompt on. RUN probe on VM: llama-server prompt-eval timings in /run/llmos/model.log for "what's the capital of australia" asked twice — is the prefix cached? Decide: smaller per-request tool set vs. rely on cache | role: run probe
 - [failed] (freedom) RUN result: owner guidance "2 refusal(s), 0 lecture(s) in 16 requests" (router-ping script; angry complaint letter); standard "2 refusal(s), 1 lecture(s)". Prompt-change dispatch was interrupted; paused for owner review. RUN tools/refusal-probe.py against the 1.7.5 VM model; report every refusal, hedge or lecture | role: run
-- [open] (capability) wider timed sweep: 60 phrases sampled from docs/research/use-cases.md + everyday-experience.md not yet in sweep-phrases.txt | role: fix (phrase file) then run
+- [done] (RUN: "timed-sweep: 54 phrase(s), 40 took <=3 s, 14 took >3 s"; build/logs/sweep2-1.7.5.log) (capability) wider timed sweep: 60 phrases sampled from docs/research/use-cases.md + everyday-experience.md not yet in sweep-phrases.txt | role: fix (phrase file) then run
 - [open] (process) prune merged worktrees under .claude/worktrees | role: run
+- [open] (capability) WRONG: "make this a jpg" took a screenshot instead of converting a file | role: probe+fix
+- [open] (ui) RAW: "turn word doc into pdf" -> "'files' is not installed; install it with install_app first …" (internal tool text) | role: probe+fix
+- [open] (capability) WRONG: "show hidden files" -> "1 item in ~/Documents." | role: probe+fix
+- [open] (capability) WRONG: "find the file i was working on yesterday" -> "Your home folder is empty." (9 s; Documents has a folder) | role: probe+fix
+- [open] (ui) SLOP: "why is my disk full" -> "full because / is at 35% usage…" (20 s); should say it is 35% used and show storage | role: fix
+- [open] (ui) SLOP: "add a shortcut to this folder" -> "The owner must specify…" (third person, 31 s) | role: probe
+- [open] (speed) browser: "open my bookmarks" empty reply 53 s; "make browser dark" 110 s; "change homepage" 242 s timeout | role: probe
+- [open] (ui) "how do I keep this without the usb" on an installed system -> generic cloud advice (35 s); should say it's already installed | role: fix
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
