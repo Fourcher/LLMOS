@@ -158,4 +158,4 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - [done] (capability/speed/UI) merged b1ee0a5, bd3a962, f2b6cec, 059904f, 769a120 | evidence: VERIFY 84e4e76 "compiled 38 files OK", "node check OK", 82 suites no FAIL; router spot-check all 7 phrases routed
 - [done] (reliability) 1.7.7 smokes | evidence: isosmoke "desk socket: yes"; calc-smoke "all good"
 - [done] (top) P1-8/P1-9 GATE on 1.7.7 | evidence: RUN "rect2 value: 'hello world' (P1-8 PASS)"; "Enter-to-reply: 30.4 s"; desk-state reply "Hello! What would you like me to do?" (P1-9 PASS); click at 662,744 on 1280x800
-- [open] (speed) "hello world" typed in the desk took 30.4 s to answer (greeting should be instant) | role: probe
+- [done] (speed) "hello world" 30.4 s -> instant greeting (7e063ea merged; VERIFY "Hello World! greeting=True")
