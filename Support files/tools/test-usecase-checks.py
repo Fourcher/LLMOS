@@ -57,6 +57,16 @@ def main():
                 failures.append("%s in %s: setup differs from usecase-checks.json" % (instruction, fname))
         print("ok %r -> %s" % (instruction, ", ".join(f for f, _ in matches)))
 
+    # Leftover state from an earlier run must be cleared first, or a rerun can false-pass.
+    required_cleanup = {
+        "make a folder called Taxes 2026": "rm -rf '/root/Documents/Taxes 2026'",
+        "move all the photos from downloads to pictures": "rm -f /root/Pictures/llmos-test-1.jpg",
+    }
+    for instruction, command in required_cleanup.items():
+        for fname, task in by_instruction.get(instruction, []):
+            if command not in task.get("setup", []):
+                failures.append("%s in %s: setup lacks cleanup %r" % (instruction, fname, command))
+
     if failures:
         for line in failures:
             print("FAIL " + line)

@@ -43,7 +43,9 @@
       "weak": false,
       "reachable_by_agent": true,
       "timeout_s": 120,
-      "setup": []
+      "setup": [
+        "rm -rf '/root/Documents/Taxes 2026'"
+      ]
     },
     {
       "id": "uc-43",
@@ -127,6 +129,7 @@
       "reachable_by_agent": true,
       "timeout_s": 120,
       "setup": [
+        "rm -f /root/Pictures/llmos-test-1.jpg",
         "mkdir -p /root/Downloads /root/Pictures",
         "touch /root/Downloads/llmos-test-1.jpg"
       ]
