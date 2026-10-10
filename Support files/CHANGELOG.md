@@ -4,6 +4,17 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.8
+- Faster web search: both engines run at once, gives up after 10 seconds, and shows plain error text.
+- Instant answers for greetings with a friendly word, and for "15 percent of 240".
+- Typos like "opn firefox" are understood.
+- "Always open PDFs in Firefox" sets the default app.
+- The files window shows icons or a list, and remembers which you chose.
+- "Turn word doc into PDF", "show my to do list", and "my pics from Christmas" go straight to the right place.
+- Plain error messages instead of raw codes.
+- "Click File" answers faster when nothing matches.
+- Test-shell measurement works on the first-run wizard.
+
 ## 1.7.7
 - Real-input test hooks: desk `rect`, `testreset-min`, and testshell fixed sampling.
 - Photo search by "my pics from X".
