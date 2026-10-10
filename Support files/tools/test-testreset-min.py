@@ -46,6 +46,16 @@ check("self.close_window(wid)" in branch and "for wid in list(self.windows):" in
 check("self.chat().new_topic()" in branch,
       "branch starts a new topic with the testreset helper self.chat().new_topic()")
 
+# (c2) both testreset branches clear the last reply, so a task never starts with the previous task's reply
+TR_START = 'elif cmd == "testreset" and _fwcfg("testshell")'
+tr_start = src.find(TR_START)
+tr_end = src.find("elif cmd ", tr_start + len(TR_START)) if tr_start != -1 else -1
+tr_branch = src[tr_start:tr_end] if tr_end != -1 else (src[tr_start:] if tr_start != -1 else "")
+check(tr_start != -1 and 'self.last_reply = ""' in tr_branch,
+      'testreset branch body contains self.last_reply = ""')
+check('self.last_reply = ""' in body,
+      'testreset-min branch body contains self.last_reply = ""')
+
 # (d) a dialog left open by the previous task is declined first, so it cannot block the next one
 first_stmt = body.lstrip().split("\n", 1)[0].strip()
 check(first_stmt == "self.decline_dialogs()",

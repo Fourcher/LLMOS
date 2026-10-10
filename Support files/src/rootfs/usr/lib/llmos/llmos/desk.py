@@ -4125,6 +4125,7 @@ class Desk:
                     self.unlock("x")
                 record.stop()                 # (a recording one case started must not run on through the rest)
                 self.chat().new_topic()
+                self.last_reply = ""
                 self.push_status()
                 out = {"ok": True}
             elif cmd == "testreset-min" and _fwcfg("testshell"):   # tests: only close the open windows and start a new topic (no settings, no blanking)
@@ -4132,6 +4133,7 @@ class Desk:
                 for wid in list(self.windows):
                     self.close_window(wid)
                 self.chat().new_topic()
+                self.last_reply = ""
                 self.push_status()
                 out = {"ok": True}
             elif cmd == "rect" and _fwcfg("testshell"):   # tests: "rect <id> <css selector>": the element's box on the page, for a real click
