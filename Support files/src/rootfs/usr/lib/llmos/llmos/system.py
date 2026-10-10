@@ -602,20 +602,32 @@ def set_timezone(name, chosen_by_user=True):
     return zone
 
 
-def sync_time(automatic=False):
-    """Set the clock from the network once (busybox ntpd), when the owner allows the internet. A PC's clock is
-    often off after another OS used it, and a wrong clock breaks every secure web site.
-    automatic=True (the boot timer) only runs when internet is "yes"; the owner's own ask runs unless "no"."""
+def _sync_time_root():
+    """Run ntpd and set the hardware clock, as root. Returns True when ntpd succeeded."""
     import shutil
     import subprocess
-    from . import config as _c
-    internet = _c.settings.get("internet", "yes")
-    if (internet != "yes" if automatic else internet == "no") or not shutil.which("ntpd"):
-        return False
     try:
         p = subprocess.run(["ntpd", "-q", "-n", "-p", "pool.ntp.org"], capture_output=True, timeout=30)
         if p.returncode == 0 and shutil.which("hwclock"):
             subprocess.run(["hwclock", "-w", "-u"], capture_output=True, timeout=10)
         return p.returncode == 0
     except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def sync_time(automatic=False):
+    """Set the clock from the network once (busybox ntpd), when the owner allows the internet. A PC's clock is
+    often off after another OS used it, and a wrong clock breaks every secure web site.
+    automatic=True (the boot timer) only runs when internet is "yes"; the owner's own ask runs unless "no".
+    As root it runs directly; else through rootd's sync_time verb."""
+    import shutil
+    from . import config as _c
+    internet = _c.settings.get("internet", "yes")
+    if (internet != "yes" if automatic else internet == "no") or not shutil.which("ntpd"):
+        return False
+    if os.geteuid() == 0:
+        return _sync_time_root()
+    try:
+        return bool(json.loads(rootd_client.call("sync_time", _timeout=60)))
+    except rootd_client.RootdError:
         return False
