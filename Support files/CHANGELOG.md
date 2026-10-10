@@ -4,6 +4,12 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.5
+- "Turn wifi on/off" works at once.
+- Reading the screen is faster (its text recognition runs in parallel).
+- A click when nothing is open says so at once.
+- "Biggest files" skips hidden files and works for a named folder ("the biggest file in Downloads").
+
 ## 1.7.4
 - "What's on my screen" lists the open windows at once.
 - "What's plugged into my computer" lists USB devices, cameras, drives and sound.
