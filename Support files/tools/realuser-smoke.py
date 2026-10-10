@@ -6,6 +6,7 @@ complete_wizard(user, run_in_vm, grab, max_steps=15) -> {"ok", "reason", "steps"
 one_request(user, run_in_vm, text)                    -> {"ok", "reason", "reply"}
 main(): boots the target on a fresh overlay, runs both, always quits the VM.
 """
+import argparse
 import json
 import os
 import re
@@ -146,11 +147,21 @@ def _fail(reason):
 
 
 def main(argv=None):
+    ap = argparse.ArgumentParser(description="First-run user smoke: wizard, then one question, through clicks and typing.")
+    ap.add_argument("--run", action="store_true", help="boot the test VM and run the smoke (required)")
+    ap.add_argument("--image", default=IMAGE, help="qcow2 image to boot (default %s)" % IMAGE)
+    ap.add_argument("--mem", type=int, default=4096, help="VM memory in MB (default 4096)")
+    args = ap.parse_args(argv)
+    if not args.run:
+        ap.print_usage()
+        print("add --run to boot the test VM")
+        return 0
     os.chdir(SUPPORT_DIR)
+    image = os.path.join(SUPPORT_DIR, args.image)
     slow = realrun._slow()
     q = None
     try:
-        subprocess.run(["/bin/bash", "tools/boot-target.sh", IMAGE, "4096"],
+        subprocess.run(["/bin/bash", "tools/boot-target.sh", image, str(args.mem)],
                        env=dict(os.environ, LLMOS_TESTSHELL="1"), check=True, stdout=subprocess.DEVNULL)
         run_in_vm = realrun._vm_runner()
         if not realrun._poll(lambda: "up" in run_in_vm("echo up"), 300 * slow, time.monotonic, time.sleep):

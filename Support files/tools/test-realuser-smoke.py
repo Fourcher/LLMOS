@@ -174,8 +174,30 @@ def test_no_onboard_flag():
     check("no onboarded setting in the smoke scripts", not hits, str(hits))
 
 
+def pid_files():
+    found = set()
+    run_dir = os.path.join(os.path.dirname(HERE), "run")
+    if os.path.isdir(run_dir):
+        for dp, _, fns in os.walk(run_dir):
+            if "target.pid" in fns:
+                found.add(os.path.join(dp, "target.pid"))
+    return found
+
+
+def test_no_args_no_boot():
+    import subprocess
+    script = os.path.join(HERE, "realuser-smoke.py")
+    before = pid_files()
+    p = subprocess.run([sys.executable, script], capture_output=True, text=True, timeout=60,
+                       cwd=os.path.dirname(HERE))
+    check("realuser-smoke no args exits 0", p.returncode == 0, "rc=%s err=%s" % (p.returncode, p.stderr))
+    check("realuser-smoke no args prints --run", "--run" in p.stdout, p.stdout)
+    check("realuser-smoke no args creates no target.pid", not (pid_files() - before), str(pid_files() - before))
+
+
 def main():
     quiet()
+    test_no_args_no_boot()
     test_three_step_wizard()
     test_restart_only_fails()
     test_skip_fallback()

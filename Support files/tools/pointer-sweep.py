@@ -142,7 +142,12 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Click every desk button and list the ones that do nothing.")
     ap.add_argument("--sel", default=DEFAULT_SEL, help="CSS selector for the buttons to sweep")
     ap.add_argument("--out", default=OUT)
+    ap.add_argument("--run", action="store_true", help="connect to the running test VM and sweep its desk (required)")
     args = ap.parse_args(argv)
+    if not args.run:
+        ap.print_usage()
+        print("add --run to boot the test VM")
+        return 0
     os.chdir(SUPPORT_DIR)
 
     from qmp import QMP
