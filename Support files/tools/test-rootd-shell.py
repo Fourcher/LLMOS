@@ -183,6 +183,44 @@ system.SHELLS = slink
 check("verb: refuses a symlinked SHELLS", rejected({"user": "root", "shell": "/bin/bash"}))
 system.SHELLS = SHELLS_T
 
+# ---- 3b. system._set_shell_root called directly: shared check, missing user, adversarial inputs ----
+reset()
+system._set_shell_root("root", "/bin/bash")
+check("direct: positive change writes the root line",
+      read(PASSWD_T).split("\n")[0] == "root:x:0:0:root:/root:/bin/bash")
+check("direct: positive change appends shell once", read(SHELLS_T) == "/bin/sh\n/bin/ash\n/bin/bash\n")
+system._set_shell_root("root", "/bin/bash")
+check("direct: idempotent, shells not doubled", read(SHELLS_T) == "/bin/sh\n/bin/ash\n/bin/bash\n")
+check("direct: passwd mode kept (0640)", stat.S_IMODE(os.stat(PASSWD_T).st_mode) == 0o640)
+reset()
+
+
+def direct_rejects(user, shell):
+    try:
+        system._set_shell_root(user, shell)
+    except ValueError as e:
+        return str(e)
+    return None
+
+
+direct_cases = [
+    ("root", "/bin/bash\nevil:x:0:0::/:/bin/sh", "bad shell", "newline in shell"),
+    ("root", "/bin/ba:sh", "bad shell", "colon in shell"),
+    ("root", "bin/bash", "bad shell", "relative shell path"),
+    ("root", "/bin/../tmp/x", "bad shell", "dot-dot segment in shell"),
+    ("root", FAKE_NOEXEC, "bad shell", "non-executable file as shell"),
+    ("root", "/nonexistent/bash", "bad shell", "missing shell file"),
+    ("root\n", "/bin/bash", "bad user", "user with trailing newline"),
+    ("root:x", "/bin/bash", "bad user", "colon in user"),
+    ("", "/bin/bash", "bad user", "empty user"),
+    ("nobody", "/bin/bash", "no such user", "user missing from passwd"),
+    ("alice", "/bin/bash", "no such user", "user with no uid-0 line"),
+]
+for user, shell, want, label in direct_cases:
+    got = direct_rejects(user, shell)
+    check(f"direct: rejects {label} ({got})", got == want)
+    check(f"direct: {label} writes nothing", read(PASSWD_T) == PASSWD_BODY and read(SHELLS_T) == SHELLS_BODY)
+
 # ---- 4. everyday: calls system.set_shell and keeps its replies ----
 
 

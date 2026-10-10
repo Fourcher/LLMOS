@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import time
 
-from . import config, rootd_client
+from . import config, rootd, rootd_client
 from .rootd import HOSTS_NAME_RE
 
 NFT_RULES = "/etc/nftables.nft"
@@ -195,12 +195,31 @@ def _replace_keep_owner(path, text):
         raise
 
 
+SHELL_USER_RE = re.compile(r"[a-z_][a-z0-9_-]{0,31}")
+SHELL_PATH_RE = re.compile(r"/[A-Za-z0-9_./+-]{1,100}")
+
+
+def check_shell_change(user, shell):
+    """Shared input check for a login-shell change (rootd's set_shell verb and _set_shell_root). Raises ValueError.
+    fullmatch, not match with $: "$" accepts a trailing newline. The executable test is rootd._is_shell_file."""
+    if not isinstance(user, str) or not SHELL_USER_RE.fullmatch(user):
+        raise ValueError("bad user")
+    if not isinstance(shell, str) or not SHELL_PATH_RE.fullmatch(shell) or ".." in shell.split("/"):
+        raise ValueError("bad shell")
+    if not rootd._is_shell_file(shell):
+        raise ValueError("bad shell")
+
+
 def _set_shell_root(user, shell):
-    """As root: point the user's line in PASSWD at shell, and add shell to SHELLS once. PASSWD is written first."""
+    """As root: point the user's line in PASSWD at shell, and add shell to SHELLS once. PASSWD is written first.
+    Checks everything before writing: a bad input, or a user with no line in PASSWD, raises ValueError and writes nothing."""
+    check_shell_change(user, shell)
     pw = open(PASSWD).read()
-    pw = re.sub(r"^(" + re.escape(user) + r":[^:]*:0:0:[^:]*:[^:]*:)[^\n]*$", lambda mm: mm.group(1) + shell, pw, count=1, flags=re.M)
-    _replace_keep_owner(PASSWD, pw)
+    pw, n = re.subn(r"^(" + re.escape(user) + r":[^:]*:0:0:[^:]*:[^:]*:)[^\n]*$", lambda mm: mm.group(1) + shell, pw, count=1, flags=re.M)
+    if n != 1:
+        raise ValueError("no such user")
     shells = open(SHELLS).read()
+    _replace_keep_owner(PASSWD, pw)
     if shell not in shells.split():
         _replace_keep_owner(SHELLS, shells + shell + "\n")
 
