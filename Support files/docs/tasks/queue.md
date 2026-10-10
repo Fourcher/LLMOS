@@ -95,6 +95,8 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [done] (freedom) PROBE: hands-off asks nothing except (a) after the turn read untrusted text (web/file/mail) and a changing tool follows — the prompt-injection guard "guard_untrusted", on by default, an owner opt-out via change_setting (tools.py:1477); (b) scheduled/headless destructive actions. Both are disclosed protections, kept by design. ALWAYS_CONFIRM is skipped under hands-off as intended.
 - [done] (ui) merged 0ac9955 (not-installed message, VERIFY PASS), 19a62b2 (say "you", VERIFY PASS), b5d72b4 (disk-full -> storage, open bookmarks, VERIFY PASS); (process) 7249f39 deskre helper (VERIFY PASS incl. mutation check); (reliability) 46b1503 OCR test temp dir (3 concurrent runs green)
 - [open] (reliability) build 1.7.6 once browser dark/home + recent-files land; RUN smokes + both sweeps | role: fix (bump) then run
+- [running] (capability) VERIFY PASS 4b0da11: "show my files as a list" no longer opens the notes list (shopping/notes/reading lists unchanged; a notes list literally named "music" now goes to the model — accepted). Merge after the 1.7.6 build.
+- [running] (reliability) 4a1d859 test-start ignores git-ignored packages/ — VERIFY in flight; merge after the build.
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
