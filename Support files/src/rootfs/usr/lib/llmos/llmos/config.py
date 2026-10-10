@@ -194,6 +194,38 @@ def save_json(path, obj, mode=0o600):
         raise
 
 
+def _write_etc(name, text):
+    """Write a public file under ETC (settings.json, conduct.txt). Written directly while this process can write
+    ETC (the desk as root, the test env); otherwise through rootd's write_setting_file verb, which only takes
+    those two names. A rootd refusal or failure surfaces as OSError, like a failed direct write."""
+    path = os.path.join(ETC, name)
+    if os.path.isdir(ETC):
+        writable = os.access(ETC, os.W_OK)
+    else:
+        writable = os.access(os.path.dirname(ETC) or ".", os.W_OK)
+    if not writable:
+        from . import rootd_client
+        try:
+            rootd_client.call("write_setting_file", name=name, text=text)
+        except rootd_client.RootdError as e:
+            raise OSError(str(e))
+        return
+    guard_write(path)
+    os.makedirs(ETC, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=ETC, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _merge(defaults, value):
     out = dict(defaults)
     for k, v in (value or {}).items():
@@ -241,7 +273,7 @@ class Settings:
         for part in parts[:-1]:
             node = node.setdefault(part, {})
         node[parts[-1]] = value
-        save_json(self.path, cur, mode=0o644)
+        _write_etc("settings.json", json.dumps(cur, ensure_ascii=False, indent=1))
 
 
 settings = Settings()
