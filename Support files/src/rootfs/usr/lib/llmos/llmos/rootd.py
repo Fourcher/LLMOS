@@ -128,6 +128,43 @@ def set_hostname(args):
     return "ok"
 
 
+def _unparsed_settings(path):
+    """Return the exact bytes of an existing regular settings.json that is not a JSON object, else None.
+    A symlink is never read or copied here: the write replaces the link as before."""
+    if os.path.islink(path) or not os.path.isfile(path):
+        return None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return None
+    with os.fdopen(fd, "rb") as f:
+        raw = f.read()
+    try:
+        if isinstance(json.loads(raw.decode("utf-8")), dict):
+            return None
+    except ValueError:
+        pass
+    return raw
+
+
+def _keep_copy(d, raw):
+    """Write raw to d as settings.json.broken-<YYYYmmdd-HHMMSS>, then -1, -2 ... on collision. Mode 0600.
+    Created exclusively and without following symlinks. Returns the name used."""
+    base = "settings.json.broken-" + datetime.now().strftime("%Y%m%d-%H%M%S")
+    n = 0
+    while True:
+        name = base if n == 0 else f"{base}-{n}"
+        try:
+            fd = os.open(os.path.join(d, name), os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+        except FileExistsError:
+            n += 1
+            continue
+        with os.fdopen(fd, "wb") as f:
+            os.fchmod(f.fileno(), 0o600)
+            f.write(raw)
+        return name
+
+
 def write_setting_file(args):
     args = _args_dict(args)
     name = args.get("name")
@@ -136,7 +173,14 @@ def write_setting_file(args):
         raise ValueError("bad args: name")
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_SETTING:
         raise ValueError("bad args: text")
-    _write_atomic(os.path.join(_llmos_dir(), name), text)
+    llmos = _llmos_dir()
+    path = os.path.join(llmos, name)
+    if name == "settings.json":
+        raw = _unparsed_settings(path)
+        if raw is not None:
+            # Keep the owner's corrupt text before it is overwritten. If the copy fails, nothing is written.
+            _keep_copy(llmos, raw)
+    _write_atomic(path, text)
     return "ok"
 
 
