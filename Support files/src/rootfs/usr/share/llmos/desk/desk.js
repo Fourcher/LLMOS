@@ -747,7 +747,7 @@
         return e;
       }
       case "toggle": {
-        const e = el("div", "toggle", `<span>${esc(b.label)}</span>`);
+        const e = el("div", "toggle", `<span>${esc(b.label)}${b.hint ? `<div class="d">${esc(b.hint)}</div>` : ""}</span>`);
         const sw = el("button", "sw" + (b.on ? " on" : "")); let on = !!b.on;
         sw.type = "button"; sw.setAttribute("role", "switch"); sw.setAttribute("aria-checked", String(on));
         if (b.label) sw.setAttribute("aria-label", b.label);
