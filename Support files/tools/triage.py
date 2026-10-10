@@ -95,7 +95,7 @@ def bundle(cl, outdir, suite="suite"):
         if os.path.exists(src):
             shutil.copy(src, os.path.join(d, os.path.basename(src)))
     with open(os.path.join(d, "rerun.txt"), "w") as f:
-        f.write("python3 tools/realrun.py %s --ids %s\n" % (suite, ",".join(ids)))
+        f.write("python3 tools/realrun.py %s --ids %s --run\n" % (suite, ",".join(ids)))
     return d
 
 
