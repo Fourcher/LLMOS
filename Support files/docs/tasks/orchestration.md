@@ -59,3 +59,6 @@ Before dispatching a FIX, add a "must also handle" line listing, as applicable:
 A FIX worker ran its new realuser-smoke.py "to check --help"; main() ignored argv and booted the test VM from the main checkout's run/ during the 1.7.7 build (the build's x86 TCG VM survived). Rules:
 - Every new tool that can boot a VM must refuse to boot unless given an explicit `--run` flag; with no args or `--help` it prints usage and exits 0.
 - FIX and VERIFY specs say: never execute a VM-touching script (anything calling boot-target.sh, tsh, vmctl, qmp sockets); test only the pure functions with fakes.
+
+## Lesson (2026-10-10): when a FIX changes a call shape, the spec owns every test that asserts it
+Two FIX attempts on the bare-click change stopped because other test files asserted the old call tuple. Specs that change a function's arguments, return value or call shape must say: "grep tools/test-*.py for the old shape and update every expectation that comes from this path; list them".
