@@ -392,6 +392,39 @@ def main():
         check("run_task reads desk-state through tsh-shaped output", rec["verdict"] == "PASS", json.dumps(rec)[:300])
         print("ok vm_json shapes: echo, prompt, timeout, nested braces")
 
+        # 9c. vm_text: the vmctl trailer is removed from graded text; TIMEOUT gives None
+        check("vm_text: trailer only matched -> empty string",
+              realrun.vm_text("[vmctl: matched after 1.0s]\n") == "", repr(realrun.vm_text("[vmctl: matched after 1.0s]\n")))
+        check("vm_text: trailer only TIMEOUT -> None",
+              realrun.vm_text("[vmctl: TIMEOUT after 30.4s]\n") is None)
+        check("vm_text: multi-line output keeps its lines",
+              realrun.vm_text("a.txt\nb.txt\n\n[vmctl: matched after 2.2s]\n") == "a.txt\nb.txt",
+              repr(realrun.vm_text("a.txt\nb.txt\n\n[vmctl: matched after 2.2s]\n")))
+        check("vm_text: line merely containing vmctl is kept",
+              realrun.vm_text("see [vmctl: matched after 1.0s] in text\n[vmctl: matched after 1.0s]\n")
+              == "see [vmctl: matched after 1.0s] in text",
+              repr(realrun.vm_text("see [vmctl: matched after 1.0s] in text\n[vmctl: matched after 1.0s]\n")))
+        check("vm_text: TIMEOUT trailer with output -> None",
+              realrun.vm_text("partial\n[vmctl: TIMEOUT after 30.4s]\n") is None)
+        check("vm_text: non-string -> None", realrun.vm_text(None) is None)
+        check("vm_text: no trailer strips trailing whitespace",
+              realrun.vm_text("Canberra  \n\n") == "Canberra", repr(realrun.vm_text("Canberra  \n\n")))
+        print("ok vm_text trailer removal, TIMEOUT -> None, multi-line kept")
+
+        # 9d. vm_command_line getter: the matched trailer is not part of the observed text
+        trailer_vm = make_vm()
+
+        def trailer_cmd(cmd):
+            if cmd == "ls /root/Desktop":
+                return "/root/Desktop/Test\n[vmctl: matched after 1.0s]\n"
+            return trailer_vm(cmd)
+        trailer_rec = realrun.run_task(state_task("trailer-1"), FakeUser(), trailer_cmd,
+                                       clock=FakeClock(), outdir=outroot)
+        check("vm_command_line observed has no trailer",
+              trailer_rec["observed"] == "/root/Desktop/Test" and trailer_rec["verdict"] == "PASS",
+              json.dumps(trailer_rec)[:300])
+        print("ok run_task vm_command_line observed=%r verdict=%s" % (trailer_rec["observed"], trailer_rec["verdict"]))
+
         # 10. fresh_overlay: readiness, onboarding, desk-ready polls with a fake clock (sleep advances it)
         class FakeTime:
             def __init__(self):
