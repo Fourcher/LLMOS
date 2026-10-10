@@ -1,6 +1,3 @@
-turn off the computer
-turn it off and on again
-put it to sleep
 what day is it
 how much battery do I have
 no, put it back
@@ -11,8 +8,6 @@ put it on the hard drive
 how do I keep this without the usb
 is this running off the usb?
 connect my account
-set a password
-change my password
 add an account for my kid
 make a guest user
 can I dual boot with windows
@@ -44,7 +39,6 @@ find duplicates
 connect to google drive / onedrive / dropbox
 put this on the desktop
 add a shortcut to this folder
-lock this folder with a password
 open the internet
 open bbc.co.uk
 search for cheap flights to rome
