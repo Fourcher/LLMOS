@@ -91,7 +91,7 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [open] (ui) SLOP: "why is my disk full" -> "full because / is at 35% usage…" (20 s); should say it is 35% used and show storage | role: fix
 - [open] (ui) SLOP: "add a shortcut to this folder" -> "The owner must specify…" (third person, 31 s) | role: probe
 - [open] (speed) browser: "open my bookmarks" empty reply 53 s; "make browser dark" 110 s; "change homepage" 242 s timeout | role: probe
-- [running] (ui) _MEDIUM_Q gains "how do I keep this without the usb" -> d_live_answer/d_disk_answer | files: src/rootfs/usr/lib/llmos/llmos/desk.py tools/test-medium-q.py — "how do I keep this without the usb" on an installed system -> generic cloud advice (35 s); should say it's already installed | role: fix
+- [done] (merged 991e456 VERIFY PASS: 42 suites, adversarial matches/non-matches as expected) (ui) _MEDIUM_Q gains "how do I keep this without the usb" -> d_live_answer/d_disk_answer | files: src/rootfs/usr/lib/llmos/llmos/desk.py tools/test-medium-q.py — "how do I keep this without the usb" on an installed system -> generic cloud advice (35 s); should say it's already installed | role: fix
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
