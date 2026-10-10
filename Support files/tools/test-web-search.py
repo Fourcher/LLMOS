@@ -64,4 +64,18 @@ assert out is None and isinstance(err, web.WebError), (out, err)
 assert dt < 1.5, f"both slow took {dt:.2f}s, limit is 1s"
 print(f"ok both slow -> WebError({str(err)!r}) in {dt:.2f}s")
 
+# 5. both engines raise a non-WebError at once -> WebError naming ValueError, fast
+os.environ.pop("LLMOS_SLOW", None)
+out, err, dt = run_search(fake(0.01, exc=ValueError("bad page")), fake(0.01, exc=ValueError("bad json")))
+assert out is None and isinstance(err, web.WebError), (out, err)
+assert "ValueError" in str(err), str(err)
+assert dt < 0.5, f"both ValueError took {dt:.2f}s, limit is 0.5s"
+print(f"ok both ValueError -> WebError({str(err)!r}) in {dt:.2f}s")
+
+# 6. one engine raises KeyError fast, the other returns a list after 0.2 s -> the list
+out, err, dt = run_search(fake(0.01, exc=KeyError("uddg")), fake(0.2, HIT2))
+assert err is None and out == HIT2, (out, err)
+assert dt < 1.0, f"KeyError + list took {dt:.2f}s, limit is 1s"
+print(f"ok KeyError, Brave list returned in {dt:.2f}s")
+
 print("all good")

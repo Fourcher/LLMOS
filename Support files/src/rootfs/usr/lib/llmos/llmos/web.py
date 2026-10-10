@@ -133,8 +133,8 @@ def search(query, n=6):
     def run(idx, engine):
         try:
             done.put((idx, engine(query), None))
-        except (WebError, OSError) as e:
-            done.put((idx, None, str(e)))
+        except Exception as e:
+            done.put((idx, None, f"{type(e).__name__}: {e}"))
 
     for idx, engine in enumerate(engines):
         threading.Thread(target=run, args=(idx, engine), daemon=True).start()
