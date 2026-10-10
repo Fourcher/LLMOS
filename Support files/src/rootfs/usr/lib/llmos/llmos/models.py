@@ -6,7 +6,7 @@ import os
 import subprocess
 import time
 
-from . import config
+from . import config, system
 
 CATALOG_PATH = os.path.join(config.SHARE, "catalog.json")
 
@@ -247,7 +247,7 @@ def use(mid):
     if m.get("ram_gb", 0) > ram_gb() + 0.5:
         raise ValueError(f"{m['name']} needs about {m['ram_gb']} GB of memory; this machine has {ram_gb():.1f} GB")
     config.settings.set("model", m["id"])
-    subprocess.run(["rc-service", "llmos-model", "restart"], capture_output=True)
+    system.service("llmos-model", "restart", timeout=60)
     return m
 
 
