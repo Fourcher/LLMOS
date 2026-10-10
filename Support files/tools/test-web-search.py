@@ -62,6 +62,7 @@ os.environ["LLMOS_SLOW"] = "0.1"
 out, err, dt = run_search(fake(3, HIT), fake(3, HIT2))
 assert out is None and isinstance(err, web.WebError), (out, err)
 assert dt < 1.5, f"both slow took {dt:.2f}s, limit is 1s"
+assert str(err) == "the search took too long", str(err)
 print(f"ok both slow -> WebError({str(err)!r}) in {dt:.2f}s")
 
 # 5. both engines raise a non-WebError at once -> WebError naming ValueError, fast
@@ -77,5 +78,28 @@ out, err, dt = run_search(fake(0.01, exc=KeyError("uddg")), fake(0.2, HIT2))
 assert err is None and out == HIT2, (out, err)
 assert dt < 1.0, f"KeyError + list took {dt:.2f}s, limit is 1s"
 print(f"ok KeyError, Brave list returned in {dt:.2f}s")
+
+# 7. both engines WebError -> plain messages joined, no "WebError:" prefix
+out, err, dt = run_search(fake(0.01, exc=web.WebError("X 503")), fake(0.01, exc=web.WebError("Y 429")))
+assert out is None and str(err) == "X 503; Y 429", (out, str(err))
+print(f"ok both WebError -> {str(err)!r} in {dt:.2f}s")
+
+# 8. both ValueError -> type-prefixed messages joined
+out, err, dt = run_search(fake(0.01, exc=ValueError("a")), fake(0.01, exc=ValueError("b")))
+assert out is None and str(err) == "ValueError: a; ValueError: b", (out, str(err))
+print(f"ok both ValueError -> {str(err)!r} in {dt:.2f}s")
+
+# 9. both engines finish with empty lists -> "no results"
+out, err, dt = run_search(fake(0.01, []), fake(0.01, []))
+assert out is None and str(err) == "no results", (out, str(err))
+print(f"ok both empty -> {str(err)!r} in {dt:.2f}s")
+
+# 10. both slow -> "the search took too long" in about 1 s
+os.environ["LLMOS_SLOW"] = "0.1"
+out, err, dt = run_search(fake(3, HIT), fake(3, HIT2))
+assert out is None and str(err) == "the search took too long", (out, str(err))
+assert dt < 1.5, f"both slow took {dt:.2f}s, limit is 1s"
+os.environ.pop("LLMOS_SLOW", None)
+print(f"ok both slow -> {str(err)!r} in {dt:.2f}s")
 
 print("all good")

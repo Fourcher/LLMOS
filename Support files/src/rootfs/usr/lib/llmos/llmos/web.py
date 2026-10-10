@@ -134,7 +134,10 @@ def search(query, n=6):
         try:
             done.put((idx, engine(query), None))
         except Exception as e:
-            done.put((idx, None, f"{type(e).__name__}: {e}"))
+            if isinstance(e, (WebError, OSError)):
+                done.put((idx, None, str(e)))
+            else:
+                done.put((idx, None, f"{type(e).__name__}: {e}"))
 
     for idx, engine in enumerate(engines):
         threading.Thread(target=run, args=(idx, engine), daemon=True).start()
@@ -161,6 +164,8 @@ def search(query, n=6):
                     seen.add(r["url"])
                     uniq.append(r)
             return uniq[:n]
+    if finished < len(engines):
+        raise WebError("the search took too long")
     raise WebError("; ".join(errors[i] for i in sorted(errors)) or "no results")
 
 
