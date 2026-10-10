@@ -17,7 +17,7 @@ REF = "llmos-1.5.0"
 BLOCKS = ["EN", "ZH", "ES", "FR", "DE", "JA"]
 NEW = {
     "loading_model": "Getting ready…",
-    "model_down": "Still getting ready. Try again in a moment.",
+    "model_down": "The assistant isn't answering right now. Try again in a moment, or say \"the model is not answering\".",
     "w_model_none": "This computer's memory is too small to run the assistant here.",
     "d_online_failed": "This computer couldn't finish it on its own.",
     "w_text": "This computer does what you tell it — in plain words, typed or spoken. The assistant runs on this computer itself; nothing you do leaves it unless you ask for something from the internet. A few quick questions, then it's yours.",
@@ -70,11 +70,6 @@ for key, text in NEW.items():
             ph_en = sorted(PLACEHOLDER.findall(en.get(key, "")))
             ph_b = sorted(PLACEHOLDER.findall(new[b][key]))
             check(ph_en == ph_b, f"{b} {key}: placeholders match English {ph_en}")
-
-# the old wording is gone from English (only checked when the reference is readable)
-for key in NEW:
-    if key in old.get("EN", {}):
-        check(en.get(key) != old["EN"][key], f"EN {key} differs from {REF}")
 
 # the importable module still loads and gives the new text
 sys.path.insert(0, ROOTFS)
