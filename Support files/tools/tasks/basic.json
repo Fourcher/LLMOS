@@ -1,0 +1,1001 @@
+{
+  "suite": "basic",
+  "tasks": [
+    {
+      "id": "S01",
+      "instruction": "hello",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S02",
+      "instruction": "what can you do",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S03",
+      "instruction": "what time is it",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S04",
+      "instruction": "open the files",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S05",
+      "instruction": "open the terminal",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S06",
+      "instruction": "open firefox",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S07",
+      "instruction": "open the calculator",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S08",
+      "instruction": "what's the weather",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S09",
+      "instruction": "turn the volume down",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S10",
+      "instruction": "turn the volume up",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S11",
+      "instruction": "make the text bigger",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S12",
+      "instruction": "make it dark",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "vm_command_line",
+          "command": "cat /root/.config/llmos/settings.json 2>/dev/null || cat /etc/llmos/settings.json"
+        },
+        "expected": {
+          "include": [
+            "dark"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": false
+    },
+    {
+      "id": "S13",
+      "instruction": "make it light",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "vm_command_line",
+          "command": "cat /root/.config/llmos/settings.json 2>/dev/null || cat /etc/llmos/settings.json"
+        },
+        "expected": {
+          "include": [
+            "light"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": false
+    },
+    {
+      "id": "S14",
+      "instruction": "what's my ip address",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S15",
+      "instruction": "is the internet working",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S16",
+      "instruction": "how much battery",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S17",
+      "instruction": "list my files",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S18",
+      "instruction": "where are my downloads",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S19",
+      "instruction": "make a folder called Test on my desktop",
+      "evaluator": {
+        "func": "file_exists",
+        "result": {
+          "type": "vm_command_line",
+          "command": "ls -d /root/Test 2>/dev/null"
+        },
+        "expected": {
+          "include": [
+            "/root/Test"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": false
+    },
+    {
+      "id": "S20",
+      "instruction": "delete the folder Test",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S21",
+      "instruction": "remind me in 5 minutes to stretch",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S22",
+      "instruction": "set a timer for 2 minutes",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S23",
+      "instruction": "what did I say a minute ago",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S24",
+      "instruction": "write a poem about the sea, four lines",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S25",
+      "instruction": "translate thank you to french",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S26",
+      "instruction": "what's 15 percent of 240",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S27",
+      "instruction": "convert 10 kilometres to miles",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S28",
+      "instruction": "who is the prime minister of the uk",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S29",
+      "instruction": "search the web for the best free text editor",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S30",
+      "instruction": "open youtube",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S31",
+      "instruction": "play some music",
+      "evaluator": {
+        "func": "proc_running",
+        "result": {
+          "type": "vm_command_line",
+          "command": "pgrep -a mpv"
+        },
+        "expected": {
+          "include": [
+            "mpv"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": false
+    },
+    {
+      "id": "S32",
+      "instruction": "pause the music",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S33",
+      "instruction": "what's on my screen",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S34",
+      "instruction": "take a screenshot",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S35",
+      "instruction": "lock the screen",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S36",
+      "instruction": "unlock the screen",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S37",
+      "instruction": "turn wifi off",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S38",
+      "instruction": "show my email",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S39",
+      "instruction": "do I have new email",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S40",
+      "instruction": "send craig@localhost an email saying hello",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S41",
+      "instruction": "make a note that the door code is 1234",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S42",
+      "instruction": "what's in my notes",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S43",
+      "instruction": "add milk to my shopping list",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S44",
+      "instruction": "what's on my shopping list",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S45",
+      "instruction": "open my shopping list",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S46",
+      "instruction": "what's the date",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S47",
+      "instruction": "install vlc",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S48",
+      "instruction": "help",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S49",
+      "instruction": "thanks",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    },
+    {
+      "id": "S50",
+      "instruction": "stop",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback"
+          ]
+        }
+      },
+      "reachable_by_agent": true,
+      "timeout_s": 120,
+      "weak": true
+    }
+  ]
+}
