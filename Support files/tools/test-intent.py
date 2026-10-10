@@ -162,6 +162,9 @@ CASES = {
     "install htop": ("install_app", {"packages": "htop"}),
     # files and screenshots
     "show my files": ("show_files", {"path": "~"}),
+    "find the file i was working on yesterday": ("show_files", {"path": "~", "sort": "date"}),
+    "show my recent files": ("show_files", {"path": "~", "sort": "date"}),
+    "find my report": ("find_files", {"query": "report"}),
     "open my downloads folder": ("show_files", {"path": "~/Downloads"}),
     "show me my files in ~/projects": ("show_files", {"path": "~/projects"}),
     "what's in ~/projects?": ("show_files", {"path": "~/projects"}),
