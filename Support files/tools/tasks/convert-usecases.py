@@ -43,6 +43,30 @@ DROP_RE = re.compile("|".join("(?:%s)" % p for p in DROP_PATTERNS), re.IGNORECAS
 PER_FILE = 40
 EXCLUDE_OUTPUT = ["No such tool", "error:", "Traceback", "I couldn't finish that"]
 
+CHECKS_PATH = os.path.join(HERE, "usecase-checks.json")
+
+
+def load_checks():
+    """Per-instruction setup/evaluator/weak overrides. Missing file means no overrides."""
+    if not os.path.exists(CHECKS_PATH):
+        return {}
+    with open(CHECKS_PATH, encoding="utf-8") as f:
+        checks = json.load(f)
+    if not isinstance(checks, dict):
+        raise ValueError("%s must be a JSON object keyed by instruction" % CHECKS_PATH)
+    return checks
+
+
+def apply_check(task, checks):
+    entry = checks.get(task["instruction"])
+    if entry is None:
+        return task
+    task["setup"] = list(entry.get("setup", []))
+    task["evaluator"] = json.loads(json.dumps(entry["evaluator"]))
+    task["weak"] = bool(entry.get("weak", False))
+    return task
+
+
 SOURCES = [
     ("usecases", os.path.join(ROOT, "docs", "research", "use-cases.md")),
     ("parity", os.path.join(ROOT, "docs", "research", "parity-tasks.md")),
@@ -96,10 +120,11 @@ def main():
         if re.match(r"^(usecases|parity)-\d+\.json$", stale):
             os.remove(os.path.join(HERE, stale))
     seen = set()  # de-duplicate across both sources; first occurrence (use-cases) wins
+    checks = load_checks()
     for name, path in SOURCES:
         prefix = "uc" if name == "usecases" else "par"
         phrases = collect(path, seen)
-        tasks = [make_task(prefix, i, p) for i, p in enumerate(phrases, start=1)]
+        tasks = [apply_check(make_task(prefix, i, p), checks) for i, p in enumerate(phrases, start=1)]
         chunks = [tasks[i:i + PER_FILE] for i in range(0, len(tasks), PER_FILE)]
         for index, chunk in enumerate(chunks, start=1):
             out_name = "%s-%d.json" % (name, index)

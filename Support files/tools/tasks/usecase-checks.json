@@ -1,0 +1,84 @@
+{
+  "lock the screen": {
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "llmos desk-state"},
+      "expected": {"include": ["\"screen\": \"lock\""]}
+    },
+    "weak": false
+  },
+  "show my files": {
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "llmos desk-state"},
+      "expected": {"include": ["\"id\": \"files\""]}
+    },
+    "weak": false
+  },
+  "open my documents": {
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "llmos desk-state"},
+      "expected": {"include": ["\"id\": \"files\""]}
+    },
+    "weak": false
+  },
+  "show hidden files": {
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "llmos desk-state"},
+      "expected": {"include": ["\"id\": \"files\""]}
+    },
+    "weak": false
+  },
+  "find my resume": {
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "llmos desk-state"},
+      "expected": {"include": ["\"id\": \"find\""]}
+    },
+    "weak": false
+  },
+  "find duplicates": {
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "llmos desk-state"},
+      "expected": {"include": ["\"id\": \"dupes\""]}
+    },
+    "weak": false
+  },
+  "i have the same photos twice": {
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "llmos desk-state"},
+      "expected": {"include": ["\"id\": \"dupes\""]}
+    },
+    "weak": false
+  },
+  "make a folder called Taxes 2026": {
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "test -d \"/root/Documents/Taxes 2026\" && echo yes || echo no"},
+      "expected": {"include": ["yes"], "exclude": ["no"]}
+    },
+    "weak": false
+  },
+  "move all the photos from downloads to pictures": {
+    "setup": ["mkdir -p /root/Downloads /root/Pictures", "touch /root/Downloads/llmos-test-1.jpg"],
+    "evaluator": {
+      "func": "include_exclude",
+      "result": {"type": "vm_command_line", "command": "ls /root/Pictures | grep -c llmos-test-1.jpg"},
+      "expected": {"include": ["1"]}
+    },
+    "weak": false
+  },
+  "empty the trash": {
+    "setup": ["mkdir -p /root/.Trash", "touch /root/.Trash/llmos-test-junk"],
+    "evaluator": {
+      "func": "equals",
+      "result": {"type": "vm_command_line", "command": "ls -A /root/.Trash | wc -l"},
+      "expected": {"equals": "0"}
+    },
+    "weak": false
+  }
+}
