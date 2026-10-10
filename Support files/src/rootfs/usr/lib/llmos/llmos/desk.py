@@ -45,7 +45,8 @@ SCREEN_MESSAGES = {
 }
 _MEDIUM_Q = re.compile(r"\b(?:(?:is|am)\s+(?:this|it|i|llm\s*os)\s+(?:running|booted|working)?\s*(?:off|from|on)\s+(?:the\s+|a\s+)?(?:usb|stick|flash\s*drive|thumb\s*drive|pen\s*drive)|"
                        r"(?:is|was)\s+(?:it|this|llm\s*os)\s+installed|did\s+it\s+install|will\s+(?:my\s+)?(?:stuff|files|things|changes|settings|work|data)\s+(?:be\s+)?(?:saved|kept)|"
-                       r"(?:can|what happens if)\s+i\s+(?:unplug|remove|take\s+out)\s+(?:the\s+)?(?:usb|stick|flash\s*drive))", re.I)
+                       r"(?:can|what happens if)\s+i\s+(?:unplug|remove|take\s+out)\s+(?:the\s+)?(?:usb|stick|flash\s*drive)|"
+                       r"how\s+(?:do|can)\s+i\s+keep\s+(?:this|it|everything|llm\s*os|my\s+(?:stuff|files|things))(?:\s+going)?\s+(?:without|after\s+(?:removing|unplugging))\s+(?:the\s+)?(?:usb|stick|flash\s*drive))", re.I)
 _TIME_Q = re.compile(r"(?:what(?:'s| is) the (?:time|date)(?: (?:now|today))?|what time is it(?: now)?|whats the time|what(?:'s| is) today(?:'s date)?|"
                      r"what day is (?:it|today)|what(?:'s| is) the day today|what is the date today|time|date|today)[?.!]*")
 _BATTERY_Q = re.compile(r"(?:how much|what(?:'s| is)(?: my| the)?) battery(?: (?:do i have|is left|level|life|left|percentage))?[?.!]*|"
