@@ -318,6 +318,21 @@ def power(args):
     return json.dumps([ok, msg])
 
 
+def radio(args):
+    args = _args_dict(args)
+    kind = args.get("kind")
+    on = args.get("on")
+    if set(args) - {"kind", "on"}:
+        raise ValueError("bad args: unexpected argument")
+    if not isinstance(kind, str) or kind not in ("wifi", "bluetooth", "all"):
+        raise ValueError("bad args: kind")
+    if not isinstance(on, bool):
+        raise ValueError("bad args: on")
+    from . import system
+    rc, out, err = system._radio_root(kind, on)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
 def service(args):
     args = _args_dict(args)
     name = args.get("name")
@@ -431,6 +446,7 @@ VERBS = {
     "apk_add": apk_add,
     "apk_del": apk_del,
     "power": power,
+    "radio": radio,
     "service": service,
     "set_timezone": set_timezone,
     "set_hostname": set_hostname,

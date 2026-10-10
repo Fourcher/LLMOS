@@ -429,6 +429,35 @@ def power(action):
         return False, str(e)
 
 
+RADIO_KINDS = ("wifi", "bluetooth", "all")
+
+
+def _radio_root(kind, on):
+    """Block or unblock a radio with rfkill, as root. Returns (returncode, stdout, stderr). Never builds a shell string."""
+    try:
+        p = subprocess.run(["rfkill", "unblock" if on else "block", kind], capture_output=True, text=True, timeout=10)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timed out after 10 s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def radio(kind, on):
+    """Turn a radio on or off (rfkill): directly as root, else through rootd's radio verb. Returns (rc, out, err)."""
+    if kind not in RADIO_KINDS:
+        raise ValueError(f"unknown radio kind '{kind}'")
+    if not isinstance(on, bool):
+        raise ValueError("on must be a bool")
+    if os.geteuid() == 0:
+        return _radio_root(kind, on)
+    try:
+        rc, out, err = json.loads(rootd_client.call("radio", kind=kind, on=on, _timeout=40))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
 def _service_root(name, action, timeout=60):
     """Run rc-service for one service, as root. Returns (returncode, stdout, stderr)."""
     try:
