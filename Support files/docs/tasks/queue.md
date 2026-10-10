@@ -80,6 +80,7 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [open] (process) RUN workers: the guard refuses `<script>` and `bash <script>` with computed paths but accepted `/bin/bash "<literal path>"`. Put that form into the RUN spec template in orchestration.md | role: orchestrator doc edit
 - [open] (process) OCR on the desk's own UI can give false hits (control.find found "File" on the desk). Exclude the desk webview from OCR targets or crop to the front window | role: probe
 - [open] (reliability) build 1.7.5 (bump + CHANGELOG), RUN smokes, timed sweep, and time control.read_screen() on the VM (was 18 s) | role: fix then run
+- [open] (speed) each model request = system 5.3k chars + 78 tool schemas 25.3k chars (~8.5k tokens), cache_prompt on. RUN probe on VM: llama-server prompt-eval timings in /run/llmos/model.log for "what's the capital of australia" asked twice — is the prefix cached? Decide: smaller per-request tool set vs. rely on cache | role: run probe
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
