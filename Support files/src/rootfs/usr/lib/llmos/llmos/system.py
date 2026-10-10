@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 
 from . import config, rootd_client
@@ -12,6 +13,8 @@ from .rootd import HOSTS_NAME_RE
 
 NFT_RULES = "/etc/nftables.nft"
 HOSTS = "/etc/hosts"
+PASSWD = "/etc/passwd"
+SHELLS = "/etc/shells"
 FOCUS_BEGIN = "# llmos-focus begin"
 FOCUS_END = "# llmos-focus end"
 DISTRACTIONS = [
@@ -172,6 +175,46 @@ def set_tor(on):
         return ok, note
     except rootd_client.RootdError as e:
         return False, str(e)
+
+
+def _replace_keep_owner(path, text):
+    """Replace path with text: a temp file in the same folder, then os.replace. The mode and owner of the original are kept."""
+    st = os.stat(path)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or ".", prefix="." + os.path.basename(path) + ".")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.chmod(tmp, st.st_mode & 0o7777)
+        os.chown(tmp, st.st_uid, st.st_gid)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _set_shell_root(user, shell):
+    """As root: point the user's line in PASSWD at shell, and add shell to SHELLS once. PASSWD is written first."""
+    pw = open(PASSWD).read()
+    pw = re.sub(r"^(" + re.escape(user) + r":[^:]*:0:0:[^:]*:[^:]*:)[^\n]*$", lambda mm: mm.group(1) + shell, pw, count=1, flags=re.M)
+    _replace_keep_owner(PASSWD, pw)
+    shells = open(SHELLS).read()
+    if shell not in shells.split():
+        _replace_keep_owner(SHELLS, shells + shell + "\n")
+
+
+def set_shell(user, shell):
+    """Change a user's login shell: directly as root, else through rootd's set_shell verb. Raises OSError on failure."""
+    if user == "root":
+        return _set_shell_root(user, shell)
+    try:
+        reply = rootd_client.call("set_shell", user=user, shell=shell)
+    except rootd_client.RootdError as e:
+        raise OSError(str(e))
+    if reply != "ok":
+        raise OSError(str(reply))
 
 
 def _apk_add_root(names, quiet=False, timeout=900):
