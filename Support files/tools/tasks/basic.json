@@ -228,7 +228,7 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "cat /root/.config/llmos/settings.json 2>/dev/null || cat /etc/llmos/settings.json"
+          "command": "cat /etc/llmos/settings.json"
         },
         "expected": {
           "include": [
@@ -247,7 +247,7 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "cat /root/.config/llmos/settings.json 2>/dev/null || cat /etc/llmos/settings.json"
+          "command": "cat /etc/llmos/settings.json"
         },
         "expected": {
           "include": [
@@ -366,11 +366,11 @@
         "func": "file_exists",
         "result": {
           "type": "vm_command_line",
-          "command": "ls -d /root/Test 2>/dev/null"
+          "command": "ls -d /root/Desktop/Test 2>/dev/null"
         },
         "expected": {
           "include": [
-            "/root/Test"
+            "/root/Desktop/Test"
           ]
         }
       },

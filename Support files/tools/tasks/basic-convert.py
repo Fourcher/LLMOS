@@ -22,7 +22,7 @@ ROW = re.compile(r'^\|\s*(S\d+)\s*\|\s*"([^"]*)"\s*\|\s*(.*?)\s*\|\s*(P\d)\s*\|\
 THEME_WORDS = ["theme", "purple", "colour", "color", "dark", "light"]
 MUSIC_WORDS = ["music", "playing", "mpv"]
 FOLDER_NAME = re.compile(r"\bfolder\s+(?:called\s+)?([A-Za-z0-9_.-]+)", re.IGNORECASE)
-SETTINGS_CMD = "cat /root/.config/llmos/settings.json 2>/dev/null || cat /etc/llmos/settings.json"
+SETTINGS_CMD = "cat /etc/llmos/settings.json"
 REPLY_EXCLUDE = ["No such tool", "error:", "Traceback"]
 
 
@@ -62,7 +62,8 @@ def evaluator_for(instruction, expected):
     if "folder" in text:
         m = FOLDER_NAME.search(instruction)
         if m:
-            path = "/root/" + m.group(1)
+            base = "/root/Desktop/" if "desktop" in phrase else "/root/"
+            path = base + m.group(1)
             if re.match(r"(delete|remove)\b", phrase):
                 expected_block = {"exclude": [path]}
             else:
