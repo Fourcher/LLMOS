@@ -835,11 +835,17 @@ NET_DIR = "/sys/class/net"
 VPN_WAIT = 6.0
 
 
-def _vpn_tun_up():
+def _vpn_tun_names():
+    """The tun/tap interface names present now (empty when the list can't be read)."""
     try:
-        return any(n.startswith(("tun", "tap")) for n in os.listdir(NET_DIR))
+        return {n for n in os.listdir(NET_DIR) if n.startswith(("tun", "tap"))}
     except Exception:
-        return False
+        return set()
+
+
+def _vpn_tun_up(before=frozenset()):
+    """True when a tun/tap interface exists that was not there before openvpn started."""
+    return bool(_vpn_tun_names() - set(before))
 
 
 def _vpn_alive():
@@ -850,15 +856,16 @@ def _vpn_alive():
         return None
 
 
-def _vpn_wait():
-    """Wait up to 6 s for the tunnel. True as soon as a tun/tap interface exists and openvpn runs; False when openvpn is
-    gone on two polls in a row (after 0.5 s); at 6 s, True exactly when openvpn still runs (the old rule)."""
+def _vpn_wait(before=frozenset()):
+    """Wait up to 6 s for the tunnel. True as soon as a tun/tap interface new since `before` (the names taken before
+    openvpn started) exists and openvpn runs; False when openvpn is gone on two polls in a row (after 0.5 s); at 6 s,
+    True exactly when openvpn still runs (the old rule)."""
     start = time.monotonic()
     gone = 0
     while True:
         t = time.monotonic() - start
         alive = _vpn_alive()
-        if alive and _vpn_tun_up():
+        if alive and _vpn_tun_up(before):
             return True
         if alive is False and t >= 0.5:
             gone += 1
@@ -927,8 +934,9 @@ def vpn(desk, line, low):
         if re.search(r"^\s*auth-user-pass\s*$", body, re.M):
             return _say(desk, line, f"{os.path.basename(f)} needs a user name and password, which isn't supported here yet. If your VPN offers a "
                                     "WireGuard file, that one works.")
+        before = _vpn_tun_names()
         r = subprocess.run(["openvpn", "--config", f, "--daemon", "llmos-vpn"], capture_output=True, text=True, timeout=60)
-        ok = r.returncode == 0 and _vpn_wait()
+        ok = r.returncode == 0 and _vpn_wait(before)
         err = [(r.stderr or r.stdout).strip()[-150:]] if not ok else []
     if not ok:
         return _say(desk, line, f"The VPN from {os.path.basename(f)} didn't connect: {' '.join(err) or 'no answer from its server'}.")
