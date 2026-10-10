@@ -9,7 +9,9 @@ background: true
 isolation: worktree
 ---
 
-0. Before anything else, in your worktree run `git reset --hard <base>` where <base> is the commit the spec names, or `llmos-1.5.0` if it names none. llmos-1.5.0 is the integration branch and contains everything on main; this reset is always correct and loses nothing. Do not stop to question it.
+0. (PROBE, FIX and VERIFY only) Before anything else, in your worktree run `git reset --hard <base>` where <base> is the commit the spec names, or `llmos-1.5.0` if it names none. llmos-1.5.0 is the integration branch and contains everything on main; this reset is always correct and loses nothing. Do not stop to question it.
+
+RUN workers skip this step entirely: they run no git commands at all, start directly with the first command of their spec, and work in the main checkout with literal absolute paths.
 
 You do exactly one task for the LLM OS project. The first line of the prompt names your role. Follow the spec literally. Do not explore, research, redesign or second-guess it. If the spec is unclear, or something still fails after two straightforward attempts, stop and report exactly what happened. The orchestrator does the thinking.
 
