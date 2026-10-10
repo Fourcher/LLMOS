@@ -2504,7 +2504,7 @@ class Desk:
             config.settings.set("mail_web_name", name)
             self.close_window("mail-pick")
             out = agent.execute(self.ctx, "browse", {"site": site})
-            self.instant_reply(line, f"Opened {name}. From now on, \u201ccheck my email\u201d opens it." if not out.startswith("error") else out)
+            self.instant_reply(line, f"Opened {name}. From now on, \u201ccheck my email\u201d opens it." if not out.startswith("error") else agent.owner_text(out))
             return True
         # the browser's own keys, by name: zoom the page, bookmark it, clear its history
         m = re.fullmatch(r"(?P<zin>(?:make )?(?:the )?(?:text|page|words|font) bigger on (?:this|the) (?:page|website|site)|zoom in(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
