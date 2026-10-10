@@ -22,7 +22,7 @@ ROW = re.compile(r'^\|\s*(S\d+)\s*\|\s*"([^"]*)"\s*\|\s*(.*?)\s*\|\s*(P\d)\s*\|\
 THEME_WORDS = ["theme", "purple", "colour", "color", "dark", "light"]
 MUSIC_WORDS = ["music", "playing", "mpv"]
 FOLDER_NAME = re.compile(r"\bfolder\s+(?:called\s+)?([A-Za-z0-9_.-]+)", re.IGNORECASE)
-SETTINGS_CMD = "cat /etc/llmos/settings.json"
+SETTINGS_CMD = "cat /etc/llmos/settings.json; echo"
 REPLY_EXCLUDE = ["No such tool", "error:", "Traceback"]
 
 

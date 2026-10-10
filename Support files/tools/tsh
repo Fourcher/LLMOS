@@ -9,4 +9,4 @@ cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 N=$RANDOM$RANDOM
 P=$(tail -c 4000 run/boot-serial.log 2>/dev/null | tr -d '\r' | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' | grep -aoE 'llmos:[^ ]*# |› ' | tail -1)
 case "$P" in llmos:*) P='' ;; *) P='!' ;; esac
-python3 tools/vmctl.py run run/tser.sock run/boot-serial.log "$P$1; echo DONE_\"\"$N" "^DONE_$N" "${2:-120}" --quiet 1 | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g' | grep -vE "^\s*$|DONE_|^78|^!|LLM OS$|Ministral 3 3B ·|^llmos:[^ ]*# *$"
+python3 tools/vmctl.py run run/tser.sock run/boot-serial.log "$P$1; echo; echo DONE_\"\"$N" "^DONE_$N" "${2:-120}" --quiet 1 | sed -e 's/\x1b\[[0-9;?]*[A-Za-z]//g' -e 's/\r//g' | grep -vE "^\s*$|DONE_|^78|^!|LLM OS$|Ministral 3 3B ·|^llmos:[^ ]*# *$"

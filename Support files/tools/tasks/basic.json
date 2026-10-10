@@ -228,7 +228,7 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "cat /etc/llmos/settings.json"
+          "command": "cat /etc/llmos/settings.json; echo"
         },
         "expected": {
           "include": [
@@ -247,7 +247,7 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "cat /etc/llmos/settings.json"
+          "command": "cat /etc/llmos/settings.json; echo"
         },
         "expected": {
           "include": [
