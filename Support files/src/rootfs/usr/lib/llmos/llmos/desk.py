@@ -2287,6 +2287,21 @@ class Desk:
             prev = [m["content"] for m in self.chat().msgs if m["role"] == "user" and m["content"].strip().lower().rstrip("?.! ") != low.rstrip("?.! ")]
             self.last_reply = self._said = (f"You said: “{prev[-1]}”" if prev else "You haven't asked me anything yet in this conversation.")
             return True
+        if re.fullmatch(r"what(?:'s| is) on (?:my |the )?screen(?: now| right now)?|what(?:'s| is) open(?: now| right now)?|which (?:windows|apps|programs) are open", low.rstrip("?.! ")):
+            names = []
+            try:
+                names += [str(w).split(".")[-1].replace("-", " ").replace("_", " ").title() for w in wm.windows() if str(w).strip()]
+            except Exception:
+                pass
+            names += [str(s.get("title")) for s in self.windows.values() if s.get("title") and str(s.get("title")) not in names]
+            seen, uniq = set(), []
+            for n in names:
+                if n.strip() and n.lower() not in seen:
+                    seen.add(n.lower())
+                    uniq.append(n)
+            names = uniq
+            self.last_reply = self._said = ("Open now: " + ", ".join(names) + ".") if names else "Nothing is open, just the desk."
+            return True
         r = self._system_shortcut(low, line)
         if r:
             return True
