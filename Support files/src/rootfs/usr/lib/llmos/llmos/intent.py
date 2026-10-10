@@ -820,6 +820,14 @@ def _notes(text):
     m = _NOTES_SHOW.match(text)
     if m and not re.search(r"\b(?:files?|folders?|documents|downloads|pictures|photos|music|videos|icons?)\b", m.group("list") or m.group("list2") or "", re.I):
         lst = m.group("list") or m.group("list2")
+        if lst:
+            lst = re.sub(r"\s+(?:as|in)\s+(?:a\s+)?(?:list|grid|icons?)\s*$", "", lst, flags=re.I)
+            lst = re.sub(r"\s+(?:as|in)(?:\s+a)?\s*$", "", lst, flags=re.I)
+            lst = re.sub(r"\s+list\s*$", "", lst, flags=re.I).strip()
+            if lst.lower() in ("the", "a"):
+                return ("notes_show", {})   # "show the list": all the lists, no name
+            if lst.lower() in ("notes", "my notes"):
+                return ("notes_show", {"list": "notes"})   # same form as "show my notes" (line ~1608)
         return ("notes_show", {"list": lst.strip()} if lst else {})
     m = _NOTE_REMOVE.match(text)
     if m:
@@ -925,6 +933,21 @@ def _device(text):
 
 
 def _files(text):
+    # "show as list" / "switch to big icons": the view of the folder on screen (the last one shown, else home)
+    m = re.match(r"^\s*(?:please\s+)?(?:show|view|display|see|put|switch|change)\s+(?:(?:my|the|these|those)\s+)?(?:(?:files?|them|it|everything|folders?)\s+)?"
+                 r"(?:as|in|to)\s+(?:a\s+)?(?P<v>list|big\s+icons|icons|large\s+icons|a\s+grid|grid|thumbnails|details)(?:\s+view)?\s*[.!]?$", text, re.I)
+    if m:
+        from . import tools as T
+        v = re.sub(r"\s+", " ", m.group("v").lower()).replace("a grid", "grid")
+        view = "icons" if v in ("icons", "big icons", "large icons", "grid", "thumbnails") else "list"
+        return ("show_files", {"path": T._LAST_FOLDER or "~", "view": view})
+    # bare view phrases: "show big icons", "list view", "show icons"
+    m = re.match(r"^\s*(?:please\s+)?(?:show\s+|use\s+|switch\s+to\s+)?(?P<v>big\s+icons|large\s+icons|icons|icon\s+view|grid\s+view|list\s+view|details\s+view)\s*[.!]?$", text, re.I)
+    if m:
+        from . import tools as T
+        v = re.sub(r"\s+", " ", m.group("v").lower())
+        view = "list" if v in ("list view", "details view") else "icons"
+        return ("show_files", {"path": T._LAST_FOLDER or "~", "view": view})
     m = re.match(r"^\s*(?:please\s+)?(?:find|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:file|document|thing)s?\s+(?:that\s+)?i(?:\s+(?:was\s+just|was|were|have\s+been)|['’]ve\s+been)\s+working\s+on(?:\s+(?:yesterday|today|last\s+night|earlier|before))?\s*[?.!]?\s*$"
                  r"|^\s*(?:please\s+)?(?:show|open|list)\s+(?:me\s+)?(?:my\s+)?(?:recent|latest|newest)\s+(?:files|documents)\s*[?.!]?\s*$", text, re.I)
     if m:
@@ -1096,6 +1119,22 @@ def _photo(text):
 # "open https://example.com in the browser" (also what a link on the desk says)
 _OPEN_URL = re.compile(r"^\s*(?:please\s+)?(?:(?:open|go to|visit|browse|show me|load|join)\s+(?:this\s+(?:link|meeting|call|meet|zoom)(?:\s+link)?:?\s+)?|(?:join\s+)?)(?P<url>https?://\S+)"
                        r"(?:\s+in\s+(?:the\s+|a\s+)?(?:web\s+)?browser)?\s*[.!]?\s*$", re.I)
+
+
+_DEFAULT_APP_OPEN = re.compile(r"^(?:please\s+)?(?:always\s+open|open\s+all)\s+(?:my\s+)?(?P<k>[\w\s]+?)\s+(?:in|with|using)\s+(?P<a>[\w .-]+?)\s*[.!]?$", re.I)
+_DEFAULT_APP_SET = re.compile(r"^(?:please\s+)?(?:make|set)\s+(?P<a>[\w .-]+?)\s+(?:as\s+)?(?:my\s+|the\s+)?default\s+(?:app\s+|program\s+)?for\s+(?P<k>[\w\s]+?)\s*[.!]?$", re.I)
+
+
+def _default_app(text):
+    """'always open pdfs in firefox' / 'make vlc my default for videos' -> set_default_app; only for kinds of file the tool knows."""
+    m = _DEFAULT_APP_OPEN.match(text) or _DEFAULT_APP_SET.match(text)
+    if not m:
+        return None
+    from . import tools
+    k = m.group("k").strip().lower()
+    if k not in tools.DEFAULT_KINDS:
+        return None
+    return ("set_default_app", {"kind": k, "app": m.group("a").strip()})
 
 
 def _open_url(text):
@@ -1358,11 +1397,17 @@ def _apps(text):
                                                                           for tt in apps.templates() for w in [tt["id"]] + tt["words"]):
         return ("open_app", {"command": bare})
     m = re.match(r"^\s*(?:a\s+|an\s+|the\s+|my\s+)?(?P<n>[a-z][a-z -]{1,25}?)\s+app\s*[.!?]?\s*$", text, re.I)
-    if m and (apps.find(m.group("n")) or apps.match_template(m.group("n"))):
-        return ("open_app", {"command": m.group("n").strip()})
+    if m:
+        # "open the task list app": the verb and article are not part of the program's name
+        cmd = re.sub(r"^(?:open|launch|start|run|show)\s+(?:the\s+|my\s+|a\s+)?", "", m.group("n").strip(), flags=re.I)
+        cmd = re.sub(r"\s+(?:app|application|program)$", "", cmd, flags=re.I).strip()
+        if cmd and (apps.find(cmd) or apps.match_template(cmd)):
+            return ("open_app", {"command": cmd})
     m = _OPEN_APP.match(text)
     if m:
         n = m.group("n").strip()
+        if re.search(r"\blists?$", n, re.I) and re.match(r"^\s*(?:please\s+)?(?:show|see|open|read)\s+(?:my|the)\s+", text, re.I):
+            return None              # "show my to do list": a list of notes, the notes route takes it, not a program
         from . import tools as _T
         if n.lower().removeprefix("my ").strip() in _T.FOLDERS or n.lower() in ("files", "my files", "file"):
             return None              # "show my files": the folder, not a program called something like Files
@@ -1797,8 +1842,34 @@ def _fix_schedule(r):
     return (r[0], a)
 
 
+TYPOS = {"opn": "open", "oepn": "open", "opne": "open", "wat": "what", "waht": "what", "whats": "what's", "hwo": "how",
+         "chang": "change", "chnage": "change", "volum": "volume", "voluem": "volume", "teh": "the", "pls": "please",
+         "plz": "please", "brwoser": "browser", "broswer": "browser", "firefx": "firefox", "fierfox": "firefox",
+         "clsoe": "close", "colse": "close", "tunr": "turn", "trun": "turn", "screem": "screen", "shwo": "show",
+         "sohw": "show", "delte": "delete", "remvoe": "remove", "folde": "folder", "foler": "folder", "fiel": "file",
+         "flie": "file", "musci": "music", "pirnt": "print", "prnt": "print", "seach": "search", "serach": "search",
+         "wifi": "wifi", "blutooth": "bluetooth", "bluetoth": "bluetooth", "brightnes": "brightness",
+         "birghtness": "brightness", "timr": "timer", "tiemr": "timer", "alrm": "alarm", "calender": "calendar",
+         "calcualtor": "calculator", "calulator": "calculator"}
+
+
+def _retype(text):
+    """Whole-word typo fix (case-insensitive); the rest of the text is left exactly as typed."""
+    if not TYPOS:
+        return text
+    pat = re.compile(r"\b(" + "|".join(re.escape(k) for k in sorted(TYPOS, key=len, reverse=True)) + r")\b", re.I)
+    return pat.sub(lambda m: TYPOS[m.group(1).lower()], text)
+
+
 def match(text):
-    return _fix_schedule(_match(text))
+    r = _fix_schedule(_match(text))
+    if r is not None:
+        return r
+    typed = str(text or "")
+    fixed = _retype(typed)                    # one retry on the typo-fixed copy; the first pass result wins when it is not None
+    if fixed == typed:
+        return None
+    return _fix_schedule(_match(fixed))
 
 
 def _analyze_program(t):
@@ -1857,6 +1928,9 @@ def _match(text):
     lk = _look(t)
     if lk:
         return lk
+    dap = _default_app(t)
+    if dap:
+        return dap
     ou = _open_url(t)
     if ou:
         return ou

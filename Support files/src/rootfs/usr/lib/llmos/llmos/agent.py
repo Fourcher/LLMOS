@@ -563,7 +563,7 @@ def _bare_click(ctx, user_text):
         return None          # a single key ("press 7") is _screen_steps' job
     if "click" not in tools.REGISTRY or not tools.REGISTRY["click"].available():
         return None
-    out = execute(ctx, "click", {"text": t})
+    out = execute(ctx, "click", {"text": t, "describe_miss": False})
     if _failed(out):
         return f"I can't see “{t}” on the screen."
     return f"Clicked {t}."
@@ -606,7 +606,7 @@ def run(ctx, user_text, history):
         else:
             if web:
                 out = execute(ctx, "browse", {"site": web})
-                reply = f"Opened your email ({config.settings.get('mail_web_name') or web})." if not out.startswith("error") else out
+                reply = f"Opened your email ({config.settings.get('mail_web_name') or web})." if not out.startswith("error") else owner_text(out)
             else:
                 _ctx(ctx, "show_ui", {"id": "mail-pick", "replace": True, "title": "Your email", "size": "s", "blocks": [
                     {"type": "text", "text": "Which email do you use? I'll open it in the browser and remember it for next time."},
@@ -927,6 +927,17 @@ def _plain_error(text):
     return t.strip() or "That didn't work"
 
 
+def owner_text(out):
+    """A tool's output for the owner: an 'error: ...' result is said in plain words; anything else is returned as-is."""
+    if not isinstance(out, str) or not out.startswith("error:"):
+        return out
+    rest = out[6:].strip()
+    if not rest:
+        return "Something went wrong."
+    t = _plain_error(rest)
+    return t[:1].upper() + t[1:]
+
+
 def _shortcut_words(name, args, out):
     low = str(out).lower()
     if name == "mail_read" and low.startswith("error: no message matches"):
@@ -1026,7 +1037,7 @@ def _shortcut_words(name, args, out):
     if name == "delete_file":
         return _cap(out.split(" (")[0]) + "." if low.startswith(("moved ", "deleted ")) else out
     if name in ("restore_file", "empty_trash"):
-        return _cap(out.split(". Say")[0]) + "." if not low.startswith("error") else out
+        return _cap(out.split(". Say")[0]) + "." if not low.startswith("error") else owner_text(out)
     if name == "note_add":
         where = {"shopping": "shopping list", "notes": "notes"}.get(str(args.get("list", "")), str(args.get("list", "")) + " list").strip()
         if low.startswith("added"):
@@ -1070,7 +1081,7 @@ def _shortcut_words(name, args, out):
             by.setdefault(n.get("list", "notes"), []).append(n["text"])
         return " ".join(f"{k.capitalize()}: {', '.join(v[:8])}." for k, v in by.items())
     if name == "note_done":
-        return ("Done." if " is ticked off" in low else "Back on the list.") if not low.startswith("error") else out
+        return ("Done." if " is ticked off" in low else "Back on the list.") if not low.startswith("error") else owner_text(out)
     if name == "note_remove":
         return "Removed." if low.startswith("removed") else out
     if name == "set_passphrase":

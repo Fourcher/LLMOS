@@ -2504,7 +2504,7 @@ class Desk:
             config.settings.set("mail_web_name", name)
             self.close_window("mail-pick")
             out = agent.execute(self.ctx, "browse", {"site": site})
-            self.instant_reply(line, f"Opened {name}. From now on, \u201ccheck my email\u201d opens it." if not out.startswith("error") else out)
+            self.instant_reply(line, f"Opened {name}. From now on, \u201ccheck my email\u201d opens it." if not out.startswith("error") else agent.owner_text(out))
             return True
         # the browser's own keys, by name: zoom the page, bookmark it, clear its history
         m = re.fullmatch(r"(?P<zin>(?:make )?(?:the )?(?:text|page|words|font) bigger on (?:this|the) (?:page|website|site)|zoom in(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
@@ -3449,6 +3449,7 @@ class Desk:
         return None
 
     def turn(self, text, chat="main"):
+        fixed = intent._retype(text)          # typo-fixed copy: the fast paths get a second pass on it; the model always gets text as typed
         parts = self._split_compound(text) if chat == "main" else None
         if parts:
             said = []
@@ -3463,7 +3464,9 @@ class Desk:
                     said.append(s)
             self.last_reply = " ".join(x.rstrip(".") + "." for x in said) if said else "Done: " + "; ".join(parts) + "."
             return
-        if chat == "main" and self.shortcut(text):
+        # fast paths (shortcut, which includes everyday.handle): the typed line first; the typo-fixed copy only when the
+        # first pass handled nothing (short-circuit: no second run of a path that already acted)
+        if chat == "main" and (self.shortcut(text) or (fixed != text and self.shortcut(fixed))):
             self.last_reply = self.__dict__.pop("_said", None) or "Done."
             return
         c = self.chat(chat)
