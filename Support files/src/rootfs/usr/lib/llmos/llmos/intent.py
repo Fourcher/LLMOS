@@ -925,6 +925,14 @@ def _device(text):
 
 
 def _files(text):
+    # "show as list" / "switch to big icons": the view of the folder on screen (the last one shown, else home)
+    m = re.match(r"^\s*(?:please\s+)?(?:show|view|display|see|put|switch|change)\s+(?:(?:my|the|these|those)\s+)?(?:(?:files?|them|it|everything|folders?)\s+)?"
+                 r"(?:as|in|to)\s+(?:a\s+)?(?P<v>list|big\s+icons|icons|large\s+icons|a\s+grid|grid|thumbnails|details)(?:\s+view)?\s*[.!]?$", text, re.I)
+    if m:
+        from . import tools as T
+        v = re.sub(r"\s+", " ", m.group("v").lower()).replace("a grid", "grid")
+        view = "icons" if v in ("icons", "big icons", "large icons", "grid", "thumbnails") else "list"
+        return ("show_files", {"path": T._LAST_FOLDER or "~", "view": view})
     m = re.match(r"^\s*(?:please\s+)?(?:find|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:file|document|thing)s?\s+(?:that\s+)?i(?:\s+(?:was\s+just|was|were|have\s+been)|['’]ve\s+been)\s+working\s+on(?:\s+(?:yesterday|today|last\s+night|earlier|before))?\s*[?.!]?\s*$"
                  r"|^\s*(?:please\s+)?(?:show|open|list)\s+(?:me\s+)?(?:my\s+)?(?:recent|latest|newest)\s+(?:files|documents)\s*[?.!]?\s*$", text, re.I)
     if m:

@@ -2114,12 +2114,16 @@ def _friendly_when(ts):
       "/root (~). Use for 'show my files', 'open my documents folder', 'what's in ~/projects'.",
       {"path": {"type": "string", "description": "folder to show (default: the home folder)"},
        "sort": {"type": "string", "enum": ["name", "date", "size"], "description": "order (default name; date = newest first)"},
-       "hidden": {"type": "boolean", "description": "true to show hidden files (names starting with a dot), false to hide them again"}}, [], risk=READ)
+       "hidden": {"type": "boolean", "description": "true to show hidden files (names starting with a dot), false to hide them again"},
+       "view": {"type": "string", "enum": ["list", "icons"], "description": "list = rows (default); icons = big icons. Given = the owner's choice, kept for later"}}, [], risk=READ)
 def show_files(a, ctx):
     global _LAST_FOLDER, _SHOW_HIDDEN
     # "sort by date" / "show hidden files" with no folder named: the folder last shown
     if a.get("hidden") is not None:
         _SHOW_HIDDEN = bool(a.get("hidden"))
+    view = a.get("view") or config.settings.get("files_view") or "list"
+    if a.get("view"):
+        config.settings.set("files_view", view)
     path = _path(a.get("path") or (_LAST_FOLDER if (a.get("sort") or a.get("hidden") is not None) and _LAST_FOLDER else "~"))
     _LAST_FOLDER = path
     if path.rstrip("/") == _trash():
@@ -2187,7 +2191,7 @@ def show_files(a, ctx):
                                                     for n in pics]})
         items = [it for it in items if it["title"] not in pics]
     if items or (not is_trash and not pics):
-        blocks.append({"type": "list", "items": items} if items else {"type": "text", "text": i18n.t("d_empty_folder"), "dim": True})
+        blocks.append({"type": "list", "items": items, "view": view} if items else {"type": "text", "text": i18n.t("d_empty_folder"), "dim": True})
     if is_trash and items:
         blocks.append({"type": "buttons", "items": [{"label": i18n.t("d_empty_trash"), "say": "empty the trash", "danger": True}]})
     show(ctx, {"id": "files", "replace": True, "title": title, "size": "l", "blocks": blocks})
