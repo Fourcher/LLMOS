@@ -60,7 +60,8 @@ for b in BLOCKS:
         check(all(isinstance(new[b].get(k), str) and "{" not in new[b][k] for k in NEW_KEYS),
               f"{b}: no_model present and has no placeholder braces")
         if b != "EN":
-            check({k: v for k, v in new[b].items() if k not in NEW_KEYS} == old[b],
+            check({k: v for k, v in new[b].items() if k not in NEW_KEYS}
+                  == {k: v for k, v in old[b].items() if k not in NEW_KEYS},
                   f"{b}: values unchanged apart from no_model (non-English not edited)")
 
 en = new.get("EN", {})
