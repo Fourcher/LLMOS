@@ -1,41 +1,41 @@
 {
   "name": "LLM OS",
-  "version": "1.7.5",
-  "built": "2026-10-09",
-  "source_commit": "dc1d241",
-  "source_hash": "bc49ef060bebc43be6362a8233db78cea9e43ca611286db8880ba05daae1da5e",
+  "version": "1.7.6",
+  "built": "2026-10-10",
+  "source_commit": "75a6566",
+  "source_hash": "28bb55c505087cc35822952f58c9282909c495653b966aa674c4a278ef489bc1",
   "images": [
     {
       "file": "llmos-arm64.iso",
       "arch": "arm64",
       "kind": "iso",
-      "size": 3601668096,
-      "sha256": "5032eae828b4267fac2e0065d28b13a1f19a1f854ddec074346e3a959c39bfe9",
-      "built": "2026-10-09 19:48"
+      "size": 3601670144,
+      "sha256": "55ba3ac002743b78f9aa827cd7cf2fc85109c60234c9f60b983afaf2037d4925",
+      "built": "2026-10-09 23:06"
     },
     {
       "file": "llmos-arm64.qcow2",
       "arch": "arm64",
       "kind": "vm",
-      "size": 5536022528,
-      "sha256": "9de4e95daceca4e9065f4b501ed3da113e68617d4b363c54fb3238e3430f6270",
-      "built": "2026-10-09 19:45"
+      "size": 5535105024,
+      "sha256": "4c7b7186a493dfa2247072f914777a421641aa3a544789d71de2d6e770f06230",
+      "built": "2026-10-09 23:02"
     },
     {
       "file": "llmos-x86_64.iso",
       "arch": "x86_64",
       "kind": "iso",
-      "size": 4114249728,
-      "sha256": "10686110c98c36c5662d295b6f24095a9e5eb18888d058e055cb64d0cdabaf4b",
-      "built": "2026-10-09 21:05"
+      "size": 4112531456,
+      "sha256": "8e0d650d3372bf879598cb7a25b0f8b40ab03ee9c611e886eccf63c7e5f0c59f",
+      "built": "2026-10-10 00:26"
     },
     {
       "file": "llmos-x86_64.qcow2",
       "arch": "x86_64",
       "kind": "vm",
-      "size": 6055395328,
-      "sha256": "a1d612caa4f01edba444d1eef048e35df81bc74b7cc5b5ba64a0ce5be620d591",
-      "built": "2026-10-09 20:57"
+      "size": 6049169408,
+      "sha256": "9cf77aeede4c3c658dfd8f87c030b6f96ce47e132ed3a655ab524a3bad6f0dfa",
+      "built": "2026-10-10 00:17"
     }
   ]
 }

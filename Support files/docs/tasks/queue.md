@@ -128,7 +128,7 @@ Session state note (2026-10-09):
 ## Post-1.7.6-build src merge list (all VERIFY PASS; merge in this order once release.sh exits)
 - df416e6 (intent chain incl. 4eea691 aria, last_saved, notes guard, spreadsheet, _free_path)
 - 55047d6 (i18n 6 langs × 440 keys)
-- 6c6218f (P1-4 rect 65b5641 + P2-14 testreset-min)
+- b2af87a (P1-4 rect 65b5641 + P2-14 testreset-min 6c6218f + both resets clear last_reply)
 - ee5d199 (P3-2 testshell temperature 0 / seed 42)
 - a943c66 (photo route "my pics from X", action-clause guard)
 - d343bf1 ("skipped" toast = no answer in 10 minutes; trial-merged clean with 55047d6)
