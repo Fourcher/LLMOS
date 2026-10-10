@@ -1730,6 +1730,12 @@ def _everyday2(text):
     if m:
         k = m.group("k").replace("résumé", "resume").replace("cv", "resume")
         return ("make_document", {"kind": "cover letter" if "cover" in k else k})
+    m = re.match(r"^(?:please\s+)?(?:make|create|start|set\s+up)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+|simple\s+)?spreadsheet(?:\s+(?:for|of|about|to\s+track)\s+(?:my\s+|the\s+|a\s+)?(?P<t>[\w '-]{1,40}?))?\s*[.!]?$", low)
+    if m:
+        t = (m.group("t") or "").strip()
+        if re.search(r"\b(?:budget|money|spending|expenses?|bills)\b", t):
+            return ("make_spreadsheet", {"name": "Budget", "rows": [["Item", "Amount"], ["Rent", ""], ["Food", ""], ["Bills", ""], ["Other", ""], ["Total", "=SUM(B2:B5)"]]})
+        return ("make_spreadsheet", {"name": t.title() if t else "Spreadsheet", "rows": [["Item", "Amount"], ["", ""], ["Total", "=SUM(B2:B2)"]]})
     if re.match(r"^(?:back\s*up|backup|save\s+a\s+copy\s+of|copy)\s+(?:all\s+)?(?:my\s+)?(?:files|stuff|documents|photos|computer|everything)(?:\s+(?:to|onto)\s+(?:the\s+|my\s+)?(?:usb|stick|usb\s+stick|external\s+(?:drive|disk)|drive))?$|^make\s+a\s+backup$", low):
         return ("backup_files", {})
     if re.match(r"^(?:restore|bring\s+back|get\s+back)\s+(?:my\s+)?(?:files|stuff|everything)\s+from\s+(?:the\s+|my\s+)?(?:backup|usb|stick|drive)$|^restore\s+(?:my\s+|the\s+)?backup$", low):
