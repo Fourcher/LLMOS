@@ -264,6 +264,19 @@ def fresh_overlay(run_in_vm, boot=_fresh_overlay, clock=time.monotonic, sleep=ti
         raise RuntimeError("fresh: desk not ready")
 
 
+def parse_ids(values):
+    """--ids accepts space-separated, comma-joined (S12,S13) or both (S12, S13). Returns the id list."""
+    return [x.strip() for a in (values or []) for x in a.split(",") if x.strip()]
+
+
+def select_tasks(tasks, ids):
+    """Tasks whose id is in ids, in suite order, and the ids that match no task."""
+    known = {t["id"] for t in tasks}
+    unknown = [i for i in ids if i not in known]
+    wanted = set(ids)
+    return [t for t in tasks if t["id"] in wanted], unknown
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Run a task suite as a real user through QMP.")
     ap.add_argument("suite", help="task file (JSON with a tasks list)")
@@ -278,11 +291,18 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.repeat < 1:
         ap.error("--repeat must be >= 1")
+    ids = None
+    tasks = tasklib.load(args.suite)["tasks"]
+    if args.ids is not None:
+        ids = parse_ids(args.ids)
+        tasks, unknown = select_tasks(tasks, ids)
+        if unknown:
+            print("unknown ids: %s" % ", ".join(unknown), file=sys.stderr)
+        if not tasks:
+            print("no task matches --ids: %s" % ", ".join(ids), file=sys.stderr)
+            return 2
+        ids = [t["id"] for t in tasks]
     if not args.run:
-        tasks = tasklib.load(args.suite)["tasks"]
-        if args.ids:
-            wanted = set(args.ids)
-            tasks = [t for t in tasks if t["id"] in wanted]
         print("dry: would run %d tasks from %s" % (len(tasks), args.suite))
         print("add --run to boot the test VM")
         return 0
@@ -301,7 +321,7 @@ def main(argv=None):
         user.qmp = QMP("run/tqmp.sock")
 
     try:
-        summary = run_suite(args.suite, user, run_in_vm, ids=args.ids, outdir=args.outdir,
+        summary = run_suite(args.suite, user, run_in_vm, ids=ids, outdir=args.outdir,
                             run_path=args.path, repeat=args.repeat,
                             fresh=fresh if args.repeat > 1 else None)
     finally:

@@ -121,8 +121,44 @@ def test_no_args_no_boot():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_ids_forms():
+    import subprocess
+    script = os.path.join(HERE, "realrun.py")
+    basic = os.path.join(HERE, "tasks", "basic.json")
+    # parse_ids: every spelling of the same two ids
+    for label, argv in [("space", ["S12", "S13"]), ("comma", ["S12,S13"]), ("comma-space", ["S12,", "S13"]),
+                        ("comma-spaces", ["S12, S13"])]:
+        got = realrun.parse_ids(argv)
+        check("parse_ids %s -> S12,S13" % label, got == ["S12", "S13"], repr(got))
+    check("parse_ids empty comma is empty", realrun.parse_ids([","]) == [], repr(realrun.parse_ids([",", " "])))
+    print("ok parse_ids forms")
+
+    def dry(ids_argv):
+        return subprocess.run([sys.executable, script, basic, "--ids"] + ids_argv, capture_output=True,
+                              text=True, timeout=60, cwd=os.path.dirname(HERE))
+
+    for label, argv in [("space", ["S12", "S13"]), ("comma", ["S12,S13"]), ("comma-space", ["S12,", "S13"]),
+                        ("comma-spaces", ["S12, S13"])]:
+        p = dry(argv)
+        check("dry --ids %s selects 2" % label,
+              p.returncode == 0 and "dry: would run 2 tasks" in p.stdout and p.stderr == "",
+              "rc=%s out=%r err=%r" % (p.returncode, p.stdout, p.stderr))
+    print("ok dry --ids forms select 2")
+
+    p = dry(["S12,S13,NOPE"])
+    check("unknown mixed runs known one", p.returncode == 0 and "dry: would run 2 tasks" in p.stdout
+          and "unknown ids: NOPE" in p.stderr, "rc=%s out=%r err=%r" % (p.returncode, p.stdout, p.stderr))
+    print("ok unknown id mixed with known")
+
+    p = dry(["NOPE"])
+    check("no match exits 2", p.returncode == 2 and "no task matches --ids: NOPE" in p.stderr
+          and "dry:" not in p.stdout, "rc=%s out=%r err=%r" % (p.returncode, p.stdout, p.stderr))
+    print("ok no-match exits 2")
+
+
 def main():
     test_no_args_no_boot()
+    test_ids_forms()
     outroot = tempfile.mkdtemp(prefix="realrun-test-")
     try:
         # 1. reply task PASSes
