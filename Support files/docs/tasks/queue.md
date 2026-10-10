@@ -1,7 +1,19 @@
 # Task queue (LLM OS buildout)
 
 Owned by llmos-orchestrator. One line per task. Status: open, running, done, failed.
-Operating rules come from the owner's prompt and later messages: one task at a time; run VM/image builds one at a time; never let two workers edit the same file; ask the owner only before an outside download, a publish, or a push to a shared remote.
+Operating rules: .claude/agents/llmos-orchestrator.md and docs/tasks/orchestration.md. Run VM/image builds one at a time; never let two workers edit the same file; never ask the owner.
+
+## TOP PRIORITY (owner, 2026-10-09): real-world use testing
+Boot the VM and drive it like a person (real clicks, real typing, real outcomes). Plan: docs/research/reports/VM real use testing plan.md (35 tasks, phases 1-3; follow its conventions and shared-file marks). Start Phase 1 now, after the RUN already going: PROBE and FIX tasks in parallel, RUN tasks one at a time. The other fronts continue at lower priority.
+- [open] (reliability) P1-1 QMP socket on the QEMU line | role: fix | files: tools/boot-target.sh | test: see plan P1-1
+- [open] (reliability) P1-2 QMP probe on a booted image | role: run | files: none | test: see plan P1-2 (after P1-1)
+- [open] (reliability) P1-3 tools/qmp.py (shot, click, key, type) | role: fix | files: tools/qmp.py | test: see plan P1-3 (after P1-2)
+- [open] (capability) P1-4 test-shell `rect <id> <selector>` desk command | role: fix | files: desk.py | test: see plan P1-4
+- [open] (reliability) P1-5 tools/settle.py (wait for screen change, then still) | role: fix | files: tools/settle.py | test: see plan P1-5
+- [open] (speed) P1-6 PROBE the model sampling settings (temperature, seed) | role: probe | files: none | test: see plan P1-6
+- [open] (reliability) P1-7..P1-13 per the plan, in order (gate P1-9: real click, typing and Enter in the desk produce a reply) | role: per plan | files: per plan | test: per plan
+- [open] (reliability) Phase 2 and Phase 3 per the plan, after the P1-9 gate | role: per plan | files: per plan | test: per plan
+
 
 - [done] Finish the 1.7.1 image build with the security toolkit; check-fresh FRESH; package and smoke-test it. Evidence: check-fresh "FRESH: dist/ was built from the current OS source (d53d280, v1.7.1)"; SHA256SUMS -c all OK (both arches + model); arm64 ISO smoke "test shell up after 14 s ... VERSION=1.7.1 ARCH=aarch64 MEDIUM=live ... desk socket: yes"; x86 ISO smoke (UEFI) "test shell up after 24 s ... VERSION=1.7.1 ARCH=x86_64 MEDIUM=live ... desk socket: yes"; package.sh -> "/Users/jordan/Desktop/LLM OS 1.7.1.zip (7.2G)". NOTE: recovered from a worker that launched two concurrent x86 builds + a self-matching waiter; killed them, rebuilt x86 cleanly (no new downloads; secureboot chain cached).
 - [done] Give the Hermes/Ministral default decision a written verdict in docs/research/model-bakeoff.md. Evidence: verdict section appended; grounded in run/bake-hermes + run/bake-ministral (read by hand). Hermes adds 5 confabulations (Q05,Q06,Q07,Q10,Q13) vs Ministral's 2 over-refusals -> keep Ministral default; Hermes not adopted.
