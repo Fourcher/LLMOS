@@ -156,6 +156,18 @@ def _read_stream(lines, on_text):
     return content, [calls[i] for i in sorted(calls)], timings, "\n".join(other)
 
 
+_FWCFG = "/sys/firmware/qemu_fw_cfg/by_name/opt/llmos"
+
+
+def _testshell():
+    """The test VM (fw_cfg opt/llmos/testshell): model sampling is made repeatable there; owners never see this."""
+    try:
+        with open(os.path.join(_FWCFG, "testshell", "raw")) as f:
+            return f.read().strip() not in ("", "0")
+    except OSError:
+        return False
+
+
 def _plain(messages):
     """Messages without this OS's private bookkeeping keys (such as the online model's own blocks)."""
     return [{k: v for k, v in m.items() if not str(k).startswith("_")} for m in messages]
@@ -170,6 +182,9 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
     body = {"messages": _plain(messages), "stream": True, "temperature": temperature,
             "top_p": 0.95, "max_tokens": max_tokens, "cache_prompt": True,
             "chat_template_kwargs": {"enable_thinking": think}}
+    if _testshell():
+        body["temperature"] = 0
+        body["seed"] = 42
     if tools:
         body["tools"] = tools
     if json_schema:
