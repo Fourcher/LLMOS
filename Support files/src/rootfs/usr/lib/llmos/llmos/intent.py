@@ -1439,9 +1439,10 @@ def _everyday2(text):
     # finding the owner's own things by what they are about
     m = re.match(r"^(?:please\s+)?(?:find|show(?:\s+me)?|where(?:'s|\s+is|\s+are)|look\s+for|get(?:\s+me)?|open)\s+(?:the|my|that|those)\s+(?:photos?|pictures?|pics?|images?|snaps?)\s+"
                  r"(?:of|with|from|where|showing|that\s+(?:has|have|shows?)|i\s+took\s+(?:of|at|in))\s+(?P<q>.+)$"
-                 r"|^(?:please\s+)?(?:find|show(?:\s+me)?)\s+(?:my\s+)?(?:photos?|pictures?|pics?)\s+(?:of|with|from)\s+(?P<q2>.+?)\s+(?:i\s+took|from\s+my\s+(?:photos|pictures|phone|camera))$", low)
+                 r"|^(?:please\s+)?(?:find|show(?:\s+me)?)\s+(?:my\s+)?(?:photos?|pictures?|pics?)\s+(?:of|with|from)\s+(?P<q2>.+?)\s+(?:i\s+took|from\s+my\s+(?:photos|pictures|phone|camera))$"
+                 r"|^(?:please\s+)?(?:(?:show|find|open)(?:\s+me)?\s+)?(?:all\s+)?(?:my|our)\s+(?:photos?|pictures?|pics?|snaps?)\s+(?:of|with|from)\s+(?P<q3>(?![^,;]*\b(?:are|is|was|were|need|needs|copy|move|shrink|resize|rename|send|delete|remove|put|make|edit|crop|rotate|print|share|upload|convert|zip|backup|back\s+up|into|onto)\b)[^,;]+)$", low)
     if m:
-        return ("find_by_meaning", {"query": (m.group("q") or m.group("q2")).strip(), "kind": "photos"})
+        return ("find_by_meaning", {"query": (m.group("q") or m.group("q2") or m.group("q3")).strip(), "kind": "photos"})
     m = re.match(r"^(?:please\s+)?(?:find|show(?:\s+me)?|where(?:'s|\s+is|\s+are)|look\s+for|get(?:\s+me)?|open)\s+(?:the|my|that)\s+"
                  r"(?:document|doc|file|pdf|letter|note|essay|report|spreadsheet|invoice|receipt|contract|recipe|presentation|story|cv|resume|form)s?\s+"
                  r"(?:about|on|for|regarding|that\s+(?:mentions|talks\s+about|is\s+about|says)|mentioning|with|where\s+i\s+(?:wrote|talked)\s+about)\s+(?P<q>.+)$"
