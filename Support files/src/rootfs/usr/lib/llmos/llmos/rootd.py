@@ -10,6 +10,7 @@ import os
 import re
 import socket
 import tempfile
+import threading
 from datetime import datetime
 
 ZONEINFO = "/usr/share/zoneinfo"
@@ -17,9 +18,12 @@ ETC_ROOT = "/"
 LOG_PATH = "/run/llmos/rootd.log"
 MAX_REQUEST = 512 * 1024
 MAX_SETTING = 256 * 1024
+CONN_TIMEOUT = 5.0
+MAX_CONN = 16
 
-ZONE_RE = re.compile(r"^[A-Za-z_]+(?:/[A-Za-z0-9_+-]+){0,2}$")
-HOST_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+# fullmatch, not match with $: "$" accepts a trailing newline.
+ZONE_RE = re.compile(r"[A-Za-z_]+(?:/[A-Za-z0-9_+-]+){0,2}")
+HOST_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 SETTING_NAMES = {"settings.json", "conduct.txt"}
 
 
@@ -53,10 +57,16 @@ def _args_dict(args):
 def set_timezone(args):
     args = _args_dict(args)
     zone = args.get("zone")
-    if not isinstance(zone, str) or not ZONE_RE.match(zone):
+    if not isinstance(zone, str) or not ZONE_RE.fullmatch(zone):
         raise ValueError("bad args: zone")
-    src = os.path.join(ZONEINFO, zone)
-    if not os.path.isfile(src):
+    # Resolve symlinks first: the target must be a regular file inside ZONEINFO.
+    real_zoneinfo = os.path.realpath(ZONEINFO)
+    src = os.path.realpath(os.path.join(ZONEINFO, zone))
+    try:
+        inside = os.path.commonpath([real_zoneinfo, src]) == real_zoneinfo
+    except ValueError:
+        inside = False
+    if not inside or not os.path.isfile(src):
         raise ValueError("bad args: unknown zone")
     # Same steps as system.set_timezone: symlink /etc/localtime, /etc/timezone, /etc/llmos/timezone.
     localtime = _etc("localtime")
@@ -77,7 +87,7 @@ def set_timezone(args):
 def set_hostname(args):
     args = _args_dict(args)
     name = args.get("name")
-    if not isinstance(name, str) or not HOST_RE.match(name):
+    if not isinstance(name, str) or not HOST_RE.fullmatch(name):
         raise ValueError("bad args: name")
     os.makedirs(_etc(), exist_ok=True)
     with open(_etc("hostname"), "w") as f:
@@ -158,6 +168,32 @@ def _read_request(conn):
     return data
 
 
+def _reply(conn, reply):
+    try:
+        conn.sendall(json.dumps(reply).encode("utf-8"))
+    except OSError:
+        pass
+
+
+def _handle_conn(conn, slots):
+    """Serve one connection in its own thread. Releases its slot when done."""
+    try:
+        with conn:
+            try:
+                req = _read_request(conn)
+                verb, reply = _run(req)
+            except socket.timeout:
+                _log("?", False)
+                _reply(conn, {"ok": False, "error": "timeout"})
+                return
+            except OSError:
+                return
+            _reply(conn, reply)
+            _log(verb, reply["ok"])
+    finally:
+        slots.release()
+
+
 def serve(path="/run/llmos/root.sock", group="owner"):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if os.path.lexists(path):
@@ -170,17 +206,20 @@ def serve(path="/run/llmos/root.sock", group="owner"):
         os.chown(path, -1, gid)
     except (KeyError, OSError):
         pass
-    srv.listen(8)
+    srv.listen(MAX_CONN)
+    slots = threading.BoundedSemaphore(MAX_CONN)
     while True:
         conn, _ = srv.accept()
-        with conn:
-            try:
-                req = _read_request(conn)
-                verb, reply = _run(req)
-                conn.sendall(json.dumps(reply).encode("utf-8"))
-                _log(verb, reply["ok"])
-            except OSError:
-                pass
+        conn.settimeout(CONN_TIMEOUT)
+        if not slots.acquire(blocking=False):
+            _reply(conn, {"ok": False, "error": "busy"})
+            conn.close()
+            continue
+        try:
+            threading.Thread(target=_handle_conn, args=(conn, slots), daemon=True).start()
+        except RuntimeError:
+            slots.release()
+            conn.close()
 
 
 if __name__ == "__main__":

@@ -59,7 +59,7 @@ def snapshot(root):
 
 # --- set_timezone
 expect_ok("set_timezone Europe/Paris", call("set_timezone", {"zone": "Europe/Paris"}))
-assert os.readlink(os.path.join(etc, "etc", "localtime")) == os.path.join(zoneinfo, "Europe", "Paris")
+assert os.readlink(os.path.join(etc, "etc", "localtime")) == os.path.realpath(os.path.join(zoneinfo, "Europe", "Paris"))
 assert open(os.path.join(etc, "etc", "timezone")).read() == "Europe/Paris\n"
 assert open(os.path.join(etc, "etc", "llmos", "timezone")).read() == "Europe/Paris\n"
 expect_err("zone traversal", call("set_timezone", {"zone": "../../etc/passwd"}), "bad args")
@@ -67,6 +67,15 @@ expect_err("zone unknown", call("set_timezone", {"zone": "Europe/Atlantis"}), "b
 expect_err("zone directory", call("set_timezone", {"zone": "Europe"}), "bad args")
 expect_err("zone not str", call("set_timezone", {"zone": 5}), "bad args")
 expect_err("zone args not dict", json.loads(rootd.handle(b'{"verb":"set_timezone","args":["Europe/Paris"]}')), "bad args")
+expect_err("zone trailing newline", call("set_timezone", {"zone": "Europe/Paris\n"}), "bad args")
+
+# symlink inside zoneinfo that points outside it must be refused
+outside = os.path.join(tmp, "outside-secret")
+with open(outside, "w") as f:
+    f.write("not a zone")
+os.symlink(outside, os.path.join(zoneinfo, "Europe", "Escape"))
+expect_err("symlink outside zoneinfo", call("set_timezone", {"zone": "Europe/Escape"}), "bad args")
+os.unlink(os.path.join(zoneinfo, "Europe", "Escape"))
 
 # --- set_hostname
 expect_ok("set_hostname kitchen-pc", call("set_hostname", {"name": "kitchen-pc"}))
@@ -75,6 +84,7 @@ expect_err("hostname uppercase", call("set_hostname", {"name": "Kitchen"}), "bad
 expect_err("hostname space", call("set_hostname", {"name": "kitchen pc"}), "bad args")
 expect_err("hostname leading dash", call("set_hostname", {"name": "-pc"}), "bad args")
 expect_err("hostname too long", call("set_hostname", {"name": "a" * 64}), "bad args")
+expect_err("hostname trailing newline", call("set_hostname", {"name": "kitchen\n"}), "bad args")
 
 # --- write_setting_file
 expect_ok("write settings.json", call("write_setting_file", {"name": "settings.json", "text": "{\"a\": 1}"}))
@@ -128,6 +138,29 @@ time.sleep(0.2)
 log = open(rootd.LOG_PATH).read().splitlines()
 assert log and log[-1].endswith(" set_hostname ok"), log
 print(f"ok socket request: {reply}; log: {log[-1]}")
+
+# a silent client must not block a second client
+silent = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+silent.connect(sock_path)
+c2 = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+c2.settimeout(2)
+c2.connect(sock_path)
+started = time.time()
+c2.sendall(json.dumps({"verb": "set_hostname", "args": {"name": "second-pc"}}).encode())
+c2.shutdown(socket.SHUT_WR)
+chunks = []
+while True:
+    part = c2.recv(65536)
+    if not part:
+        break
+    chunks.append(part)
+elapsed = time.time() - started
+c2.close()
+silent.close()
+reply2 = json.loads(b"".join(chunks).decode())
+assert reply2 == {"ok": True, "out": "ok"}, reply2
+assert elapsed < 2, f"second client waited {elapsed:.2f}s"
+print(f"ok silent client does not block: reply in {elapsed:.2f}s")
 
 shutil.rmtree(tmp, ignore_errors=True)
 shutil.rmtree(sock_dir, ignore_errors=True)
