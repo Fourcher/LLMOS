@@ -43,6 +43,8 @@ CASES = {
     "show the biggest files on the computer": ("biggest_files", {}),
     "find the largest files on my computer": ("biggest_files", {}),
     "what's taking up the most space": ("biggest_files", {}),
+    "find the biggest file in Downloads": ("biggest_files", {"folder": "~/Downloads"}),
+    "show the largest files in my pictures folder": ("biggest_files", {"folder": "~/Pictures"}),
     "zip my documents folder": ("compress_files", {"path": "~/Documents"}),
     "zip these": ("which_file", {"request": "zip these"}),
     "convert ~/a.docx to pdf": ("convert_to_pdf", {"path": "~/a.docx"}),
