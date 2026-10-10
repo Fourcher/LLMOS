@@ -805,10 +805,10 @@ def vpn(desk, line, low):
     need = "openvpn" if kind == "openvpn" else "wireguard-tools"
     if not shutil.which("openvpn" if kind == "openvpn" else "wg-quick"):
         desk.emit({"t": "toast", "text": "Getting the VPN program…", "sticky": "vpn"})
-        r = subprocess.run(["apk", "add", "-q", need], capture_output=True, text=True, timeout=600)
+        rc, out, err = _system.apk_add([need], quiet=True, timeout=600)
         desk.emit({"t": "toast", "text": "", "sticky": "vpn"})
-        if r.returncode != 0:
-            return _say(desk, line, f"Couldn't get the VPN program ({need}): {(r.stderr or r.stdout).strip()[-150:]}")
+        if rc != 0:
+            return _say(desk, line, f"Couldn't get the VPN program ({need}): {(err or out).strip()[-150:]}")
     if kind == "wireguard":
         os.makedirs("/etc/wireguard", exist_ok=True)
         name = re.sub(r"[^a-zA-Z0-9_=+.-]", "", os.path.splitext(os.path.basename(f))[0])[:15] or "vpn"
@@ -963,11 +963,11 @@ def system_more(desk, line, low):
         path = "/bin/sh" if sh == "sh" else shutil.which(sh)
         if not path:
             desk.emit({"t": "toast", "text": f"Getting {sh}…", "sticky": "sh"})
-            r = subprocess.run(["apk", "add", "-q", sh], capture_output=True, text=True, timeout=600)
+            rc, out, err = _system.apk_add([sh], quiet=True, timeout=600)
             desk.emit({"t": "toast", "text": "", "sticky": "sh"})
             path = shutil.which(sh)
             if not path:
-                return _say(desk, line, f"Couldn't install {sh}: {(r.stderr or r.stdout).strip()[-150:]}")
+                return _say(desk, line, f"Couldn't install {sh}: {(err or out).strip()[-150:]}")
         try:
             pw = open("/etc/passwd").read()
             pw = re.sub(r"^(root:[^:]*:0:0:[^:]*:[^:]*:)[^\n]*$", lambda mm: mm.group(1) + path, pw, count=1, flags=re.M)
