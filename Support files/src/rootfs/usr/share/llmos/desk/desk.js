@@ -701,7 +701,7 @@
       }
       case "progress": { const e = el("div"); e.append(el("div", "stat", `<span>${esc(b.label)}</span><span class="v">${Math.round(b.fraction * 100)}%</span>`), el("div", "bar", `<i style="width:${Math.round(b.fraction * 100)}%"></i>`)); return e; }
       case "list": {
-        const e = el("div", "list" + (b.columns > 1 ? " cols-" + b.columns : ""));
+        const e = el("div", "list" + (b.columns > 1 ? " cols-" + b.columns : "") + (b.view === "icons" ? " icons" : ""));
         b.items.forEach((it, i) => {
           const row = el("div", "item" + (it.done ? " done" : ""));
           row.style.setProperty("--i", Math.min(i, 12));
