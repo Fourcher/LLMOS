@@ -46,7 +46,7 @@ MATCH = re.compile(
     r"\b(?:split|divide) \$?\d|time (?:is it )?in [a-z]|how (?:long|much time) (?:is it )?(?:until|till) \d|^(?:how (?:do (?:you|i) )?)?spell\b|"
     r"^define\b|definition of|what does \w+ mean|meaning of|words? for \w+$|synonyms? (?:of|for)|"
     r"\d+\s*(?:degrees|°)?\s*(?:fahrenheit|celsius|f|c)\b|\d+\s*(?:kg|kilos?|pounds?|lbs?|miles?|km|feet|foot|inch(?:es)?|cm|meters?|metres?|ounces?|oz|grams?|liters?|litres?|gallons?|cups?|mph)\s+(?:to|in|into)\b|"
-    r"\d+(?:\.\d+)?\s*(?:%|percent)\s+(?:tip|tax|discount|off|service|gratuity)|^(?:thanks?|thank you|thx|cheers|ta)\b|"
+    r"\d+(?:\.\d+)?\s*(?:%|percent)\s+(?:tip|tax|discount|off|service|gratuity)|\d+(?:\.\d+)?\s*(?:percent|per\s*cent)\s+of\s+[\d,]|what\s+percent(?:age)?\s+(?:of\s+[\d,.]+\s+is|is\s+[\d,.]+\s+of)\s+[\d,.]+|^(?:thanks?|thank you|thx|cheers|ta)\b|"
     r"how (?:big|large) is|how much (?:space|room) does|how many (?:files|things|items|photos|pictures|songs) (?:are |do i have )?in|"
     r"(?:what|which) (?:wi-?fi|network)|what(?:'s| is) (?:my |the )?(?:wi-?fi|network)|am i (?:on|connected to) (?:the )?wi-?fi|"
     r"what(?:'s| is) (?:this |the )?(?:playing|song|track)|what song is this|what am i listening to|now playing|"
@@ -1053,7 +1053,31 @@ def quick(desk, line, low):
         if m.group("k") in ("discount", "off"):
             return _say(desk, line, f"{p:g}% off {f(n)} saves {f(amount)}, so you pay {f(n - amount)}.")
         return _say(desk, line, f"A {p:g}% {m.group('k').split()[0]} on {f(n)} is {f(amount)}, for a total of {f(n + amount)}.")
-    # unit conversions: "convert 5 miles to km", "5 miles in km", "72 fahrenheit in celsius", "how many ounces in a pound"
+    # percentages: "15% of 240", "what's 12.5 percent of 80" -> 36; "what percent is 45 of 240" -> 18.75%
+    def _pct_num(s):
+        return float(s.replace(",", ""))
+
+    def _pct_fmt(v):
+        v = round(v, 2)
+        return f"{v:,.0f}" if abs(v - round(v)) < 1e-9 else f"{v:,.2f}".rstrip("0").rstrip(".")
+    m = re.fullmatch(r"(?:what(?:'s|s|\s+is)\s+|calculate\s+|work\s+out\s+)?(?P<p>\d+(?:\.\d+)?)\s*(?:%|percent|per\s*cent)\s+of\s+(?P<n>[\d,]+(?:\.\d+)?)\s*\??", q)
+    if m:
+        try:
+            p, n = _pct_num(m.group("p")), _pct_num(m.group("n"))
+            return _say(desk, line, f"{_pct_fmt(p)}% of {_pct_fmt(n)} is {_pct_fmt(n * p / 100)}.")
+        except ValueError:
+            return False
+    m = re.fullmatch(r"what\s+percent(?:age)?\s+(?:of\s+(?P<b>[\d,.]+)\s+is\s+(?P<a>[\d,.]+)|is\s+(?P<a2>[\d,.]+)\s+of\s+(?P<b2>[\d,.]+))\s*\??", q)
+    if m:
+        try:
+            a = _pct_num(m.group("a") or m.group("a2"))
+            b = _pct_num(m.group("b") or m.group("b2"))
+        except ValueError:
+            return False
+        if b == 0:
+            return False
+        return _say(desk, line, f"{_pct_fmt(a)} is {_pct_fmt(a / b * 100)}% of {_pct_fmt(b)}.")
+    # unit conversions: "convert 5 miles to km","5 miles in km", "72 fahrenheit in celsius", "how many ounces in a pound"
     unit = r"(?:degrees\s+)?[a-z°/ ]{1,18}?"
     m = re.fullmatch(rf"(?:convert |what(?:'s| is) |how much is |how many )?(?P<n>-?[\d.,]+)\s*(?P<a>{unit})\s+(?:to|in|into|as)\s+(?P<b>{unit})", q) or \
         re.fullmatch(rf"how many (?P<b>{unit}) (?:are )?(?:in|per) (?:a |an |one )?(?P<a>{unit})", q)
