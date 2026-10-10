@@ -349,15 +349,28 @@ def type_text(text):
 _KEYNAMES = {"enter": "Return", "return": "Return", "tab": "Tab", "esc": "Escape", "escape": "Escape",
              "backspace": "BackSpace", "delete": "Delete", "del": "Delete", "space": "space", "up": "Up",
              "down": "Down", "left": "Left", "right": "Right", "home": "Home", "end": "End", "pageup": "Prior",
-             "pagedown": "Next", "page up": "Prior", "page down": "Next", "f5": "F5", "f11": "F11", "f12": "F12"}
+             "pagedown": "Next", "page up": "Prior", "page down": "Next", "f5": "F5", "f11": "F11", "f12": "F12",
+             "+": "plus", "plus": "plus", "-": "minus", "minus": "minus"}
 _MODS = {"ctrl": "ctrl", "control": "ctrl", "alt": "alt", "shift": "shift", "super": "logo", "win": "logo",
          "windows": "logo", "cmd": "ctrl", "command": "ctrl", "logo": "logo"}
 
 
+def _combo_parts(combo):
+    """"ctrl+a" -> [ctrl, a]; the plus key itself is "+" or a trailing "++": "+" -> [+], "ctrl++" -> [ctrl, +]."""
+    s = combo.lower()
+    if s == "+":
+        return ["+"]
+    if s.endswith("++"):
+        return [p for p in s[:-2].split("+") if p] + ["+"]
+    return [p for p in s.split("+") if p]
+
+
 def press(keys):
-    """A key or a combination: "enter", "ctrl+s", "ctrl+shift+t", "alt+f4". Several in a row: "tab tab enter"."""
+    """A key or a combination: "enter", "ctrl+s", "ctrl+shift+t", "alt+f4", "ctrl++" (zoom in). Several in a row:
+    "tab tab enter". Returns (False, reason) when no key was pressed."""
+    pressed = 0
     for combo in str(keys).strip().split():
-        parts = [p for p in re.split(r"\+", combo.lower()) if p]
+        parts = _combo_parts(combo)
         if not parts:
             continue
         mods = [_MODS[p] for p in parts[:-1] if p in _MODS]
@@ -372,7 +385,10 @@ def press(keys):
         r = _run(argv, timeout=10)
         if r.returncode != 0:
             return False, (r.stderr or "").strip()
+        pressed += 1
         time.sleep(0.12)
+    if not pressed:
+        return False, "no key in " + repr(str(keys))
     return True, ""
 
 
