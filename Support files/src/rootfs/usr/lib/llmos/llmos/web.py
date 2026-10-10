@@ -19,7 +19,24 @@ TOR_PROXY = "127.0.0.1:9050"
 
 
 class WebError(Exception):
-    pass
+    """A plain-words message for the owner. `status` keeps the HTTP code (or None) for code that inspects it."""
+
+    def __init__(self, message="", status=None):
+        super().__init__(message)
+        self.status = status
+
+
+def _status_msg(service, code):
+    """The owner's words for a failed HTTP request to `service`."""
+    if code == 404:
+        return "that page doesn't exist"
+    if code == 429:
+        return f"{service} is getting too many requests; try again in a minute"
+    if 500 <= code <= 599:
+        return f"{service} isn't answering right now; try again in a minute"
+    if code in (401, 403):
+        return f"{service} refused the request"
+    return f"{service} didn't answer properly"
 
 
 def _curl_base(timeout):
@@ -80,7 +97,7 @@ def _search_ddg(query):
     status, _, _, body = fetch("https://html.duckduckgo.com/html/", data={"q": query}, timeout=10)
     page = body.decode("utf-8", "replace")
     if status != 200 or "result__a" not in page:
-        raise WebError(f"DuckDuckGo returned {status}")
+        raise WebError(_status_msg("DuckDuckGo", status), status)
     out = []
     for block in page.split('class="result ')[1:]:
         if "result--ad" in block[:200]:
@@ -102,7 +119,7 @@ def _search_brave(query):
     status, _, _, body = fetch(url, timeout=10)
     page = body.decode("utf-8", "replace")
     if status != 200:
-        raise WebError(f"Brave returned {status}")
+        raise WebError(_status_msg("Brave", status), status)
     out = []
     for block in page.split('data-type="web"')[1:]:
         block = block[:6000]
@@ -134,7 +151,9 @@ def search(query, n=6):
         try:
             done.put((idx, engine(query), None))
         except Exception as e:
-            if isinstance(e, (WebError, OSError)):
+            if isinstance(e, WebError):
+                done.put((idx, None, e))
+            elif isinstance(e, OSError):
                 done.put((idx, None, str(e)))
             else:
                 done.put((idx, None, f"{type(e).__name__}: {e}"))
@@ -166,7 +185,9 @@ def search(query, n=6):
             return uniq[:n]
     if finished < len(engines):
         raise WebError("the search took too long")
-    raise WebError("; ".join(errors[i] for i in sorted(errors)) or "no results")
+    if len(errors) == len(engines) and all(isinstance(errors[i], WebError) for i in errors):
+        raise WebError("the search services aren't answering right now; try again in a minute")
+    raise WebError("; ".join(str(errors[i]) for i in sorted(errors)) or "no results")
 
 
 _DROP = re.compile(r"<(script|style|noscript|svg|nav|footer|header|aside|form|iframe|template)\b.*?</\1\s*>", re.S | re.I)
@@ -198,7 +219,7 @@ def readable(page_html, limit=6000):
 def read(url, limit=6000):
     status, ctype, final, body = fetch(url)
     if status >= 400:
-        raise WebError(f"HTTP {status} from {final}")
+        raise WebError(_status_msg(urllib.parse.urlparse(final or "").netloc or "the site", status), status)
     if "html" in ctype or body.lstrip()[:1] == b"<":
         title, text = readable(body.decode("utf-8", "replace"), limit)
         return {"url": final, "title": title, "text": text}
@@ -216,7 +237,7 @@ def wikimedia_image(subject):
         "iiprop": "url|extmetadata|mime", "iiurlwidth": 1280})
     status, _, _, body = fetch(api, timeout=20)
     if status != 200:
-        raise WebError(f"Wikimedia returned {status}")
+        raise WebError(_status_msg("Wikimedia", status), status)
     pages = (json.loads(body or b"{}").get("query") or {}).get("pages") or {}
     best = sorted(pages.values(), key=lambda p: p.get("index", 99))
     for p in best:
