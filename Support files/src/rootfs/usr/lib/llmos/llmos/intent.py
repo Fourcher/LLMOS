@@ -1229,8 +1229,10 @@ def _everyday(text):
         if m.group("where"):
             args["where"] = m.group("where").lower()
         return ("make_folder", args)
-    m2 = re.match(r"^\s*(?:please\s+)?(?:call|name)\s+it\s+(?P<to>[\w .()-]{1,60}?)(?:\s+instead)?\s*[.!]?\s*$", text, re.I)
-    if m2:
+    m2 = (re.match(r"^\s*(?:please\s+)?call\s+it\s+(?P<to>[\w .()-]{1,60}?)\s+instead\s*[.!]?\s*$", text, re.I)
+          or re.match(r"^\s*(?:please\s+)?(?:call|name)\s+it\s+(?P<to>[\w ()-]{1,55}\.\w{1,5})\s*[.!]?\s*$", text, re.I)
+          or re.match(r"^\s*(?:please\s+)?name\s+it\s+(?P<to>[\w .()-]{1,60}?)\s*[.!]?\s*$", text, re.I))
+    if m2 and not re.fullmatch(r"(?:a\s+)?(?:day|night|quits|even|a\s+wrap|done)", m2.group("to").strip(), re.I):
         return ("rename_file", {"name": "it", "to": m2.group("to").strip()})
     m = _RENAME.match(text)
     if m and re.search(r"\b(?:every|all|each)\b.*\b(?:files?|photos?|pictures?|documents?|songs?)\b|\b(?:files|photos|pictures|documents|songs)\b", m.group("n"), re.I):

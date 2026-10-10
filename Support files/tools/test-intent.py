@@ -58,6 +58,8 @@ CASES = {
     "call it Budget instead": ("rename_file", {"name": "it", "to": "Budget"}),
     "rename it to Budget": ("rename_file", {"name": "it", "to": "Budget"}),
     "rename it": ("which_file", {"request": "rename it"}),
+    "call it budget.xlsx": ("rename_file", {"name": "it", "to": "budget.xlsx"}),
+    "name it Taxes": ("rename_file", {"name": "it", "to": "Taxes"}),
     "is paypa1.com safe?": ("check_site", {"address": "paypa1.com"}),
     "delete all my files": ("delete_file", {"path": "~", "contents": True}),
     "change the font to arial size 14": ("set_appearance", {"font": "arial", "scale": "115"}),
@@ -459,4 +461,14 @@ for text in NOTES_GUARD_CASES:
         nbad += 1
         print(f"NOTES GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"notes guards: {len(NOTES_GUARD_CASES) - nbad}/{len(NOTES_GUARD_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad else 0)
+
+# rename guards: "call it a day" and friends are not renames of "it"
+RENAME_GUARD_CASES = ["call it a day", "call it a night", "call it quits", "let's call it even"]
+rbad = 0
+for text in RENAME_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "rename_file":
+        rbad += 1
+        print(f"RENAME GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"rename guards: {len(RENAME_GUARD_CASES) - rbad}/{len(RENAME_GUARD_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad else 0)
