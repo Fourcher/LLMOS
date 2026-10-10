@@ -897,7 +897,7 @@ _BRIGHT = re.compile(r"^\s*(?:please\s+)?(?:(?:set\s+|make\s+|put\s+)?(?:the\s+)
                      r"|(?:turn|make)\s+(?:the\s+)?(?:screen|brightness|display)\s+(?P<dir>up|down|brighter|dimmer|darker)|(?:increase|raise|turn\s+up)\s+(?:the\s+)?(?:screen\s+)?brightness(?P<up>)"
                      r"|(?:decrease|lower|reduce|turn\s+down|dim)\s+(?:the\s+)?(?:screen\s+)?(?:brightness|screen)(?P<down>)|(?P<b>brighter|dimmer))\s*[.!]?\s*$", re.I)
 _VOL = re.compile(r"^\s*(?:please\s+)?(?:(?:set\s+|make\s+|put\s+)?(?:the\s+)?(?:volume|sound)\s+(?:to\s+|at\s+)?(?P<n>\d{1,3})\s*%?"
-                  r"|(?:turn|make)\s+(?:the\s+)?(?:volume|sound|music|it)\s+(?P<dir>up|down|louder|quieter|softer)|(?:increase|raise|turn\s+up)\s+(?:the\s+)?(?:volume|sound)(?P<up>)"
+                  r"|(?:turn|make)\s+(?:the\s+)?(?:volume|sound|music|it)\s+(?P<dir>up|down|louder|quieter|softer)|(?:change|put|set|move)\s+(?:the\s+)?(?:volume|sound|music)\s+(?P<dir2>up|down|louder|quieter|softer)|(?:increase|raise|turn\s+up)\s+(?:the\s+)?(?:volume|sound)(?P<up>)"
                   r"|(?:decrease|lower|reduce|turn\s+down)\s+(?:the\s+)?(?:volume|sound)(?P<down>)|(?P<l>louder|quieter|softer)"
                   r"|(?P<mute>mute|unmute)(?:\s+(?:the\s+)?(?:sound|speakers?|volume|audio|it))?|(?:turn\s+(?:the\s+)?(?:sound|audio|speakers?)\s+(?P<onoff>on|off)))\s*[.!]?\s*$", re.I)
 
@@ -919,7 +919,7 @@ def _device(text):
             return ("set_volume", {"mute": m.group("mute").lower() == "mute"})
         if m.group("onoff"):
             return ("set_volume", {"mute": m.group("onoff").lower() == "off"})
-        d = (m.group("dir") or m.group("l") or ("up" if m.group("up") is not None else "down")).lower()
+        d = (m.group("dir") or m.group("dir2") or m.group("l") or ("up" if m.group("up") is not None else "down")).lower()
         return ("set_volume", {"delta": 10 if d in ("up", "louder") else -10})
     return None
 

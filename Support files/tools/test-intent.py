@@ -210,6 +210,9 @@ CASES = {
     "brighter": ("set_brightness", {"delta": 15}),
     "volume 30": ("set_volume", {"percent": 30}),
     "turn the volume up": ("set_volume", {"delta": 10}),
+    "change the volume up": ("set_volume", {"delta": 10}),
+    "set the music up": ("set_volume", {"delta": 10}),
+    "put the sound down": ("set_volume", {"delta": -10}),
     "quieter": ("set_volume", {"delta": -10}),
     "mute": ("set_volume", {"mute": True}),
     "unmute the sound": ("set_volume", {"mute": False}),
@@ -416,4 +419,14 @@ for text, want in TYPO_CASES.items():
         tbad += 1
         print(f"TYPO MISMATCH {text!r}\n   got    {got!r}\n   wanted {want!r}")
 print(f"typos: {len(TYPO_CASES) - tbad}/{len(TYPO_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad else 0)
+
+# volume guards: "set it up" and "put it down" are not volume commands ("it" only follows turn/make)
+GUARD_CASES = ["set it up", "put it down"]
+gbad = 0
+for text in GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "set_volume":
+        gbad += 1
+        print(f"GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"volume guards: {len(GUARD_CASES) - gbad}/{len(GUARD_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad else 0)
