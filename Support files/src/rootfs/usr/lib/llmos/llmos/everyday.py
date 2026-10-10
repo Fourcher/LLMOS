@@ -18,7 +18,7 @@ import threading
 import time
 import urllib.parse
 
-from . import config
+from . import config, rootd_client
 
 _JOKE_PAT = (r"(?:^(?:please\s+)?(?:tell|give)\s+me\s+(?:a\s+|another\s+|one\s+more\s+)?"
              r"(?:(?:good|funny|short|clean|dad|bad)\s+)?joke(?:\s+please)?[.!?]*$|"
@@ -469,14 +469,15 @@ def hostname(desk, line, low):
             return _say(desk, line, "Use letters, numbers and dashes for the name, for example \u201ckitchen-pc\u201d.")
         old = os.uname().nodename
         try:
-            with open("/etc/hostname", "w") as f:
-                f.write(n + "\n")
+            rootd_client.call("set_hostname", name=n)
             subprocess.run(["hostname", n], capture_output=True, timeout=5)
             hosts = open("/etc/hosts").read()
             hosts = re.sub(rf"\b{re.escape(old)}\b", n, hosts)
             with open("/etc/hosts", "w") as f:
                 f.write(hosts)
         except OSError as e:
+            return _say(desk, line, f"Couldn't rename it: {e}.")
+        except rootd_client.RootdError as e:
             return _say(desk, line, f"Couldn't rename it: {e}.")
         return _say(desk, line, f"This computer is now called “{n}” (it was “{old}”). Other devices on the network see the new name after a restart.")
     if re.search(r"what(?:'?s| is) (?:the |this |my )?computer(?:'?s)? name|what(?:'?s| is) (?:the |my )?hostname|^hostname$", low):

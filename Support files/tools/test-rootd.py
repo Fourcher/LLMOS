@@ -62,6 +62,14 @@ expect_ok("set_timezone Europe/Paris", call("set_timezone", {"zone": "Europe/Par
 assert os.readlink(os.path.join(etc, "etc", "localtime")) == os.path.realpath(os.path.join(zoneinfo, "Europe", "Paris"))
 assert open(os.path.join(etc, "etc", "timezone")).read() == "Europe/Paris\n"
 assert open(os.path.join(etc, "etc", "llmos", "timezone")).read() == "Europe/Paris\n"
+# chosen=False: the zone is set, but /etc/llmos/timezone is left alone
+os.unlink(os.path.join(etc, "etc", "llmos", "timezone"))
+expect_ok("set_timezone not chosen", call("set_timezone", {"zone": "Europe/Paris", "chosen": False}))
+assert os.readlink(os.path.join(etc, "etc", "localtime")) == os.path.realpath(os.path.join(zoneinfo, "Europe", "Paris"))
+assert not os.path.exists(os.path.join(etc, "etc", "llmos", "timezone")), "chosen=False wrote /etc/llmos/timezone"
+expect_err("chosen not bool", call("set_timezone", {"zone": "Europe/Paris", "chosen": "yes"}), "bad args")
+expect_ok("set_timezone chosen again", call("set_timezone", {"zone": "Europe/Paris", "chosen": True}))
+assert open(os.path.join(etc, "etc", "llmos", "timezone")).read() == "Europe/Paris\n"
 expect_err("zone traversal", call("set_timezone", {"zone": "../../etc/passwd"}), "bad args")
 expect_err("zone unknown", call("set_timezone", {"zone": "Europe/Atlantis"}), "bad args")
 expect_err("zone directory", call("set_timezone", {"zone": "Europe"}), "bad args")

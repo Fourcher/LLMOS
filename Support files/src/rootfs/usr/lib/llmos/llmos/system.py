@@ -5,7 +5,7 @@ import re
 import subprocess
 import time
 
-from . import config
+from . import config, rootd_client
 
 NFT_RULES = "/etc/nftables.nft"
 HOSTS = "/etc/hosts"
@@ -342,16 +342,10 @@ def set_timezone(name, chosen_by_user=True):
     zone = find_timezone(name)
     if not zone:
         raise ValueError(f"unknown time zone '{name}'")
-    src = os.path.join(ZONEINFO, zone)
-    tmp = "/etc/localtime.tmp"
-    os.symlink(src, tmp)
-    os.replace(tmp, "/etc/localtime")
-    with open("/etc/timezone", "w") as f:
-        f.write(zone + "\n")
-    if chosen_by_user:
-        os.makedirs(config.ETC, exist_ok=True)
-        with open(os.path.join(config.ETC, "timezone"), "w") as f:
-            f.write(zone + "\n")
+    try:
+        rootd_client.call("set_timezone", zone=zone, chosen=bool(chosen_by_user))
+    except rootd_client.RootdError as e:
+        raise ValueError(str(e))
     apply_timezone_env()
     return zone
 
