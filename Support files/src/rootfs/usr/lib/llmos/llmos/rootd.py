@@ -290,6 +290,32 @@ def service(args):
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
+BACKLIGHT_DEV_RE = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
+
+
+def set_backlight(args):
+    args = _args_dict(args)
+    device = args.get("device")
+    value = args.get("value")
+    if not isinstance(device, str) or not BACKLIGHT_DEV_RE.fullmatch(device) or device in (".", ".."):
+        raise ValueError("bad args: device")
+    from . import devices
+    try:
+        names = os.listdir(devices.BACKLIGHT_DIR)
+    except OSError:
+        names = []
+    if device not in names:
+        raise ValueError("bad args: device")
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("bad args: value")
+    with open(os.path.join(devices.BACKLIGHT_DIR, device, "max_brightness")) as f:
+        mx = int(f.read())
+    if not 0 <= value <= mx:
+        raise ValueError("bad args: value")
+    devices._write_backlight_root(device, value)
+    return "ok"
+
+
 VERBS = {
     "apk_add": apk_add,
     "apk_del": apk_del,
@@ -302,6 +328,7 @@ VERBS = {
     "write_hosts": write_hosts,
     "firewall_apply": firewall_apply,
     "set_tor": set_tor,
+    "set_backlight": set_backlight,
 }
 
 
