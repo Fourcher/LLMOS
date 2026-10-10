@@ -831,6 +831,53 @@ def autostart(desk, line, low):
     return False
 
 
+NET_DIR = "/sys/class/net"
+VPN_WAIT = 6.0
+
+
+def _vpn_tun_names():
+    """The tun/tap interface names present now (empty when the list can't be read)."""
+    try:
+        return {n for n in os.listdir(NET_DIR) if n.startswith(("tun", "tap"))}
+    except Exception:
+        return set()
+
+
+def _vpn_tun_up(before=frozenset()):
+    """True when a tun/tap interface exists that was not there before openvpn started."""
+    return bool(_vpn_tun_names() - set(before))
+
+
+def _vpn_alive():
+    """True/False from pgrep; None when the check itself fails."""
+    try:
+        return subprocess.run(["pgrep", "-x", "openvpn"], capture_output=True).returncode == 0
+    except Exception:
+        return None
+
+
+def _vpn_wait(before=frozenset()):
+    """Wait up to 6 s for the tunnel. True as soon as a tun/tap interface new since `before` (the names taken before
+    openvpn started) exists and openvpn runs; False when openvpn is gone on two polls in a row (after 0.5 s); at 6 s,
+    True exactly when openvpn still runs (the old rule)."""
+    start = time.monotonic()
+    gone = 0
+    while True:
+        t = time.monotonic() - start
+        alive = _vpn_alive()
+        if alive and _vpn_tun_up(before):
+            return True
+        if alive is False and t >= 0.5:
+            gone += 1
+            if gone >= 2:
+                return False
+        else:
+            gone = 0
+        if t >= VPN_WAIT:
+            return alive is True
+        time.sleep(0.25)
+
+
 def vpn(desk, line, low):
     if not re.search(r"vpn|wireguard|openvpn|proxy", low):
         return False
@@ -887,9 +934,9 @@ def vpn(desk, line, low):
         if re.search(r"^\s*auth-user-pass\s*$", body, re.M):
             return _say(desk, line, f"{os.path.basename(f)} needs a user name and password, which isn't supported here yet. If your VPN offers a "
                                     "WireGuard file, that one works.")
+        before = _vpn_tun_names()
         r = subprocess.run(["openvpn", "--config", f, "--daemon", "llmos-vpn"], capture_output=True, text=True, timeout=60)
-        time.sleep(6)
-        ok = r.returncode == 0 and subprocess.run(["pgrep", "-x", "openvpn"], capture_output=True).returncode == 0
+        ok = r.returncode == 0 and _vpn_wait(before)
         err = [(r.stderr or r.stdout).strip()[-150:]] if not ok else []
     if not ok:
         return _say(desk, line, f"The VPN from {os.path.basename(f)} didn't connect: {' '.join(err) or 'no answer from its server'}.")
