@@ -145,6 +145,6 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 
 ## Post-1.7.7-build src merge list
 - b1ee0a5 (pdf route: "turn word doc into pdf" -> which_file; VERIFY PASS)
-- f11631a (contains b01e1ea to-do list route fix; b14adc7 + notes "as a list" fix; contains 2d76e55 set_default_app + files view list/icons tool+routes; VERIFY PASS)
+- c18ff22 (contains f11631a + open_app verb strip; b01e1ea to-do list route fix; b14adc7 + notes "as a list" fix; contains 2d76e55 set_default_app + files view list/icons tool+routes; VERIFY PASS)
 - bd3a962 (files icon grid in desk.js/desk.css; VERIFY PASS)
-- [open] (capability) "open the task list app" -> open_app command "open the task list" (verb kept in command) | role: fix | files: intent.py _OPEN_APP
+- [done] (capability) "open the task list app" (c18ff22 VERIFY PASS: "open_app task list") -> open_app command "open the task list" (verb kept in command) | role: fix | files: intent.py _OPEN_APP
