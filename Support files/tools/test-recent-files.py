@@ -112,6 +112,36 @@ try:
 finally:
     tools._RECENT_CAP = real_cap
 
+# open=True: the open tool (tools.open_file) is called with the newest file and nothing else is opened
+opened = []
+real_open = tools.open_file
+tools.open_file = lambda a, ctx: opened.append(a["path"]) or "opened"
+try:
+    home3 = make_home({"old.txt": (NOW - 3600, "Documents"), "new.txt": (NOW - 600, "Documents")})
+    out = run(home3, {"open": True})
+    check("open newest", (opened, out), ([os.path.join(home3, "Documents", "new.txt")], "Opened new.txt (saved 10 minutes ago)."))
+    opened.clear()
+    out = run(home, {"since": "yesterday", "open": True})
+    check("open yesterday", (opened, out.startswith("Opened yesterday15.txt (saved yesterday 15:00)")),
+          ([os.path.join(home, "Documents", "yesterday15.txt")], True))
+    opened.clear()
+    home4 = make_home({})
+    check("open nothing", (run(home4, {"open": True}), opened),
+          ("Nothing new was saved in the last two hours.", []))
+    check("open nothing since", (run(home4, {"since": "week", "open": True}), opened),
+          ("No files were saved in the last 7 days.", []))
+    opened.clear()
+    # open fails: the failure text is the reply, not "Opened ..."
+    tools.open_file = lambda a, ctx: opened.append(a["path"]) or "error: there is no file " + a["path"]
+    out = run(home3, {"open": True})
+    check("open failed", (opened, out), ([os.path.join(home3, "Documents", "new.txt")], "error: there is no file " + os.path.join(home3, "Documents", "new.txt")))
+    tools.open_file = lambda a, ctx: opened.append(a["path"]) or "opened"
+    opened.clear()
+    # no open flag: the same replies, and no open call
+    check("no open flag", (run(home3, {}).startswith("It's ~/Documents/new.txt"), opened), (True, []))
+finally:
+    tools.open_file = real_open
+
 if bad:
     print(f"{bad} FAILED")
     sys.exit(1)
