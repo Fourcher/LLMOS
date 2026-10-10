@@ -463,7 +463,7 @@ for text in NOTES_GUARD_CASES:
 print(f"notes guards: {len(NOTES_GUARD_CASES) - nbad}/{len(NOTES_GUARD_CASES)} as expected")
 
 # rename guards: "call it a day" and friends are not renames of "it"
-RENAME_GUARD_CASES = ["call it a day", "call it a night", "call it quits", "let's call it even"]
+RENAME_GUARD_CASES = ["call it a day", "call it a night", "call it quits", "let's call it even", "name it after my dog", "call it what you want instead"]
 rbad = 0
 for text in RENAME_GUARD_CASES:
     got = intent.match(text)
