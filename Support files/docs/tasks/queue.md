@@ -151,3 +151,4 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - 059904f (web search: engines in parallel, 10 s cap, plain error text; VERIFY PASS: "search failed: DuckDuckGo returned 503; Brave returned 429")
 - [open] (reliability) packages/LLM OS 1.7.7.zip actually holds the 1.7.6 build; next package.sh run after the 1.7.7 build overwrites it | role: run | files: packages/
 - 769a120 (everyday: instant "15 percent of 240" answers; VERIFY PASS: "15% of 240 is 36.")
+- [done] (owner freedom) default autonomy audit | evidence: PROBE "wizard default slider 0 -> hands-off (desk.py:3788); config fallback balanced (config.py:144) only when the wizard is skipped". Decision: leave as is — the owner sees hands-off by default; the balanced fallback only affects test VMs onboarded by setting (safety suite relies on it). Revisit if the owner says otherwise.
