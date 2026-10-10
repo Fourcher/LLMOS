@@ -19,6 +19,8 @@ import time
 import urllib.parse
 
 from . import config, rootd_client
+from . import system as _system
+from .system import _hosts_name_ok, _write_hosts
 
 _JOKE_PAT = (r"(?:^(?:please\s+)?(?:tell|give)\s+me\s+(?:a\s+|another\s+|one\s+more\s+)?"
              r"(?:(?:good|funny|short|clean|dad|bad)\s+)?joke(?:\s+please)?[.!?]*$|"
@@ -471,10 +473,9 @@ def hostname(desk, line, low):
         try:
             rootd_client.call("set_hostname", name=n)
             subprocess.run(["hostname", n], capture_output=True, timeout=5)
-            hosts = open("/etc/hosts").read()
+            hosts = open(_system.HOSTS).read()
             hosts = re.sub(rf"\b{re.escape(old)}\b", n, hosts)
-            with open("/etc/hosts", "w") as f:
-                f.write(hosts)
+            _write_hosts(hosts)
         except OSError as e:
             return _say(desk, line, f"Couldn't rename it: {e}.")
         except rootd_client.RootdError as e:
@@ -509,10 +510,9 @@ def _hosts_block(focus_sites):
     allow_only = list(wb.get("allow_only") or [])
     host_sites = [h for s in blocked for h in (s, "www." + s) if not s.startswith("www.")] + [s for s in blocked if s.startswith("www.")]
     try:
-        lines = [ln for ln in open("/etc/hosts").read().splitlines() if _MARK not in ln]
-        lines += [f"0.0.0.0 {s} {_MARK}" for s in dict.fromkeys(host_sites)]
-        with open("/etc/hosts", "w") as f:
-            f.write("\n".join(lines) + "\n")
+        lines = [ln for ln in open(_system.HOSTS).read().splitlines() if _MARK not in ln]
+        lines += [f"0.0.0.0 {s} {_MARK}" for s in dict.fromkeys(host_sites) if _hosts_name_ok(s)]
+        _write_hosts("\n".join(lines) + "\n")
     except OSError:
         pass
     try:
@@ -564,16 +564,40 @@ def web_block(desk, line, low):
         config.settings.set("web_block", wb)
         _hosts_block(_focus_sites())
         return _say(desk, line, f"{', '.join(sorted(drop))} open again.")
-    m = re.search(r"^(?:please\s+)?block\s+(?P<s>(?!every|all\b)[\w., -]+?)(?:\s+(?:forever|for good|permanently|from now on))?$", low)
-    if m and not re.search(r"\b(?:for|until|while)\b", m.group("s")):
+    m = re.search(r"^(?:please\s+)?block\s+(?P<s>(?!every|all\b)(?:https?://|[\w.,/ -])+?)(?:\s+(?:forever|for good|permanently|from now on))?$", low)
+    if m and not re.search(r"\b(?:for|until|while)\b", m.group("s")) \
+            and all(_one_token(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()):
         wb = dict(config.settings.get("web_block") or {})
-        add = [_site(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()]
-        wb["block"] = sorted(set((wb.get("block") or []) + add))
-        wb.pop("allow_only", None)
-        config.settings.set("web_block", wb)
-        _hosts_block(_focus_sites())
-        return _say(desk, line, f"Blocked {', '.join(add)}{_firefox_note()}. Say \u201cunblock {add[0].split('.')[0]}\u201d to undo.")
+        typed = [_typed_site(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()]
+        add = [s for s in typed if _hosts_name_ok(s)]          # only names that will really be written
+        skipped = [s for s in typed if not _hosts_name_ok(s)]
+        if add:
+            wb["block"] = sorted(set((wb.get("block") or []) + add))
+            wb.pop("allow_only", None)
+            config.settings.set("web_block", wb)
+            _hosts_block(_focus_sites())
+            reply = f"Blocked {', '.join(add)}{_firefox_note()}. Say \u201cunblock {add[0].split('.')[0]}\u201d to undo."
+        else:
+            reply = "Nothing was blocked."
+        if skipped:
+            reply += f" I couldn't block {', '.join(skipped)}: they aren't website names."
+        return _say(desk, line, reply)
     return False
+
+
+def _one_token(word):
+    """A web_block target is one token: no space inside (so "port 8080" or "the camera" falls through) and no colon
+    outside a leading http:// or https:// (so "10.0.0.1:22" falls through)."""
+    w = word.strip()
+    return " " not in w and ":" not in re.sub(r"^https?://", "", w)
+
+
+def _typed_site(word):
+    """A site as the owner types it: a leading http:// or https:// and any path are dropped, a www. is kept;
+    a plain word ("reddit") becomes its site name as _site() gives it."""
+    w = word.strip().lower().strip(".,")
+    w = re.sub(r"^https?://", "", w).split("/")[0]
+    return w if "." in w else _site(w)
 
 
 def _focus_sites():

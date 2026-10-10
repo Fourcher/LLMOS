@@ -107,7 +107,7 @@ expect_err("setting text not str", call("write_setting_file", {"name": "conduct.
 # --- handle-level
 expect_err("unknown verb", call("reboot", {}), "unknown verb")
 expect_err("args not dict", json.loads(rootd.handle(b'{"verb":"set_hostname","args":"kitchen"}')), "bad args")
-expect_err("oversized request", json.loads(rootd.handle(b"x" * (512 * 1024 + 1))), "too large")
+expect_err("oversized request", json.loads(rootd.handle(b"x" * (rootd.MAX_REQUEST + 1))), "too large")
 expect_err("not json", json.loads(rootd.handle(b"{nope")), "bad args")
 expect_err("not object", json.loads(rootd.handle(b"[1,2]")), "bad args")
 
