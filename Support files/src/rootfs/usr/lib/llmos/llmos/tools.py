@@ -2602,6 +2602,11 @@ def make_spreadsheet(a, ctx):
     base = _path(name) if "/" in name or name.startswith("~") else os.path.join(config.home(), "Documents", name)
     base = os.path.splitext(base)[0]
     os.makedirs(os.path.dirname(base), exist_ok=True)
+    if os.path.exists(base + ".csv") or os.path.exists(base + ".xlsx"):
+        n = 2
+        while os.path.exists(f"{base} {n}.csv") or os.path.exists(f"{base} {n}.xlsx"):
+            n += 1
+        base = f"{base} {n}"
     csv_path = base + ".csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(rows)
@@ -2611,10 +2616,12 @@ def make_spreadsheet(a, ctx):
         if r.returncode == 0 and os.path.exists(base + ".xlsx"):
             os.remove(csv_path)
             out = base + ".xlsx"
+    opened = False
     if a.get("open", True):
-        open_file({"path": out}, ctx)
+        r = open_file({"path": out}, ctx)
+        opened = not str(r).lower().startswith(("error", "not done"))
     home = config.home().rstrip("/")
-    return f"made {('~' + out[len(home):]) if out.startswith(home) else out} with {len(rows)} row(s) and opened it. Done: tell the owner in one sentence."
+    return f"made {('~' + out[len(home):]) if out.startswith(home) else out} with {len(rows)} row(s){' and opened it' if opened else ''}. Done: tell the owner in one sentence."
 
 
 @tool("find_by_meaning", "Find the owner's own files, notes or photos by what they are about, not their names: 'the photo of the "
