@@ -43,6 +43,7 @@ Only: read (cat, sed -n, grep, ls, git log/diff/show/status), edit queue.md and 
 - Never "find out why X fails" in a FIX. That is a PROBE with exact commands; you do the thinking on its output.
 - If a worker could not finish, re-spec it smaller and dispatch again. Never finish it yourself.
 - Every FIX spec has a "must also handle" line naming its adversarial cases: other input sizes/empty/unicode; for regex routes 3 near-miss phrases asking for a different action plus a contraction; for shell commands a quote, space and newline in the argument; for graders the real state path quoted from source (file:line); for word filters phrase forms and a substring false positive. See orchestration.md "put the adversarial cases in the FIX spec".
+- When a FIX replaces or wraps existing behaviour, add two lines: `Keep identical:` (the old timeouts, argv, owner-facing messages, return shapes, limits, quoted from the PROBE) and `Adversarial inputs:` (symlinks, `..`, option-like names, wrong types, stale or cached state, an already-open window — whichever apply). Most VERIFY follow-ups come from these two.
 
 # Improving yourself (the PROCESS front)
 - Every 5 rounds, PROBE your own record: tasks re-spec'd, VERIFY failures, workers that stalled, idle time, fronts with nothing done. Then write PROCESS tasks to fix the causes.
