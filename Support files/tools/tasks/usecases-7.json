@@ -1,0 +1,845 @@
+{
+  "suite": "usecases-7",
+  "tasks": [
+    {
+      "id": "uc-241",
+      "instruction": "connect to my work vpn",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-242",
+      "instruction": "what's my ip",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-243",
+      "instruction": "how fast is my internet",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-244",
+      "instruction": "close the lid and keep running",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-245",
+      "instruction": "what happens when I press the power button",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-246",
+      "instruction": "set up a printer",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-247",
+      "instruction": "read this to me",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-248",
+      "instruction": "read the screen",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-249",
+      "instruction": "turn on the screen reader",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-250",
+      "instruction": "i cant see very well",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-251",
+      "instruction": "high contrast",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-252",
+      "instruction": "bigger mouse pointer",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-253",
+      "instruction": "magnifier",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-254",
+      "instruction": "zoom in on the screen",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-255",
+      "instruction": "type what I say",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-256",
+      "instruction": "captions",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-257",
+      "instruction": "subtitles for this video",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-258",
+      "instruction": "my hands shake, double clicks are hard",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-259",
+      "instruction": "sticky keys",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-260",
+      "instruction": "reduce motion",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-261",
+      "instruction": "stop the animations",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-262",
+      "instruction": "on-screen keyboard",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-263",
+      "instruction": "color blind mode",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-264",
+      "instruction": "dark mode",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-265",
+      "instruction": "make it dark",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-266",
+      "instruction": "night theme",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-267",
+      "instruction": "light mode",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-268",
+      "instruction": "too dark, go back",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-269",
+      "instruction": "change my wallpaper",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-270",
+      "instruction": "put a picture of mountains as background",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-271",
+      "instruction": "use my dog photo",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-272",
+      "instruction": "change the font",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-273",
+      "instruction": "use a rounded font",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-274",
+      "instruction": "font bigger",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-275",
+      "instruction": "make the accent color green",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-276",
+      "instruction": "i like purple",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-277",
+      "instruction": "move the dock/taskbar to the left",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-278",
+      "instruction": "hide the bar",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-279",
+      "instruction": "make icons smaller",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-280",
+      "instruction": "change notification sound",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    }
+  ]
+}

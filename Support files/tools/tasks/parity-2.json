@@ -1,0 +1,110 @@
+{
+  "suite": "parity-2",
+  "tasks": [
+    {
+      "id": "par-41",
+      "instruction": "open the calendar",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-42",
+      "instruction": "open the image viewer",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-43",
+      "instruction": "keep the screen on",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-44",
+      "instruction": "what can I do here",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "par-45",
+      "instruction": "show all my programs",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    }
+  ]
+}

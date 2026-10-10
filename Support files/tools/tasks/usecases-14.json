@@ -1,0 +1,257 @@
+{
+  "suite": "usecases-14",
+  "tasks": [
+    {
+      "id": "uc-521",
+      "instruction": "telehealth call",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-522",
+      "instruction": "apply for jobs",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-523",
+      "instruction": "upload my CV",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-524",
+      "instruction": "directions to the airport",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-525",
+      "instruction": "map of paris",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-526",
+      "instruction": "what's happening today",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-527",
+      "instruction": "check my order status",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-528",
+      "instruction": "track my parcel",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-529",
+      "instruction": "do my taxes",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-530",
+      "instruction": "fill this government form",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-531",
+      "instruction": "install to hard drive",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-532",
+      "instruction": "will my stuff be saved?",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    }
+  ]
+}

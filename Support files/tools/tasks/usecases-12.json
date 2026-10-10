@@ -1,0 +1,845 @@
+{
+  "suite": "usecases-12",
+  "tasks": [
+    {
+      "id": "uc-441",
+      "instruction": "someone else is using my computer, guest mode",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-442",
+      "instruction": "back up my files",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-443",
+      "instruction": "copy everything to my external drive",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-444",
+      "instruction": "back up automatically every week",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-445",
+      "instruction": "restore my files from backup",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-446",
+      "instruction": "get yesterday's version of this file",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-447",
+      "instruction": "back up to the cloud",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-448",
+      "instruction": "move my stuff to a new computer",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-449",
+      "instruction": "export my settings and apps",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-450",
+      "instruction": "snapshot before you change things",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-451",
+      "instruction": "roll back the system",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-452",
+      "instruction": "open a terminal",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-453",
+      "instruction": "command line",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-454",
+      "instruction": "install python / node / git / docker",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-455",
+      "instruction": "apt install htop",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-456",
+      "instruction": "run this command: ...",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-457",
+      "instruction": "what does this command do",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-458",
+      "instruction": "ssh into my server 192.168.1.10",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-459",
+      "instruction": "make an ssh key",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-460",
+      "instruction": "clone this repo",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-461",
+      "instruction": "commit and push",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-462",
+      "instruction": "what changed",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-463",
+      "instruction": "edit my .bashrc",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-464",
+      "instruction": "open /etc/hosts",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-465",
+      "instruction": "change the config for X",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-466",
+      "instruction": "write a script that renames my photos by date",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-467",
+      "instruction": "automate this",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-468",
+      "instruction": "run this every night at 2am",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-469",
+      "instruction": "cron job",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-470",
+      "instruction": "what's listening on port 8080",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-471",
+      "instruction": "start a local web server here",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-472",
+      "instruction": "preview this html",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-473",
+      "instruction": "set up vs code with python",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-474",
+      "instruction": "install an IDE",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-475",
+      "instruction": "show system logs",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-476",
+      "instruction": "why did that service fail",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-477",
+      "instruction": "journalctl",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-478",
+      "instruction": "install the nvidia driver",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-479",
+      "instruction": "use my gpu",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    },
+    {
+      "id": "uc-480",
+      "instruction": "make a virtual machine",
+      "evaluator": {
+        "func": "include_exclude",
+        "result": {
+          "type": "reply"
+        },
+        "expected": {
+          "exclude": [
+            "No such tool",
+            "error:",
+            "Traceback",
+            "I couldn't finish that"
+          ]
+        }
+      },
+      "weak": true,
+      "reachable_by_agent": true,
+      "timeout_s": 120
+    }
+  ]
+}
