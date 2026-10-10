@@ -173,6 +173,54 @@ def set_tor(on):
         return False, str(e)
 
 
+def _apk_add_root(names, quiet=False, timeout=900):
+    """Install packages with apk, as root. Returns (returncode, stdout, stderr)."""
+    argv = ["apk", "add", "-q", *names] if quiet else ["apk", "add", "--no-progress", *names]
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timed out after {timeout} s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def _apk_del_root(name, force=False, timeout=600):
+    """Remove one package with apk, as root. Returns (returncode, stdout, stderr)."""
+    argv = ["apk", "del", "--no-progress"] + (["--force-broken-world"] if force else []) + [name]
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timed out after {timeout} s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def apk_add(names, quiet=False, timeout=900):
+    """Install packages: directly as root, else through rootd's apk_add verb. Returns (returncode, stdout, stderr)."""
+    if os.geteuid() == 0:
+        return _apk_add_root(list(names), quiet=bool(quiet), timeout=timeout)
+    try:
+        rc, out, err = json.loads(rootd_client.call("apk_add", names=list(names), quiet=bool(quiet),
+                                                    timeout=timeout, _timeout=timeout + 60))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
+def apk_del(name, force=False, timeout=600):
+    """Remove a package: directly as root, else through rootd's apk_del verb. Returns (returncode, stdout, stderr)."""
+    if os.geteuid() == 0:
+        return _apk_del_root(name, force=bool(force), timeout=timeout)
+    try:
+        rc, out, err = json.loads(rootd_client.call("apk_del", name=name, force=bool(force),
+                                                    timeout=timeout, _timeout=timeout + 60))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
 def _hosts_name_ok(name):
     """Would rootd's write_hosts accept this name? (A name it refuses would make the whole write fail.)"""
     return len(name) <= 253 and HOSTS_NAME_RE.fullmatch(name) is not None
