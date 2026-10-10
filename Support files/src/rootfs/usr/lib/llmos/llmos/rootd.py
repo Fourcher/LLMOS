@@ -322,6 +322,16 @@ def _no_args(args):
         raise ValueError("bad args: this verb takes no arguments")
 
 
+def sync_time(args):
+    _no_args(args)
+    from . import config
+    # The owner's "no" holds even when a non-root process calls this verb directly.
+    if config.settings.get("internet", "yes") == "no":
+        return json.dumps(False)
+    from . import system
+    return json.dumps(system._sync_time_root())
+
+
 def apk_update(args):
     _no_args(args)
     from . import system
@@ -361,6 +371,7 @@ VERBS = {
     "apk_update": apk_update,
     "apk_upgrade": apk_upgrade,
     "clear_apk_cache": clear_apk_cache,
+    "sync_time": sync_time,
 }
 
 
