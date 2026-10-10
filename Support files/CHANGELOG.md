@@ -4,6 +4,10 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.9
+- The first reply after start-up is faster: the model is warmed up with exactly what the first request sends.
+- Test resets close other programs and bring the desk back to the front.
+
 ## 1.7.8
 - Faster web search: both engines run at once, gives up after 10 seconds, and shows plain error text.
 - Instant answers for greetings with a friendly word, and for "15 percent of 240".
