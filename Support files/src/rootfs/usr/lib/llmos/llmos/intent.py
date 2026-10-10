@@ -824,6 +824,8 @@ def _notes(text):
             lst = re.sub(r"\s+(?:as|in)\s+(?:a\s+)?(?:list|grid|icons?)\s*$", "", lst, flags=re.I)
             lst = re.sub(r"\s+(?:as|in)(?:\s+a)?\s*$", "", lst, flags=re.I)
             lst = re.sub(r"\s+list\s*$", "", lst, flags=re.I).strip()
+            if lst.lower() in ("the", "a"):
+                return ("notes_show", {})   # "show the list": all the lists, no name
             if lst.lower() in ("notes", "my notes"):
                 return ("notes_show", {"list": "notes"})   # same form as "show my notes" (line ~1608)
         return ("notes_show", {"list": lst.strip()} if lst else {})
@@ -1400,6 +1402,8 @@ def _apps(text):
     m = _OPEN_APP.match(text)
     if m:
         n = m.group("n").strip()
+        if re.search(r"\blists?$", n, re.I) and re.match(r"^\s*(?:please\s+)?(?:show|see|open|read)\s+(?:my|the)\s+", text, re.I):
+            return None              # "show my to do list": a list of notes, the notes route takes it, not a program
         from . import tools as _T
         if n.lower().removeprefix("my ").strip() in _T.FOLDERS or n.lower() in ("files", "my files", "file"):
             return None              # "show my files": the folder, not a program called something like Files
