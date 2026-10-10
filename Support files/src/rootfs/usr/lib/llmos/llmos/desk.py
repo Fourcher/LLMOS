@@ -1001,7 +1001,8 @@ class Desk:
 
     def handle(self, msg):
         t = msg.get("t")
-        if self.screen != "desk" and t not in SCREEN_MESSAGES.get(self.screen, SCREEN_MESSAGES["boot"]):
+        if self.screen != "desk" and t not in SCREEN_MESSAGES.get(self.screen, SCREEN_MESSAGES["boot"]) \
+                and not (t in ("rect.result", "rects.result") and _fwcfg("testshell")):
             sys.stderr.write(f"desk: ignored '{t}' from the page on the {self.screen} screen\n")
             return
         if t == "ready":
