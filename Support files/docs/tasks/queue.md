@@ -69,9 +69,14 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [done] (merged ee689f3 + 98173be VERIFY PASS: "show my biggest files" -> biggest_files ~; plugged-in from /sys, "Plugged in: USB Keyboard (Logitech); a camera; …") (capability) "show my biggest files" -> "18 items in /." and "what's plugged into my computer" -> "I couldn't finish that." | role: run probe with desk.log on 1.7.3
 - [open] (speed) "what's the capital of australia" correct but 69 s (web_search + model). Probe the time split via desk.log | role: run probe
 - [open] (freedom) RUN tools/refusal-probe.py on the 1.7.3 VM | role: run
-- [open] (reliability) build 1.7.4 with this round (missing-path delete, click miss, volume, biggest files, plugged-in, screen-open); RUN smokes + timed sweep (expect "show my biggest files", "what's plugged in", "what's on my screen" under 3 s) | role: run
-- [open] (capability) "find the biggest file in Downloads" -> find_files (wrong) | role: fix
+- [done] (RUN 1.7.4: check-fresh "FRESH … (3a99fce, v1.7.4)"; arm64+x86 ISO "VERSION=1.7.4 … desk socket: yes"; calc-smoke "all good"; sweep "34 ≤3 s, 11 >3 s" (1.7.2: 26). "delete the folder Test" -> "There's nothing called ~/Test to delete." 2 s; "what did I say" -> "You said: “delete the folder Test”" 2 s; "what's on my screen" 2 s; "show my biggest files" 2 s; "what's plugged into my computer" -> "Plugged in: sound: virtio-snd." 1 s. Manifest 0e4353b) (reliability) build 1.7.4 with this round (missing-path delete, click miss, volume, biggest files, plugged-in, screen-open); RUN smokes + timed sweep (expect "show my biggest files", "what's plugged in", "what's on my screen" under 3 s) | role: run
+- [done] (merged 522a432 VERIFY PASS) (capability) "find the biggest file in Downloads" -> find_files (wrong) | role: fix
 - [open] (process) test-hardware/test-recall/test-screen-open copy desk regexes; make desk expose the patterns as module constants and test those | role: fix
+- [running] (reliability) REGRESSION 1.7.4: "click File" with nothing open timed out (242 s; 1.7.3: 20 s via model). RUN probe timing control.find/read_screen + desk.log | role: run
+- [running] (ui) biggest files lists hidden ~/.ash_history first: skip dot-files in the home scan | role: fix | files: src/rootfs/usr/lib/llmos/llmos/tools.py tools/test-biggest-hidden.py
+- [running] (speed/ui) "turn wifi off" 13 s, reply ends "What else?" | role: probe
+- [open] (speed) fact lookups slow: capital 72 s, Everest 11 s (web_search + model) | role: probe split via desk.log
+- [running] (release) package 1.7.4 into packages/ | role: run
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
