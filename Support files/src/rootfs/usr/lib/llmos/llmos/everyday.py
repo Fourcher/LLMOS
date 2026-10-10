@@ -27,7 +27,14 @@ _JOKE_PAT = (r"(?:^(?:please\s+)?(?:tell|give)\s+me\s+(?:a\s+|another\s+|one\s+m
              r"^(?:say|know)\s+(?:a|any)\s+jokes?\??$|"
              r"^make\s+me\s+laugh[.!?]*$)")
 
+# "how much space is left", "is my disk full", "free up space": the disk's real numbers (free_space), case-insensitive.
+_FREE_SPACE_Q = (r"(?i:how much (?:free |disk )?(?:space|storage|room)(?: is)? (?:left|free|remaining|do i have)(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?"
+                 r"|how much (?:disk )?space (?:is )?(?:left|free)"
+                 r"|(?:is|why is) my (?:disk|computer) full|how full is my disk"
+                 r"|(?:check )?(?:disk space|storage|free space)|free up (?:disk )?space)")
+
 MATCH = re.compile(
+    r"^" + _FREE_SPACE_Q + r"[?.!]?$|" +
     r"^how much (?:free |disk )?(?:space|storage|room)(?: is| do i have)?(?: (?:left|free|remaining))?(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?(?: (?:left|free|remaining))?$|^how much (?:disk )?space (?:is )?(?:left|free)$|"
     r"^(?:turn|switch) (?:on|off) (?:the |my )?bluetooth$|^(?:turn|switch) (?:the |my )?bluetooth (?:on|off)$|^bluetooth (?:on|off)$|^(?:yes|yeah|yep|yup|sure|ok|okay)$|(?:the |my )?(?:screen|computer|pc|laptop|everything) (?:has |have )?(?:froze|frozen|locked up|is stuck)$|"
     r"(?:computer|pc|laptop|machine) (?:is |has been |got |feels )?(?:really |very |so |quite )?slow\b|"
@@ -1576,7 +1583,7 @@ def open_mail(desk, line, low):
 
 def free_space(desk, line, low):
     """How much space is left: the real numbers from the disk, in words (never guessed)."""
-    if not re.fullmatch(r"how much (?:free |disk )?(?:space|storage|room)(?: is)? (?:left|free|remaining|do i have)(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?|how much (?:disk )?space (?:is )?(?:left|free)", low):
+    if not re.fullmatch(_FREE_SPACE_Q + r"[?.!]?", low):
         return False
     import shutil
     try:
@@ -1585,7 +1592,9 @@ def free_space(desk, line, low):
         return _say(desk, line, "I couldn't read the disk just now.")
     def gb(n):
         return f"{n / 1e9:.1f} GB" if n < 1e11 else f"{n / 1e9:.0f} GB"
-    return _say(desk, line, f"You have {gb(u.free)} free out of {gb(u.total)} on this computer.")
+    pct = round(u.used / u.total * 100) if u.total else 0
+    hint = " Say \"show my biggest files\" to see what's using it." if re.search(r"\bfull\b|free up", low, re.I) else ""
+    return _say(desk, line, f"You have {gb(u.free)} free out of {gb(u.total)} ({pct}% used).{hint}")
 
 
 def small_answers(desk, line, low):
