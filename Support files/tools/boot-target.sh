@@ -19,7 +19,7 @@ HOST_ARGS=""
 # LLMOS_EXTRA_DRIVE=file.qcow2: a second disk (installer tests)
 [ -n "${LLMOS_EXTRA_DRIVE:-}" ] && HOST_ARGS="$HOST_ARGS -drive file=$LLMOS_EXTRA_DRIVE,format=qcow2,if=virtio"
 python3 -c "import socket;s=socket.socket(socket.AF_UNIX);s.connect('run/tmon.sock');s.recv(999);s.sendall(b'quit\n')" 2>/dev/null; sleep 1
-rm -f run/boot-serial.log
+rm -f run/boot-serial.log run/tqmp.sock
 # a SHIPPED image is never written to: tests of dist/ images run on a
 # throwaway overlay (build/work test disks are booted directly so that state
 # persists across the reboot leg). LLMOS_KEEP_OVERLAY=1 boots the previous
@@ -43,7 +43,7 @@ qemu-system-aarch64 -machine virt -accel hvf -cpu host -smp "$CPUS" -m "$RAM" \
   -device virtio-gpu-pci -device virtio-keyboard-pci -device virtio-tablet-pci \
   -audiodev none,id=snd0 -device virtio-sound-pci,audiodev=snd0 \
   -fw_cfg name=opt/llmos/tz,string=America/Phoenix $HOST_ARGS \
-  -display none -monitor unix:run/tmon.sock,server=on,wait=off \
+  -display none -monitor unix:run/tmon.sock,server=on,wait=off -qmp unix:run/tqmp.sock,server=on,wait=off \
   -chardev socket,id=ser0,path=run/tser.sock,server=on,wait=off,logfile="$PWD/run/boot-serial.log",logappend=on -serial chardev:ser0 \
   -daemonize -pidfile run/target.pid && echo "target VM pid $(cat run/target.pid)"
 tools/vm-lifetime.sh run/target.pid    # never longer than 3 h, whatever happens to the test driving it
