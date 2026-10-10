@@ -35,6 +35,8 @@ from . import clip, record, folderlock, everyday, reset, agent, apps, programs, 
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
+# app-ids testreset must never force-quit, even if someone adds them to wm.PROCS later
+NEVER_KILL = {"org.llmos.desk", "python3", "python", "llama-server", "llmos"}
 # what the page may send while each screen other than the desk is showing: nothing typed or spoken on the
 # lock screen, the first-run wizard or the boot screen may reach the assistant (anything else is dropped)
 SCREEN_MESSAGES = {
@@ -3979,6 +3981,14 @@ class Desk:
         except OSError:
             pass
 
+    def _focus_desk(self):
+        """The desk comes back in front of programs, ready to type (the Super key, and after a test reset)."""
+        if shutil.which("wlrctl"):
+            subprocess.run(["wlrctl", "toplevel", "focus", "app_id:org.llmos.desk"], capture_output=True, timeout=5,
+                           env=dict(os.environ, **(media.desk_env() or {})))
+        self.GLib.idle_add(lambda: (self.gtkwin.present() if getattr(self, "gtkwin", None) else None, False)[1])
+        self.emit({"t": "eval", "js": "document.getElementById('in') && document.getElementById('in').focus()"})
+
     def run_in_terminal(self, cmd):
         """Interactive programs and !commands get a terminal window."""
         if not shutil.which("foot"):
@@ -4133,6 +4143,36 @@ class Desk:
                 self.decline_dialogs()
                 for wid in list(self.windows):
                     self.close_window(wid)
+                try:                          # program windows the last task left open (not the desk itself)
+                    ext = [a for a in wm.windows() if a and a != "org.llmos.desk"]
+                except Exception:
+                    ext = []
+                for aid in ext:
+                    try:
+                        wm.act("close", aid)
+                    except Exception:
+                        pass
+                deadline = time.time() + 3
+                while ext and time.time() < deadline:
+                    time.sleep(0.2)
+                    try:
+                        ext = [a for a in wm.windows() if a and a != "org.llmos.desk" and a in ext]
+                    except Exception:
+                        ext = []
+                for aid in ext:
+                    if aid in NEVER_KILL or aid not in wm.PROCS:   # only known programs are force-quit
+                        print("desk: testreset left %s open (unknown program)" % aid, file=sys.stderr)
+                        continue
+                    try:
+                        wm.force_quit(aid)
+                    except Exception:
+                        pass
+                for pid in list(self.apps):   # the programs the desk launched
+                    try:
+                        self.close_app(pid)
+                    except Exception:
+                        pass
+                self._focus_desk()
                 for k, v in (("autonomy", "balanced"), ("internet", "yes"), ("brain", "local"), ("guidance", "owner"), ("tor", False),
                              ("screen_off", 0), ("sleep_after", 0), ("do_not_disturb", False), ("language", "English"), ("autolock", 0)):
                     config.settings.set(k, v)
@@ -4150,6 +4190,36 @@ class Desk:
                 self.decline_dialogs()
                 for wid in list(self.windows):
                     self.close_window(wid)
+                try:                          # program windows the last task left open (not the desk itself)
+                    ext = [a for a in wm.windows() if a and a != "org.llmos.desk"]
+                except Exception:
+                    ext = []
+                for aid in ext:
+                    try:
+                        wm.act("close", aid)
+                    except Exception:
+                        pass
+                deadline = time.time() + 3
+                while ext and time.time() < deadline:
+                    time.sleep(0.2)
+                    try:
+                        ext = [a for a in wm.windows() if a and a != "org.llmos.desk" and a in ext]
+                    except Exception:
+                        ext = []
+                for aid in ext:
+                    if aid in NEVER_KILL or aid not in wm.PROCS:   # only known programs are force-quit
+                        print("desk: testreset left %s open (unknown program)" % aid, file=sys.stderr)
+                        continue
+                    try:
+                        wm.force_quit(aid)
+                    except Exception:
+                        pass
+                for pid in list(self.apps):   # the programs the desk launched
+                    try:
+                        self.close_app(pid)
+                    except Exception:
+                        pass
+                self._focus_desk()
                 self.chat().new_topic()
                 self.last_reply = ""
                 self.push_status()
@@ -4190,11 +4260,7 @@ class Desk:
                 self.act(arg)
                 out = {"ok": True, "windows": [w.get("title", "") for w in self.windows.values()], "reply": getattr(self, "last_reply", "")}
             elif cmd == "focus":         # the Super key: the desk comes back in front of programs, ready to type
-                if shutil.which("wlrctl"):
-                    subprocess.run(["wlrctl", "toplevel", "focus", "app_id:org.llmos.desk"], capture_output=True, timeout=5,
-                                   env=dict(os.environ, **(media.desk_env() or {})))
-                self.GLib.idle_add(lambda: (self.gtkwin.present() if getattr(self, "gtkwin", None) else None, False)[1])
-                self.emit({"t": "eval", "js": "document.getElementById('in') && document.getElementById('in').focus()"})
+                self._focus_desk()
                 out = {"ok": True}
             elif cmd == "js":
                 self.emit({"t": "eval", "js": arg})
