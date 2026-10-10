@@ -53,6 +53,8 @@ CASES = {
     "zip these": ("which_file", {"request": "zip these"}),
     "convert ~/a.docx to pdf": ("convert_to_pdf", {"path": "~/a.docx"}),
     "put this on the desktop": ("which_file", {"request": "put this on the desktop"}),
+    "rename notes.txt to todo.txt": ("rename_file", {"name": "notes.txt", "to": "todo.txt"}),
+    "rename it to budget.xlsx": ("which_file", {"request": "rename it to budget.xlsx"}),
     "is paypa1.com safe?": ("check_site", {"address": "paypa1.com"}),
     "delete all my files": ("delete_file", {"path": "~", "contents": True}),
     "change the font to arial size 14": ("set_appearance", {"font": "arial", "scale": "115"}),

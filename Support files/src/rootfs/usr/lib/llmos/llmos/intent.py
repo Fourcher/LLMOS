@@ -1257,6 +1257,8 @@ def _everyday(text):
             return ("rename_files", args)
         return None                       # many files by some other rule: the model decides
     if m and not re.search(r"\b(?:wifi|network|computer|keyboard)\b", m.group("n"), re.I):
+        if m.group("n").strip().strip("'\"").lower() in ("this", "that", "it", "these", "those", "them", "this file", "that file", "this folder", "that folder"):
+            return ("which_file", {"request": text.strip()})
         return ("rename_file", {"name": m.group("n").strip().strip("'\""), "to": m.group("to").strip().strip("'\"")})
     # "make a copy of report.txt from my downloads in my documents": a copy, the source folder named before the destination
     m = re.match(r"^\s*(?:please\s+)?(?:make|put|create)\s+a\s+copy\s+of\s+(?:the\s+|my\s+)?(?P<what>.+?)"
