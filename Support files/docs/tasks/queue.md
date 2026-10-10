@@ -177,7 +177,7 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 
 ## Owner account (next big item) — plan, one step at a time
 Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_HOME or ~ (65 home-path uses); 13 root-needing lines in tools.py (apk, iwctl, nft, /etc writes, chmod/chown); no account code; installer has no user step; desk.py:3032 already tells the owner separate accounts are planned.
-- [open] (capability) A1 PROBE: exactly how the graphical session starts and as whom (getty autologin? /root/.profile? an openrc service?) — files and lines | role: probe
+- [done] (capability) A1 | evidence: PROBE "init -> inittab (src/install.sh:188-197) -> getty -n -l /usr/libexec/llmos-login (tty1) -> llmos desk -> llmos-desk (seatd-launch labwc in dbus-run-session) -> desk-app; all as root, HOME=/root (llmos-login:11, llmos-desk:6); root locked install.sh:200". A change touches install.sh 192-200, llmos-login 11/37-44, llmos-desk 6/9-15/47/52, plus a useradd step.
 - [open] (capability) A2 PROBE: list every root-needing call across llmos/*.py (not just tools.py) with what it does | role: probe
 - [open] (capability) A3 design note (orchestrator): owner user "owner" + a small root helper (unix socket, fixed verb list, no shell) for A2's actions; desk/agent run as owner
 - [open] (capability) A4.. FIX steps from the design, each one file or two, behind a test-shell flag first
