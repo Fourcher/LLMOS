@@ -340,6 +340,13 @@ def _recommend(sysinfo, tiers):
     return {"capability": cap if cap in have else (tiers[0]["tier"] if tiers else ""), "motion": 2 if sysinfo["accel"] else 1}
 
 
+def _nothing_open_reply(text):
+    """Reply for 'click X' when nothing is open. Names X in the owner's own case; empty X keeps the old sentence."""
+    m = re.fullmatch(r"(?:please )?(?:click|tap|press)(?: on)?(?: the)? (?P<target>.+)", text.strip().rstrip(".!"), re.IGNORECASE)
+    target = re.sub(r"^(?:the|on)(?:\s+|$)", "",m.group("target").strip(), flags=re.IGNORECASE).strip() if m else ""
+    return f"Nothing is open to click {target} in." if target else "Nothing is open to click on."
+
+
 # --------------------------------------------------------------- ctx
 
 class DeskCtx:
@@ -2335,7 +2342,7 @@ class Desk:
             except Exception:
                 open_now = ["?"]                     # can't tell: let the click be tried
             if not open_now and not any(s.get("kind") == "app" for s in self.windows.values()):
-                self.last_reply = self._said = "Nothing is open to click on."
+                self.last_reply = self._said = _nothing_open_reply(line)
                 return True
         r = self._system_shortcut(low, line)
         if r:
