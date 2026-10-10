@@ -19,6 +19,8 @@ import time
 import urllib.parse
 
 from . import config, rootd_client
+from . import system as _system
+from .system import _hosts_name_ok, _write_hosts
 
 _JOKE_PAT = (r"(?:^(?:please\s+)?(?:tell|give)\s+me\s+(?:a\s+|another\s+|one\s+more\s+)?"
              r"(?:(?:good|funny|short|clean|dad|bad)\s+)?joke(?:\s+please)?[.!?]*$|"
@@ -471,10 +473,9 @@ def hostname(desk, line, low):
         try:
             rootd_client.call("set_hostname", name=n)
             subprocess.run(["hostname", n], capture_output=True, timeout=5)
-            hosts = open("/etc/hosts").read()
+            hosts = open(_system.HOSTS).read()
             hosts = re.sub(rf"\b{re.escape(old)}\b", n, hosts)
-            with open("/etc/hosts", "w") as f:
-                f.write(hosts)
+            _write_hosts(hosts)
         except OSError as e:
             return _say(desk, line, f"Couldn't rename it: {e}.")
         except rootd_client.RootdError as e:
@@ -509,10 +510,9 @@ def _hosts_block(focus_sites):
     allow_only = list(wb.get("allow_only") or [])
     host_sites = [h for s in blocked for h in (s, "www." + s) if not s.startswith("www.")] + [s for s in blocked if s.startswith("www.")]
     try:
-        lines = [ln for ln in open("/etc/hosts").read().splitlines() if _MARK not in ln]
-        lines += [f"0.0.0.0 {s} {_MARK}" for s in dict.fromkeys(host_sites)]
-        with open("/etc/hosts", "w") as f:
-            f.write("\n".join(lines) + "\n")
+        lines = [ln for ln in open(_system.HOSTS).read().splitlines() if _MARK not in ln]
+        lines += [f"0.0.0.0 {s} {_MARK}" for s in dict.fromkeys(host_sites) if _hosts_name_ok(s)]
+        _write_hosts("\n".join(lines) + "\n")
     except OSError:
         pass
     try:

@@ -116,7 +116,7 @@ try:
     assert real_open(path("hostname")).read() == "kitchenpc\n", real_open(path("hostname")).read()
     assert ran and ran[-1] == ["hostname", "kitchenpc"], ran
     assert desk.said[-1].startswith("This computer is now called “kitchenpc”"), desk.said
-    assert f"127.0.0.1 kitchenpc" in real_open(hosts).read()
+    assert f"127.0.0.1 kitchenpc" in real_open(path("hosts")).read(), "rootd did not write the hosts file"
     print(f"ok everyday hostname 'kitchen_pc' -> hostname file 'kitchenpc': {desk.said[-1]}")
 
     desk = Desk()

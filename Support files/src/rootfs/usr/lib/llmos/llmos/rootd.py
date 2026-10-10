@@ -17,7 +17,7 @@ from datetime import datetime
 ZONEINFO = "/usr/share/zoneinfo"
 ETC_ROOT = "/"
 LOG_PATH = "/run/llmos/rootd.log"
-MAX_REQUEST = 512 * 1024
+MAX_REQUEST = 2 * 1024 * 1024
 MAX_SETTING = 256 * 1024
 MAX_HOSTS = 1024 * 1024
 CONN_TIMEOUT = 5.0

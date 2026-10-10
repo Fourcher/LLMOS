@@ -6,6 +6,7 @@ import subprocess
 import time
 
 from . import config, rootd_client
+from .rootd import HOSTS_NAME_RE
 
 NFT_RULES = "/etc/nftables.nft"
 HOSTS = "/etc/hosts"
@@ -149,6 +150,23 @@ def set_tor(on):
     return True, ""
 
 
+def _hosts_name_ok(name):
+    """Would rootd's write_hosts accept this name? (A name it refuses would make the whole write fail.)"""
+    return len(name) <= 253 and HOSTS_NAME_RE.fullmatch(name) is not None
+
+
+def _write_hosts(text):
+    """Write the hosts file: directly when this process may write it (root), else through rootd's write_hosts verb."""
+    if os.access(HOSTS, os.W_OK):
+        with open(HOSTS, "w") as f:
+            f.write(text)
+        return
+    try:
+        rootd_client.call("write_hosts", text=text)
+    except rootd_client.RootdError as e:
+        raise OSError(str(e)) from None
+
+
 def _hosts_without_focus():
     try:
         with open(HOSTS) as f:
@@ -161,15 +179,14 @@ def _hosts_without_focus():
 def focus(on, minutes=None, extra=None):
     base = _hosts_without_focus()
     if on:
-        sites = DISTRACTIONS + [s.strip().lower() for s in (extra or []) if s.strip()]
+        sites = [s for s in DISTRACTIONS + [s.strip().lower() for s in (extra or []) if s.strip()] if _hosts_name_ok(s)]
         block = "\n".join(f"0.0.0.0 {s}" for s in sites)
         base += f"{FOCUS_BEGIN}\n{block}\n{FOCUS_END}\n"
         until = time.time() + minutes * 60 if minutes else 0
         config.settings.set("focus", {"on": True, "until": until, "extra": extra or []})
     else:
         config.settings.set("focus", {"on": False, "until": 0})
-    with open(HOSTS, "w") as f:
-        f.write(base)
+    _write_hosts(base)
 
 
 def focus_list():
