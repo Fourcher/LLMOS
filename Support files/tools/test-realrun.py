@@ -2,6 +2,7 @@
 """Tests for tools/realrun.py with fake clock, user and VM runner. Stdlib only."""
 import json
 import os
+import shlex
 import shutil
 import sys
 import tempfile
@@ -162,6 +163,49 @@ def main():
         rec = realrun.run_task(reply_task("normal-1"), FakeUser(), make_vm(), clock=FakeClock(), outdir=outroot)
         check("normal case PASS with stale_reply false",
               rec["verdict"] == "PASS" and rec["stale_reply"] is False, json.dumps(rec)[:300])
+
+        # 8. page and say paths: same record keys, say issues exactly one llmos say, no type_into
+        page_user = FakeUser()
+        page_rec = realrun.run_task(reply_task("path-page"), page_user, make_vm(),
+                                    clock=FakeClock(), outdir=outroot, path="page")
+        check("page path PASS", page_rec["verdict"] == "PASS", json.dumps(page_rec)[:300])
+        check("page record path", page_rec["path"] == "page", repr(page_rec.get("path")))
+        check("page path types into the page", len(page_user.typed) == 1 and page_user.pressed == ["ret"],
+              "typed=%r pressed=%r" % (page_user.typed, page_user.pressed))
+
+        say_user = FakeUser()
+        say_cmds = []
+        say_vm_inner = make_vm()
+
+        def say_vm(cmd):
+            say_cmds.append(cmd)
+            return say_vm_inner(cmd)
+        say_task_ = dict(reply_task("path-say"), instruction="what's the time")
+        say_rec = realrun.run_task(say_task_, say_user, say_vm, clock=FakeClock(), outdir=outroot,
+                                   path="say")
+        check("say path PASS", say_rec["verdict"] == "PASS", json.dumps(say_rec)[:300])
+        check("say record path", say_rec["path"] == "say", repr(say_rec.get("path")))
+        check("same record keys on both paths", set(page_rec.keys()) == set(say_rec.keys()),
+              "page-only=%r say-only=%r" % (set(page_rec) - set(say_rec), set(say_rec) - set(page_rec)))
+        expected_say = "llmos say " + shlex.quote("what's the time")
+        say_calls = [c for c in say_cmds if c.startswith("llmos say")]
+        check("say path issues exactly one llmos say", say_calls == [expected_say],
+              repr(say_calls))
+        check("say path never calls type_into", say_user.typed == [], repr(say_user.typed))
+        check("say path typed_ok true", say_rec["typed_ok"] is True, repr(say_rec["typed_ok"]))
+
+        say_suite_dir = tempfile.mkdtemp(prefix="realrun-say-")
+        say_suite = os.path.join(say_suite_dir, "suite.json")
+        with open(say_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [dict(reply_task("say-s1"), instruction="what's the time")]}, f)
+        say_summary = realrun.run_suite(say_suite, FakeUser(), make_vm(), outdir=outroot,
+                                        run_path="say")
+        check("summary path say", say_summary.get("path") == "say", repr(say_summary.get("path")))
+        page_summary = realrun.run_suite(say_suite, FakeUser(), make_vm(), outdir=outroot)
+        check("summary path defaults to page", page_summary.get("path") == "page",
+              repr(page_summary.get("path")))
+        shutil.rmtree(say_suite_dir, ignore_errors=True)
+        print("ok path say summary %s pass=%s" % (say_summary["path"], say_summary["pass"]))
     finally:
         shutil.rmtree(outroot, ignore_errors=True)
 
