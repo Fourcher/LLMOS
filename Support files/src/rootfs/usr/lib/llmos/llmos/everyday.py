@@ -4,10 +4,12 @@ temperatures, battery and disk health, parcel tracking, typing and language prac
 focus mode that blocks distracting sites for a while.
 
 handle(desk, line) -> True when it answered. MATCH is a quick test the desk uses to decide the request is instant."""
+import collections
 import datetime as dt
 import glob
 import json
 import os
+import random
 import re
 import shutil
 import signal
@@ -17,6 +19,11 @@ import time
 import urllib.parse
 
 from . import config
+
+_JOKE_PAT = (r"(?:^(?:please\s+)?(?:tell|give)\s+me\s+(?:a\s+|another\s+|one\s+more\s+)?"
+             r"(?:(?:good|funny|short|clean|dad|bad)\s+)?joke(?:\s+please)?[.!?]*$|"
+             r"^(?:say|know)\s+(?:a|any)\s+jokes?\??$|"
+             r"^make\s+me\s+laugh[.!?]*$)")
 
 MATCH = re.compile(
     r"^how much (?:free |disk )?(?:space|storage|room)(?: is| do i have)?(?: (?:left|free|remaining))?(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?(?: (?:left|free|remaining))?$|^how much (?:disk )?space (?:is )?(?:left|free)$|"
@@ -57,7 +64,7 @@ MATCH = re.compile(
     r"internet (?:working|up|down|ok|on|connected)|am i (?:online|connected)|do i have (?:the )?internet|(?:wi-?fi|network) working|are we online|"
     r"^what day (?:of the week )?(?:is|was|will be|falls on|does)\b|"
     r"\.(?:txt|md|csv|log)$|"
-    r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)", re.I)
+    r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)|" + _JOKE_PAT, re.I)
 
 
 def _say(desk, line, text):
@@ -1600,9 +1607,55 @@ def small_answers(desk, line, low):
     return False
 
 
+# ------------------------------------------------------------------ jokes
+
+JOKES = [
+    "Why did the spreadsheet see a therapist? It had too many unresolved cells.",
+    "My computer asked for a vacation, so I told it to take a byte.",
+    "I tried to write a joke about UDP, but I'm not sure you'd get it.",
+    "My printer and I have a lot in common. We both jam when you need us most.",
+    "I asked my pencil for a joke. It said it would work on a point.",
+    "I asked the fridge for a joke. It said it was too cool for that.",
+    "What did the mouse say to the keyboard? Let's get clicking.",
+    "I wanted a job at the bakery, but they said I didn't have the dough.",
+    "I bought a desk calendar. We have a very dateable relationship.",
+    "Why did the stop sign get a raise? It was always holding its ground.",
+    "My Wi-Fi and I have trust issues. It keeps dropping our conversations.",
+    "Why did the bread stay home? It was feeling a little crumby.",
+    "My alarm clock is my most reliable friend. It shows up even when I don't want it to.",
+    "Why did the lamp break up with the outlet? It felt the spark was gone.",
+    "Why did the golf ball go to school? It wanted to brush up on its swing.",
+    "What do you call a computer that naps? A snooze button.",
+    "I used to be indecisive. Now I'm not so sure.",
+    "What do you call a pickle that tells jokes? A dill-arious comedian.",
+    "Why did the penguin book a hotel? It heard the ice was too far away.",
+    "Why did the computer go to the doctor? It had a virus and had to stay in quarantine.",
+    "I asked the cloud for advice. It said it would get back to me, but it's still up in the air.",
+    "I told my plant a joke. It didn't laugh, but it did grow on me.",
+    "My keyboard is very cheerful. Whenever I'm stuck, it says, 'Press any key to continue.'",
+    "I went to the gym to work on my abs. Now I can't feel them, so I think it worked.",
+    "Why did the tortilla stop talking? It was too wrapped up in itself.",
+    "Why did the coffee file a police report? It got mugged.",
+    "Why did the hard drive break up with the floppy disk? Too much old baggage.",
+    "Why did the clock get so good at math? It had plenty of time to practice.",
+    "I changed my password to 'incorrect.' Now whenever I forget it, the computer says, 'Your password is incorrect.'",
+    "Why did the battery go to the gym? It wanted to get more charged up.",
+]
+_recent_jokes = collections.deque(maxlen=10)  # the last 10 jokes told, so the next one is new
+
+
+def jokes(desk, line, low):
+    if not re.search(_JOKE_PAT, low, re.I):
+        return False
+    fresh = [j for j in JOKES if j not in _recent_jokes]
+    joke = random.choice(fresh)
+    _recent_jokes.append(joke)
+    return _say(desk, line, joke)
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True
