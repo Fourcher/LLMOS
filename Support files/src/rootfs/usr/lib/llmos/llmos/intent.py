@@ -932,6 +932,28 @@ def _device(text):
     return None
 
 
+_CONVERT_FILE = re.compile(
+    r"^\s*(?:please\s+)?(?:convert|turn|make|change|save)\s+(?:the\s+)?"
+    r"(?P<f>\"[^\"]+\.\w{2,5}\"|'[^']+\.\w{2,5}'|\S+\.\w{2,5})"
+    r"(?:\s+(?:(?:in)?to|as)\s+(?:an?\s+)?|\s+an?\s+)(?P<fmt>[a-z0-9]{2,5})\s*[.!]?\s*$", re.I)
+_CONVERT_IMG = {"jpg": "jpg", "jpeg": "jpg", "png": "png", "webp": "webp", "gif": "gif", "bmp": "bmp", "avif": "avif"}     # edit_image save_as
+_CONVERT_MEDIA = ("mp3", "wav", "flac", "ogg", "m4a", "aac", "opus", "mp4", "webm", "mkv", "mov", "avi", "m4v", "gif")  # convert_media to
+_CONVERT_IN_IMG = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".avif")
+_CONVERT_IN_MEDIA = (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac", ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v")
+
+
+def _convert_file(f, fmt):
+    import os
+    ext = os.path.splitext(f)[1].lower()
+    if fmt == "pdf":
+        return ("convert_to_pdf", {"path": f})
+    if ext in _CONVERT_IN_IMG and fmt in _CONVERT_IMG:
+        return ("edit_image", {"path": f, "save_as": os.path.splitext(f)[0] + "." + _CONVERT_IMG[fmt]})
+    if ext in _CONVERT_IN_MEDIA and fmt in _CONVERT_MEDIA:
+        return ("convert_media", {"files": [f], "to": fmt})
+    return None
+
+
 def _files(text):
     # "show as list" / "switch to big icons": the view of the folder on screen (the last one shown, else home)
     m = re.match(r"^\s*(?:please\s+)?(?:show|view|display|see|put|switch|change)\s+(?:(?:my|the|these|those)\s+)?(?:(?:files?|them|it|everything|folders?)\s+)?"
@@ -995,6 +1017,10 @@ def _files(text):
     m = re.match(r"^\s*(?:please\s+)?(?:convert|turn|save|export|make)\s+(?P<p>(?:~|/)\S.*?|this|that|it|(?:my|the|a|this|that)?\s*(?:word\s+)?(?:doc|docx|document|file|letter|essay|report|spreadsheet|presentation|slides|resume|cv)s?)\s+(?:to|into|as)\s+(?:a\s+)?pdf\s*[.!]?\s*$", text, re.I)
     if m:
         return ("convert_to_pdf", {"path": m.group("p")}) if m.group("p")[0] in "~/" else ("which_file", {"request": text.strip()})
+    # "convert photo.png to jpg", "make cat.webp a png", "turn ~/x.wav into a mp3": a named file and a format the tools write
+    m = _CONVERT_FILE.match(text)
+    if m and _convert_file(m.group("f").strip("'\""), m.group("fmt").lower()):
+        return _convert_file(m.group("f").strip("'\""), m.group("fmt").lower())
     m = re.match(r"^\s*(?:please\s+)?(?:connect\s+(?:to\s+)?|open\s+|sync\s+(?:with\s+)?|set\s+up\s+|use\s+)(?:my\s+)?(?P<s>google\s+drive|one\s*drive|dropbox|icloud(?:\s+drive)?)\b.*$", text, re.I)
     if m:
         site = {"googledrive": "google drive", "onedrive": "https://onedrive.live.com", "dropbox": "https://www.dropbox.com/home",
