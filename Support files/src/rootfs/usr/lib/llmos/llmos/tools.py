@@ -3923,6 +3923,23 @@ def open_app(a, ctx):
     return f"the owner used '{cmd}'; it exited with code {rc}"
 
 
+def _install_reason(e, min_gb):
+    """The plain sentence the owner sees when the installer refuses a disk (installer.plan raises InstallError
+    with these fixed texts; anything else gets the generic sentence). The technical text stays in the model's return."""
+    s = str(e)
+    if s.startswith("no such disk"):
+        return "That disk isn't on this computer."
+    if s.startswith("no other disk found"):
+        return "There is no other disk to install on."
+    if "no GPT partition table" in s:
+        return "That disk can't share space with another system, so LLM OS would need the whole disk."
+    if s.startswith("no free space"):
+        return "There isn't enough free space on that disk: shrink the other system's partition first, then try again."
+    if s.startswith("the free space"):
+        return f"There isn't enough free space: it needs {min_gb} GB."
+    return "This disk can't take the install."
+
+
 @tool("install_to_disk", "Install LLM OS onto this computer's own disk from the running system: mode 'alongside' "
       "uses free space next to macOS/Windows/Linux (their partitions are kept, the EFI partition is shared), "
       "mode 'whole' erases one disk. First call shows the owner the plan; it only proceeds when called again "
@@ -3936,8 +3953,10 @@ def install_to_disk(a, ctx):
         try:
             res = installer.run(str(a["token"]), status=ctx.status)
         except (installer.InstallError, OSError, subprocess.TimeoutExpired) as e:
-            show(ctx, {"title": "Installation failed", "size": "m", "blocks": [{"type": "text", "text": str(e)}]})
-            return f"installation failed: {e}. Tell the owner exactly this."
+            # installer.run writes to the disk (partitioning) after the token check, so nothing is claimed about what changed
+            body = 'Say "install" to try again.'
+            show(ctx, {"title": "The install didn't finish", "size": "m", "blocks": [{"type": "text", "text": body}]})
+            return f"installation failed: {e}. Tell the owner: {body}"
         show(ctx, {"title": "Installed", "size": "m", "blocks": [
             {"type": "text", "text": f"LLM OS is installed on {res['where']}."},
             {"type": "text", "text": "\n".join("· " + n for n in res["notes"]), "dim": True},
@@ -3947,10 +3966,11 @@ def install_to_disk(a, ctx):
     try:
         p = installer.plan(a.get("mode") or "alongside", a.get("disk"), a.get("size_gb"))
     except (installer.InstallError, OSError) as e:
-        show(ctx, {"title": "Cannot install", "size": "m", "blocks": [{"type": "text", "text": str(e)},
+        why = _install_reason(e, installer.MIN_ROOT_GB)
+        show(ctx, {"title": "Can't install on this disk", "size": "m", "blocks": [{"type": "text", "text": why},
              {"type": "buttons", "items": [{"label": i18n.t("d_erase_whole"), "say": "erase the whole disk and install LLM OS on it", "danger": True}]
               if "free space" in str(e) or "GPT" in str(e) else []}]})
-        return f"cannot install: {e}. Tell the owner exactly this."
+        return f"cannot install: {e}. Tell the owner: {why}"
     show(ctx, {"title": "Install LLM OS on this computer", "size": "m", "blocks": [
         {"type": "text", "text": "\n".join("· " + ln for ln in p["lines"])},
         {"type": "text", "text": "Nothing has been written yet.", "dim": True},
