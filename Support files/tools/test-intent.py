@@ -562,4 +562,9 @@ for text in OPEN_LAST_GUARD_CASES:
         obad += 1
         print(f"OPEN LAST GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"open-last guards: {len(OPEN_LAST_GUARD_CASES) - obad}/{len(OPEN_LAST_GUARD_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad or fbad or dbad or obad else 0)
+total = bad + app_bad + reply_bad + tbad + gbad + nbad + rbad + fbad + dbad + obad
+if total:
+    print(f"{total} FAILED")
+else:
+    print("all good")
+sys.exit(1 if total else 0)

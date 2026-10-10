@@ -131,6 +131,12 @@ try:
     check("open nothing since", (run(home4, {"since": "week", "open": True}), opened),
           ("No files were saved in the last 7 days.", []))
     opened.clear()
+    # open fails: the failure text is the reply, not "Opened ..."
+    tools.open_file = lambda a, ctx: opened.append(a["path"]) or "error: there is no file " + a["path"]
+    out = run(home3, {"open": True})
+    check("open failed", (opened, out), ([os.path.join(home3, "Documents", "new.txt")], "error: there is no file " + os.path.join(home3, "Documents", "new.txt")))
+    tools.open_file = lambda a, ctx: opened.append(a["path"]) or "opened"
+    opened.clear()
     # no open flag: the same replies, and no open call
     check("no open flag", (run(home3, {}).startswith("It's ~/Documents/new.txt"), opened), (True, []))
 finally:

@@ -4238,7 +4238,9 @@ def last_saved(a, ctx):
         mins = int((now - when) // 60)
         ago = "just now" if mins < 1 else f"{mins} minute{'s' if mins != 1 else ''} ago"
         if a.get("open"):
-            open_file({"path": best}, ctx)
+            r = open_file({"path": best}, ctx)
+            if str(r).lower().startswith(("error", "not done")):
+                return str(r)
             return f"Opened {os.path.basename(best)} (saved {ago})."
         return f"It's {'~' + best[len(home):] if best.startswith(home) else best} (saved {ago})."
     if since not in _RECENT_SINCE:
@@ -4253,7 +4255,9 @@ def last_saved(a, ctx):
         return f"No files were saved {_RECENT_SINCE[since]}."
     if a.get("open"):
         m, best = hits[0]
-        open_file({"path": best}, ctx)
+        r = open_file({"path": best}, ctx)
+        if str(r).lower().startswith(("error", "not done")):
+            return str(r)
         return f"Opened {os.path.basename(best)} (saved {_recent_when(m)})."
     lines = []
     for m, p in hits[:10]:
