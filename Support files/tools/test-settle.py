@@ -131,4 +131,29 @@ got2, dt2 = timed_no_change("2")
 check("LLMOS_SLOW=1 timeout ~0.3s (%.2fs)" % dt1, got1 is None and 0.25 <= dt1 < 0.6)
 check("LLMOS_SLOW=2 timeout ~0.6s (%.2fs)" % dt2, got2 is None and 0.55 <= dt2 < 1.2)
 
+# wait_change: a frame of a different size counts as changed (no IndexError)
+def make_ppm_size(w, h, value):
+    return b"P6\n%d %d\n255\n" % (w, h) + bytes([value]) * (w * h * 3)
+
+
+small_frame = make_ppm_size(8, 8, 200)
+got = settle.wait_change(lambda: small_frame, frame_a, timeout=1, poll=0.05)
+check("wait_change size change returns 8x8 frame", got == small_frame)
+
+# wait_still: size flicker resets stillness; constant 8x8 eventually returns
+seq2 = {"i": 0}
+const_small = make_ppm_size(8, 8, 90)
+
+
+def flicker_size():
+    seq2["i"] += 1
+    if seq2["i"] <= 10:
+        return frame_a if seq2["i"] % 2 else small_frame
+    return const_small
+
+
+got = settle.wait_still(flicker_size, still_s=0.2, timeout=5, poll=0.05)
+check("wait_still size flicker then constant 8x8 (%s)" % ("returned" if got is not None else "None"),
+      got is None or got == const_small)
+
 print("all good")

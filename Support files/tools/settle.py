@@ -102,11 +102,19 @@ def _small(frame):
     return small_gray(w, h, rgb)
 
 
+def _dims(frame):
+    w, h, _ = read_ppm(frame)
+    return w, h
+
+
 def wait_change(grab, before, timeout=10, threshold=0.01, masks=(), poll=0.25):
     sw, sh, base = _small(before)
+    bdims = _dims(before)
     deadline = time.monotonic() + timeout * _slow()
     while True:
         now = grab()
+        if _dims(now) != bdims:
+            return now  # size changed (e.g. resolution switch) counts as a change
         nsw, nsh, cur = _small(now)
         if diff_ratio(base, cur, sw, sh, masks) > threshold:
             return now
@@ -120,6 +128,7 @@ def wait_still(grab, still_s=1.0, timeout=20, threshold=0.002, masks=(), poll=0.
     deadline = start + timeout * _slow()
     last = grab()
     sw, sh, prev = _small(last)
+    pdims = _dims(last)
     still_since = time.monotonic()
     while True:
         now_t = time.monotonic()
@@ -129,10 +138,16 @@ def wait_still(grab, still_s=1.0, timeout=20, threshold=0.002, masks=(), poll=0.
             return None
         time.sleep(poll)
         frame = grab()
+        fdims = _dims(frame)
         _, _, cur = _small(frame)
-        if diff_ratio(prev, cur, sw, sh, masks) >= threshold:
+        if fdims != pdims:
+            # size changed: not still; the new frame becomes the reference
+            still_since = time.monotonic()
+            sw, sh = _small(frame)[:2]
+        elif diff_ratio(prev, cur, sw, sh, masks) >= threshold:
             still_since = time.monotonic()
         prev = cur
+        pdims = fdims
         last = frame
 
 
