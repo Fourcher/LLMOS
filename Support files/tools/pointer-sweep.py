@@ -22,6 +22,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import realrun  # noqa: E402
 import settle  # noqa: E402
 
 SUPPORT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,12 +41,9 @@ SKIP = re.compile(r"\b(?:shut[ -]?down|restart|reboot|sleep|lock\b|end process|e
 
 def _rects(run_in_vm, sel):
     out = run_in_vm("llmos desk-ctl rects 1 %s" % shlex.quote(sel))
-    try:
-        obj = json.loads(out)
-    except (TypeError, ValueError):
+    obj = realrun.vm_json(out)
+    if obj is None:
         raise RuntimeError("rects %s: reply is not JSON: %r" % (sel, str(out)[:200]))
-    if not isinstance(obj, dict):
-        raise RuntimeError("rects %s: reply is not an object" % sel)
     if "error" in obj:
         raise RuntimeError("rects %s failed: %s" % (sel, obj["error"]))
     return obj
@@ -70,7 +68,10 @@ def list_buttons(run_in_vm, sel=DEFAULT_SEL):
 
 
 def _state(run_in_vm):
-    return json.loads(run_in_vm("llmos desk-state"))
+    obj = realrun.vm_json(run_in_vm("llmos desk-state"))
+    if obj is None:
+        raise RuntimeError("desk-state is not JSON")
+    return obj
 
 
 def _state_key(st):

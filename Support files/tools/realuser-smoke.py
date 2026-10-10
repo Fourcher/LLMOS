@@ -37,11 +37,7 @@ class StepFailure(Exception):
 
 def _read_state(run_in_vm):
     """desk-state as a dict, or None when the output is not JSON."""
-    try:
-        obj = json.loads(run_in_vm("llmos desk-state"))
-    except (TypeError, ValueError):
-        return None
-    return obj if isinstance(obj, dict) else None
+    return realrun.vm_json(run_in_vm("llmos desk-state"))
 
 
 def _await_state(run_in_vm, tries=30):
@@ -56,7 +52,9 @@ def _await_state(run_in_vm, tries=30):
 def _rects(run_in_vm, user, sel):
     user._n += 1
     out = run_in_vm("llmos desk-ctl rects %d %s" % (user._n, _quote(sel)))
-    obj = json.loads(out)
+    obj = realrun.vm_json(out)
+    if obj is None:
+        raise StepFailure("rects %s: reply is not JSON: %r" % (sel, str(out)[:200]))
     if obj.get("ok") is False or "items" not in obj:
         raise StepFailure("rects %s failed: %s" % (sel, obj.get("error")))
     return obj
