@@ -18,6 +18,20 @@ def git(*args, cwd):
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
 
 
+def last_activity(path, branch):
+    """Newest of: worktree dir mtime, branch tip commit time, worktree index mtime."""
+    times = [os.path.getmtime(path)]
+    tip = git("log", "-1", "--format=%ct", branch, cwd=path).stdout.strip()
+    times.append(int(tip or 0))
+    idx = git("rev-parse", "--git-path", "index", cwd=path).stdout.strip()
+    if idx:
+        if not os.path.isabs(idx):
+            idx = os.path.join(path, idx)
+        if os.path.exists(idx):
+            times.append(os.path.getmtime(idx))
+    return max(times)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dry-run", action="store_true", help="print what would be removed; remove nothing")
@@ -47,12 +61,12 @@ def main():
         elif not os.path.isdir(path):
             why = "missing dir"
             other += 1
-        elif git("status", "--porcelain", cwd=path).stdout.strip():
-            why = "dirty"
-            dirty += 1
-        elif time.time() - os.path.getmtime(path) < args.idle * 60:
+        elif time.time() - last_activity(path, branch) < args.idle * 60:
             why = "recent (<%d min, may be in use)" % args.idle
             recent += 1
+        elif git("--no-optional-locks", "status", "--porcelain", cwd=path).stdout.strip():
+            why = "dirty"
+            dirty += 1
         if why:
             print("skip", name, why)
             continue
