@@ -57,8 +57,11 @@ def _args_dict(args):
 def set_timezone(args):
     args = _args_dict(args)
     zone = args.get("zone")
+    chosen = args.get("chosen", True)
     if not isinstance(zone, str) or not ZONE_RE.fullmatch(zone):
         raise ValueError("bad args: zone")
+    if not isinstance(chosen, bool):
+        raise ValueError("bad args: chosen")
     # Resolve symlinks first: the target must be a regular file inside ZONEINFO.
     real_zoneinfo = os.path.realpath(ZONEINFO)
     src = os.path.realpath(os.path.join(ZONEINFO, zone))
@@ -68,7 +71,7 @@ def set_timezone(args):
         inside = False
     if not inside or not os.path.isfile(src):
         raise ValueError("bad args: unknown zone")
-    # Same steps as system.set_timezone: symlink /etc/localtime, /etc/timezone, /etc/llmos/timezone.
+    # Same steps as system.set_timezone: symlink /etc/localtime, /etc/timezone, and /etc/llmos/timezone when the owner chose it.
     localtime = _etc("localtime")
     tmp = _etc("localtime.tmp")
     os.makedirs(os.path.dirname(localtime), exist_ok=True)
@@ -78,9 +81,10 @@ def set_timezone(args):
     os.replace(tmp, localtime)
     with open(_etc("timezone"), "w") as f:
         f.write(zone + "\n")
-    os.makedirs(_etc("llmos"), exist_ok=True)
-    with open(_etc("llmos", "timezone"), "w") as f:
-        f.write(zone + "\n")
+    if chosen:
+        os.makedirs(_etc("llmos"), exist_ok=True)
+        with open(_etc("llmos", "timezone"), "w") as f:
+            f.write(zone + "\n")
     return "ok"
 
 
