@@ -3449,6 +3449,7 @@ class Desk:
         return None
 
     def turn(self, text, chat="main"):
+        fixed = intent._retype(text)          # typo-fixed copy: the fast paths get a second pass on it; the model always gets text as typed
         parts = self._split_compound(text) if chat == "main" else None
         if parts:
             said = []
@@ -3463,7 +3464,9 @@ class Desk:
                     said.append(s)
             self.last_reply = " ".join(x.rstrip(".") + "." for x in said) if said else "Done: " + "; ".join(parts) + "."
             return
-        if chat == "main" and self.shortcut(text):
+        # fast paths (shortcut, which includes everyday.handle): the typed line first; the typo-fixed copy only when the
+        # first pass handled nothing (short-circuit: no second run of a path that already acted)
+        if chat == "main" and (self.shortcut(text) or (fixed != text and self.shortcut(fixed))):
             self.last_reply = self.__dict__.pop("_said", None) or "Done."
             return
         c = self.chat(chat)
