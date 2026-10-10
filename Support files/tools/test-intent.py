@@ -210,6 +210,8 @@ CASES = {
     "brighter": ("set_brightness", {"delta": 15}),
     "volume 30": ("set_volume", {"percent": 30}),
     "turn the volume up": ("set_volume", {"delta": 10}),
+    "change the volume up": ("set_volume", {"delta": 10}),
+    "put the sound down": ("set_volume", {"delta": -10}),
     "quieter": ("set_volume", {"delta": -10}),
     "mute": ("set_volume", {"mute": True}),
     "unmute the sound": ("set_volume", {"mute": False}),
