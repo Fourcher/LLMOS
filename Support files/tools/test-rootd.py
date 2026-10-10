@@ -216,19 +216,93 @@ assert open(settings_path).read() == "{\"b\": 2}", "write did not replace the li
 assert open(outside_file).read() == "outside settings", "write followed the symlink"
 print("ok symlinked settings.json: remove drops the link, write replaces it, outside file untouched")
 
+# --- write_hosts
+hosts_root = os.path.join(tmp, "hostsroot")
+os.makedirs(os.path.join(hosts_root, "etc"))
+rootd.ETC_ROOT = hosts_root
+hosts_path = os.path.join(hosts_root, "etc", "hosts")
+# The formats written by system.py (full-line markers) and everyday.py (inline "# llmos focus mode"), plus IPv6 and tabs.
+realistic = (
+    "# Host Database\n"
+    "# localhost is used to configure the loopback interface\n"
+    "127.0.0.1\tlocalhost\n"
+    "127.0.1.1 kitchen-pc\n"
+    "::1 localhost ip6-localhost ip6-loopback\n"
+    "# llmos-focus begin\n"
+    "0.0.0.0 youtube.com\n"
+    "0.0.0.0 www.youtube.com\n"
+    "# llmos-focus end\n"
+    "0.0.0.0 reddit.com # llmos focus mode\n"
+    "0.0.0.0\twikipedia.org\n"
+)
+expect_ok("write_hosts realistic file", call("write_hosts", {"text": realistic}))
+assert open(hosts_path).read() == realistic, "hosts text was not written as sent"
+assert oct(os.stat(hosts_path).st_mode & 0o777) == "0o644", oct(os.stat(hosts_path).st_mode)
+assert sorted(os.listdir(os.path.join(hosts_root, "etc"))) == ["hosts"], os.listdir(os.path.join(hosts_root, "etc"))
+expect_ok("write_hosts replaces the file", call("write_hosts", {"text": "127.0.0.1 localhost\n"}))
+assert open(hosts_path).read() == "127.0.0.1 localhost\n"
+rejected_hosts = {
+    "shell metacharacters": "127.0.0.1 localhost; rm -rf /\n",
+    "url instead of name": "127.0.0.1 localhost\n0.0.0.0 https://x.com\n",
+    "bad ip": "127.0.0.1 localhost\n999.1.1.1 x.com\n",
+    "ip only": "127.0.0.1 localhost\n0.0.0.0\n",
+    "label too long": "127.0.0.1 localhost\n0.0.0.0 " + "a" * 64 + ".com\n",
+    "name starts with dash": "127.0.0.1 localhost\n0.0.0.0 -x.com\n",
+    "carriage return": "127.0.0.1 localhost\r\n",
+    "nul byte": "127.0.0.1 localhost\n0.0.0.0 x.com\x00\n",
+    "no localhost": "0.0.0.0 youtube.com\n",
+    "localhost on other ip": "10.0.0.1 localhost\n",
+    "zone id": "127.0.0.1 localhost\nfe80::1%eth0 x.com\n",
+}
+for label, text in rejected_hosts.items():
+    expect_err(f"write_hosts rejects {label}", call("write_hosts", {"text": text}), "bad args")
+assert open(hosts_path).read() == "127.0.0.1 localhost\n", "a rejected write changed /etc/hosts"
+expect_err("write_hosts line number", call("write_hosts", {"text": "127.0.0.1 localhost\n0.0.0.0 https://x.com\n"}), "bad args: hosts line 2")
+expect_err("write_hosts no localhost msg", call("write_hosts", {"text": "0.0.0.0 youtube.com\n"}), "must keep localhost")
+expect_err("write_hosts text not str", call("write_hosts", {"text": ["127.0.0.1 localhost"]}), "bad args")
+expect_err("write_hosts args not dict", json.loads(rootd.handle(b'{"verb":"write_hosts","args":"x"}')), "bad args")
+try:
+    rootd.write_hosts({"text": "127.0.0.1 localhost\n#" + "x" * (2 * 1024 * 1024)})
+    raise AssertionError("2 MiB hosts accepted")
+except ValueError as e:
+    assert "too large" in str(e), e
+    print(f"ok write_hosts 2 MiB rejected: {e}")
+exact = "127.0.0.1 localhost\n"
+exact += "#" + "x" * (rootd.MAX_HOSTS - len(exact.encode()) - 2) + "\n"
+assert len(exact.encode()) == rootd.MAX_HOSTS, len(exact.encode())
+assert rootd.write_hosts({"text": exact}) == "ok"
+assert open(hosts_path).read() == exact
+print("ok write_hosts 1 MiB accepted (direct call)")
+# symlinked etc: refused, nothing outside touched
+hosts_link_root = os.path.join(tmp, "hostslinkroot")
+os.makedirs(hosts_link_root)
+hosts_outside_etc = os.path.join(tmp, "hosts-outside-etc")
+os.makedirs(hosts_outside_etc)
+os.symlink(hosts_outside_etc, os.path.join(hosts_link_root, "etc"))
+rootd.ETC_ROOT = hosts_link_root
+try:
+    expect_refused("symlinked etc: write_hosts refused", call("write_hosts", {"text": "127.0.0.1 localhost\n"}))
+finally:
+    rootd.ETC_ROOT = etc
+assert os.listdir(hosts_outside_etc) == [], "write_hosts wrote through a symlinked etc"
+print("ok write_hosts: symlinked etc refused, outside folder untouched")
+
 # --- serve over a real socket, in a thread
 sock_dir = tempfile.mkdtemp(prefix="rs-", dir="/tmp")
 sock_path = os.path.join(sock_dir, "root.sock")
 t = threading.Thread(target=rootd.serve, args=(sock_path, "no-such-group-xyz"), daemon=True)
 t.start()
-for _ in range(100):
-    if os.path.exists(sock_path):
-        break
-    time.sleep(0.05)
-assert os.path.exists(sock_path), "socket not created"
-assert oct(os.stat(sock_path).st_mode & 0o777) == "0o660", oct(os.stat(sock_path).st_mode)
+# bind() creates the path before listen(), so retry the connect until the server is really listening
 c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-c.connect(sock_path)
+for _ in range(100):
+    try:
+        c.connect(sock_path)
+        break
+    except (FileNotFoundError, ConnectionRefusedError):
+        time.sleep(0.05)
+else:
+    raise AssertionError("socket never listened")
+assert oct(os.stat(sock_path).st_mode & 0o777) == "0o660", oct(os.stat(sock_path).st_mode)
 c.sendall(json.dumps({"verb": "set_hostname", "args": {"name": "socket-pc"}}).encode())
 c.shutdown(socket.SHUT_WR)
 reply = json.loads(c.makefile("rb").read().decode())
