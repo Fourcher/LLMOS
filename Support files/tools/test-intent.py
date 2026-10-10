@@ -51,6 +51,8 @@ CASES = {
     "show the largest files in my pictures folder": ("biggest_files", {"folder": "~/Pictures"}),
     "zip my documents folder": ("compress_files", {"path": "~/Documents"}),
     "zip these": ("which_file", {"request": "zip these"}),
+    "make this a jpg": ("which_file", {"request": "make this a jpg"}),
+    "save it as png": ("which_file", {"request": "save it as png"}),
     "convert ~/a.docx to pdf": ("convert_to_pdf", {"path": "~/a.docx"}),
     "put this on the desktop": ("which_file", {"request": "put this on the desktop"}),
     "rename notes.txt to todo.txt": ("rename_file", {"name": "notes.txt", "to": "todo.txt"}),
@@ -471,4 +473,14 @@ for text in RENAME_GUARD_CASES:
         rbad += 1
         print(f"RENAME GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"rename guards: {len(RENAME_GUARD_CASES) - rbad}/{len(RENAME_GUARD_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad else 0)
+
+# format guards: "make this bigger" and friends are not file conversions (the "which file" route is for formats only)
+FORMAT_GUARD_CASES = ["make this bigger", "turn this off", "make it louder", "make it cosier", "make it look like a mac"]
+fbad = 0
+for text in FORMAT_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "which_file":
+        fbad += 1
+        print(f"FORMAT GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"format guards: {len(FORMAT_GUARD_CASES) - fbad}/{len(FORMAT_GUARD_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad or fbad else 0)
