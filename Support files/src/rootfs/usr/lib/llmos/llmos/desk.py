@@ -2315,8 +2315,6 @@ class Desk:
             if not open_now and not any(s.get("kind") == "app" for s in self.windows.values()):
                 self.last_reply = self._said = "Nothing is open to click on."
                 return True
-        if re.fullmatch(r"(?:make|turn|switch|put|set) (?:the |my )?(?:web )?(?:browser|firefox|internet)(?: to)? dark(?: mode)?|dark mode (?:for|in|on) (?:the |my )?(?:browser|firefox)", low.rstrip(".!")):
-            line = low = "dark mode"              # the browser follows the system's look
         r = self._system_shortcut(low, line)
         if r:
             return True

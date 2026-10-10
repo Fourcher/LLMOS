@@ -30,6 +30,7 @@ CASES = {
     "screenshot this window": ("screenshot", {}),
     "set my time zone to paris": ("change_setting", {"setting": "timezone", "value": "paris"}),
     "use dark mode": ("set_appearance", {"theme": "dark"}),
+    "make browser dark": ("set_appearance", {"theme": "dark"}),
     "keep the screen on": ("change_setting", {"setting": "screen_off", "value": "never"}),
     "sleep after 30 minutes": ("change_setting", {"setting": "sleep_after", "value": "30"}),
     "closing the lid should do nothing": ("change_setting", {"setting": "lid", "value": "nothing"}),
