@@ -31,7 +31,7 @@ import sys
 import threading
 import time
 
-from . import clip, record, folderlock, everyday, reset, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line
+from . import clip, record, folderlock, everyday, reset, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line, waits
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
@@ -139,16 +139,23 @@ def _wifi_scan():
     dev = _wifi_device()
     if not dev:
         return []
+    def read():
+        p = subprocess.run(["iwctl", "station", dev, "get-networks"], capture_output=True, text=True, timeout=30)
+        nets, seen = [], set()
+        for ln in re.sub(r"\x1b\[[0-9;]*m", "", p.stdout).splitlines():
+            m = re.match(r"\s*(?:>\s*)?(.+?)\s{2,}(psk|open|8021x|wep)\s+(\**)", ln.strip(), re.I)
+            if m and m.group(1).strip() not in seen and not m.group(1).startswith("-"):
+                seen.add(m.group(1).strip())
+                nets.append({"ssid": m.group(1).strip(), "secured": m.group(2).lower() != "open", "signal": len(m.group(3))})
+        return nets
+    # read the list before scanning, so a stale (cached) list is not taken as the new result
+    try:
+        before = read()
+    except Exception:
+        before = None
     subprocess.run(["iwctl", "station", dev, "scan"], capture_output=True, timeout=30)
-    time.sleep(3)
-    p = subprocess.run(["iwctl", "station", dev, "get-networks"], capture_output=True, text=True, timeout=30)
-    nets, seen = [], set()
-    for ln in re.sub(r"\x1b\[[0-9;]*m", "", p.stdout).splitlines():
-        m = re.match(r"\s*(?:>\s*)?(.+?)\s{2,}(psk|open|8021x|wep)\s+(\**)", ln.strip(), re.I)
-        if m and m.group(1).strip() not in seen and not m.group(1).startswith("-"):
-            seen.add(m.group(1).strip())
-            nets.append({"ssid": m.group(1).strip(), "secured": m.group(2).lower() != "open", "signal": len(m.group(3))})
-    return nets
+    # poll every 0.25 s until networks are listed and the list has stopped changing (old fixed wait: 3 s)
+    return waits.scan_settled(read, limit=3.0, step=0.25, default=[], before=before)
 
 
 def _wifi_connect(ssid, password):
@@ -159,10 +166,8 @@ def _wifi_connect(ssid, password):
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     if p.returncode != 0:
         return False, (p.stderr or p.stdout).strip()[:200] or "could not connect"
-    for _ in range(15):
-        if _online():
-            return True, ""
-        time.sleep(1)
+    if waits.wait_until(_online, total=15.0, step=0.25):   # 60 checks, 0.25 s apart
+        return True, ""
     return True, "connected, waiting for an address"
 
 
