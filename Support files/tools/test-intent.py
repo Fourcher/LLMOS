@@ -41,6 +41,7 @@ CASES = {
     "sort by date": ("show_files", {"sort": "date"}),
     "show my biggest files": ("biggest_files", {"folder": "~"}),
     "show the biggest files on the computer": ("biggest_files", {}),
+    "find the largest files on my computer": ("biggest_files", {}),
     "what's taking up the most space": ("biggest_files", {}),
     "zip my documents folder": ("compress_files", {"path": "~/Documents"}),
     "zip these": ("which_file", {"request": "zip these"}),

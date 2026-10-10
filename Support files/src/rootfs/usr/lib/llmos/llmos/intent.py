@@ -1271,7 +1271,7 @@ def _everyday(text):
     if m and not _FILEISH.search(m.group("q")):
         return ("browse", {"search": m.group("q")})
     m = _FIND_FILE.match(text)
-    if m and _FILEISH.search(text) and not re.search(r"\be-?mails?\b", text, re.I) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I):
+    if m and _FILEISH.search(text) and not re.search(r"\be-?mails?\b", text, re.I) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I) and not re.search(r"\b(?:biggest|largest)\s+files\b", text, re.I):
         q = re.sub(r"\b(?:my|the|that|file|files|folder|folders|called|named|i|saved|downloaded|put|was|working|on|about|yesterday)\b", " ", m.group("q"), flags=re.I)
         if q.strip():
             return ("find_files", {"query": " ".join(q.split())})
