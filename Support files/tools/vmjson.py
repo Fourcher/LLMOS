@@ -37,7 +37,7 @@ def vm_json(text):
 
 _TRAILER = re.compile(r"^\[vmctl: (matched|TIMEOUT) after [\d.]+s\]$")
 # the echoed command typed into the console: a prompt "llmos:<cwd># " followed by text (or a bare prompt)
-_ECHO = re.compile(r"^llmos:\S*#(\s|$)")
+_ECHO = re.compile(r"^(?:llmos:\S*#|›)(?:\s|$)")
 
 
 def vm_text(out):

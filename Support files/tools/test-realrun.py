@@ -462,6 +462,18 @@ def main():
               repr(realrun.vm_text("llmos:/# ls\na.txt\nb.txt\n[vmctl: matched after 1.0s]\n")))
         print("ok vm_text drops echoed command line, keeps mid-line # and multi-line output")
 
+        # 9c3. tsh types at the console prompt "› " and prefixes "!": the echo is "› !cmd"
+        tsh_echo = "› !cat /etc/llmos/settings.json; echo"
+        check("vm_text: tsh echo \"› !cmd\" dropped",
+              realrun.vm_text(tsh_echo + "\n{}\n[vmctl: matched after 1.0s]\n") == "{}",
+              repr(realrun.vm_text(tsh_echo + "\n{}\n[vmctl: matched after 1.0s]\n")))
+        check("vm_text: reply line with mid-line › kept",
+              realrun.vm_text("the arrow › is used\n") == "the arrow › is used",
+              repr(realrun.vm_text("the arrow › is used\n")))
+        check("vm_text: llmos:/# echo still dropped",
+              realrun.vm_text("llmos:/# echo hi\nhi\n") == "hi", repr(realrun.vm_text("llmos:/# echo hi\nhi\n")))
+        print("ok vm_text drops tsh \"› !cmd\" echo, keeps mid-line ›, still drops llmos:/# echo")
+
         def echo_cmd_vm(output):
             def vm(cmd):
                 if cmd == "fake-state-cmd":
