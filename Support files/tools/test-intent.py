@@ -182,6 +182,9 @@ CASES = {
     # files and screenshots
     "show my files": ("show_files", {"path": "~"}),
     "find the file i was working on yesterday": ("show_files", {"path": "~", "sort": "date"}),
+    "where did it save": ("last_saved", {}),
+    "where did that go": ("last_saved", {}),
+    "where's the file you just made": ("last_saved", {}),
     "show my recent files": ("show_files", {"path": "~", "sort": "date"}),
     "open the document I've been working on": ("show_files", {"path": "~", "sort": "date"}),
     "open the file I’ve been working on": ("show_files", {"path": "~", "sort": "date"}),

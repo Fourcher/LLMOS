@@ -4135,6 +4135,30 @@ def make_folder(a, ctx):
     return f"made the folder {p.replace(config.home(), '~')}. Say one sentence at most."
 
 
+@tool("last_saved", "Where the newest file in the owner's home folder is: the one saved or downloaded most recently (hidden files skipped).",
+      {}, [], risk=READ)
+def last_saved(a, ctx):
+    home = config.home()
+    best, when = "", 0.0
+    for d, dirs, fs in os.walk(home):
+        dirs[:] = [x for x in dirs if not x.startswith(".")]
+        for f in fs:
+            if f.startswith("."):
+                continue
+            p = os.path.join(d, f)
+            try:
+                m = os.path.getmtime(p)
+            except OSError:
+                continue
+            if m > when:
+                best, when = p, m
+    if not best or time.time() - when > 7200:
+        return "Nothing new was saved in the last two hours."
+    mins = int((time.time() - when) // 60)
+    ago = "just now" if mins < 1 else f"{mins} minute{'s' if mins != 1 else ''} ago"
+    return f"It's {'~' + best[len(home):] if best.startswith(home) else best} (saved {ago})."
+
+
 @tool("rename_file", "Rename one of the owner's files or folders; the extension is kept unless a new one is given.",
       {"name": {"type": "string", "description": "the current name (or part of it) or path"}, "to": STR}, ["name", "to"], risk=CHANGE)
 def rename_file(a, ctx):

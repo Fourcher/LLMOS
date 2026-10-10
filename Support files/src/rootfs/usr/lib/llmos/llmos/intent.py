@@ -1433,6 +1433,8 @@ _DARK_WORDS = re.compile(r"^\s*(?:pon(?:er)?|activa(?:r)?|mets?|active|aktiviere
 def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
+    if re.fullmatch(r"where (?:did|has) (?:it|that|my file|the file|my download|the download) (?:get )?(?:save[d]?|go|gone|end up|ended up)|where(?:'s| is) (?:the|that) (?:file|thing|document) (?:you|i) (?:just )?(?:made|saved|downloaded|created)|where did (?:you|it) (?:just )?(?:save|put) (?:it|that)", low.rstrip("?.! ")):
+        return ("last_saved", {})
     import urllib.parse as _u
     # finding the owner's own things by what they are about
     m = re.match(r"^(?:please\s+)?(?:find|show(?:\s+me)?|where(?:'s|\s+is|\s+are)|look\s+for|get(?:\s+me)?|open)\s+(?:the|my|that|those)\s+(?:photos?|pictures?|pics?|images?|snaps?)\s+"
