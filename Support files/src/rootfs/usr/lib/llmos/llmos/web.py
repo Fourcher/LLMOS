@@ -4,9 +4,12 @@ keys. With the Tor setting on, every request (DNS included) goes through Tor."""
 import html
 import json
 import os
+import queue
 import re
 import subprocess
 import tempfile
+import threading
+import time
 import urllib.parse
 
 from . import config
@@ -28,7 +31,7 @@ def _curl_base(timeout):
     return cmd
 
 
-def fetch(url, max_bytes=3_000_000, timeout=25, data=None, dest=None):
+def fetch(url, max_bytes=3_000_000, timeout=15,data=None, dest=None):
     """GET/POST a URL. Returns (status, content_type, final_url, body_bytes)."""
     if not re.match(r"^https?://", url or ""):
         raise WebError("only http(s) URLs are supported")
@@ -74,7 +77,7 @@ def _text(fragment):
 
 
 def _search_ddg(query):
-    status, _, _, body = fetch("https://html.duckduckgo.com/html/", data={"q": query}, timeout=20)
+    status, _, _, body = fetch("https://html.duckduckgo.com/html/", data={"q": query}, timeout=10)
     page = body.decode("utf-8", "replace")
     if status != 200 or "result__a" not in page:
         raise WebError(f"DuckDuckGo returned {status}")
@@ -96,7 +99,7 @@ def _search_ddg(query):
 
 def _search_brave(query):
     url = "https://search.brave.com/search?" + urllib.parse.urlencode({"q": query, "source": "web"})
-    status, _, _, body = fetch(url, timeout=20)
+    status, _, _, body = fetch(url, timeout=10)
     page = body.decode("utf-8", "replace")
     if status != 200:
         raise WebError(f"Brave returned {status}")
@@ -113,23 +116,57 @@ def _search_brave(query):
     return out
 
 
+def _search_limit():
+    try:
+        slow = float(os.environ.get("LLMOS_SLOW", "1"))
+    except ValueError:
+        slow = 1.0
+    return 10.0 * slow
+
+
 def search(query, n=6):
-    errors = []
-    for engine in (_search_ddg, _search_brave):
+    """Ask both engines at once. The first non-empty result list wins; an empty
+    or failed engine does not stop the other one. Waits at most _search_limit()."""
+    engines = (_search_ddg, _search_brave)
+    done = queue.Queue()
+
+    def run(idx, engine):
         try:
-            res = engine(query)
-            if res:
-                seen, uniq = set(), []
-                for r in res:
-                    if r["url"] not in seen:
-                        seen.add(r["url"])
-                        uniq.append(r)
-                return uniq[:n]
-        except WebError as e:
-            errors.append(str(e))
-        except OSError as e:
-            errors.append(str(e))
-    raise WebError("; ".join(errors) or "no results")
+            done.put((idx, engine(query), None))
+        except Exception as e:
+            if isinstance(e, (WebError, OSError)):
+                done.put((idx, None, str(e)))
+            else:
+                done.put((idx, None, f"{type(e).__name__}: {e}"))
+
+    for idx, engine in enumerate(engines):
+        threading.Thread(target=run, args=(idx, engine), daemon=True).start()
+
+    errors = {}
+    deadline = time.monotonic() + _search_limit()
+    finished = 0
+    while finished < len(engines):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            idx, res, err = done.get(timeout=remaining)
+        except queue.Empty:
+            break
+        finished += 1
+        if err is not None:
+            errors[idx] = err
+            continue
+        if res:
+            seen, uniq = set(), []
+            for r in res:
+                if r["url"] not in seen:
+                    seen.add(r["url"])
+                    uniq.append(r)
+            return uniq[:n]
+    if finished < len(engines):
+        raise WebError("the search took too long")
+    raise WebError("; ".join(errors[i] for i in sorted(errors)) or "no results")
 
 
 _DROP = re.compile(r"<(script|style|noscript|svg|nav|footer|header|aside|form|iframe|template)\b.*?</\1\s*>", re.S | re.I)
