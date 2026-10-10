@@ -135,6 +135,87 @@ expect_err("remove name not str", call("remove_setting_file", {"name": 5}), "bad
 assert os.path.exists(settings_path), "a rejected remove touched settings.json"
 print("ok remove_setting_file: removes, missing ok, bad names rejected")
 
+# --- symlinked etc/llmos: every verb refuses, and nothing outside is touched
+def expect_refused(label, reply):
+    assert reply["ok"] is False, f"{label}: accepted {reply}"
+    assert "not a plain folder" in reply["error"], f"{label}: {reply}"
+    print(f"ok {label}: {reply['error']}")
+
+
+link_root = os.path.join(tmp, "linkroot")
+os.makedirs(os.path.join(link_root, "etc"))
+outside_dir = os.path.join(tmp, "outside-dir")
+os.makedirs(outside_dir)
+with open(os.path.join(outside_dir, "conduct.txt"), "w") as f:
+    f.write("outside conduct")
+with open(os.path.join(outside_dir, "timezone"), "w") as f:
+    f.write("outside tz\n")
+os.symlink(outside_dir, os.path.join(link_root, "etc", "llmos"))
+rootd.ETC_ROOT = link_root
+try:
+    expect_refused("symlinked etc/llmos: write refused", call("write_setting_file", {"name": "conduct.txt", "text": "pwned"}))
+    expect_refused("symlinked etc/llmos: remove refused", call("remove_setting_file", {"name": "conduct.txt"}))
+    expect_refused("symlinked etc/llmos: set_timezone refused", call("set_timezone", {"zone": "Europe/Paris"}))
+    expect_refused("symlinked etc/llmos: set_timezone not chosen refused", call("set_timezone", {"zone": "Europe/Paris", "chosen": False}))
+    assert open(os.path.join(outside_dir, "conduct.txt")).read() == "outside conduct", "outside conduct.txt changed"
+    assert open(os.path.join(outside_dir, "timezone")).read() == "outside tz\n", "outside timezone changed"
+    assert sorted(os.listdir(outside_dir)) == ["conduct.txt", "timezone"], "outside dir changed"
+    assert not os.path.lexists(os.path.join(link_root, "etc", "localtime")), "set_timezone wrote localtime despite refusal"
+    assert not os.path.lexists(os.path.join(link_root, "etc", "timezone")), "set_timezone wrote timezone despite refusal"
+finally:
+    rootd.ETC_ROOT = etc
+print("ok symlinked etc/llmos: outside files untouched")
+
+# symlinked etc itself: refused too
+etc_link_root = os.path.join(tmp, "etclinkroot")
+os.makedirs(etc_link_root)
+outside_etc = os.path.join(tmp, "outside-etc")
+os.makedirs(os.path.join(outside_etc, "llmos"))
+with open(os.path.join(outside_etc, "llmos", "conduct.txt"), "w") as f:
+    f.write("outside etc conduct")
+os.symlink(outside_etc, os.path.join(etc_link_root, "etc"))
+rootd.ETC_ROOT = etc_link_root
+try:
+    expect_refused("symlinked etc: write refused", call("write_setting_file", {"name": "conduct.txt", "text": "pwned"}))
+    expect_refused("symlinked etc: remove refused", call("remove_setting_file", {"name": "conduct.txt"}))
+    expect_refused("symlinked etc: set_timezone refused", call("set_timezone", {"zone": "Europe/Paris"}))
+finally:
+    rootd.ETC_ROOT = etc
+assert open(os.path.join(outside_etc, "llmos", "conduct.txt")).read() == "outside etc conduct", "outside etc conduct changed"
+print("ok symlinked etc: outside files untouched")
+
+# etc/llmos missing: created as before
+missing_root = os.path.join(tmp, "missingroot")
+os.makedirs(os.path.join(missing_root, "etc"))
+rootd.ETC_ROOT = missing_root
+try:
+    expect_ok("missing etc/llmos: write creates it", call("write_setting_file", {"name": "conduct.txt", "text": "fresh"}))
+    assert open(os.path.join(missing_root, "etc", "llmos", "conduct.txt")).read() == "fresh"
+    os.unlink(os.path.join(missing_root, "etc", "llmos", "conduct.txt"))
+    os.rmdir(os.path.join(missing_root, "etc", "llmos"))
+    expect_ok("missing etc/llmos: set_timezone creates it", call("set_timezone", {"zone": "Europe/Paris"}))
+    assert open(os.path.join(missing_root, "etc", "llmos", "timezone")).read() == "Europe/Paris\n"
+finally:
+    rootd.ETC_ROOT = etc
+print("ok missing etc/llmos: created")
+
+# symlinked settings.json inside a plain etc/llmos: remove drops only the link, write replaces the link
+outside_file = os.path.join(tmp, "outside-settings.json")
+with open(outside_file, "w") as f:
+    f.write("outside settings")
+if os.path.lexists(settings_path):
+    os.unlink(settings_path)
+os.symlink(outside_file, settings_path)
+expect_ok("remove symlinked settings.json", call("remove_setting_file", {"name": "settings.json"}))
+assert not os.path.lexists(settings_path), "symlinked settings.json link still exists"
+assert open(outside_file).read() == "outside settings", "remove followed the symlink"
+os.symlink(outside_file, settings_path)
+expect_ok("write over symlinked settings.json", call("write_setting_file", {"name": "settings.json", "text": "{\"b\": 2}"}))
+assert not os.path.islink(settings_path), "write kept the symlink"
+assert open(settings_path).read() == "{\"b\": 2}", "write did not replace the link"
+assert open(outside_file).read() == "outside settings", "write followed the symlink"
+print("ok symlinked settings.json: remove drops the link, write replaces it, outside file untouched")
+
 # --- serve over a real socket, in a thread
 sock_dir = tempfile.mkdtemp(prefix="rs-", dir="/tmp")
 sock_path = os.path.join(sock_dir, "root.sock")
