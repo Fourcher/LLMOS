@@ -4167,28 +4167,82 @@ def make_folder(a, ctx):
     return f"made the folder {p.replace(config.home(), '~')}. Say one sentence at most."
 
 
-@tool("last_saved", "Where the newest file in the owner's home folder is: the one saved or downloaded most recently (hidden files skipped).",
-      {}, [], risk=READ)
-def last_saved(a, ctx):
-    home = config.home()
-    best, when = "", 0.0
+_RECENT_CAP = 20000      # files examined per search: keeps "recent files" fast on a big home folder
+_RECENT_SINCE = {"hour": "in the last hour", "today": "today", "yesterday": "yesterday", "week": "in the last 7 days"}
+
+
+def _recent_scan(home, lo, hi=float("inf")):
+    """(mtime, path) of the regular files under home with lo <= mtime < hi, newest first. Hidden files and
+    folders (so ~/.cache and ~/.local) are skipped, symlinks are not followed, and the scan stops after
+    _RECENT_CAP files."""
+    out, seen = [], 0
     for d, dirs, fs in os.walk(home):
         dirs[:] = [x for x in dirs if not x.startswith(".")]
         for f in fs:
             if f.startswith("."):
                 continue
+            if seen >= _RECENT_CAP:
+                return sorted(out, reverse=True)
+            seen += 1
             p = os.path.join(d, f)
             try:
+                if os.path.islink(p):
+                    continue
                 m = os.path.getmtime(p)
             except OSError:
                 continue
-            if m > when:
-                best, when = p, m
-    if not best or time.time() - when > 7200:
-        return "Nothing new was saved in the last two hours."
-    mins = int((time.time() - when) // 60)
-    ago = "just now" if mins < 1 else f"{mins} minute{'s' if mins != 1 else ''} ago"
-    return f"It's {'~' + best[len(home):] if best.startswith(home) else best} (saved {ago})."
+            if lo <= m < hi:
+                out.append((m, p))
+    return sorted(out, reverse=True)
+
+
+def _recent_when(m):
+    """'today 16:42' / 'yesterday 16:42' / '03 Oct 09:05' for a file's mtime."""
+    import datetime as _dt
+    d = _dt.date.fromtimestamp(m)
+    hm = time.strftime("%H:%M", time.localtime(m))
+    today = _dt.date.today()
+    if d == today:
+        return f"today {hm}"
+    if d == today - _dt.timedelta(days=1):
+        return f"yesterday {hm}"
+    return time.strftime("%d %b %H:%M", time.localtime(m))
+
+
+@tool("last_saved", "Find the owner's recently saved or downloaded files in the home folder (hidden files skipped). "
+      "With no 'since': the newest file saved in the last two hours. With 'since': the files in that period, newest first, up to 10.",
+      {"since": {"type": "string", "enum": ["hour", "today", "yesterday", "week"],
+                 "description": "hour = last hour; today = since midnight; yesterday = all of yesterday; week = last 7 days. Leave out for the last two hours."}},
+      [], risk=READ)
+def last_saved(a, ctx):
+    import datetime as _dt
+    home = config.home()
+    since = str(a.get("since") or "").strip().lower()
+    now = time.time()
+    if not since:
+        hits = _recent_scan(home, now - 7200)
+        if not hits:
+            return "Nothing new was saved in the last two hours."
+        when, best = hits[0]
+        mins = int((now - when) // 60)
+        ago = "just now" if mins < 1 else f"{mins} minute{'s' if mins != 1 else ''} ago"
+        return f"It's {'~' + best[len(home):] if best.startswith(home) else best} (saved {ago})."
+    if since not in _RECENT_SINCE:
+        return "error: since must be hour, today, yesterday or week"
+    midnight = _dt.datetime.combine(_dt.date.today(), _dt.time()).timestamp()
+    lo, hi = {"hour": (now - 3600, float("inf")),
+              "today": (midnight, float("inf")),
+              "yesterday": (midnight - 86400, midnight),
+              "week": (now - 7 * 86400, float("inf"))}[since]
+    hits = _recent_scan(home, lo, hi)
+    if not hits:
+        return f"No files were saved {_RECENT_SINCE[since]}."
+    lines = []
+    for m, p in hits[:10]:
+        folder = os.path.dirname(p)
+        folder = '~' + folder[len(home):] if folder.startswith(home) else folder
+        lines.append(f"- {os.path.basename(p)} in {folder} ({_recent_when(m)})")
+    return f"Files saved {_RECENT_SINCE[since]}, newest first:\n" + "\n".join(lines)
 
 
 @tool("rename_file", "Rename one of the owner's files or folders; the extension is kept unless a new one is given.",

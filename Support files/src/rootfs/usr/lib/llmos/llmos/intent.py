@@ -948,8 +948,8 @@ def _files(text):
         v = re.sub(r"\s+", " ", m.group("v").lower())
         view = "list" if v in ("list view", "details view") else "icons"
         return ("show_files", {"path": T._LAST_FOLDER or "~", "view": view})
-    m = re.match(r"^\s*(?:please\s+)?(?:find|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:file|document|thing)s?\s+(?:that\s+)?i(?:\s+(?:was\s+just|was|were|have\s+been)|['’]ve\s+been)\s+working\s+on(?:\s+(?:yesterday|today|last\s+night|earlier|before))?\s*[?.!]?\s*$"
-                 r"|^\s*(?:please\s+)?(?:show|open|list)\s+(?:me\s+)?(?:my\s+)?(?:recent|latest|newest)\s+(?:files|documents)\s*[?.!]?\s*$", text, re.I)
+    m = re.match(r"^\s*(?:please\s+)?(?:find|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:file|document|thing)s?\s+(?:that\s+)?i(?:\s+(?:was\s+just|was|were|have\s+been)|['’]ve\s+been)\s+working\s+on(?:\s+(?:today|last\s+night|earlier|before))?\s*[?.!]?\s*$"
+                 r"|^\s*(?:please\s+)?(?:show|open|list)\s+(?:me\s+)?(?:my\s+)?(?:latest|newest)\s+(?:files|documents)\s*[?.!]?\s*$", text, re.I)
     if m:
         return ("show_files", {"path": "~", "sort": "date"})
     m = _SHOT.match(text)
@@ -1475,6 +1475,22 @@ _DARK_WORDS = re.compile(r"^\s*(?:pon(?:er)?|activa(?:r)?|mets?|active|aktiviere
                          r"|^\s*(?:pon(?:er)?|activa(?:r)?|mets?|aktiviere)?\s*(?:el\s+|le\s+)?(?P<l>modo\s+claro|mode\s+clair|hell(?:er)?\s*modus|浅色模式|ライトモード)", re.I)
 
 
+_RECENT_SAVED = [
+    # (pattern, since): "what was I working on yesterday", "files I changed today", "recent files", "files from this week"
+    (re.compile(r"^\s*(?:please\s+)?(?:what\s+(?:was|were)\s+i\s+(?:just\s+)?working\s+on|(?:find|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:file|document)s?\s+(?:that\s+)?i\s+(?:was|were)\s+working\s+on)\s+yesterday\s*[?.!]?\s*$", re.I), "yesterday"),
+    (re.compile(r"^\s*(?:please\s+)?(?:files?|documents?)\s+i\s+(?:changed|edited|saved|made)\s+today\s*[?.!]?\s*$|^\s*(?:please\s+)?what\s+did\s+i\s+work\s+on\s+today\s*[?.!]?\s*$", re.I), "today"),
+    (re.compile(r"^\s*(?:please\s+)?(?:(?:show|open|list)\s+)?(?:my\s+)?recent\s+files\s*[?.!]?\s*$|^\s*(?:please\s+)?files\s+from\s+this\s+week\s*[?.!]?\s*$", re.I), "week"),
+]
+
+
+def _recent_saved(text):
+    """The owner's recently saved files: the last_saved tool with the period the words name. Raw text, case-insensitive."""
+    for pat, since in _RECENT_SAVED:
+        if pat.match(text):
+            return ("last_saved", {"since": since})
+    return None
+
+
 def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
@@ -1920,6 +1936,9 @@ def _match(text):
         return None
     if len(t) > 200:
         return None
+    rs = _recent_saved(t)
+    if rs:
+        return rs
     ev2 = _everyday2(t)
     if ev2:
         return ev2
