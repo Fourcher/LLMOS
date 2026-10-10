@@ -1,6 +1,7 @@
 """The agent loop: turn what the user said into actions, honestly, under the
 user's chosen autonomy level."""
 import json
+import os
 import re
 import time
 
@@ -563,7 +564,7 @@ def _bare_click(ctx, user_text):
         return None
     out = execute(ctx, "click", {"text": t})
     if _failed(out):
-        return None
+        return f"I can't see “{t}” on the screen."
     return f"Clicked {t}."
 
 
@@ -1269,6 +1270,14 @@ def execute(ctx, name, arguments):
     # first unless the owner turned that check off too ("guard_untrusted": on by default, in every mode)
     tainted = getattr(ctx, "tainted", False) and risk in (tools.CHANGE, tools.DESTRUCTIVE, tools.SECURITY) and name not in TAINT_EXEMPT \
         and config.settings.get("guard_untrusted", True)
+    if name == "delete_file":
+        p = str((arguments or {}).get("path") or "")
+        try:
+            gone = not os.path.lexists(os.path.abspath(tools._path(p)))
+        except Exception:
+            gone = False
+        if gone:
+            return f"error: there's nothing called {p} to delete"   # nothing to ask about
     if always or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
         if not ctx.confirm_action(tool, shown, risk):
             store.audit(name, shown, "denied", allowed=False)

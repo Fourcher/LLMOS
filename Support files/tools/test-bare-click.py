@@ -57,7 +57,7 @@ try:
 
     result["out"] = "error: nothing named File"
     calls.clear()
-    check("failed click -> None", agent._bare_click(None, "click File"), None)
+    check("failed click -> can't-see sentence", agent._bare_click(None, "click File"), "I can't see “File” on the screen.")
     check("failed click was attempted once", calls, [("click", {"text": "File"})])
 finally:
     tools.REGISTRY["click"].available = _saved_available
