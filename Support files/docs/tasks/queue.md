@@ -152,3 +152,9 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - [open] (reliability) packages/LLM OS 1.7.7.zip actually holds the 1.7.6 build; next package.sh run after the 1.7.7 build overwrites it | role: run | files: packages/
 - 769a120 (everyday: instant "15 percent of 240" answers; VERIFY PASS: "15% of 240 is 36.")
 - [done] (owner freedom) default autonomy audit | evidence: PROBE "wizard default slider 0 -> hands-off (desk.py:3788); config fallback balanced (config.py:144) only when the wizard is skipped". Decision: leave as is — the owner sees hands-off by default; the balanced fallback only affects test VMs onboarded by setting (safety suite relies on it). Revisit if the owner says otherwise.
+
+## 1.7.7 build + post-build merges (2026-10-10 02:25)
+- [done] (reliability) P1-7 1.7.7 build | evidence: "==== done (02:23:07) ==== dist/ is current"; RELEASE.json "1.7.7 2937f9d" (contains P1-4 rect, P2-14 testreset-min, P3-2 sampling)
+- [done] (capability/speed/UI) merged b1ee0a5, bd3a962, f2b6cec, 059904f, 769a120 | evidence: VERIFY 84e4e76 "compiled 38 files OK", "node check OK", 82 suites no FAIL; router spot-check all 7 phrases routed
+- [running] (reliability) 1.7.7 isosmoke + calc-smoke | role: run
+- [open] (top) P1-8/P1-9 gate on 1.7.7: rect #in, QMP click centre, type "hello world", rect value check, Enter, desk-ctl wait, desk-state reply | role: run | after: smokes
