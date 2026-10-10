@@ -2503,12 +2503,14 @@ class Desk:
         # the browser's own keys, by name: zoom the page, bookmark it, clear its history
         m = re.fullmatch(r"(?P<zin>(?:make )?(?:the )?(?:text|page|words|font) bigger on (?:this|the) (?:page|website|site)|zoom in(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
                          r"(?P<zout>(?:make )?(?:the )?(?:text|page|words|font) smaller on (?:this|the) (?:page|website|site)|zoom out(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
-                         r"(?P<bm>bookmark (?:this|it|this page|the page|this site)|add (?:this|it|this page) to (?:my )?(?:bookmarks|favou?rites)|save this page)", l2)
+                         r"(?P<bm>bookmark (?:this|it|this page|the page|this site)|add (?:this|it|this page) to (?:my )?(?:bookmarks|favou?rites)|save this page)|"
+                         r"(?P<bms>(?:open|show)(?: me)? (?:my |the )?(?:bookmarks|favou?rites))", l2)
         if m and shutil.which("wtype"):
-            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmark"
+            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmarks" if m.group("bms") else "bookmark"
             ok, note = wm.browser_key(k)
             self.instant_reply(line, ({"zoom in": "Made the page bigger (Ctrl+0 puts it back).", "zoom out": "Made the page smaller.",
-                                       "bookmark": "The bookmark window is open in the browser: press Save."}[k]) if ok
+                                       "bookmark": "The bookmark window is open in the browser: press Save.",
+                                       "bookmarks": "Your bookmarks are open in the browser."}[k]) if ok
                                else note[:1].upper() + note[1:] + ".")
             return True
         if re.fullmatch(r"(?:this |the |a |my )?(?:website|site|web ?page|page|web ?site) (?:won'?t|wont|doesn'?t|does not|isn'?t|is not|will not|can'?t|cannot) (?:load|work|open|come up|connect)(?:ing)?|"
@@ -3026,6 +3028,7 @@ class Desk:
                     r"(?:mouse|keyboard|touchpad) (?:problem|trouble)s?)[?.!]*"), "input"),
         (re.compile(r"(?:open (?:the )?)?(?:storage|disk space|disk usage|free (?:up )?(?:some )?space|(?:my )?disk is full|clean ?up(?: the computer| my computer| disk)?|"
                     r"what'?s (?:using|filling|taking up) (?:my |the )?(?:disk|space|storage)|running out of space|"
+                    r"why(?: is|'s) (?:my |the )?(?:disk|drive|storage|computer|hard drive) (?:so )?full|why am i (?:out of|running out of|low on) (?:space|storage)|"
                     r"how much (?:free |disk |storage )?(?:space|storage)(?: do i have| is left| left| have i got)?|how full is (?:my |the )?(?:disk|computer|drive))[?.!]*"), "storage"),
         (re.compile(r"(?:are there (?:any )?updates|check for updates|any updates|updates|"
                     r"is (?:it|the system|everything) up to date)[?.!]*"), "updates"),

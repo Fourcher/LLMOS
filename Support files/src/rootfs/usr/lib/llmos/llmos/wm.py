@@ -22,7 +22,8 @@ KEYS = {"back": ["-M", "alt", "-k", "Left", "-m", "alt"], "forward": ["-M", "alt
         "save": ["-M", "ctrl", "-k", "s", "-m", "ctrl"],
         "zoom in": ["-M", "ctrl", "-k", "plus", "-m", "ctrl"], "zoom out": ["-M", "ctrl", "-k", "minus", "-m", "ctrl"],
         "zoom reset": ["-M", "ctrl", "-k", "0", "-m", "ctrl"], "bookmark": ["-M", "ctrl", "-k", "d", "-m", "ctrl"],
-        "clear history": ["-M", "ctrl", "-M", "shift", "-k", "Delete", "-m", "shift", "-m", "ctrl"], "find": ["-M", "ctrl", "-k", "f", "-m", "ctrl"]}
+        "clear history": ["-M", "ctrl", "-M", "shift", "-k", "Delete", "-m", "shift", "-m", "ctrl"], "find": ["-M", "ctrl", "-k", "f", "-m", "ctrl"],
+        "bookmarks": ["-M", "ctrl", "-M", "shift", "-k", "o", "-m", "shift", "-m", "ctrl"]}
 
 
 def _env():
