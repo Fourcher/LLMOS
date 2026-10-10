@@ -228,11 +228,14 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "cat /etc/llmos/settings.json; echo"
+          "command": "python3 -c \"import json;a=json.load(open('/etc/llmos/settings.json')).get('appearance',{});b=(a.get('background') or '#ffffff').lstrip('#');r,g,c=(int(b[i:i+2],16) for i in (0,2,4));print('dark' if (r+g+c)/3<128 else 'light')\""
         },
         "expected": {
           "include": [
             "dark"
+          ],
+          "exclude": [
+            "light"
           ]
         }
       },
@@ -247,11 +250,14 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "cat /etc/llmos/settings.json; echo"
+          "command": "python3 -c \"import json;a=json.load(open('/etc/llmos/settings.json')).get('appearance',{});b=(a.get('background') or '#ffffff').lstrip('#');r,g,c=(int(b[i:i+2],16) for i in (0,2,4));print('dark' if (r+g+c)/3<128 else 'light')\""
         },
         "expected": {
           "include": [
             "light"
+          ],
+          "exclude": [
+            "dark"
           ]
         }
       },
