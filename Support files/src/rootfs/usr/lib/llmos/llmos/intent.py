@@ -933,6 +933,13 @@ def _files(text):
         v = re.sub(r"\s+", " ", m.group("v").lower()).replace("a grid", "grid")
         view = "icons" if v in ("icons", "big icons", "large icons", "grid", "thumbnails") else "list"
         return ("show_files", {"path": T._LAST_FOLDER or "~", "view": view})
+    # bare view phrases: "show big icons", "list view", "show icons"
+    m = re.match(r"^\s*(?:please\s+)?(?:show\s+|use\s+|switch\s+to\s+)?(?P<v>big\s+icons|large\s+icons|icons|icon\s+view|grid\s+view|list\s+view|details\s+view)\s*[.!]?$", text, re.I)
+    if m:
+        from . import tools as T
+        v = re.sub(r"\s+", " ", m.group("v").lower())
+        view = "list" if v in ("list view", "details view") else "icons"
+        return ("show_files", {"path": T._LAST_FOLDER or "~", "view": view})
     m = re.match(r"^\s*(?:please\s+)?(?:find|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:file|document|thing)s?\s+(?:that\s+)?i(?:\s+(?:was\s+just|was|were|have\s+been)|['’]ve\s+been)\s+working\s+on(?:\s+(?:yesterday|today|last\s+night|earlier|before))?\s*[?.!]?\s*$"
                  r"|^\s*(?:please\s+)?(?:show|open|list)\s+(?:me\s+)?(?:my\s+)?(?:recent|latest|newest)\s+(?:files|documents)\s*[?.!]?\s*$", text, re.I)
     if m:

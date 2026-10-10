@@ -30,6 +30,22 @@ T._LAST_FOLDER = "/root/Downloads"
 route("show as list", ("show_files", {"path": "/root/Downloads", "view": "list"}))
 T._LAST_FOLDER = None
 
+# bare view phrases (sweep)
+route("show big icons", ("show_files", {"path": "~", "view": "icons"}))
+route("big icons", ("show_files", {"path": "~", "view": "icons"}))
+route("show icons", ("show_files", {"path": "~", "view": "icons"}))
+route("icon view", ("show_files", {"path": "~", "view": "icons"}))
+route("please use grid view.", ("show_files", {"path": "~", "view": "icons"}))
+route("list view", ("show_files", {"path": "~", "view": "list"}))
+route("show details view", ("show_files", {"path": "~", "view": "list"}))
+T._LAST_FOLDER = "/root/Downloads"
+route("list view", ("show_files", {"path": "/root/Downloads", "view": "list"}))
+T._LAST_FOLDER = None
+r = intent._match("show icons on the desktop")
+assert r != ("show_files", {"path": "~", "view": "icons"}), r
+print("ok 'show icons on the desktop' is not the bare view route ->", r)
+print("print only: 'show list' ->", intent._match("show list"))
+
 # not the view route: unchanged from before
 r = intent._match("show me a list of my files")
 assert r is None, r
