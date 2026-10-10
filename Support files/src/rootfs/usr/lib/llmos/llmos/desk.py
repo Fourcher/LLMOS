@@ -2377,6 +2377,18 @@ class Desk:
             threading.Thread(target=lambda: self.instant_reply(line, fn()[1]), daemon=True).start()
             self._said = "Checking now; the result follows."
             return True
+        m = re.fullmatch(r"(?:turn |switch )?(?:the )?wi-?fi (?P<v>on|off)|(?:turn|switch) (?P<v2>on|off) (?:the )?wi-?fi|(?P<v3>enable|disable) (?:the )?wi-?fi", low.rstrip(".!"))
+        if m and shutil.which("rfkill"):
+            v = m.group("v") or m.group("v2") or ("on" if m.group("v3") == "enable" else "off")
+            try:
+                have = subprocess.run(["rfkill", "list", "wifi"], capture_output=True, text=True, timeout=5).stdout.strip()
+                if have:
+                    subprocess.run(["rfkill", "block" if v == "off" else "unblock", "wifi"], capture_output=True, timeout=10)
+            except (OSError, subprocess.TimeoutExpired):
+                have = ""
+            self.instant_reply(line, ("Wi-Fi is off." if v == "off" else "Wi-Fi is on.") if have else "This computer has no Wi-Fi adapter.")
+            self.push_status()
+            return True
         m = re.fullmatch(r"(?:turn |switch )?(?:on |off )?(?:airplane|aeroplane|flight|plane) mode(?: (?P<v>on|off))?|(?P<v2>turn on|turn off|enable|disable) (?:airplane|aeroplane|flight) mode", low.rstrip(".!"))
         if m and shutil.which("rfkill"):
             v = m.group("v") or ("off" if (m.group("v2") or "").endswith(("off", "disable")) or low.startswith(("turn off", "switch off")) else "on")
