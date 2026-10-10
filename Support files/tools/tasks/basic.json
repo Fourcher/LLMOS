@@ -228,7 +228,7 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "python3 -c \"import json;a=json.load(open('/etc/llmos/settings.json')).get('appearance',{});b=(a.get('background') or '#ffffff').lstrip('#');r,g,c=(int(b[i:i+2],16) for i in (0,2,4));print('dark' if (r+g+c)/3<128 else 'light')\""
+          "command": "cd /usr/lib/llmos && python3 -c \"import json;from llmos import ui;exec('try:\\n a=json.load(open(\\'/etc/llmos/settings.json\\')).get(\\'appearance\\',{})\\n c=ui.parse_color(a.get(\\'background\\') or \\'#ffffff\\') or (255,255,255)\\n print(\\'dark\\' if sum(c)/3<128 else \\'light\\')\\nexcept Exception:\\n print(\\'light\\')')\""
         },
         "expected": {
           "include": [
@@ -250,7 +250,7 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "python3 -c \"import json;a=json.load(open('/etc/llmos/settings.json')).get('appearance',{});b=(a.get('background') or '#ffffff').lstrip('#');r,g,c=(int(b[i:i+2],16) for i in (0,2,4));print('dark' if (r+g+c)/3<128 else 'light')\""
+          "command": "cd /usr/lib/llmos && python3 -c \"import json;from llmos import ui;exec('try:\\n a=json.load(open(\\'/etc/llmos/settings.json\\')).get(\\'appearance\\',{})\\n c=ui.parse_color(a.get(\\'background\\') or \\'#ffffff\\') or (255,255,255)\\n print(\\'dark\\' if sum(c)/3<128 else \\'light\\')\\nexcept Exception:\\n print(\\'light\\')')\""
         },
         "expected": {
           "include": [

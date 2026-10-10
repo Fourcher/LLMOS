@@ -23,8 +23,9 @@ THEME_WORDS = ["theme", "purple", "colour", "color", "dark", "light"]
 MUSIC_WORDS = ["music", "playing", "mpv"]
 FOLDER_NAME = re.compile(r"\bfolder\s+(?:called\s+)?([A-Za-z0-9_.-]+)", re.IGNORECASE)
 SETTINGS_CMD = "cat /etc/llmos/settings.json; echo"
-# prints 'dark' or 'light' from appearance.background (missing -> white -> light); no '!' in it, so tsh types it as-is
-DARK_LIGHT_CMD = r'''python3 -c "import json;a=json.load(open('/etc/llmos/settings.json')).get('appearance',{});b=(a.get('background') or '#ffffff').lstrip('#');r,g,c=(int(b[i:i+2],16) for i in (0,2,4));print('dark' if (r+g+c)/3<128 else 'light')"'''
+# prints 'dark' or 'light' from appearance.background, normalised by the OS's own ui.parse_color (#rgb, #rrggbb, names);
+# bad or missing colour -> white -> light; any exception -> light. No '!' in it, so tsh types it as-is.
+DARK_LIGHT_CMD = r'''cd /usr/lib/llmos && python3 -c "import json;from llmos import ui;exec('try:\n a=json.load(open(\'/etc/llmos/settings.json\')).get(\'appearance\',{})\n c=ui.parse_color(a.get(\'background\') or \'#ffffff\') or (255,255,255)\n print(\'dark\' if sum(c)/3<128 else \'light\')\nexcept Exception:\n print(\'light\')')"'''
 REPLY_EXCLUDE = ["No such tool", "error:", "Traceback"]
 
 
