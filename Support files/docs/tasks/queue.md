@@ -174,3 +174,10 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - [done] (top) P2-9 page vs say on 1.7.9 | evidence: "page 50/50 (1177 s), say 50/50 (873 s), 50 compared; 0 differ"
 - [hold] (speed) 0801038 desk "wait N after M" + realrun uses it (VERIFY PASS: grace 0.00 s when done) — merge after P3-6 RUN finishes (touches realrun.py in use), before the 1.8.0 build.
 - [hold] (reliability) f736b08 real-state checks for 10 use-case tasks (VERIFY PASS: all keys/paths confirmed in source; desk-state spacing matches) — merge after P3-6 (it regenerates usecases-1.json in use).
+
+## Owner account (next big item) — plan, one step at a time
+Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_HOME or ~ (65 home-path uses); 13 root-needing lines in tools.py (apk, iwctl, nft, /etc writes, chmod/chown); no account code; installer has no user step; desk.py:3032 already tells the owner separate accounts are planned.
+- [open] (capability) A1 PROBE: exactly how the graphical session starts and as whom (getty autologin? /root/.profile? an openrc service?) — files and lines | role: probe
+- [open] (capability) A2 PROBE: list every root-needing call across llmos/*.py (not just tools.py) with what it does | role: probe
+- [open] (capability) A3 design note (orchestrator): owner user "owner" + a small root helper (unix socket, fixed verb list, no shell) for A2's actions; desk/agent run as owner
+- [open] (capability) A4.. FIX steps from the design, each one file or two, behind a test-shell flag first
