@@ -221,7 +221,7 @@
     catch (e) { $("clock").textContent = now.toLocaleTimeString(); }
   }
   setInterval(clock, 1000);
-  $("clock").style.cursor = "pointer"; $("clock").title = "Clock & calendar";
+  $("clock").style.cursor = "pointer"; $("clock").title = t("d_clock_title", "Clock & calendar");
   $("clock").addEventListener("click", () => act("open the clock"));
 
   // ---------------------------------------------------------------- screens
