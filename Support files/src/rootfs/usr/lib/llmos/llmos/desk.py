@@ -1781,6 +1781,9 @@ class Desk:
                     {"label": L("v_hands-off"), "say": "switch to hands-off mode"},
                     {"label": L("v_balanced"), "say": "switch to balanced mode"},
                     {"label": L("v_hands-on"), "say": "switch to hands-on mode"}]},
+                {"type": "toggle", "label": L("s_guard_untrusted"), "hint": L("s_guard_untrusted_hint"),
+                 "on": bool(s.get("guard_untrusted", True)), "say_on": "turn on the web page check",
+                 "say_off": "turn off the web page check"},
                 {"type": "heading", "text": L("s_internet")},
                 {"type": "choices", "selected": L("v_" + {"yes": "yes", "ask": "ask", "no": "no"}[s["internet"]]), "items": [
                     pick("v_yes", "allow internet use"), pick("v_ask", "ask me each time before using the internet"),
