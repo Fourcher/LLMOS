@@ -55,7 +55,7 @@ def launch(cmd, env, timeout=60):
 base_env = dict(os.environ, LLMOS_SETUP_NO_BROWSER="1", TERM="dumb")
 
 print("the folder a friend opens")
-top = sorted(n for n in os.listdir(TOP) if not n.startswith("."))
+top = sorted(n for n in os.listdir(TOP) if not n.startswith(".") and n != "packages")   # packages/: local build output (git-ignored), never shipped
 check(top == ["Start Here (Linux).sh", "Start Here (Mac).command", "Start Here (Windows).bat", "Support files"],
       f"only the three Start Here files and one folder: {top}")
 bat = open(os.path.join(TOP, "Start Here (Windows).bat"), "rb").read()
