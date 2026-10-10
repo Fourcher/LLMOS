@@ -141,7 +141,7 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - [done] (speed) sweep 2 on 1.7.6 | evidence: "timed-sweep: 54 phrase(s), 47 took <=3 s, 7 took >3 s" (1.7.5: 40/54)
 - [open] (capability) slow/wrong: "how tall is mount everest" 88 s; "show as list / big icons" 149 s empty reply; "turn word doc into pdf" 73 s wrong ("Opened the office program"); "always open pdfs in X" 44 s wrong ("Install files."); "translate thank you to french" 23 s; "click File" 23 s | role: probe (dispatched) | files: read only
 - [open] (reliability) package.sh named the 1.7.6 build "LLM OS 1.7.7.zip" (reads source VERSION, not dist) | role: fix (dispatched) | files: tools/package.sh
-- [open] (reliability) main-checkout test-start.py FAIL ("known packages/ issue") still seen by RUN | role: probe | files: read only
+- [done] (reliability) test-start.py in main checkout | evidence: PROBE "test-start.py exits 0 (all good)"; packages/ already excluded; not reproducible
 
 ## Post-1.7.7-build src merge list
 - b1ee0a5 (pdf route: "turn word doc into pdf" -> which_file; VERIFY PASS)
@@ -149,3 +149,4 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - bd3a962 (files icon grid in desk.js/desk.css; VERIFY PASS)
 - [done] (capability) "open the task list app" (c18ff22 VERIFY PASS: "open_app task list") -> open_app command "open the task list" (verb kept in command) | role: fix | files: intent.py _OPEN_APP
 - 059904f (web search: engines in parallel, 10 s cap, plain error text; VERIFY PASS: "search failed: DuckDuckGo returned 503; Brave returned 429")
+- [open] (reliability) packages/LLM OS 1.7.7.zip actually holds the 1.7.6 build; next package.sh run after the 1.7.7 build overwrites it | role: run | files: packages/
