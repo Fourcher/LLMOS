@@ -1397,8 +1397,12 @@ def _apps(text):
                                                                           for tt in apps.templates() for w in [tt["id"]] + tt["words"]):
         return ("open_app", {"command": bare})
     m = re.match(r"^\s*(?:a\s+|an\s+|the\s+|my\s+)?(?P<n>[a-z][a-z -]{1,25}?)\s+app\s*[.!?]?\s*$", text, re.I)
-    if m and (apps.find(m.group("n")) or apps.match_template(m.group("n"))):
-        return ("open_app", {"command": m.group("n").strip()})
+    if m:
+        # "open the task list app": the verb and article are not part of the program's name
+        cmd = re.sub(r"^(?:open|launch|start|run|show)\s+(?:the\s+|my\s+|a\s+)?", "", m.group("n").strip(), flags=re.I)
+        cmd = re.sub(r"\s+(?:app|application|program)$", "", cmd, flags=re.I).strip()
+        if cmd and (apps.find(cmd) or apps.match_template(cmd)):
+            return ("open_app", {"command": cmd})
     m = _OPEN_APP.match(text)
     if m:
         n = m.group("n").strip()
