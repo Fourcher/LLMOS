@@ -45,3 +45,12 @@ download packages from Alpine's signed repositories, and run installs that may b
 - Pass then fail = flaky: file it with its signature, don't gate a merge or release on it.
 - Fail twice = real: dispatch a FIX with the repro bundle.
 - A failure cluster closes only after two passing reruns.
+
+## Lesson (2026-10-10 round review): put the adversarial cases in the FIX spec
+This round's VERIFY FAILs were all cases the FIX spec never named: frame size change (settle), dangerous phrases slipping a word list (P2-11), wrong state paths guessed without reading source (P2-2), action clauses swallowed by a broad regex (photo route), unquoted shell argument (realuser). Each cost one extra FIX+VERIFY cycle.
+Before dispatching a FIX, add a "must also handle" line listing, as applicable:
+- inputs of a different size/shape than the happy path; empty, None, unicode;
+- for regex routes: 3 near-miss phrases that ask for a DIFFERENT action and must not match, plus one contraction;
+- for anything built into a shell command: a quote, a space and a newline in the argument;
+- for task/grader files: the real path of the state, read from source (paste file:line into the spec), never guessed;
+- for word filters: phrase forms, not just single words, and a substring false positive (sudo/sudoku).
