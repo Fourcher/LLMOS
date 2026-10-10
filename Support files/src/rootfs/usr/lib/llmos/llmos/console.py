@@ -239,7 +239,7 @@ class Console:
         s = config.settings.all()
         ui.line(f"LLM OS", style="accent")
         m = models.active()
-        sub = m["name"] if m else T("model_down")
+        sub = m["name"] if m else T("no_model")
         extras = []
         if models.host_mode():
             extras.append("host GPU")
