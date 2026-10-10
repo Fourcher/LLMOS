@@ -42,6 +42,11 @@ def main():
             failures.append(f"{target}: no var(--...) used")
             continue
         print(f"ok {target} uses theme variables and no hex colour")
+        if target == ".sw::after":
+            if not re.search(r"(?<![-\w])background:\s*color-mix\(in srgb,\s*var\(--fg\)", body):
+                failures.append(f"{target}: knob background does not use var(--fg)")
+            else:
+                print(f"ok {target} knob background uses var(--fg) (contrasts with the track in both themes)")
     if failures:
         for line in failures:
             print("FAIL " + line)
