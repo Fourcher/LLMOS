@@ -564,16 +564,32 @@ def web_block(desk, line, low):
         config.settings.set("web_block", wb)
         _hosts_block(_focus_sites())
         return _say(desk, line, f"{', '.join(sorted(drop))} open again.")
-    m = re.search(r"^(?:please\s+)?block\s+(?P<s>(?!every|all\b)[\w., -]+?)(?:\s+(?:forever|for good|permanently|from now on))?$", low)
+    m = re.search(r"^(?:please\s+)?block\s+(?P<s>(?!every|all\b)[\w.,/: -]+?)(?:\s+(?:forever|for good|permanently|from now on))?$", low)
     if m and not re.search(r"\b(?:for|until|while)\b", m.group("s")):
         wb = dict(config.settings.get("web_block") or {})
-        add = [_site(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()]
-        wb["block"] = sorted(set((wb.get("block") or []) + add))
-        wb.pop("allow_only", None)
-        config.settings.set("web_block", wb)
-        _hosts_block(_focus_sites())
-        return _say(desk, line, f"Blocked {', '.join(add)}{_firefox_note()}. Say \u201cunblock {add[0].split('.')[0]}\u201d to undo.")
+        typed = [_typed_site(w) for w in re.split(r",|\band\b", m.group("s")) if w.strip()]
+        add = [s for s in typed if _hosts_name_ok(s)]          # only names that will really be written
+        skipped = [s for s in typed if not _hosts_name_ok(s)]
+        if add:
+            wb["block"] = sorted(set((wb.get("block") or []) + add))
+            wb.pop("allow_only", None)
+            config.settings.set("web_block", wb)
+            _hosts_block(_focus_sites())
+            reply = f"Blocked {', '.join(add)}{_firefox_note()}. Say \u201cunblock {add[0].split('.')[0]}\u201d to undo."
+        else:
+            reply = "Nothing was blocked."
+        if skipped:
+            reply += f" I couldn't block {', '.join(skipped)}: they aren't website names."
+        return _say(desk, line, reply)
     return False
+
+
+def _typed_site(word):
+    """A site as the owner types it: a leading http:// or https:// and any path are dropped, a www. is kept;
+    a plain word ("reddit") becomes its site name as _site() gives it."""
+    w = word.strip().lower().strip(".,")
+    w = re.sub(r"^https?://", "", w).split("/")[0]
+    return w if "." in w else _site(w)
 
 
 def _focus_sites():

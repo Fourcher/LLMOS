@@ -24,6 +24,7 @@ with open(hosts, "w") as f:
 # --- redirects: the hosts path, the settings store, the Firefox policy file
 real_hosts, real_settings, real_policy = system.HOSTS, config.settings, everyday._POLICY
 real_call, real_access = rootd_client.call, os.access
+real_firefox_note = everyday._firefox_note
 
 
 class FakeSettings:
@@ -126,11 +127,59 @@ try:
     assert read() == ORIGINAL, repr(read())
     print("ok everyday _hosts_block (writable): direct write, block lifted restores the original text")
 
+    # 8. web_block reply and written hosts lines: the names actually written, skipped names said plainly
+    class Desk:
+        def __init__(self):
+            self.replies = []
+
+        def instant_reply(self, line, text):
+            self.replies.append(text)
+
+    desk = Desk()
+    everyday._firefox_note = lambda: ""
+
+    def web(text):
+        desk.replies.clear()
+        assert everyday.web_block(desk, text, text.lower()) is True, text
+        return desk.replies[-1]
+
+    # 8a. a URL with scheme and path is normalised, not skipped
+    config.settings.set("web_block", {})
+    reply = web("block https://example.com/news")
+    assert reply == "Blocked example.com. Say “unblock example” to undo.", reply
+    lines = read().splitlines()
+    assert f"0.0.0.0 example.com {everyday._MARK}" in lines and f"0.0.0.0 www.example.com {everyday._MARK}" in lines, lines
+    print(f"ok web_block URL: reply {reply!r}, example.com written")
+
+    # 8b. an invalid name is skipped and named; the valid one is still blocked and written
+    config.settings.set("web_block", {})
+    reply = web("block my_site.com, https://example.com/news")
+    assert reply == ("Blocked example.com. Say “unblock example” to undo. "
+                     "I couldn't block my_site.com: they aren't website names."), reply
+    assert config.settings.get("web_block")["block"] == ["example.com"], config.settings.get("web_block")
+    assert not any("my_site" in ln for ln in read().splitlines()), read()
+    assert f"0.0.0.0 example.com {everyday._MARK}" in read().splitlines(), read()
+    print(f"ok web_block mixed: reply {reply!r}, my_site.com not written")
+
+    # 8c. all skipped: nothing blocked, the reason is said, nothing is stored or written
+    config.settings.set("web_block", {})
+    before = read()
+    reply = web("block my_site.com")
+    assert reply == "Nothing was blocked. I couldn't block my_site.com: they aren't website names.", reply
+    assert not config.settings.get("web_block"), config.settings.get("web_block")
+    assert read() == before, read()
+    print(f"ok web_block all skipped: reply {reply!r}, nothing written")
+
+    everyday._hosts_block([])
+    config.settings.set("web_block", {})
+    assert read() == ORIGINAL, repr(read())
+
     print("all good")
 finally:
     system.HOSTS = real_hosts
     config.settings = real_settings
     everyday._POLICY = real_policy
+    everyday._firefox_note = real_firefox_note
     rootd_client.call = real_call
     os.access = real_access
     shutil.rmtree(tmp, ignore_errors=True)
