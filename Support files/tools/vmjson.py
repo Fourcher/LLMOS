@@ -36,12 +36,14 @@ def vm_json(text):
 
 
 _TRAILER = re.compile(r"^\[vmctl: (matched|TIMEOUT) after [\d.]+s\]$")
+# the echoed command typed into the console: a prompt "llmos:<cwd># " followed by text (or a bare prompt)
+_ECHO = re.compile(r"^llmos:\S*#(\s|$)")
 
 
 def vm_text(out):
-    """The text of VM command output with the "[vmctl: matched after N.Ns]" and "[vmctl: TIMEOUT after N.Ns]"
-    trailer lines removed and trailing whitespace stripped. Output with a TIMEOUT trailer gives None (no
-    output); a non-string gives None."""
+    """The text of VM command output with the echoed command lines (a line starting "llmos:<cwd># "), the
+    "[vmctl: matched after N.Ns]" and "[vmctl: TIMEOUT after N.Ns]" trailer lines removed and trailing
+    whitespace stripped. Output with a TIMEOUT trailer gives None (no output); a non-string gives None."""
     if not isinstance(out, str):
         return None
     kept = []
@@ -51,6 +53,8 @@ def vm_text(out):
         if m:
             if m.group(1) == "TIMEOUT":
                 timed_out = True
+            continue
+        if _ECHO.match(line.strip()):
             continue
         kept.append(line)
     if timed_out:
