@@ -216,6 +216,94 @@ assert open(settings_path).read() == "{\"b\": 2}", "write did not replace the li
 assert open(outside_file).read() == "outside settings", "write followed the symlink"
 print("ok symlinked settings.json: remove drops the link, write replaces it, outside file untouched")
 
+# --- corrupt settings.json: the exact bytes are kept as settings.json.broken-<stamp> before the overwrite
+broken_root = os.path.join(tmp, "brokenroot")
+os.makedirs(os.path.join(broken_root, "etc", "llmos"))
+broken_dir = os.path.join(broken_root, "etc", "llmos")
+broken_settings = os.path.join(broken_dir, "settings.json")
+rootd.ETC_ROOT = broken_root
+real_datetime = rootd.datetime
+frozen = real_datetime(2026, 10, 10, 12, 0, 0)
+
+
+class FrozenDatetime:
+    @staticmethod
+    def now():
+        return frozen
+
+
+def copies():
+    return sorted(n for n in os.listdir(broken_dir) if n.startswith("settings.json.broken-"))
+
+
+try:
+    rootd.datetime = FrozenDatetime
+    cases = [
+        ("corrupt text", b"{nope, the owner's words"),
+        ("empty file", b""),
+        ("json list", b"[]"),
+    ]
+    for label, raw in cases:
+        with open(broken_settings, "wb") as f:
+            f.write(raw)
+        for old in copies():
+            os.unlink(os.path.join(broken_dir, old))
+        expect_ok(f"corrupt settings.json ({label}): write", call("write_setting_file", {"name": "settings.json", "text": "{\"c\": 3}"}))
+        assert copies() == ["settings.json.broken-20261010-120000"], (label, copies())
+        kept = os.path.join(broken_dir, copies()[0])
+        assert open(kept, "rb").read() == raw, f"{label}: copy bytes differ"
+        assert oct(os.stat(kept).st_mode & 0o777) == "0o600", oct(os.stat(kept).st_mode)
+        assert open(broken_settings).read() == "{\"c\": 3}", f"{label}: new content not written"
+        print(f"ok corrupt settings.json ({label}): copy kept with exact bytes, mode 0600, new content written")
+
+    # good JSON object: no copy
+    for old in copies():
+        os.unlink(os.path.join(broken_dir, old))
+    with open(broken_settings, "w") as f:
+        f.write("{\"a\": 1}")
+    expect_ok("good settings.json: write", call("write_setting_file", {"name": "settings.json", "text": "{\"d\": 4}"}))
+    assert copies() == [], f"good file was copied: {copies()}"
+    assert open(broken_settings).read() == "{\"d\": 4}"
+    print("ok good settings.json: no copy")
+
+    # two corrupt writes in the same (frozen) second: distinct copies, -1 suffix on collision
+    with open(broken_settings, "w") as f:
+        f.write("{bad one")
+    expect_ok("corrupt twice (first)", call("write_setting_file", {"name": "settings.json", "text": "{\"e\": 5}"}))
+    with open(broken_settings, "w") as f:
+        f.write("{bad two")
+    expect_ok("corrupt twice (second)", call("write_setting_file", {"name": "settings.json", "text": "{\"f\": 6}"}))
+    assert copies() == ["settings.json.broken-20261010-120000", "settings.json.broken-20261010-120000-1"], copies()
+    assert open(os.path.join(broken_dir, copies()[0]), "rb").read() == b"{bad one", "first copy changed"
+    assert open(os.path.join(broken_dir, copies()[1]), "rb").read() == b"{bad two", "second copy wrong"
+    assert open(broken_settings).read() == "{\"f\": 6}"
+    print("ok two corrupt writes in one second: two distinct copies")
+
+    # conduct.txt is never copied, even when corrupt
+    with open(os.path.join(broken_dir, "conduct.txt"), "w") as f:
+        f.write("{not json")
+    before = copies()
+    expect_ok("conduct.txt write: no copy", call("write_setting_file", {"name": "conduct.txt", "text": "kind\n"}))
+    assert copies() == before, "conduct.txt write made a copy"
+    print("ok conduct.txt: no copy")
+
+    # symlinked settings.json: no copy, the link is replaced as before, outside file untouched
+    for old in copies():
+        os.unlink(os.path.join(broken_dir, old))
+    outside_bad = os.path.join(tmp, "outside-bad.json")
+    with open(outside_bad, "w") as f:
+        f.write("{outside bad")
+    os.unlink(broken_settings)
+    os.symlink(outside_bad, broken_settings)
+    expect_ok("symlinked settings.json: write", call("write_setting_file", {"name": "settings.json", "text": "{\"g\": 7}"}))
+    assert copies() == [], f"symlink target was copied: {copies()}"
+    assert not os.path.islink(broken_settings) and open(broken_settings).read() == "{\"g\": 7}"
+    assert open(outside_bad).read() == "{outside bad", "symlink target changed"
+    print("ok symlinked settings.json: no copy, outside file untouched")
+finally:
+    rootd.datetime = real_datetime
+    rootd.ETC_ROOT = etc
+
 # --- write_hosts
 hosts_root = os.path.join(tmp, "hostsroot")
 os.makedirs(os.path.join(hosts_root, "etc"))
