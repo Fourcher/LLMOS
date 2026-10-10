@@ -672,7 +672,7 @@ class Desk:
             # a focus period running when the desk restarted carries on (or ends, if its time is up)
             GLib.timeout_add(2500, lambda: (everyday.focus_resume(self), False)[1])
             GLib.timeout_add(2500, lambda: (self._start_notifications(), False)[1])
-            GLib.timeout_add_seconds(20, lambda: (threading.Thread(target=system.sync_time, daemon=True).start(), False)[1])
+            GLib.timeout_add_seconds(20, lambda: (threading.Thread(target=lambda: system.sync_time(automatic=True), daemon=True).start(), False)[1])
             GLib.timeout_add(1500, lambda: (self.apply_input(), False)[1])
             threading.Thread(target=self._control_socket, daemon=True).start()
             GLib.timeout_add_seconds(3, self._poll_drives)
