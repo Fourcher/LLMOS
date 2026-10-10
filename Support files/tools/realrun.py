@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evaluators  # noqa: E402
 import tasklib  # noqa: E402
 from realuser import INPUT  # noqa: E402
+from vmjson import vm_json  # noqa: E402
 
 OUTDIR = "run/realrun"
 REPLY_KEY = "reply"  # desk.py:4038 _state() -> {"reply": self.last_reply, ...}
@@ -27,38 +28,6 @@ REPLY_KEY = "reply"  # desk.py:4038 _state() -> {"reply": self.last_reply, ...}
 
 def _add(steps, name, seconds):
     steps[name] = steps.get(name, 0.0) + seconds
-
-
-def vm_json(text):
-    """The JSON object (a dict) in VM command output, or None. tsh output carries more than the
-    reply (the echoed command, prompt lines, the "[vmctl: ...]" trailer), so: the whole text if it is
-    one object; else the last line that is one object; else the span from the first "{" to the last "}".
-    Output with no object (e.g. "[vmctl: TIMEOUT after 30.4s]") gives None."""
-    if not isinstance(text, str):
-        return None
-    try:
-        obj = json.loads(text)
-        if isinstance(obj, dict):
-            return obj
-    except ValueError:
-        pass
-    for line in reversed([ln.strip() for ln in text.splitlines()]):
-        if line.startswith("{") and line.endswith("}"):
-            try:
-                obj = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(obj, dict):
-                return obj
-    first, last = text.find("{"), text.rfind("}")
-    if first != -1 and last > first:
-        try:
-            obj = json.loads(text[first:last + 1])
-        except ValueError:
-            return None
-        if isinstance(obj, dict):
-            return obj
-    return None
 
 
 PATHS = ("page", "say")
