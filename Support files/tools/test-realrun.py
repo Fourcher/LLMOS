@@ -516,6 +516,138 @@ def main():
               json.dumps(trailer_rec)[:300])
         print("ok run_task vm_command_line observed=%r verdict=%s" % (trailer_rec["observed"], trailer_rec["verdict"]))
 
+        # 9e. stuck-turn drain: a fake desk that stays busy after the wait; cancel ends it after `left` polls
+        def make_drain_vm(left=2, cancel_raises=False, drop_queued=False, never_idle=False, busy_waits=1):
+            base = make_vm()
+            st = {"busy": False, "cancelled": False, "left": left, "busy_waits": busy_waits,
+                  "reply": "", "never_idle": never_idle, "cmds": [], "events": []}
+
+            def vm(cmd):
+                st["cmds"].append(cmd)
+                if cmd == "llmos desk-ctl testreset":
+                    st["events"].append("testreset")
+                    st["reply"] = ""  # a reset clears the reply; a busy desk stays busy
+                    return "ok"
+                if cmd == "llmos desk-ctl cancel":
+                    st["cancelled"] = True
+                    if cancel_raises:
+                        raise RuntimeError("cancel refused")
+                    return "ok"
+                if cmd.startswith("llmos desk-ctl wait"):
+                    if st["busy_waits"] > 0:
+                        st["busy_waits"] -= 1
+                        st["busy"] = True
+                    if not st["busy"]:
+                        st["reply"] = "Canberra"
+                    return json.dumps({"busy": st["busy"], "reply": st["reply"], "screen": "desk"})
+                if cmd == "llmos desk-state":
+                    if st["cancelled"] and st["busy"] and not st["never_idle"]:
+                        if st["left"] > 0:
+                            st["left"] -= 1
+                        else:
+                            st["busy"] = False
+                    d = {"screen": "desk", "busy": st["busy"], "reply": st["reply"],
+                         "dialogs": [], "windows": [], "apps": []}
+                    if not drop_queued:
+                        d["queued"] = 0
+                    return json.dumps(d)
+                return base(cmd)
+            return vm, st
+
+        def no_sleep(_s):
+            pass
+
+        vm, st = make_drain_vm(left=2)
+        busy_rec = realrun.run_task(reply_task("drain-busy"), FakeUser(), vm, clock=FakeClock(),
+                                    outdir=outroot, sleep=no_sleep)
+        cancels = [c for c in st["cmds"] if c == "llmos desk-ctl cancel"]
+        check("busy after wait -> cancel sent once", len(cancels) == 1, repr(st["cmds"]))
+        check("busy drain: verdict still FAIL with the same reason",
+              busy_rec["verdict"] == "FAIL" and busy_rec["reason"] == "still busy after 120s", json.dumps(busy_rec)[:300])
+        check("busy drain: cancelled true, not stuck, drain time recorded",
+              busy_rec["cancelled"] is True and busy_rec["stuck"] is False
+              and isinstance(busy_rec["drain_seconds"], float) and busy_rec["drain_seconds"] > 0,
+              json.dumps({k: busy_rec[k] for k in ("cancelled", "stuck", "drain_seconds")}))
+        check("busy drain: idle on poll 3 (2 busy polls after cancel)", st["left"] == 0 and st["busy"] is False,
+              repr((st["left"], st["busy"])))
+        nxt = realrun.run_task(reply_task("drain-next"), FakeUser(), vm, clock=FakeClock(), outdir=outroot,
+                               sleep=no_sleep)
+        check("next task after drain runs normally PASS", nxt["verdict"] == "PASS" and nxt["cancelled"] is False
+              and nxt["stuck"] is False and nxt["stale_reply"] is False, json.dumps(nxt)[:300])
+        print("ok drain: busy -> cancel -> idle on poll 3 -> cancelled true, next task PASS")
+
+        # missing queued key counts as 0: idle detection still works
+        vm, st = make_drain_vm(left=2, drop_queued=True)
+        dq = realrun.run_task(reply_task("drain-noq"), FakeUser(), vm, clock=FakeClock(), outdir=outroot,
+                              sleep=no_sleep)
+        check("desk-state without queued -> drain idle, not stuck", dq["cancelled"] is True and dq["stuck"] is False,
+              json.dumps({k: dq[k] for k in ("cancelled", "stuck")}))
+
+        # cancel command fails -> still polls to idle
+        vm, st = make_drain_vm(left=2, cancel_raises=True)
+        cr = realrun.run_task(reply_task("drain-cerr"), FakeUser(), vm, clock=FakeClock(), outdir=outroot,
+                              sleep=no_sleep)
+        check("cancel raises -> still polls, idle, not stuck",
+              cr["cancelled"] is True and cr["stuck"] is False and "drain" in cr["steps"],
+              json.dumps({k: cr[k] for k in ("cancelled", "stuck")}))
+
+        # never idle -> stuck true; the suite calls fresh() before the next task
+        events = []
+        vm, st = make_drain_vm(never_idle=True)
+        real_vm = vm
+
+        def logged_vm(cmd):
+            if cmd == "llmos desk-ctl testreset":
+                events.append("testreset")
+            return real_vm(cmd)
+        stuck_suite_dir = tempfile.mkdtemp(prefix="realrun-stuck-")
+        stuck_suite = os.path.join(stuck_suite_dir, "suite.json")
+        with open(stuck_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [reply_task("stuck-1"), reply_task("stuck-2")]}, f)
+
+        def fresh_fake():
+            events.append("fresh")
+            st.update(busy=False, cancelled=False, never_idle=False)
+        realrun.run_suite(stuck_suite, FakeUser(), logged_vm, outdir=os.path.join(outroot, "stuck"),
+                          fresh=fresh_fake, sleep=no_sleep, clock=FakeClock())
+        stuck_rec = json.load(open(os.path.join(outroot, "stuck", "stuck-1.json"), encoding="utf-8"))
+        check("never idle -> stuck true", stuck_rec["stuck"] is True and stuck_rec["cancelled"] is True,
+              json.dumps({k: stuck_rec[k] for k in ("cancelled", "stuck")}))
+        check("never idle -> fresh() before the next task",
+              events == ["testreset", "fresh", "testreset"], repr(events))
+        next_rec = json.load(open(os.path.join(outroot, "stuck", "stuck-2.json"), encoding="utf-8"))
+        check("task after fresh runs normally PASS", next_rec["verdict"] == "PASS" and next_rec["stuck"] is False,
+              json.dumps(next_rec)[:300])
+        shutil.rmtree(stuck_suite_dir, ignore_errors=True)
+        print("ok stuck: never idle -> stuck true, fresh before next task, next PASS")
+
+        # never idle with no fresh available: stuck is recorded, the suite still continues
+        vm, st = make_drain_vm(never_idle=True)
+        nf_suite_dir = tempfile.mkdtemp(prefix="realrun-nofresh-")
+        nf_suite = os.path.join(nf_suite_dir, "suite.json")
+        with open(nf_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [reply_task("nf-1"), reply_task("nf-2")]}, f)
+        nf_summary = realrun.run_suite(nf_suite, FakeUser(), vm, outdir=os.path.join(outroot, "nofresh"),
+                                       sleep=no_sleep, clock=FakeClock())
+        check("never idle without fresh -> suite continues to 2 tasks", nf_summary["total"] == 2,
+              json.dumps(nf_summary)[:200])
+        shutil.rmtree(nf_suite_dir, ignore_errors=True)
+
+        # normal task: no cancel, no drain step, cancelled false, stuck false
+        normal_cmds = []
+        normal_vm = make_vm()
+
+        def recording_vm(cmd):
+            normal_cmds.append(cmd)
+            return normal_vm(cmd)
+        nr = realrun.run_task(reply_task("normal-drain"), FakeUser(), recording_vm, clock=FakeClock(),
+                              outdir=outroot, sleep=no_sleep)
+        check("normal task sends no cancel",
+              "llmos desk-ctl cancel" not in normal_cmds and "drain" not in nr["steps"], repr(normal_cmds))
+        check("normal task fields false/None", nr["cancelled"] is False and nr["stuck"] is False
+              and nr["drain_seconds"] is None, json.dumps({k: nr[k] for k in ("cancelled", "stuck", "drain_seconds")}))
+        print("ok drain: normal task sends no cancel")
+
         # 10. fresh_overlay: readiness, onboarding, desk-ready polls with a fake clock (sleep advances it)
         class FakeTime:
             def __init__(self):
