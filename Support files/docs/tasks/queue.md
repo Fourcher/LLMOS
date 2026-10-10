@@ -165,3 +165,5 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 
 ## Post-1.7.8-build src merge list
 - 8f4b4b5 (warm-up sends the same prefix as the first turn; None ctx cached 5 s; VERIFY PASS: hung /props two calls 3.01 s)
+- [done] (top) P2-5 realrun basic.json on 1.7.9 | evidence: summary "total": 50, "pass": 48, "fail": 2, 1283 s; history: 1.7.7 0/50 (shot path), 1.7.8 6/50 (Firefox kept focus), 1.7.9 48/50
+- [done] (top) P2-6 compare with hand verdicts | evidence: compare-verdicts "agree 48; hand PASS / real FAIL 2 (S12, S13)". Both disagreements = grader bug: the settings check `cat /etc/llmos/settings.json` timed out at 120 s in the grade step (reply step fine) — tsh marker after a file with no trailing newline (suspected). P2-7 FIX dispatched.
