@@ -33,7 +33,7 @@ def _add(steps, name, seconds):
 PATHS = ("page", "say")
 
 
-def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="page"):
+def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="page", sleep=time.sleep):
     if path not in PATHS:
         raise ValueError("path must be one of %s, got %r" % (PATHS, path))
     # QMP resolves the screendump filename in QEMU's own working directory, so the shot path must be absolute
@@ -49,6 +49,9 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
     observed = ""
     typed_ok = None
     shot_error = None
+    cancelled = False
+    stuck = False
+    drain_seconds = None
     ctx = {"before_reply": "", "stale": False}
     start = clock()
 
@@ -95,6 +98,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
         waited = timed("wait", lambda: run_in_vm("llmos desk-ctl wait %s" % timeout_s))
         wait_state = vm_json(waited)
         busy = isinstance(wait_state, dict) and bool(wait_state.get("busy"))
+        queued = _queued(wait_state)
         if busy:
             step_failed = "wait"
             verdict = "FAIL"
@@ -104,6 +108,11 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
             timed("shot", lambda: user.shot(shot_path))
         except Exception as e:  # noqa: BLE001 - recorded; the verdict comes from evaluate
             shot_error = repr(e)[:200]
+        if busy or queued > 0:
+            # stop the turn and whatever queued behind it, so the next task does not get a stale reply
+            cancelled = True
+            idle, drain_seconds = timed("drain", lambda: _drain(run_in_vm, clock, sleep))
+            stuck = not idle
         if not busy:
             graded = timed("grade", lambda: evaluators.evaluate(task, getter))
             verdict = graded["verdict"]
@@ -131,6 +140,9 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
         "stale_reply": ctx["stale"],
         "path": path,
         "shot_error": shot_error,
+        "cancelled": cancelled,
+        "drain_seconds": drain_seconds,
+        "stuck": stuck,
     }
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "%s.json" % tid), "w", encoding="utf-8") as f:
@@ -146,8 +158,10 @@ def _label(passes, repeat):
     return "flaky"
 
 
-def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", repeat=1, fresh=None):
+def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", repeat=1, fresh=None,
+              sleep=time.sleep, clock=time.monotonic):
     """Run every task `repeat` times. Before repeat r > 1, fresh() is called (a fresh overlay).
+    A task that left the desk stuck (record "stuck") is followed by fresh() before the next task.
     repeat == 1 writes {outdir}/<id>.json; otherwise {outdir}/r{r}/<id>.json."""
     if repeat < 1:
         raise ValueError("repeat must be >= 1, got %r" % repeat)
@@ -160,13 +174,19 @@ def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", r
         tasks = [t for t in tasks if t["id"] in wanted]
     t0 = time.monotonic()
     per = {t["id"]: {"passes": 0, "seconds": 0.0} for t in tasks}
+    stuck_prev = False
     for r in range(1, repeat + 1):
         if fresh is not None and r > 1:
             fresh()
+            stuck_prev = False
         rdir = outdir if repeat == 1 else os.path.join(outdir, "r%d" % r)
         os.makedirs(rdir, exist_ok=True)
         for task in tasks:
-            rec = run_task(task, user, run_in_vm, outdir=rdir, path=run_path)
+            if fresh is not None and stuck_prev:
+                fresh()
+            stuck_prev = False
+            rec = run_task(task, user, run_in_vm, clock=clock, outdir=rdir, path=run_path, sleep=sleep)
+            stuck_prev = rec["stuck"]
             per[rec["id"]]["seconds"] += rec["seconds"]
             if rec["verdict"] == "PASS":
                 per[rec["id"]]["passes"] += 1
@@ -228,7 +248,7 @@ WIZARD_SCREEN = "wizard"  # desk.py:1289 set_screen("wizard"); desk.py:4038 _sta
 DESK_SCREEN = "desk"      # desk.py:1315 set_screen("desk"); desk.py:4038 _state() reports self.screen
 
 
-def _poll(probe, limit, clock, sleep):
+def _poll(probe, limit, clock, sleep, interval=2):
     """Call probe() until it returns True; False when `limit` seconds of `clock()` have passed.
     A probe that raises counts as not ready. The only place that sleeps between tries."""
     deadline = clock() + limit
@@ -240,7 +260,37 @@ def _poll(probe, limit, clock, sleep):
             pass
         if clock() >= deadline:
             return False
-        sleep(2)
+        sleep(interval)
+
+
+DRAIN_LIMIT = 60  # s to wait for a cancelled desk to go idle before it counts as stuck
+
+
+def _queued(obj):
+    """The queued request count in desk-state (desk.py _state). Missing or not a number counts as 0."""
+    if not isinstance(obj, dict):
+        return 0
+    try:
+        return int(obj.get("queued") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _desk_idle(out):
+    data = vm_json(out)
+    return isinstance(data, dict) and not data.get("busy") and _queued(data) == 0
+
+
+def _drain(run_in_vm, clock, sleep):
+    """Send `llmos desk-ctl cancel`, then poll desk-state once a second until it is idle (not busy, nothing
+    queued) or DRAIN_LIMIT s pass. A failed cancel still polls. Returns (idle, seconds)."""
+    t0 = clock()
+    try:
+        run_in_vm("llmos desk-ctl cancel")
+    except Exception:  # noqa: BLE001 - the desk may still stop on its own; the poll decides
+        pass
+    idle = _poll(lambda: _desk_idle(run_in_vm("llmos desk-state")), DRAIN_LIMIT, clock, sleep, interval=1)
+    return idle, clock() - t0
 
 
 def _slow():
@@ -323,7 +373,7 @@ def main(argv=None):
     try:
         summary = run_suite(args.suite, user, run_in_vm, ids=ids, outdir=args.outdir,
                             run_path=args.path, repeat=args.repeat,
-                            fresh=fresh if args.repeat > 1 else None)
+                            fresh=fresh)
     finally:
         user.qmp.close()
     print(json.dumps({k: summary[k] for k in ("suite", "repeat", "total", "pass", "fail", "seconds")}))
