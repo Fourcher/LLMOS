@@ -1212,6 +1212,8 @@ def _everyday(text):
     from . import tools as T
     if re.match(r"^\s*(?:please\s+)?(?:make|convert|turn|save|change)\s+(?:this|that|it)(?:\s+(?:file|one|picture|photo|document|video|song))?\s+(?:in)?(?:to\s+|as\s+)?(?:an?\s+)?(?:jpe?g|png|gif|webp|heic|pdf|docx?|txt|mp3|mp4|mkv|wav)\b\s*[.!?]?\s*$", text, re.I):
         return ("which_file", {"request": text})
+    if re.match(r"^\s*(?:please\s+)?(?:summari[sz]e|read|split|sign|merge|compress|translate|proofread|check)\s+(?:this|that)\s+(?:pdf|doc|docx|document|file|letter|report|essay)(?:\s+(?:to|for|out\s+loud|aloud)(?:\s+me)?)?\s*[.!?]?\s*$", text, re.I):
+        return ("which_file", {"request": text})
     if _THIS_FILE.match(text) and not re.search(r"\b(?:to|as)\s+\S+\.\w{2,4}\b|\busb|stick|flash|monitor|screen|display|workspace|desktop \d|^\s*(?:please\s+)?rename\s+(?:this|that|it)(?:\s+(?:file|folder|one))?\s+(?:to|as)\s+\S", text, re.I):
         return ("which_file", {"request": text})
     m = re.match(r"^\s*show\s+the\s+folder\s+(?P<p>(?:~|/).*?)\s*$", text)

@@ -62,6 +62,10 @@ CASES = {
     "call it Budget instead": ("rename_file", {"name": "it", "to": "Budget"}),
     "rename it to Budget": ("rename_file", {"name": "it", "to": "Budget"}),
     "rename it": ("which_file", {"request": "rename it"}),
+    "summarize this doc": ("which_file", {"request": "summarize this doc"}),
+    "read this pdf to me": ("which_file", {"request": "read this pdf to me"}),
+    "split this pdf": ("which_file", {"request": "split this pdf"}),
+    "sign this pdf": ("which_file", {"request": "sign this pdf"}),
     "call it budget.xlsx": ("rename_file", {"name": "it", "to": "budget.xlsx"}),
     "name it Taxes": ("rename_file", {"name": "it", "to": "Taxes"}),
     "is paypa1.com safe?": ("check_site", {"address": "paypa1.com"}),
@@ -485,4 +489,14 @@ for text in FORMAT_GUARD_CASES:
         fbad += 1
         print(f"FORMAT GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"format guards: {len(FORMAT_GUARD_CASES) - fbad}/{len(FORMAT_GUARD_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad or fbad else 0)
+
+# doc guards: "read me a story" and friends are not file-document routes (the "which file" route is for "this <doc>" only)
+DOC_GUARD_CASES = ["read me a story", "check my spelling", "translate this page", "summarize the news"]
+dbad = 0
+for text in DOC_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "which_file":
+        dbad += 1
+        print(f"DOC GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"doc guards: {len(DOC_GUARD_CASES) - dbad}/{len(DOC_GUARD_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad or fbad or dbad else 0)
