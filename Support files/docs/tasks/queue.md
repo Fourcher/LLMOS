@@ -145,5 +145,5 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 
 ## Post-1.7.7-build src merge list
 - b1ee0a5 (pdf route: "turn word doc into pdf" -> which_file; VERIFY PASS)
-- b14adc7 (contains 2d76e55 set_default_app + files view list/icons tool+routes; VERIFY PASS)
+- b01e1ea (contains b14adc7 + notes "as a list" fix; contains 2d76e55 set_default_app + files view list/icons tool+routes; VERIFY PASS)
 - bd3a962 (files icon grid in desk.js/desk.css; VERIFY PASS)
