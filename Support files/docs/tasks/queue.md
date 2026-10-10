@@ -173,3 +173,4 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - [done] (top) P2-7 grader fixes proven on 1.7.9 | evidence: RUN "S12 PASS 'dark' / S13 PASS 'light' / S14 PASS" with tsh markers (f34c38d). Combined with the 47/50 corrected run: 50/50 basic tasks agree with hand verdicts on 1.7.9. PHASE 2 GATE (P2-6 matches hand verdicts) MET.
 - [done] (top) P2-9 page vs say on 1.7.9 | evidence: "page 50/50 (1177 s), say 50/50 (873 s), 50 compared; 0 differ"
 - [hold] (speed) 0801038 desk "wait N after M" + realrun uses it (VERIFY PASS: grace 0.00 s when done) — merge after P3-6 RUN finishes (touches realrun.py in use), before the 1.8.0 build.
+- [hold] (reliability) f736b08 real-state checks for 10 use-case tasks (VERIFY PASS: all keys/paths confirmed in source; desk-state spacing matches) — merge after P3-6 (it regenerates usecases-1.json in use).
