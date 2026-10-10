@@ -69,6 +69,13 @@ while IFS= read -r line || [ -n "$line" ]; do
         reply="$raw"
     fi
 
+    # A "the result follows" reply is followed by the real answer a moment later (desk instant_reply).
+    # Read the desk once more after it goes idle and append that reply.
+    if printf '%s' "$reply" | grep -q 'the result follows'; then
+        later=$(R 'for i in $(seq 40); do llmos desk-state 2>/dev/null | grep -q "\"busy\": false" && break; sleep 1; done; sleep 3; llmos desk-state | grep -o "\"reply\": \"[^\"]*\""' "F$n" 60)
+        reply="$reply || then: $later"
+    fi
+
     reply="$busy_note$(printf '%s' "$reply" | tr '\t\r\n' '   ' | cut -c1-300)"
     printf '%s\t%s\t%s\t%s\n' "$n" "$secs" "$phrase" "$reply" >> "$TSV"
     echo "[$n] ${secs}s  $phrase"
