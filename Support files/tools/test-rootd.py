@@ -123,6 +123,18 @@ assert not any(n.startswith(".") for n in written), "temp files left behind"
 assert snapshot(zoneinfo) == ["Europe", "Europe/Paris"], "zoneinfo was modified"
 print("ok files written exactly where expected")
 
+# --- remove_setting_file (after the snapshot above, which expects conduct.txt to exist)
+conduct_path = os.path.join(etc, "etc", "llmos", "conduct.txt")
+settings_path = os.path.join(etc, "etc", "llmos", "settings.json")
+expect_ok("remove conduct.txt", call("remove_setting_file", {"name": "conduct.txt"}))
+assert not os.path.exists(conduct_path), "conduct.txt still exists"
+expect_ok("remove conduct.txt again (missing ok)", call("remove_setting_file", {"name": "conduct.txt"}))
+expect_err("remove traversal", call("remove_setting_file", {"name": "../settings.json"}), "bad args")
+expect_err("remove other name", call("remove_setting_file", {"name": "shadow"}), "bad args")
+expect_err("remove name not str", call("remove_setting_file", {"name": 5}), "bad args")
+assert os.path.exists(settings_path), "a rejected remove touched settings.json"
+print("ok remove_setting_file: removes, missing ok, bad names rejected")
+
 # --- serve over a real socket, in a thread
 sock_dir = tempfile.mkdtemp(prefix="rs-", dir="/tmp")
 sock_path = os.path.join(sock_dir, "root.sock")

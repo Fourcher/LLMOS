@@ -111,10 +111,23 @@ def write_setting_file(args):
     return "ok"
 
 
+def remove_setting_file(args):
+    args = _args_dict(args)
+    name = args.get("name")
+    if not isinstance(name, str) or name not in SETTING_NAMES:
+        raise ValueError("bad args: name")
+    try:
+        os.unlink(_etc("llmos", name))
+    except FileNotFoundError:
+        pass
+    return "ok"
+
+
 VERBS = {
     "set_timezone": set_timezone,
     "set_hostname": set_hostname,
     "write_setting_file": write_setting_file,
+    "remove_setting_file": remove_setting_file,
 }
 
 

@@ -226,6 +226,34 @@ def _write_etc(name, text):
         raise
 
 
+def _remove_etc(name):
+    """Remove a public file under ETC (settings.json, conduct.txt). Unlinked directly while this process can write
+    ETC; otherwise through rootd's remove_setting_file verb. A missing file is fine; a rootd failure is OSError."""
+    if os.path.isdir(ETC):
+        writable = os.access(ETC, os.W_OK)
+    else:
+        writable = os.access(os.path.dirname(ETC) or ".", os.W_OK)
+    if not writable:
+        from . import rootd_client
+        try:
+            rootd_client.call("remove_setting_file", name=name)
+        except rootd_client.RootdError as e:
+            raise OSError(str(e))
+        return
+    try:
+        os.unlink(os.path.join(ETC, name))
+    except FileNotFoundError:
+        pass
+
+
+def write_conduct(text):
+    _write_etc("conduct.txt", text)
+
+
+def remove_conduct():
+    _remove_etc("conduct.txt")
+
+
 def _merge(defaults, value):
     out = dict(defaults)
     for k, v in (value or {}).items():
