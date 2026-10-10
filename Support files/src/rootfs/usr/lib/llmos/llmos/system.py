@@ -221,6 +221,64 @@ def apk_del(name, force=False, timeout=600):
         return 1, "", str(e)
 
 
+POWER_ACTIONS = ("poweroff", "reboot", "suspend")
+
+
+def _power_root(action):
+    """Power off, reboot, or suspend, as root. Returns (ok, msg). Never builds a shell string from input."""
+    try:
+        if action == "poweroff":
+            rc = os.system("poweroff")
+            return rc == 0, "" if rc == 0 else f"exit {rc}"
+        if action == "reboot":
+            rc = os.system("reboot")
+            return rc == 0, "" if rc == 0 else f"exit {rc}"
+        if action == "suspend":
+            subprocess.run(["sync"], timeout=30)
+            with open("/sys/power/state", "w") as f:
+                f.write("mem")
+            return True, ""
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, str(e)
+    return False, "unknown action"
+
+
+def power(action):
+    """Power off, reboot, or suspend: directly as root, else through rootd's power verb. Returns (ok, msg)."""
+    if action not in POWER_ACTIONS:
+        raise ValueError(f"unknown power action '{action}'")
+    if os.geteuid() == 0:
+        return _power_root(action)
+    try:
+        ok, msg = json.loads(rootd_client.call("power", action=action, _timeout=60))
+        return ok, msg
+    except rootd_client.RootdError as e:
+        return False, str(e)
+
+
+def _service_root(name, action, timeout=60):
+    """Run rc-service for one service, as root. Returns (returncode, stdout, stderr)."""
+    try:
+        p = subprocess.run(["rc-service", name, action], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timed out after {timeout} s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def service(name, action, timeout=60):
+    """Start, stop, or restart a service: directly as root, else through rootd's service verb. Returns (returncode, stdout, stderr)."""
+    if os.geteuid() == 0:
+        return _service_root(name, action, timeout=timeout)
+    try:
+        rc, out, err = json.loads(rootd_client.call("service", name=name, action=action,
+                                                    timeout=timeout, _timeout=timeout + 30))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
 def _hosts_name_ok(name):
     """Would rootd's write_hosts accept this name? (A name it refuses would make the whole write fail.)"""
     return len(name) <= 253 and HOSTS_NAME_RE.fullmatch(name) is not None

@@ -259,9 +259,42 @@ def apk_del(args):
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
+POWER_ACTIONS = ("poweroff", "reboot", "suspend")
+SERVICE_NAMES = ("llmos-model",)
+SERVICE_ACTIONS = ("start", "stop", "restart")
+
+
+def power(args):
+    args = _args_dict(args)
+    action = args.get("action")
+    if not isinstance(action, str) or action not in POWER_ACTIONS:
+        raise ValueError("bad args: action")
+    from . import system
+    ok, msg = system._power_root(action)
+    return json.dumps([ok, msg])
+
+
+def service(args):
+    args = _args_dict(args)
+    name = args.get("name")
+    action = args.get("action")
+    if not isinstance(name, str) or name not in SERVICE_NAMES:
+        raise ValueError("bad args: name")
+    if not isinstance(action, str) or action not in SERVICE_ACTIONS:
+        raise ValueError("bad args: action")
+    timeout = args.get("timeout", 60)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 5 <= timeout <= 300:
+        raise ValueError("bad args: timeout")
+    from . import system
+    rc, out, err = system._service_root(name, action, timeout=timeout)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
 VERBS = {
     "apk_add": apk_add,
     "apk_del": apk_del,
+    "power": power,
+    "service": service,
     "set_timezone": set_timezone,
     "set_hostname": set_hostname,
     "write_setting_file": write_setting_file,
