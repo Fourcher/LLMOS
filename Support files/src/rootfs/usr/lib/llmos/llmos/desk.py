@@ -2306,6 +2306,14 @@ class Desk:
             from . import hardware
             self.last_reply = self._said = hardware.plugged_in_sentence()
             return True
+        if re.fullmatch(r"(?:please )?(?:click|tap|press)(?: on)?(?: the)? .+", low.rstrip(".!")) and not re.fullmatch(r"(?:please )?(?:press|tap|hit) (?:\S|\d+)", low.rstrip(".!")):
+            try:
+                open_now = [w for w in wm.windows() if str(w).strip()]
+            except Exception:
+                open_now = ["?"]                     # can't tell: let the click be tried
+            if not open_now and not any(s.get("kind") == "app" for s in self.windows.values()):
+                self.last_reply = self._said = "Nothing is open to click on."
+                return True
         r = self._system_shortcut(low, line)
         if r:
             return True
