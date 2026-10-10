@@ -28,20 +28,24 @@
       "evaluator": {
         "func": "include_exclude",
         "result": {
-          "type": "reply"
+          "type": "vm_command_line",
+          "command": "test -d \"/root/Documents/Taxes 2026\" && echo yes || echo no"
         },
         "expected": {
+          "include": [
+            "yes"
+          ],
           "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
+            "no"
           ]
         }
       },
-      "weak": true,
+      "weak": false,
       "reachable_by_agent": true,
-      "timeout_s": 120
+      "timeout_s": 120,
+      "setup": [
+        "rm -rf '/root/Documents/Taxes 2026'"
+      ]
     },
     {
       "id": "uc-43",
@@ -112,20 +116,23 @@
       "evaluator": {
         "func": "include_exclude",
         "result": {
-          "type": "reply"
+          "type": "vm_command_line",
+          "command": "ls /root/Pictures | grep -c llmos-test-1.jpg"
         },
         "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
+          "include": [
+            "1"
           ]
         }
       },
-      "weak": true,
+      "weak": false,
       "reachable_by_agent": true,
-      "timeout_s": 120
+      "timeout_s": 120,
+      "setup": [
+        "rm -f /root/Pictures/llmos-test-1.jpg",
+        "mkdir -p /root/Downloads /root/Pictures",
+        "touch /root/Downloads/llmos-test-1.jpg"
+      ]
     },
     {
       "id": "uc-47",
@@ -278,22 +285,22 @@
       "id": "uc-54",
       "instruction": "empty the trash",
       "evaluator": {
-        "func": "include_exclude",
+        "func": "equals",
         "result": {
-          "type": "reply"
+          "type": "vm_command_line",
+          "command": "ls -A /root/.Trash | wc -l"
         },
         "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
-          ]
+          "equals": "0"
         }
       },
-      "weak": true,
+      "weak": false,
       "reachable_by_agent": true,
-      "timeout_s": 120
+      "timeout_s": 120,
+      "setup": [
+        "mkdir -p /root/.Trash",
+        "touch /root/.Trash/llmos-test-junk"
+      ]
     },
     {
       "id": "uc-55",
@@ -448,20 +455,19 @@
       "evaluator": {
         "func": "include_exclude",
         "result": {
-          "type": "reply"
+          "type": "vm_command_line",
+          "command": "llmos desk-state"
         },
         "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
+          "include": [
+            "\"id\": \"files\""
           ]
         }
       },
-      "weak": true,
+      "weak": false,
       "reachable_by_agent": true,
-      "timeout_s": 120
+      "timeout_s": 120,
+      "setup": []
     },
     {
       "id": "uc-63",
@@ -721,20 +727,19 @@
       "evaluator": {
         "func": "include_exclude",
         "result": {
-          "type": "reply"
+          "type": "vm_command_line",
+          "command": "llmos desk-state"
         },
         "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
+          "include": [
+            "\"id\": \"dupes\""
           ]
         }
       },
-      "weak": true,
+      "weak": false,
       "reachable_by_agent": true,
-      "timeout_s": 120
+      "timeout_s": 120,
+      "setup": []
     },
     {
       "id": "uc-76",
@@ -742,20 +747,19 @@
       "evaluator": {
         "func": "include_exclude",
         "result": {
-          "type": "reply"
+          "type": "vm_command_line",
+          "command": "llmos desk-state"
         },
         "expected": {
-          "exclude": [
-            "No such tool",
-            "error:",
-            "Traceback",
-            "I couldn't finish that"
+          "include": [
+            "\"id\": \"dupes\""
           ]
         }
       },
-      "weak": true,
+      "weak": false,
       "reachable_by_agent": true,
-      "timeout_s": 120
+      "timeout_s": 120,
+      "setup": []
     },
     {
       "id": "uc-77",
