@@ -162,3 +162,6 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - [open] (top) P1-12/13 realuser smoke: first run failed (parser; fixed 0882d17), second failed at wizard step 1 (desk ignored rect.result on wizard; fixed b9e92de, needs next build) | role: run | after: 1.7.8 build
 - [failed] (top) P2-5 realrun basic.json on 1.7.7: 0/50 (all at the shot step — QEMU-relative screendump path; and desk wait returned before requests ran). Fixed 8c3815d (tools) + 64c2ee3 (desk). Rerun on 1.7.8. | evidence: summary "pass": 0, "fail": 50, 848 s
 - [running] (reliability) 1.7.8 build + checks + smokes | role: run
+
+## Post-1.7.8-build src merge list
+- 8f4b4b5 (warm-up sends the same prefix as the first turn; None ctx cached 5 s; VERIFY PASS: hung /props two calls 3.01 s)
