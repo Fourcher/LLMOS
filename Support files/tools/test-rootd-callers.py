@@ -130,7 +130,7 @@ try:
     rootd_client.call = failing_call
     desk = Desk()
     assert everyday.hostname(desk, "call this computer kitchen-pc", "call this computer kitchen-pc")
-    assert desk.said[-1] == "Couldn't rename it: bad args: name.", desk.said
+    assert desk.said[-1] == "Couldn't rename it: that name isn't allowed: use letters, numbers and dashes.", desk.said
     assert real_open(path("hostname")).read() == "kitchen-pc\n", "a refused call changed the hostname"
     print(f"ok everyday hostname RootdError: {desk.said[-1]}")
 finally:
