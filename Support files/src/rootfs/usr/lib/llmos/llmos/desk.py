@@ -604,6 +604,8 @@ class Desk:
         self.ready = False
         self._pending = []           # messages emitted before the page was ready
         self._rect_wait = {}         # test shell: "rect <id> <selector>" waiting for the page's answer
+        self._req_pending = 0        # requests queued or running (counted from say() until the worker finishes them)
+        self._pending_lock = threading.Lock()
 
     # ---- GTK / WebKit
 
@@ -2164,6 +2166,8 @@ class Desk:
                         done.set()
             threading.Thread(target=now, daemon=True).start()
             return
+        with self._pending_lock:
+            self._req_pending += 1
         self.requests.put((text, done, chat))
 
     # tools that finish at once and need no model: safe to run beside a request in progress
@@ -2246,6 +2250,8 @@ class Desk:
             except Exception as e:      # never let the worker die
                 self.emit({"t": "reply.error", "text": agent._plain_error(str(e))})
             finally:
+                with self._pending_lock:
+                    self._req_pending = max(0, self._req_pending - 1)
                 self.turn_done.set()
                 if done:
                     done.set()
@@ -3643,6 +3649,8 @@ class Desk:
                 done = self.requests.get_nowait()[1]
             except queue.Empty:
                 break
+            with self._pending_lock:              # a dropped request never reaches the worker: count it off here
+                self._req_pending = max(0, self._req_pending - 1)
             if done:
                 done.set()
 
@@ -4071,11 +4079,17 @@ class Desk:
                 out = st
             elif cmd == "state":
                 out = self._state()
-            elif cmd == "wait":            # until nothing is running or queued
-                for _ in range(int(arg or 600)):
-                    if not self.busy and self.requests.empty():
+            elif cmd == "wait":            # until the request(s) asked for are finished, not only queued
+                start_reply = self.last_reply
+                # grace: up to 3 s for a request to start (a shortcut can finish before busy is ever set)
+                for _ in range(30):
+                    if self._req_pending > 0 or self.busy or self.last_reply != start_reply:
                         break
-                    time.sleep(1)
+                    time.sleep(0.1)
+                for _ in range(int(arg or 600) * 4):
+                    if self._req_pending == 0 and not self.busy and self.requests.empty():
+                        break
+                    time.sleep(0.25)
                 out = self._state()
             elif cmd == "dialog":          # answer every pending confirmation (tests)
                 for did, d in list(self.dialogs.items()):
