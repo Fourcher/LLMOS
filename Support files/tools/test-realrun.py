@@ -447,6 +447,61 @@ def main():
               realrun.vm_text("Canberra  \n\n") == "Canberra", repr(realrun.vm_text("Canberra  \n\n")))
         print("ok vm_text trailer removal, TIMEOUT -> None, multi-line kept")
 
+        # 9c2. vm_text drops the echoed command line (prompt + text); keeps mid-line "#" and bare-prompt-free output
+        echo_cmd = "llmos:/# cd /usr/lib/llmos && python3 -c \"print('dark' if x else 'light')\""
+        check("vm_text: echoed command line dropped, output kept",
+              realrun.vm_text(echo_cmd + "\ndark\n[vmctl: matched after 1.0s]\n") == "dark",
+              repr(realrun.vm_text(echo_cmd + "\ndark\n[vmctl: matched after 1.0s]\n")))
+        check("vm_text: mid-line # kept",
+              realrun.vm_text("issue #5 llmos:/# here\n") == "issue #5 llmos:/# here",
+              repr(realrun.vm_text("issue #5 llmos:/# here\n")))
+        check("vm_text: bare prompt line dropped",
+              realrun.vm_text("llmos:/#\nok\n") == "ok", repr(realrun.vm_text("llmos:/#\nok\n")))
+        check("vm_text: multi-line output kept after echo",
+              realrun.vm_text("llmos:/# ls\na.txt\nb.txt\n[vmctl: matched after 1.0s]\n") == "a.txt\nb.txt",
+              repr(realrun.vm_text("llmos:/# ls\na.txt\nb.txt\n[vmctl: matched after 1.0s]\n")))
+        print("ok vm_text drops echoed command line, keeps mid-line # and multi-line output")
+
+        # 9c3. tsh types at the console prompt "› " and prefixes "!": the echo is "› !cmd"
+        tsh_echo = "› !cat /etc/llmos/settings.json; echo"
+        check("vm_text: tsh echo \"› !cmd\" dropped",
+              realrun.vm_text(tsh_echo + "\n{}\n[vmctl: matched after 1.0s]\n") == "{}",
+              repr(realrun.vm_text(tsh_echo + "\n{}\n[vmctl: matched after 1.0s]\n")))
+        check("vm_text: reply line with mid-line › kept",
+              realrun.vm_text("the arrow › is used\n") == "the arrow › is used",
+              repr(realrun.vm_text("the arrow › is used\n")))
+        check("vm_text: llmos:/# echo still dropped",
+              realrun.vm_text("llmos:/# echo hi\nhi\n") == "hi", repr(realrun.vm_text("llmos:/# echo hi\nhi\n")))
+        print("ok vm_text drops tsh \"› !cmd\" echo, keeps mid-line ›, still drops llmos:/# echo")
+
+        def echo_cmd_vm(output):
+            def vm(cmd):
+                if cmd == "fake-state-cmd":
+                    return output
+                return make_vm()(cmd)
+            return vm
+
+        s12_task = {"id": "S12-like", "instruction": "is the theme dark",
+                    "evaluator": {"func": "include_exclude", "expected": {"include": ["dark"], "exclude": ["light"]},
+                                  "result": {"type": "vm_command_line", "command": "fake-state-cmd"}}}
+        s12_rec = realrun.run_task(s12_task, FakeUser(),
+                                   echo_cmd_vm(echo_cmd + "\ndark\n[vmctl: matched after 1.0s]\n"),
+                                   clock=FakeClock(), outdir=outroot)
+        check("S12-like echo+dark -> PASS", s12_rec["verdict"] == "PASS" and s12_rec["observed"] == "dark",
+              json.dumps(s12_rec)[:300])
+        print("ok S12-like observed=%r verdict=%s" % (s12_rec["observed"], s12_rec["verdict"]))
+
+        s19_task = {"id": "S19-like", "instruction": "make a folder called Test",
+                    "evaluator": {"func": "include_exclude", "expected": {"include": ["/root/Desktop/Test"]},
+                                  "result": {"type": "vm_command_line", "command": "fake-state-cmd"}}}
+        s19_rec = realrun.run_task(s19_task, FakeUser(),
+                                   echo_cmd_vm("llmos:/# ls -d /root/Desktop/Test; echo DONE_\"\"1\n"
+                                               "[vmctl: matched after 1.0s]\n"),
+                                   clock=FakeClock(), outdir=outroot)
+        check("S19-like echo-only (folder missing) -> FAIL",
+              s19_rec["verdict"] == "FAIL" and s19_rec["observed"] == "", json.dumps(s19_rec)[:300])
+        print("ok S19-like observed=%r verdict=%s" % (s19_rec["observed"], s19_rec["verdict"]))
+
         # 9d. vm_command_line getter: the matched trailer is not part of the observed text
         trailer_vm = make_vm()
 
