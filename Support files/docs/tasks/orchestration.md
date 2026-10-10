@@ -66,3 +66,5 @@ Two FIX attempts on the bare-click change stopped because other test files asser
 ## Lesson (2026-10-10 08:40 process review): list callers before the FIX starts
 Review of today's 53 merges: 8 topics needed 3+ FIX attempts (testreset 5, pointer-sweep 4, web search 4, triage 4, warm-up 3, grader echo 3, typos 3, --run guard 3). Each repeat was an edge case or a caller the first spec did not name.
 Rule for every FIX spec that changes existing behaviour: open with a PROBE-sourced "Callers and tests" line (file:line of every caller and every test that exercises the changed function), and the VERIFY spec repeats that list and checks each one. If the list is not known, dispatch the PROBE first; do not write the FIX from memory.
+
+- 2026-10-10 review: 454 idle minutes came from waiting on a single long RUN with nothing else in flight. While any RUN holds the VM, keep at least 3 host-only workers (PROBE/FIX/VERIFY) running across different fronts; freedom and ui need a task every round.
