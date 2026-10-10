@@ -134,3 +134,11 @@ Session state note (2026-10-09):
 - d343bf1 ("skipped" toast = no answer in 10 minutes; trial-merged clean with 55047d6)
 Merged tools-only this round: c9f69f8 P1-1, 8d05067 P2-1, 60395ff P2-12, 0821a15 P2-3, bb105d6 evaluator gaps, d3786d3 P2-11, 30fb221 P2-2, 71edf5f P1-5, fa75052 P1-3.
 Pending VERIFY: d9947ce P1-11 realuser.py.
+
+## 1.7.6 RUN results (2026-10-10 00:55)
+- [done] (reliability) 1.7.6 release built, smoked, packaged | role: run | evidence: "BUILT-FROM: dist/ matches commit 75a6566 (v1.7.6) / FRESH"; isosmoke arm64+x86 "desk socket: yes"; calc-smoke "all good"
+- [done] (speed) sweep 1 on 1.7.6 | evidence: "timed-sweep: 45 phrase(s), 33 took <=3 s, 12 took >3 s" (1.7.5: 36/45)
+- [done] (speed) sweep 2 on 1.7.6 | evidence: "timed-sweep: 54 phrase(s), 47 took <=3 s, 7 took >3 s" (1.7.5: 40/54)
+- [open] (capability) slow/wrong: "how tall is mount everest" 88 s; "show as list / big icons" 149 s empty reply; "turn word doc into pdf" 73 s wrong ("Opened the office program"); "always open pdfs in X" 44 s wrong ("Install files."); "translate thank you to french" 23 s; "click File" 23 s | role: probe (dispatched) | files: read only
+- [open] (reliability) package.sh named the 1.7.6 build "LLM OS 1.7.7.zip" (reads source VERSION, not dist) | role: fix (dispatched) | files: tools/package.sh
+- [open] (reliability) main-checkout test-start.py FAIL ("known packages/ issue") still seen by RUN | role: probe | files: read only
