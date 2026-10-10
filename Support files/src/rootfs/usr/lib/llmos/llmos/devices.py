@@ -6,8 +6,30 @@ import shutil
 import subprocess
 
 
+BACKLIGHT_DIR = "/sys/class/backlight"
+
+
+def _write_backlight_root(device, value):
+    """Write the raw brightness level of one backlight device (a directory name under BACKLIGHT_DIR), as root."""
+    with open(os.path.join(BACKLIGHT_DIR, device, "brightness"), "w") as f:
+        f.write(str(int(value)))
+
+
+def _write_backlight(device, value):
+    """Write the brightness level: directly as root, else through rootd's set_backlight verb.
+    A refused or failed write raises OSError, as the direct write always did."""
+    if os.geteuid() == 0:
+        _write_backlight_root(device, value)
+        return
+    from . import rootd_client
+    try:
+        rootd_client.call("set_backlight", device=device, value=int(value))
+    except rootd_client.RootdError as e:
+        raise OSError(str(e)) from None
+
+
 def brightness(percent=None, delta=None):
-    base = "/sys/class/backlight"
+    base = BACKLIGHT_DIR
     try:
         devs = sorted(os.listdir(base))
     except OSError:
@@ -29,8 +51,7 @@ def brightness(percent=None, delta=None):
     else:
         new = round(mx * max(1, min(100, int(percent))) / 100)
     new = max(1, min(mx, int(new)))          # never 0: that is "off" on most backlights
-    with open(os.path.join(dev, "brightness"), "w") as f:
-        f.write(str(new))
+    _write_backlight(devs[0], new)
     return f"Brightness set to {new * 100 // mx}%."
 
 
