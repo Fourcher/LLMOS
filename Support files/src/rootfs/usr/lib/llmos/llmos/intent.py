@@ -818,7 +818,7 @@ def _notes(text):
     if m and not _QUESTION.search(text):
         return ("note_add", {"text": m.group("item").strip(), "list": m.group("list").strip()})
     m = _NOTES_SHOW.match(text)
-    if m:
+    if m and not re.search(r"\b(?:files?|folders?|documents|downloads|pictures|photos|music|videos|icons?)\b", m.group("list") or m.group("list2") or "", re.I):
         lst = m.group("list") or m.group("list2")
         return ("notes_show", {"list": lst.strip()} if lst else {})
     m = _NOTE_REMOVE.match(text)
@@ -1210,7 +1210,11 @@ _THIS_FILE = re.compile(r"^\s*(?:please\s+)?(?:delete|trash|remove|rename|open|p
 
 def _everyday(text):
     from . import tools as T
-    if _THIS_FILE.match(text) and not re.search(r"\b(?:to|as)\s+\S+\.\w{2,4}\b|\busb|stick|flash|monitor|screen|display|workspace|desktop \d", text, re.I):
+    if re.match(r"^\s*(?:please\s+)?(?:make|convert|turn|save|change)\s+(?:this|that|it)(?:\s+(?:file|one|picture|photo|document|video|song))?\s+(?:in)?(?:to\s+|as\s+)?(?:an?\s+)?(?:jpe?g|png|gif|webp|heic|pdf|docx?|txt|mp3|mp4|mkv|wav)\b\s*[.!?]?\s*$", text, re.I):
+        return ("which_file", {"request": text})
+    if re.match(r"^\s*(?:please\s+)?(?:summari[sz]e|read|split|sign|merge|compress|translate|proofread|check)\s+(?:this|that)\s+(?:pdf|doc|docx|document|file|letter|report|essay)(?:\s+(?:to|for|out\s+loud|aloud)(?:\s+me)?)?\s*[.!?]?\s*$", text, re.I):
+        return ("which_file", {"request": text})
+    if _THIS_FILE.match(text) and not re.search(r"\b(?:to|as)\s+\S+\.\w{2,4}\b|\busb|stick|flash|monitor|screen|display|workspace|desktop \d|^\s*(?:please\s+)?rename\s+(?:this|that|it)(?:\s+(?:file|folder|one))?\s+(?:to|as)\s+\S", text, re.I):
         return ("which_file", {"request": text})
     m = re.match(r"^\s*show\s+the\s+folder\s+(?P<p>(?:~|/).*?)\s*$", text)
     if m:
@@ -1229,6 +1233,11 @@ def _everyday(text):
         if m.group("where"):
             args["where"] = m.group("where").lower()
         return ("make_folder", args)
+    m2 = (re.match(r"^\s*(?:please\s+)?call\s+it\s+(?!(?:after|for|by|like|something|anything|whatever|what|how|as)\b)(?P<to>[\w .()-]{1,60}?)\s+instead\s*[.!]?\s*$", text, re.I)
+          or re.match(r"^\s*(?:please\s+)?(?:call|name)\s+it\s+(?P<to>[\w ()-]{1,55}\.\w{1,5})\s*[.!]?\s*$", text, re.I)
+          or re.match(r"^\s*(?:please\s+)?name\s+it\s+(?!(?:after|for|by|like|something|anything|whatever|what|how|as)\b)(?P<to>[\w .()-]{1,60}?)\s*[.!]?\s*$", text, re.I))
+    if m2 and not re.fullmatch(r"(?:a\s+)?(?:day|night|quits|even|a\s+wrap|done)", m2.group("to").strip(), re.I):
+        return ("rename_file", {"name": "it", "to": m2.group("to").strip()})
     m = _RENAME.match(text)
     if m and re.search(r"\b(?:every|all|each)\b.*\b(?:files?|photos?|pictures?|documents?|songs?)\b|\b(?:files|photos|pictures|documents|songs)\b", m.group("n"), re.I):
         # many files by a rule ("rename every file on my desktop to lowercase with dashes instead of spaces")
@@ -1257,6 +1266,8 @@ def _everyday(text):
             return ("rename_files", args)
         return None                       # many files by some other rule: the model decides
     if m and not re.search(r"\b(?:wifi|network|computer|keyboard)\b", m.group("n"), re.I):
+        if m.group("n").strip().strip("'\"").lower() in ("these", "those", "them"):
+            return ("which_file", {"request": text.strip()})
         return ("rename_file", {"name": m.group("n").strip().strip("'\""), "to": m.group("to").strip().strip("'\"")})
     # "make a copy of report.txt from my downloads in my documents": a copy, the source folder named before the destination
     m = re.match(r"^\s*(?:please\s+)?(?:make|put|create)\s+a\s+copy\s+of\s+(?:the\s+|my\s+)?(?P<what>.+?)"
@@ -1422,6 +1433,8 @@ _DARK_WORDS = re.compile(r"^\s*(?:pon(?:er)?|activa(?:r)?|mets?|active|aktiviere
 def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
+    if re.fullmatch(r"where (?:did|has) (?:it|that|my file|the file|my download|the download) (?:get )?(?:save[d]?|go|gone|end up|ended up)|where(?:'s| is) (?:the|that) (?:file|thing|document) (?:you|i) (?:just )?(?:made|saved|downloaded|created)|where did (?:you|it) (?:just )?(?:save|put) (?:it|that)", low.rstrip("?.! ")):
+        return ("last_saved", {})
     import urllib.parse as _u
     # finding the owner's own things by what they are about
     m = re.match(r"^(?:please\s+)?(?:find|show(?:\s+me)?|where(?:'s|\s+is|\s+are)|look\s+for|get(?:\s+me)?|open)\s+(?:the|my|that|those)\s+(?:photos?|pictures?|pics?|images?|snaps?)\s+"
@@ -1483,9 +1496,11 @@ def _everyday2(text):
                  r"^(?:please\s+)?(?:find|get|look\s+up|search\s+for|show)\s+(?:me\s+)?(?:a\s+|an\s+)?recipes?\s+(?:for|on)\s+(?P<q2>.+?)\s*[.!?]?$", low)
     if m:
         return ("browse", {"search": ((m.group("q") or m.group("q2")) + " recipe").strip()})
+    if re.match(r"^\s*(?:please\s+)?print\s+(?:\d+\s+cop(?:y|ies)|(?:it|this)\s+(?:double|single)[- ]sided|(?:double|single)[- ]sided)\b", t, re.I):
+        return ("which_file", {"request": t})
     m = re.match(r"^(?:please\s+)?print\s+(?:me\s+)?(?:my\s+|the\s+|that\s+|a\s+)?(?P<f>[\w .'()-]+?)\s*[.!]?$", t, re.I)
     if m and m.group("f").lower() not in ("this", "that", "it", "this page", "this document", "page", "it out") \
-            and not re.search(r"\b(?:how|what|why|where|which)\b", m.group("f"), re.I):
+            and not re.search(r"\b(?:how|what|why|where|which)\b|^\d+\s+cop(?:y|ies)\b|\b(?:double|single)[- ]sided\b|\bin colou?r\b|\bblack and white\b|\blandscape\b|\bportrait\b", m.group("f"), re.I):
         return ("print_file", {"path": m.group("f").strip()})
     # the newest PDF I downloaded: "open the pdf I downloaded today"
     m = re.match(r"^(?:please\s+)?(?:open|show|view)\s+(?:the\s+|my\s+|that\s+)?(?P<k>pdf|picture|photo|image|video|song|document|file)\s+"
@@ -1717,6 +1732,12 @@ def _everyday2(text):
     if m:
         k = m.group("k").replace("résumé", "resume").replace("cv", "resume")
         return ("make_document", {"kind": "cover letter" if "cover" in k else k})
+    m = re.match(r"^(?:please\s+)?(?:make|create|start|set\s+up)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+|simple\s+)?spreadsheet(?:\s+(?:for|of|about|to\s+track)\s+(?:my\s+|the\s+|a\s+)?(?P<t>[\w '-]{1,40}?))?\s*[.!]?$", low)
+    if m:
+        t = (m.group("t") or "").strip()
+        if re.search(r"\b(?:budget|money|spending|expenses?|bills)\b", t):
+            return ("make_spreadsheet", {"name": "Budget", "rows": [["Item", "Amount"], ["Rent", ""], ["Food", ""], ["Bills", ""], ["Other", ""], ["Total", "=SUM(B2:B5)"]]})
+        return ("make_spreadsheet", {"name": t.title() if t else "Spreadsheet", "rows": [["Item", "Amount"], ["", ""], ["Total", "=SUM(B2:B2)"]]})
     if re.match(r"^(?:back\s*up|backup|save\s+a\s+copy\s+of|copy)\s+(?:all\s+)?(?:my\s+)?(?:files|stuff|documents|photos|computer|everything)(?:\s+(?:to|onto)\s+(?:the\s+|my\s+)?(?:usb|stick|usb\s+stick|external\s+(?:drive|disk)|drive))?$|^make\s+a\s+backup$", low):
         return ("backup_files", {})
     if re.match(r"^(?:restore|bring\s+back|get\s+back)\s+(?:my\s+)?(?:files|stuff|everything)\s+from\s+(?:the\s+|my\s+)?(?:backup|usb|stick|drive)$|^restore\s+(?:my\s+|the\s+)?backup$", low):

@@ -92,8 +92,9 @@
     lang = m.lang || "en";
     Object.assign(S, m.strings || {});
     document.querySelectorAll("[data-s]").forEach(e => { e.textContent = t(e.dataset.s); });
-    document.querySelectorAll("[data-ph]").forEach(e => { e.placeholder = t(e.dataset.ph); });
+    document.querySelectorAll("[data-ph]").forEach(e => { e.placeholder = t(e.dataset.ph); e.setAttribute("aria-label", t(e.dataset.ph)); });
     $("in").placeholder = t("hint", "Tell me what you want…");
+    $("in").setAttribute("aria-label", t("hint", "Tell me what you want…"));
     const desk = $("desk");
     if ((m.wallpaper || "") !== wallpaper && wallpaper && !motionOff()) {
       // the old picture fades out over the new one

@@ -29,6 +29,17 @@ def show(ctx, spec):
         ctx.show_box(norm["title"], uispec.to_rows(norm))
 
 
+def _free_path(p):
+    """p itself if nothing is there, else the first free 'name 2.ext', 'name 3.ext', … (never overwrite the owner's files)."""
+    if not os.path.lexists(p):
+        return p
+    stem, ext = os.path.splitext(p)
+    n = 2
+    while os.path.lexists(f"{stem} {n}{ext}"):
+        n += 1
+    return f"{stem} {n}{ext}"
+
+
 def _path(p):
     """A path the owner or the model gave: ~ expanded, relative ones inside the home folder."""
     p = str(p or "").strip()
@@ -2082,6 +2093,7 @@ def _human_size(n):
 
 
 _LAST_FOLDER = None
+_LAST_MADE = {"path": "", "at": 0.0}
 _SHOW_HIDDEN = False
 
 
@@ -2215,15 +2227,14 @@ def rename_series(a, ctx):
         t = os.path.join(folder, f".llmos-ren-{len(tmp)}-{old}")
         os.rename(os.path.join(folder, old), t)
         tmp.append((t, new))
+    done_names = []
     for t, new in tmp:
-        dest = os.path.join(folder, new)
-        if os.path.exists(dest):
-            stem, ext = os.path.splitext(new)
-            dest = os.path.join(folder, f"{stem} (2){ext}")
+        dest = _free_path(os.path.join(folder, new))
         os.rename(t, dest)
+        done_names.append(os.path.basename(dest))
     if _LAST_FOLDER == folder:
         show_files({"path": folder}, ctx)
-    return f"renamed {len(plan)} file(s) in {folder}: {plan[0][1]} … {plan[-1][1]}. Done: tell the owner in one sentence."
+    return f"renamed {len(plan)} file(s) in {folder}: {done_names[0]} … {done_names[-1]}. Done: tell the owner in one sentence."
 
 
 def _newest(folders, exts):
@@ -2500,7 +2511,7 @@ def edit_images(a, ctx):
     short = lambda x: "~" + x[len(home):] if x.startswith(home) else x
     where = out_dir
     if to_zip and made:
-        dest = _path(into)
+        dest = _free_path(_path(into))
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         import zipfile
         with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as z:
@@ -2601,6 +2612,11 @@ def make_spreadsheet(a, ctx):
     base = _path(name) if "/" in name or name.startswith("~") else os.path.join(config.home(), "Documents", name)
     base = os.path.splitext(base)[0]
     os.makedirs(os.path.dirname(base), exist_ok=True)
+    if os.path.exists(base + ".csv") or os.path.exists(base + ".xlsx"):
+        n = 2
+        while os.path.exists(f"{base} {n}.csv") or os.path.exists(f"{base} {n}.xlsx"):
+            n += 1
+        base = f"{base} {n}"
     csv_path = base + ".csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         csv.writer(f).writerows(rows)
@@ -2610,10 +2626,12 @@ def make_spreadsheet(a, ctx):
         if r.returncode == 0 and os.path.exists(base + ".xlsx"):
             os.remove(csv_path)
             out = base + ".xlsx"
+    opened = False
     if a.get("open", True):
-        open_file({"path": out}, ctx)
+        r = open_file({"path": out}, ctx)
+        opened = not str(r).lower().startswith(("error", "not done"))
     home = config.home().rstrip("/")
-    return f"made {('~' + out[len(home):]) if out.startswith(home) else out} with {len(rows)} row(s) and opened it. Done: tell the owner in one sentence."
+    return f"made {('~' + out[len(home):]) if out.startswith(home) else out} with {len(rows)} row(s){' and opened it' if opened else ''}. Done: tell the owner in one sentence."
 
 
 @tool("find_by_meaning", "Find the owner's own files, notes or photos by what they are about, not their names: 'the photo of the "
@@ -2925,7 +2943,7 @@ def convert_to_pdf(a, ctx):
         return edit_image({"path": path, "steps": [], "save_as": os.path.splitext(os.path.basename(path))[0] + ".pdf"}, ctx)
     if not shutil.which("abiword"):
         return "there is no program here that makes PDFs from documents (say 'install abiword')"
-    dest = os.path.splitext(path)[0] + ".pdf"
+    dest = _free_path(os.path.splitext(path)[0] + ".pdf")
     p = subprocess.run(["abiword", "--to=pdf", "-o", dest, path], capture_output=True, text=True, timeout=180)
     if p.returncode or not os.path.exists(dest):
         return f"could not convert it: {(p.stderr or p.stdout).strip()[:200] or 'this kind of file is not supported'}"
@@ -3111,6 +3129,7 @@ def edit_image(a, ctx):
         dest = f"{stem}-edited{ext}"
     if os.path.splitext(dest)[1].lower() == ".pdf":
         args += ["-quality", "92"]
+    dest = _free_path(dest)
     p = subprocess.run([tool_, path] + args + [dest], capture_output=True, text=True, timeout=300)
     if p.returncode or not os.path.exists(dest):
         err = (p.stderr or p.stdout).strip()
@@ -4110,14 +4129,45 @@ def make_folder(a, ctx):
     if os.path.exists(p):
         return f"error: {p.replace(config.home(), '~')} already exists"
     os.makedirs(p)
+    _LAST_MADE.update(path=p, at=time.time())
     _undo_push("made", p)
     show_files({"path": base}, ctx)
     return f"made the folder {p.replace(config.home(), '~')}. Say one sentence at most."
 
 
+@tool("last_saved", "Where the newest file in the owner's home folder is: the one saved or downloaded most recently (hidden files skipped).",
+      {}, [], risk=READ)
+def last_saved(a, ctx):
+    home = config.home()
+    best, when = "", 0.0
+    for d, dirs, fs in os.walk(home):
+        dirs[:] = [x for x in dirs if not x.startswith(".")]
+        for f in fs:
+            if f.startswith("."):
+                continue
+            p = os.path.join(d, f)
+            try:
+                m = os.path.getmtime(p)
+            except OSError:
+                continue
+            if m > when:
+                best, when = p, m
+    if not best or time.time() - when > 7200:
+        return "Nothing new was saved in the last two hours."
+    mins = int((time.time() - when) // 60)
+    ago = "just now" if mins < 1 else f"{mins} minute{'s' if mins != 1 else ''} ago"
+    return f"It's {'~' + best[len(home):] if best.startswith(home) else best} (saved {ago})."
+
+
 @tool("rename_file", "Rename one of the owner's files or folders; the extension is kept unless a new one is given.",
       {"name": {"type": "string", "description": "the current name (or part of it) or path"}, "to": STR}, ["name", "to"], risk=CHANGE)
 def rename_file(a, ctx):
+    name0 = str(a.get("name") or "").strip().lower()
+    if name0 in ("", "it", "this", "that", "this folder", "that folder", "this file", "that file"):
+        if _LAST_MADE["path"] and time.time() - _LAST_MADE["at"] < 600 and os.path.exists(_LAST_MADE["path"]):
+            a = dict(a, name=_LAST_MADE["path"])
+        else:
+            return "error: which one? Say its name (for example “rename notes.txt to todo.txt”)."
     src = _path(a["name"]) if "/" in str(a.get("name", "")) else None
     if not src or not os.path.exists(src):
         hits = find_paths(a.get("name", ""))
@@ -4137,6 +4187,8 @@ def rename_file(a, ctx):
     if os.path.exists(dst):
         return f"error: {new} already exists there"
     os.rename(src, dst)
+    if src == _LAST_MADE["path"]:
+        _LAST_MADE["path"] = dst
     _undo_push("move", [(dst, src)])
     return f"renamed {os.path.basename(src)} to {new}. Say one sentence at most."
 

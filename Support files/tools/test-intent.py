@@ -25,7 +25,12 @@ CASES = {
     "unzip ~/Downloads/photos.zip": ("extract_archive", {"path": "~/Downloads/photos.zip"}),
     "edit the file ~/notes.txt": ("open_file", {"path": "~/notes.txt", "edit": True}),
     "print the file ~/a.pdf": ("print_file", {"path": "~/a.pdf"}),
+    "print recipe.pdf": ("print_file", {"path": "recipe.pdf"}),
+    "print 2 copies double sided": ("which_file", {"request": "print 2 copies double sided"}),
     "set ~/Pictures/beach.jpg as my wallpaper": ("set_wallpaper", {"subject": "~/Pictures/beach.jpg"}),
+    "make a spreadsheet for my budget": ("make_spreadsheet", {"name": "Budget", "rows": [["Item", "Amount"], ["Rent", ""], ["Food", ""], ["Bills", ""], ["Other", ""], ["Total", "=SUM(B2:B5)"]]}),
+    "make a spreadsheet": ("make_spreadsheet", {"name": "Spreadsheet", "rows": [["Item", "Amount"], ["", ""], ["Total", "=SUM(B2:B2)"]]}),
+    "create a spreadsheet to track my plants": ("make_spreadsheet", {"name": "Plants", "rows": [["Item", "Amount"], ["", ""], ["Total", "=SUM(B2:B2)"]]}),
     "snip": ("screenshot", {"area": True}),
     "screenshot this window": ("screenshot", {}),
     "set my time zone to paris": ("change_setting", {"setting": "timezone", "value": "paris"}),
@@ -51,8 +56,21 @@ CASES = {
     "show the largest files in my pictures folder": ("biggest_files", {"folder": "~/Pictures"}),
     "zip my documents folder": ("compress_files", {"path": "~/Documents"}),
     "zip these": ("which_file", {"request": "zip these"}),
+    "make this a jpg": ("which_file", {"request": "make this a jpg"}),
+    "save it as png": ("which_file", {"request": "save it as png"}),
     "convert ~/a.docx to pdf": ("convert_to_pdf", {"path": "~/a.docx"}),
     "put this on the desktop": ("which_file", {"request": "put this on the desktop"}),
+    "rename notes.txt to todo.txt": ("rename_file", {"name": "notes.txt", "to": "todo.txt"}),
+    "rename it to budget.xlsx": ("rename_file", {"name": "it", "to": "budget.xlsx"}),
+    "call it Budget instead": ("rename_file", {"name": "it", "to": "Budget"}),
+    "rename it to Budget": ("rename_file", {"name": "it", "to": "Budget"}),
+    "rename it": ("which_file", {"request": "rename it"}),
+    "summarize this doc": ("which_file", {"request": "summarize this doc"}),
+    "read this pdf to me": ("which_file", {"request": "read this pdf to me"}),
+    "split this pdf": ("which_file", {"request": "split this pdf"}),
+    "sign this pdf": ("which_file", {"request": "sign this pdf"}),
+    "call it budget.xlsx": ("rename_file", {"name": "it", "to": "budget.xlsx"}),
+    "name it Taxes": ("rename_file", {"name": "it", "to": "Taxes"}),
     "is paypa1.com safe?": ("check_site", {"address": "paypa1.com"}),
     "delete all my files": ("delete_file", {"path": "~", "contents": True}),
     "change the font to arial size 14": ("set_appearance", {"font": "arial", "scale": "115"}),
@@ -164,6 +182,9 @@ CASES = {
     # files and screenshots
     "show my files": ("show_files", {"path": "~"}),
     "find the file i was working on yesterday": ("show_files", {"path": "~", "sort": "date"}),
+    "where did it save": ("last_saved", {}),
+    "where did that go": ("last_saved", {}),
+    "where's the file you just made": ("last_saved", {}),
     "show my recent files": ("show_files", {"path": "~", "sort": "date"}),
     "open the document I've been working on": ("show_files", {"path": "~", "sort": "date"}),
     "open the file I’ve been working on": ("show_files", {"path": "~", "sort": "date"}),
@@ -444,4 +465,44 @@ for text in GUARD_CASES:
         gbad += 1
         print(f"GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"volume guards: {len(GUARD_CASES) - gbad}/{len(GUARD_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad else 0)
+
+# notes guards: "show my files as a list" and "show big icons" are not notes lists
+NOTES_GUARD_CASES = ["show my files as a list", "show big icons"]
+nbad = 0
+for text in NOTES_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "notes_show":
+        nbad += 1
+        print(f"NOTES GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"notes guards: {len(NOTES_GUARD_CASES) - nbad}/{len(NOTES_GUARD_CASES)} as expected")
+
+# rename guards: "call it a day" and friends are not renames of "it"
+RENAME_GUARD_CASES = ["call it a day", "call it a night", "call it quits", "let's call it even", "name it after my dog", "call it what you want instead"]
+rbad = 0
+for text in RENAME_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "rename_file":
+        rbad += 1
+        print(f"RENAME GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"rename guards: {len(RENAME_GUARD_CASES) - rbad}/{len(RENAME_GUARD_CASES)} as expected")
+
+# format guards: "make this bigger" and friends are not file conversions (the "which file" route is for formats only)
+FORMAT_GUARD_CASES = ["make this bigger", "turn this off", "make it louder", "make it cosier", "make it look like a mac"]
+fbad = 0
+for text in FORMAT_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "which_file":
+        fbad += 1
+        print(f"FORMAT GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"format guards: {len(FORMAT_GUARD_CASES) - fbad}/{len(FORMAT_GUARD_CASES)} as expected")
+
+# doc guards: "read me a story" and friends are not file-document routes (the "which file" route is for "this <doc>" only)
+DOC_GUARD_CASES = ["read me a story", "check my spelling", "translate this page", "summarize the news"]
+dbad = 0
+for text in DOC_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "which_file":
+        dbad += 1
+        print(f"DOC GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"doc guards: {len(DOC_GUARD_CASES) - dbad}/{len(DOC_GUARD_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad or fbad or dbad else 0)
