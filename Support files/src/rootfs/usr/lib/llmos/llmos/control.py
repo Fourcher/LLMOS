@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from . import media
 
@@ -28,6 +29,7 @@ _CLICK_ROLES = ("push button", "toggle button", "check box", "radio button", "me
 _FIELD_ROLES = ("entry", "text", "password text")
 _DESK_APPS = ("llmos", "llmos-desk", "python3", "python")       # the desk's own webview: the OS's apps have their own bridge
 _HIT = {}                                                       # the AT-SPI element the last find() returned
+_POOL = max(2, min(8, os.cpu_count() or 2))
 
 
 def available():
@@ -35,7 +37,7 @@ def available():
 
 
 def _env():
-    return dict(os.environ, **(media.desk_env() or {}))
+    return dict(os.environ, OMP_THREAD_LIMIT="1", **(media.desk_env() or {}))
 
 
 def _run(argv, timeout=20, text=True):
@@ -108,13 +110,27 @@ def _buttons():
         w, h, x, y = (int(v) for v in m.groups())
         if 100 <= w <= min(1400, sw // 2) and 40 <= h <= 220:        # the size of a button, a tab or a field (at 2x)
             boxes.append((x, y, w, h))
+    def read_box(i, box):
+        x, y, w, h = box
+        path = f"{BOX}.{i}.png"
+        try:
+            if _run(["magick", SHOT, "-crop", f"{w}x{h}+{x}+{y}", "+repage", "PNG24:" + path], timeout=20).returncode:
+                return box, None
+            text = " ".join((_run(["tesseract", path, "-", "--psm", "7"], timeout=20).stdout or "").split())
+            if not text.strip() and w < 2.5 * h:
+                text = " ".join((_run(["tesseract", path, "-", "--psm", "10"], timeout=20).stdout or "").split())
+            return box, text
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    with ThreadPoolExecutor(max_workers=_POOL) as ex:
+        results = list(ex.map(lambda a: read_box(*a), enumerate(boxes[:40])))
     lines = []
-    for (x, y, w, h) in boxes[:40]:
-        if _run(["magick", SHOT, "-crop", f"{w}x{h}+{x}+{y}", "+repage", "PNG24:" + BOX], timeout=20).returncode:
+    for (x, y, w, h), text in results:
+        if text is None:
             continue
-        text = " ".join((_run(["tesseract", BOX, "-", "--psm", "7"], timeout=20).stdout or "").split())
-        if not text.strip() and w < 2.5 * h:            # a key with one sign on it ("7", "=", "+"): read as one character
-            text = " ".join((_run(["tesseract", BOX, "-", "--psm", "10"], timeout=20).stdout or "").split())
         text = re.sub(r"^[^\w(]+|[^\w).!?]+$", "", text)        # the box's own edge read as ':' or '|' 
         cx, cy, sx, sy = (x + w // 2) // 2, (y + h // 2) // 2, w // 2, h // 2
         if not re.search(r"[A-Za-z0-9=+×÷−%.()-]", text) or len(text) > 60:
@@ -145,9 +161,20 @@ def read_screen():
     add(_buttons())                                    # buttons first: the most reliable reading of what can be clicked
     step, height = 150, 200
     if shutil.which("magick") and sh:
-        for y in range(0, sh, step):
-            if _run(["magick", SHOT, "-crop", f"{sw}x{height}+0+{y}", "+repage", "PNG24:" + STRIP], timeout=20).returncode == 0:
-                add(_ocr("6", STRIP, y))
+        def read_strip(i, y):
+            path = f"{STRIP}.{i}.png"
+            try:
+                if _run(["magick", SHOT, "-crop", f"{sw}x{height}+0+{y}", "+repage", "PNG24:" + path], timeout=20).returncode == 0:
+                    return _ocr("6", path, y)
+                return []
+            finally:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+        with ThreadPoolExecutor(max_workers=_POOL) as ex:
+            for found in ex.map(lambda a: read_strip(*a), enumerate(range(0, sh, step))):
+                add(found)
     else:
         add(_ocr("6"))
     add(_ocr("11"))
