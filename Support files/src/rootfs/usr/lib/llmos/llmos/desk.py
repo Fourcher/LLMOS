@@ -2421,7 +2421,8 @@ class Desk:
             try:
                 have = subprocess.run(["rfkill", "list", "wifi"], capture_output=True, text=True, timeout=5).stdout.strip()
                 if have:
-                    subprocess.run(["rfkill", "block" if v == "off" else "unblock", "wifi"], capture_output=True, timeout=10)
+                    if system.radio("wifi", v == "on")[0] == 124:
+                        have = ""  # rfkill timed out: keep the old "no Wi-Fi adapter" reply
             except (OSError, subprocess.TimeoutExpired):
                 have = ""
             self.instant_reply(line, ("Wi-Fi is off." if v == "off" else "Wi-Fi is on.") if have else "This computer has no Wi-Fi adapter.")
@@ -2430,7 +2431,7 @@ class Desk:
         m = re.fullmatch(r"(?:turn |switch )?(?:on |off )?(?:airplane|aeroplane|flight|plane) mode(?: (?P<v>on|off))?|(?P<v2>turn on|turn off|enable|disable) (?:airplane|aeroplane|flight) mode", low.rstrip(".!"))
         if m and shutil.which("rfkill"):
             v = m.group("v") or ("off" if (m.group("v2") or "").endswith(("off", "disable")) or low.startswith(("turn off", "switch off")) else "on")
-            subprocess.run(["rfkill", "block" if v == "on" else "unblock", "all"], capture_output=True, timeout=10)
+            system.radio("all", v == "on")
             self.instant_reply(line, "Airplane mode is on: Wi-Fi and Bluetooth are off." if v == "on" else "Airplane mode is off.")
             self.push_status()
             return True
