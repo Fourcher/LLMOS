@@ -76,12 +76,15 @@ try:
     print("ok set_tor as root calls _set_tor_root")
 
     sent = []
-    rootd_client.call = lambda verb, **kw: (sent.append((verb, kw)) or "[true, \"\"]")
+    def record(verb, _timeout=None, **kw):
+        sent.append((verb, _timeout, kw))
+        return "[true, \"\"]"
+    rootd_client.call = record
     as_uid(1000)
     got = system.set_tor(False)
-    assert sent == [("set_tor", {"on": False})], sent
+    assert sent == [("set_tor", 120, {"on": False})], sent
     assert got == (True, ""), got
-    print("ok set_tor as desk sends set_tor and returns (True, \"\")")
+    print(f"ok set_tor as desk sends set_tor with _timeout=120 (not in args): {sent[0]}")
 
     rootd_client.call = boom
     got = system.set_tor(True)

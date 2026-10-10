@@ -167,7 +167,7 @@ def set_tor(on):
     if os.geteuid() == 0:
         return _set_tor_root(on)
     try:
-        ok, note = json.loads(rootd_client.call("set_tor", on=on))
+        ok, note = json.loads(rootd_client.call("set_tor", _timeout=120, on=on))
         return ok, note
     except rootd_client.RootdError as e:
         return False, str(e)
