@@ -1509,8 +1509,19 @@ _RECENT_SAVED = [
 ]
 
 
+_RECENT_OPEN = [
+    # (pattern, since): "open my last file", "reopen my last document", "open what I was working on yesterday" -> last_saved open
+    (re.compile(r"^\s*(?:please\s+)?(?:open\s+(?:my|the)\s+last\s+file|open\s+the\s+file\s+i\s+was\s+(?:just\s+)?working\s+on|reopen\s+my\s+last\s+(?:file|document))\s*[?.!]?\s*$", re.I), None),
+    (re.compile(r"^\s*(?:please\s+)?open\s+what\s+i\s+was\s+working\s+on\s+yesterday\s*[?.!]?\s*$", re.I), "yesterday"),
+    (re.compile(r"^\s*(?:please\s+)?open\s+what\s+i\s+was\s+working\s+on\s+today\s*[?.!]?\s*$", re.I), "today"),
+]
+
+
 def _recent_saved(text):
     """The owner's recently saved files: the last_saved tool with the period the words name. Raw text, case-insensitive."""
+    for pat, since in _RECENT_OPEN:
+        if pat.match(text):
+            return ("last_saved", {"open": True, "since": since} if since else {"open": True})
     for pat, since in _RECENT_SAVED:
         if pat.match(text):
             return ("last_saved", {"since": since})

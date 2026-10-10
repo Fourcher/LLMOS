@@ -70,7 +70,16 @@ CASES = {
     "files from this week": ("last_saved", {"since": "week"}),
     "i was working yesterday on my car": None,
     "recent news": None,
-    "open my last file": None,
+    # open the newest saved file (last_saved open=true); with yesterday/today the window too
+    "open my last file": ("last_saved", {"open": True}),
+    "Open The Last File": ("last_saved", {"open": True}),
+    "open the last file": ("last_saved", {"open": True}),
+    "open the file I was just working on": ("last_saved", {"open": True}),
+    "open the file i was working on": ("last_saved", {"open": True}),
+    "reopen my last file": ("last_saved", {"open": True}),
+    "reopen my last document": ("last_saved", {"open": True}),
+    "open what I was working on yesterday": ("last_saved", {"open": True, "since": "yesterday"}),
+    "open what i was working on today": ("last_saved", {"open": True, "since": "today"}),
     "delete the biggest files": None,
     "biggest files are slow": None,
     "send me the biggest file": None,
@@ -543,4 +552,14 @@ for text in DOC_GUARD_CASES:
         dbad += 1
         print(f"DOC GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"doc guards: {len(DOC_GUARD_CASES) - dbad}/{len(DOC_GUARD_CASES)} as expected")
-sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad or fbad or dbad else 0)
+
+# open-last guards: these must NOT open the newest saved file (last_saved open=true)
+OPEN_LAST_GUARD_CASES = ["open my last email", "open the last tab", "open last week's photos folder", "what was my last file", "delete my last file"]
+obad = 0
+for text in OPEN_LAST_GUARD_CASES:
+    got = intent.match(text)
+    if got and got[0] == "last_saved" and got[1].get("open"):
+        obad += 1
+        print(f"OPEN LAST GUARD MISMATCH {text!r}\n   got    {got!r}")
+print(f"open-last guards: {len(OPEN_LAST_GUARD_CASES) - obad}/{len(OPEN_LAST_GUARD_CASES)} as expected")
+sys.exit(1 if bad or app_bad or reply_bad or tbad or gbad or nbad or rbad or fbad or dbad or obad else 0)

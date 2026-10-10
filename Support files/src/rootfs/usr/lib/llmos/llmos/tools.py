@@ -4219,9 +4219,11 @@ def _recent_when(m):
 
 
 @tool("last_saved", "Find the owner's recently saved or downloaded files in the home folder (hidden files skipped). "
-      "With no 'since': the newest file saved in the last two hours. With 'since': the files in that period, newest first, up to 10.",
+      "With no 'since': the newest file saved in the last two hours. With 'since': the files in that period, newest first, up to 10. "
+      "With 'open': the newest of them is opened on the screen.",
       {"since": {"type": "string", "enum": ["hour", "today", "yesterday", "week"],
-                 "description": "hour = last hour; today = since midnight; yesterday = all of yesterday; week = last 7 days. Leave out for the last two hours."}},
+                 "description": "hour = last hour; today = since midnight; yesterday = all of yesterday; week = last 7 days. Leave out for the last two hours."},
+       "open": {"type": "boolean", "description": "true to open the newest file found (the one the reply names)"}},
       [], risk=READ)
 def last_saved(a, ctx):
     import datetime as _dt
@@ -4235,6 +4237,9 @@ def last_saved(a, ctx):
         when, best = hits[0]
         mins = int((now - when) // 60)
         ago = "just now" if mins < 1 else f"{mins} minute{'s' if mins != 1 else ''} ago"
+        if a.get("open"):
+            open_file({"path": best}, ctx)
+            return f"Opened {os.path.basename(best)} (saved {ago})."
         return f"It's {'~' + best[len(home):] if best.startswith(home) else best} (saved {ago})."
     if since not in _RECENT_SINCE:
         return "error: since must be hour, today, yesterday or week"
@@ -4246,6 +4251,10 @@ def last_saved(a, ctx):
     hits = _recent_scan(home, lo, hi)
     if not hits:
         return f"No files were saved {_RECENT_SINCE[since]}."
+    if a.get("open"):
+        m, best = hits[0]
+        open_file({"path": best}, ctx)
+        return f"Opened {os.path.basename(best)} (saved {_recent_when(m)})."
     lines = []
     for m, p in hits[:10]:
         folder = os.path.dirname(p)
