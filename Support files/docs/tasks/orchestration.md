@@ -69,3 +69,6 @@ Rule for every FIX spec that changes existing behaviour: open with a PROBE-sourc
 
 - 2026-10-10 review: 454 idle minutes came from waiting on a single long RUN with nothing else in flight. While any RUN holds the VM, keep at least 3 host-only workers (PROBE/FIX/VERIFY) running across different fronts; freedom and ui need a task every round.
 - 2026-10-10: intent.match always receives the ORIGINAL typed text (desk.py:2210/2227/3451/3458, agent.py:723); the lowercased `low` (desk.py:2195) is only for everyday.MATCH and set checks. VERIFY specs must call intent.match(text) on raw text and everyday.MATCH on intent.plain(text).lower().strip(). (A false case-loss alarm came from my wrong spec.)
+- 2026-10-10 follow-up review (24 merges after 10:30; 17 first-try; 9 follow-ups: 4 edge cases, 3 regressions, 2 other — none from missing files or tests). Two lines are now required in every FIX spec that replaces or wraps existing behaviour:
+  * "Keep identical:" — the exact old timeouts, argv, owner-facing messages, return shapes and limits (from the PROBE), so the worker tests them.
+  * "Adversarial inputs:" — symlinks, "..", option-like names, wrong types, stale/cached state, an already-open window — whatever applies, so VERIFY isn't the first to try them.
