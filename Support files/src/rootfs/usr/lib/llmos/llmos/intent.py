@@ -946,7 +946,13 @@ def _files(text):
         sub = {"documents": "Documents", "docs": "Documents", "downloads": "Downloads", "pictures": "Pictures", "photos": "Pictures",
                "music": "Music", "videos": "Videos", "desktop": "Desktop"}.get(f, "")
         return ("delete_file", {"path": "~/" + sub if sub else "~", "contents": True})
-    m = re.match(r"^\s*(?:please\s+)?(?:show|find|list|what\s+are)\s+(?:me\s+)?(?P<my>my\s+|the\s+)?(?:biggest|largest)\s+files(?P<pc>\s+on\s+(?:the|this|my)\s+(?:computer|disk|drive|machine))?\s*[?.!]?\s*$"
+    m = re.match(r"^\s*(?:please\s+)?(?:show|find|list|what(?:\s+is|\s+are|'s))\s+(?:me\s+)?(?:my\s+|the\s+)?(?:biggest|largest)\s+files?\s+in\s+(?:my\s+|the\s+)?(?P<f>documents|docs|downloads|pictures|photos|music|videos|desktop)(?:\s+folder)?\s*[?.!]?\s*$", text, re.I)
+    if m:
+        f = m.group("f").lower()
+        sub = {"documents": "Documents", "docs": "Documents", "downloads": "Downloads", "pictures": "Pictures", "photos": "Pictures",
+               "music": "Music", "videos": "Videos", "desktop": "Desktop"}[f]
+        return ("biggest_files", {"folder": "~/" + sub})
+    m = re.match(r"^\s*(?:please\s+)?(?:show|find|list|what(?:\s+is|\s+are|'s))\s+(?:me\s+)?(?P<my>my\s+|the\s+)?(?:biggest|largest)\s+files?(?P<pc>\s+on\s+(?:the|this|my)\s+(?:computer|disk|drive|machine))?\s*[?.!]?\s*$"
                  r"|^\s*what(?:'s|\s+is)\s+taking\s+up\s+(?:the\s+most\s+|all\s+the\s+|so\s+much\s+)?(?:space|room|disk\s+space)(?:\s+on\s+(?:my|the|this)\s+(?:computer|disk|drive))?\s*[?.!]*\s*$", text, re.I)
     if m:
         return ("biggest_files", {"folder": "~"} if (m.group("my") or "").strip().lower() == "my" and not m.group("pc") else {})
@@ -1271,7 +1277,7 @@ def _everyday(text):
     if m and not _FILEISH.search(m.group("q")):
         return ("browse", {"search": m.group("q")})
     m = _FIND_FILE.match(text)
-    if m and _FILEISH.search(text) and not re.search(r"\be-?mails?\b", text, re.I) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I) and not re.search(r"\b(?:biggest|largest)\s+files\b", text, re.I):
+    if m and _FILEISH.search(text) and not re.search(r"\be-?mails?\b", text, re.I) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I) and not re.search(r"\b(?:biggest|largest)\s+files?\b", text, re.I):
         q = re.sub(r"\b(?:my|the|that|file|files|folder|folders|called|named|i|saved|downloaded|put|was|working|on|about|yesterday)\b", " ", m.group("q"), flags=re.I)
         if q.strip():
             return ("find_files", {"query": " ".join(q.split())})
