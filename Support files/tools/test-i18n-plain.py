@@ -53,13 +53,18 @@ check(old_src.returncode == 0, f"reference {REF}:i18n.py readable")
 old = blocks_from_source(old_src.stdout) if old_src.returncode == 0 else {}
 
 check(sorted(new) == sorted(BLOCKS), "all six language blocks present")
+NEW_KEYS = {"no_model"}  # the one key added to every block (no assistant set up yet)
 for b in BLOCKS:
     if b in old:
-        check(set(new[b]) == set(old[b]), f"{b}: same key set as {REF} ({len(new[b])} keys)")
+        check(set(new[b]) == set(old[b]) | NEW_KEYS, f"{b}: key set = {REF} + no_model ({len(new[b])} keys)")
+        check(all(isinstance(new[b].get(k), str) and "{" not in new[b][k] for k in NEW_KEYS),
+              f"{b}: no_model present and has no placeholder braces")
         if b != "EN":
-            check(new[b] == old[b], f"{b}: values unchanged (non-English not edited)")
+            check({k: v for k, v in new[b].items() if k not in NEW_KEYS} == old[b],
+                  f"{b}: values unchanged apart from no_model (non-English not edited)")
 
 en = new.get("EN", {})
+check(en.get("no_model") == "No assistant is set up yet.", "EN no_model == 'No assistant is set up yet.'")
 for key, text in NEW.items():
     check(en.get(key) == text, f"EN {key} == new text")
     if key in old.get("EN", {}):
