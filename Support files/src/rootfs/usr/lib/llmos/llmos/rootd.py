@@ -31,6 +31,18 @@ def _etc(*parts):
     return os.path.join(ETC_ROOT, "etc", *parts)
 
 
+def _llmos_dir():
+    """Return ETC_ROOT/etc/llmos, refusing it if any part from etc down is a symlink or it leads outside ETC_ROOT."""
+    etc = _etc()
+    llmos = _etc("llmos")
+    for p in (etc, llmos):
+        if os.path.islink(p):
+            raise ValueError("bad args: settings folder is not a plain folder")
+    if os.path.realpath(llmos) != os.path.join(os.path.realpath(ETC_ROOT), "etc", "llmos"):
+        raise ValueError("bad args: settings folder is not a plain folder")
+    return llmos
+
+
 def _write_atomic(path, text):
     """Write text to path through a temp file in the same directory, then os.replace."""
     d = os.path.dirname(path)
@@ -62,6 +74,8 @@ def set_timezone(args):
         raise ValueError("bad args: zone")
     if not isinstance(chosen, bool):
         raise ValueError("bad args: chosen")
+    # Check the settings folder before anything is written.
+    llmos = _llmos_dir()
     # Resolve symlinks first: the target must be a regular file inside ZONEINFO.
     real_zoneinfo = os.path.realpath(ZONEINFO)
     src = os.path.realpath(os.path.join(ZONEINFO, zone))
@@ -82,8 +96,8 @@ def set_timezone(args):
     with open(_etc("timezone"), "w") as f:
         f.write(zone + "\n")
     if chosen:
-        os.makedirs(_etc("llmos"), exist_ok=True)
-        with open(_etc("llmos", "timezone"), "w") as f:
+        os.makedirs(llmos, exist_ok=True)
+        with open(os.path.join(llmos, "timezone"), "w") as f:
             f.write(zone + "\n")
     return "ok"
 
@@ -107,7 +121,19 @@ def write_setting_file(args):
         raise ValueError("bad args: name")
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_SETTING:
         raise ValueError("bad args: text")
-    _write_atomic(_etc("llmos", name), text)
+    _write_atomic(os.path.join(_llmos_dir(), name), text)
+    return "ok"
+
+
+def remove_setting_file(args):
+    args = _args_dict(args)
+    name = args.get("name")
+    if not isinstance(name, str) or name not in SETTING_NAMES:
+        raise ValueError("bad args: name")
+    try:
+        os.unlink(os.path.join(_llmos_dir(), name))
+    except FileNotFoundError:
+        pass
     return "ok"
 
 
@@ -115,6 +141,7 @@ VERBS = {
     "set_timezone": set_timezone,
     "set_hostname": set_hostname,
     "write_setting_file": write_setting_file,
+    "remove_setting_file": remove_setting_file,
 }
 
 

@@ -94,6 +94,46 @@ else:
         os.chmod(ro, 0o700)
     shutil.rmtree(b, ignore_errors=True)
 
+# (d) writable ETC: _remove_etc unlinks directly, missing file ok, rootd never called
+rootd_client.call = no_rootd
+try:
+    point_etc(a)
+    config.write_conduct("be kind\n")
+    config.remove_conduct()
+    check("d writable ETC removes conduct.txt directly", not os.path.exists(os.path.join(a, "conduct.txt")))
+    config.remove_conduct()
+    check("d removing a missing conduct.txt is fine", True)
+except Exception as e:
+    check("d writable ETC removes conduct.txt directly", False, repr(e))
+finally:
+    rootd_client.call = real_call
+
+# (e) non-writable ETC: remove goes through rootd's remove_setting_file verb
+if os.geteuid() != 0:
+    e_dir = tempfile.mkdtemp(prefix="llmos-etc-e-")
+    e_ro = os.path.join(e_dir, "ro")
+    os.makedirs(e_ro)
+    open(os.path.join(e_ro, "conduct.txt"), "w").write("x")
+    os.chmod(e_ro, 0o500)
+    point_etc(e_ro)
+    rm_calls = []
+
+    def record_rm(verb, **args):
+        rm_calls.append((verb, args))
+        return "ok"
+
+    rootd_client.call = record_rm
+    try:
+        config.remove_conduct()
+        check("e non-writable ETC removes through rootd",
+              rm_calls == [("remove_setting_file", {"name": "conduct.txt"})], repr(rm_calls))
+    except Exception as e:
+        check("e non-writable ETC removes through rootd", False, repr(e))
+    finally:
+        rootd_client.call = real_call
+        os.chmod(e_ro, 0o700)
+    shutil.rmtree(e_dir, ignore_errors=True)
+
 shutil.rmtree(a, ignore_errors=True)
 shutil.rmtree(home, ignore_errors=True)
 if fails:
