@@ -9,9 +9,19 @@
 # Never writes to the Desktop or anywhere outside the project working folder.
 # Refuses to package images that don't match the source they were built from (tools/check-fresh.py [--built-commit]).
 set -euo pipefail
-cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
+cd "${PACKAGE_ROOT:-/Volumes/Files/Claude Work Area/LLMOS/Support files}"
 TOP=..
-VER=$(cat VERSION)
+# The zip is named for the BUILT images (dist/RELEASE.json, else dist/VERSION), not the source tree's VERSION.
+SRC_VER=$(cat VERSION)
+BUILT_VER=""
+if [ -f dist/RELEASE.json ]; then
+    BUILT_VER=$(python3 -I -c 'import json; print(json.load(open("dist/RELEASE.json"))["version"])' 2>/dev/null || true)
+fi
+if [ -z "$BUILT_VER" ] && [ -f dist/VERSION ]; then BUILT_VER=$(cat dist/VERSION); fi
+[ -n "$BUILT_VER" ] || { echo "!! no built version: dist/RELEASE.json and dist/VERSION are both missing (run tools/release.sh first)"; exit 1; }
+VER=$BUILT_VER
+[ "$BUILT_VER" = "$SRC_VER" ] || echo "note: packaging built version $BUILT_VER (source is $SRC_VER)"
+if [ -n "${PACKAGE_PRINT_VERSION:-}" ]; then echo "$VER"; exit 0; fi
 OUT=${1:-"$TOP/packages/LLM OS $VER.zip"}
 mkdir -p "$(dirname "$OUT")"
 # dist/ must be exactly what its recorded commit builds (later source merges are fine: they ship in the next release)
