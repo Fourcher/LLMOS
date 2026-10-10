@@ -88,6 +88,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
         if before is None:
             raise ValueError("desk-state is not JSON")
         ctx["before_reply"] = before.get(REPLY_KEY) or ""
+        done0 = before.get("done")          # requests the desk had finished before this one (older desks: no key)
         if path == "say":
             timed("say", lambda: run_in_vm("llmos say " + shlex.quote(task["instruction"])))
             typed_ok = True
@@ -95,7 +96,11 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
             typed_ok = timed("type", lambda: user.type_into(INPUT, task["instruction"]))
             timed("press", lambda: user.press("ret"))
         timeout_s = task.get("timeout_s", 120)
-        waited = timed("wait", lambda: run_in_vm("llmos desk-ctl wait %s" % timeout_s))
+        if isinstance(done0, int) and not isinstance(done0, bool):
+            wait_cmd = "llmos desk-ctl wait %s after %d" % (timeout_s, done0)
+        else:
+            wait_cmd = "llmos desk-ctl wait %s" % timeout_s
+        waited = timed("wait", lambda: run_in_vm(wait_cmd))
         wait_state = vm_json(waited)
         busy = isinstance(wait_state, dict) and bool(wait_state.get("busy"))
         queued = _queued(wait_state)
