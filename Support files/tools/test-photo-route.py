@@ -33,4 +33,17 @@ print("what's in my photos from 2019 ->", r)
 assert r is None or r[0] != "find_by_meaning" or r[1].get("query") != "2019", r
 print("ok what's in my photos from 2019 (no crash)")
 
+# action requests must not become plain photo finds via q3
+for text in ("my pics from christmas are on the usb, copy them to the desktop",
+             "my photos from the trip are too big, shrink them",
+             "my pictures of the house need renaming"):
+    r = intent._everyday2(text)
+    print(text, "->", r)
+    assert r is None or r[0] != "find_by_meaning" or not any(
+        w in r[1].get("query", "") for w in (" are ", " is ", " need", "copy", "shrink", "rename")), r
+    print(f"ok {text!r} (not a find via q3)")
+
+# plain q3 still works
+photo("my photos of the dog", "the dog")
+
 print("all good")

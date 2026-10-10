@@ -1427,7 +1427,7 @@ def _everyday2(text):
     m = re.match(r"^(?:please\s+)?(?:find|show(?:\s+me)?|where(?:'s|\s+is|\s+are)|look\s+for|get(?:\s+me)?|open)\s+(?:the|my|that|those)\s+(?:photos?|pictures?|pics?|images?|snaps?)\s+"
                  r"(?:of|with|from|where|showing|that\s+(?:has|have|shows?)|i\s+took\s+(?:of|at|in))\s+(?P<q>.+)$"
                  r"|^(?:please\s+)?(?:find|show(?:\s+me)?)\s+(?:my\s+)?(?:photos?|pictures?|pics?)\s+(?:of|with|from)\s+(?P<q2>.+?)\s+(?:i\s+took|from\s+my\s+(?:photos|pictures|phone|camera))$"
-                 r"|^(?:please\s+)?(?:(?:show|find|open)(?:\s+me)?\s+)?(?:all\s+)?(?:my|our)\s+(?:photos?|pictures?|pics?|snaps?)\s+(?:of|with|from)\s+(?P<q3>.+)$", low)
+                 r"|^(?:please\s+)?(?:(?:show|find|open)(?:\s+me)?\s+)?(?:all\s+)?(?:my|our)\s+(?:photos?|pictures?|pics?|snaps?)\s+(?:of|with|from)\s+(?P<q3>(?![^,;]*\b(?:are|is|was|were|need|needs|copy|move|shrink|resize|rename|send|delete|remove|put|make|edit|crop|rotate|print|share|upload|convert|zip|backup|back\s+up|into|onto)\b)[^,;]+)$", low)
     if m:
         return ("find_by_meaning", {"query": (m.group("q") or m.group("q2") or m.group("q3")).strip(), "kind": "photos"})
     m = re.match(r"^(?:please\s+)?(?:find|show(?:\s+me)?|where(?:'s|\s+is|\s+are)|look\s+for|get(?:\s+me)?|open)\s+(?:the|my|that)\s+"
