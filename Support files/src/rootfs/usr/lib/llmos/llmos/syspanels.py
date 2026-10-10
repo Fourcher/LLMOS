@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import time
 
-from . import config, version_line
+from . import config, system, version_line
 
 FRIENDLY = {"llama-server": "the on-device model", "WebKitWebProcess": "the desk (screen)", "WebKitWebProces": "the desk (screen)",
             "WebKitNetworkProcess": "the desk (network)", "WebKitNetworkPr": "the desk (network)", "labwc": "windows",
@@ -515,12 +515,7 @@ def first_output():
 
 def sleep():
     """Suspend to RAM (the vault stays as it is; the screen asks for nothing extra on waking)."""
-    _run(["sync"], 30)
-    try:
-        with open("/sys/power/state", "w") as f:
-            f.write("mem")
-    except OSError:
-        pass
+    system.power("suspend")
 
 
 # ---- storage: what fills the disk, and what can go

@@ -521,7 +521,7 @@ class Console:
         ui.line(T("shutting_down") if how == "poweroff" else T("restarting"), style="accent")
         if config.settings.get("vault") and vault.unlocked():
             vault.lock()
-        os.system("poweroff" if how == "poweroff" else "reboot")
+        system.power("poweroff" if how == "poweroff" else "reboot")
         sys.exit(0)
 
     # ---- model readiness
