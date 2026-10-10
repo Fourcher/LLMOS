@@ -4,6 +4,15 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.7
+- Real-input test hooks: desk `rect`, `testreset-min`, and testshell fixed sampling.
+- Photo search by "my pics from X".
+- "Where did it save" is answered.
+- Spreadsheets.
+- Saves never overwrite an existing file.
+- An honest "skipped" message.
+- All 6 languages complete.
+
 ## 1.7.6
 - Replies say "you", never "the owner".
 - "Why is my disk full" opens the storage view at once.
