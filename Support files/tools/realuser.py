@@ -8,13 +8,18 @@ RealUser(qmp, run_in_vm, grab=None)
 """
 import json
 import os
+import shlex
 
 SUPPORT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_SHOT = os.path.join(SUPPORT_DIR, "run", "realuser.ppm")
 
-# check against index.html
-DIALOG_YES = "#dlg-yes"
-DIALOG_NO = "#dlg-no"
+# Selectors from src/rootfs/usr/share/llmos/desk/desk.js
+DIALOG_YES = '#overlay .dlg button[data-value="yes"]'  # desk.js:877-892
+DIALOG_NO = '#overlay .dlg button[data-value="no"]'  # desk.js:877-892
+WIZ_NEXT = "#wiz-nav > button.btn.primary"  # desk.js:247-435
+WIZ_BACK = "#wiz-nav > button.btn.ghost"  # desk.js:247-435
+WIZ_SIGNIN = "#wz-signin"  # desk.js:247-435
+INPUT = "#in"  # desk.js:247-435
 
 
 def _ppm_size(data):
@@ -55,7 +60,7 @@ class RealUser:
 
     def rect(self, sel):
         self._n += 1
-        out = self.run_in_vm("llmos desk-ctl rect %d '%s'" % (self._n, sel))
+        out = self.run_in_vm(f"llmos desk-ctl rect {self._n} {shlex.quote(sel)}")
         obj = json.loads(out)
         if obj.get("ok") is False:
             raise RuntimeError("rect %s failed: %s" % (sel, obj.get("error")))

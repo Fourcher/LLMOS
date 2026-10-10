@@ -2,11 +2,12 @@
 """Offline test for tools/realuser.py with a fake QMP and a fake VM. Stdlib only."""
 import json
 import os
+import shlex
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import realuser  # noqa: E402
-from realuser import RealUser  # noqa: E402
+from realuser import RealUser, DIALOG_YES, DIALOG_NO  # noqa: E402
 
 W, H = 1600, 1200
 VW = 800  # CSS viewport width -> scale 2
@@ -51,7 +52,7 @@ def make_vm(qmp, rects):
 
     def run_in_vm(cmd):
         cmds.append(cmd)
-        sel = cmd.split("'")[1]
+        sel = shlex.split(cmd)[-1]
         if sel not in rects:
             return json.dumps({"ok": False, "error": "no match"})
         r = dict(rects[sel])
@@ -69,8 +70,9 @@ def grab():
 
 RECTS = {
     "#field": {"x": 100, "y": 50, "w": 200, "h": 40},
-    "#dlg-yes": {"x": 10, "y": 20, "w": 60, "h": 30},
-    "#dlg-no": {"x": 90, "y": 20, "w": 60, "h": 30},
+    DIALOG_YES: {"x": 10, "y": 20, "w": 60, "h": 30},
+    DIALOG_NO: {"x": 90, "y": 20, "w": 60, "h": 30},
+    "button[title='Send']": {"x": 200, "y": 100, "w": 40, "h": 20},
 }
 
 
@@ -110,14 +112,39 @@ check(ok is True, "type_into returns True on first try")
 check(len(types) == 1 and types[0] == ("type", True), "no retype when first try matches (secret passed through)")
 check(not any(c[0] == "combo" for c in q.calls), "no select-all when first try matches")
 
-# 4. answer_dialog(True) clicks centre of #dlg-yes
+# 4. answer_dialog(True) queries DIALOG_YES and clicks its centre
 q = FakeQMP()
 vm, cmds = make_vm(q, RECTS)
 u = RealUser(q, vm, grab=grab)
 u.answer_dialog(True)
 clicks = [c for c in q.calls if c[0] == "click"]
 # centre (10+30, 20+15) = (40, 35) CSS -> (80, 70) screen
-check(clicks == [("click", 80, 70, W, H)], "answer_dialog(True) clicks centre of #dlg-yes")
+check(clicks == [("click", 80, 70, W, H)], "answer_dialog(True) clicks centre of DIALOG_YES")
+check(shlex.split(cmds[0])[-1] == DIALOG_YES, "answer_dialog(True) queries DIALOG_YES")
+
+# 4b. answer_dialog(False) queries DIALOG_NO
+q = FakeQMP()
+vm, cmds = make_vm(q, RECTS)
+u = RealUser(q, vm, grab=grab)
+u.answer_dialog(False)
+check(shlex.split(cmds[0])[-1] == DIALOG_NO, "answer_dialog(False) queries DIALOG_NO")
+
+# 4c. selector with quotes survives the VM shell round-trip
+q = FakeQMP()
+vm, cmds = make_vm(q, RECTS)
+u = RealUser(q, vm, grab=grab)
+u.rect("button[title='Send']")
+parts = shlex.split(cmds[0])
+check(parts == ["llmos", "desk-ctl", "rect", "1", "button[title='Send']"],
+      "rect quotes button[title='Send'] for the shell")
+print("ok rect command round-trips %r" % (parts,))
+q = FakeQMP()
+vm, cmds = make_vm(q, RECTS)
+u = RealUser(q, vm, grab=grab)
+u.rect(DIALOG_YES)
+parts = shlex.split(cmds[0])
+check(parts == ["llmos", "desk-ctl", "rect", "1", DIALOG_YES],
+      "rect quotes DIALOG_YES for the shell")
 
 # 5. rect error raises
 q = FakeQMP()
