@@ -96,7 +96,19 @@ sock_dir = tempfile.mkdtemp(prefix="rc-", dir="/tmp")
 sock_path = os.path.join(sock_dir, "root.sock")
 t = threading.Thread(target=rootd.serve, args=(sock_path, "no-such-group-xyz"), daemon=True)
 t.start()
-wait_for(sock_path)
+# bind() creates the path before listen(), so probe with a connect until the server is really listening
+deadline = time.time() + 5
+while True:
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.connect(sock_path)
+        s.close()
+        break
+    except (FileNotFoundError, ConnectionRefusedError):
+        s.close()
+        if time.time() > deadline:
+            raise AssertionError(f"rootd never listened on {sock_path}")
+        time.sleep(0.02)
 rootd_client.SOCK = sock_path
 
 out = rootd_client.call("set_hostname", name="kitchen")
