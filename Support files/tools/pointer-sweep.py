@@ -29,11 +29,11 @@ OUT = os.path.join(SUPPORT_DIR, "run", "pointer-sweep.json")
 DEFAULT_SEL = "button, [role=button], .chip"
 NOOP_RATIO = 0.005  # a click that changes at most 0.5% of sampled pixels (and no state) is a no-op
 # button-sweep.py's SKIP list, plus the machine-changing words: power, log out, sign out, reset
-SKIP = re.compile(r"\b(?:shut ?down|restart|reboot|sleep|lock\b|end process|eject|forget|remove|delete|empty the trash|"
-                  r"install the updates|install llm os|erase|uninstall|clear the caches|sign in|join wifi|add printer|"
+SKIP = re.compile(r"\b(?:shut[ -]?down|restart|reboot|sleep|lock\b|end process|eject|forget|remove|delete|empty the trash|"
+                  r"install the updates|install llm os|erase|uninstall|clear the caches|sign[ -]?in|join wifi|add printer|"
                   r"bluetooth (?:connect|forget)|use the online model|connect another|set up my email|"
                   r"install a web browser|play some|open the file|show the folder|"
-                  r"power|log ?out|sign out|reset|empty\b|trash|format|turn (?:it )?off|wipe|install|update|upgrade|"
+                  r"power|log[ -]?out|sign[ -]?out|reset|empty\b|trash|format|turn[ -](?:it )?off|wipe|install|update|upgrade|"
                   r"send|buy|pay|purchase|order|post|publish|share|upload|kill|quit|close all|discard|overwrite|"
                   r"replace all|factory|firewall|password|passphrase|delete account|unpair|disconnect)", re.I)
 

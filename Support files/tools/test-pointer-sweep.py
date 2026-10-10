@@ -156,7 +156,7 @@ def main():
     dangerous = ["Restart", "Shut down", "Power off", "Log out", "Sign out", "Reset everything", "Erase disk",
                  "Delete", "Remove", "Empty trash", "Uninstall", "Format", "Factory reset", "Turn off", "Wipe",
                  "Install update", "Send", "Buy", "Pay now", "Disconnect", "Kill", "Quit", "Send feedback", "Share",
-                 "EMPTY TRASH"]
+                 "EMPTY TRASH", "Log-out", "Logout", "Sign-out", "Shut-down", "Turn-off"]
     for label in dangerous:
         check(ps.SKIP.search(label) is not None, "skipped label: %r" % label)
     harmless = ["Open", "Notes", "Settings", "Calculator", "Back", "Next", "Files", "Photos", "Music", "Help",
@@ -167,7 +167,7 @@ def main():
     desk = FakeDesk(items)
     listed = [it["text"] for it in ps.list_buttons(desk.run_in_vm)]
     check(listed == harmless, "list_buttons drops every dangerous label: %r" % listed)
-    check(len(dangerous) == 25 and len(harmless) == 15, "must-skip and not-skipped lists have the agreed sizes")
+    check(len(dangerous) == 30 and len(harmless) == 15, "must-skip and not-skipped lists have the agreed sizes")
 
     # 7. an esc press that raises must not stop testreset-min
     class EscRaises(FakeUser):
