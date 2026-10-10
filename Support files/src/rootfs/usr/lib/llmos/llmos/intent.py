@@ -1647,6 +1647,8 @@ def _everyday2(text):
         f = {"photos": "~/Pictures", "pictures": "~/Pictures", "pics": "~/Pictures", "music": "~/Music", "songs": "~/Music", "documents": "~/Documents",
              "docs": "~/Documents", "downloads": "~/Downloads", "videos": "~/Videos", "desktop": "~/Desktop", "files": "~", "home folder": "~"}.get(f, f or "~")
         return ("find_duplicates", {"folder": f, "delete": True} if delete else {"folder": f})
+    if re.fullmatch(r"(?:make|turn|switch|put|set)\s+(?:the\s+|my\s+)?(?:web\s+)?(?:browser|firefox|internet)(?:\s+to)?\s+dark(?:\s+mode)?|dark\s+mode\s+(?:for|in|on)\s+(?:the\s+|my\s+)?(?:browser|firefox)", t.strip().rstrip(".!"), re.I):
+        return ("set_appearance", {"theme": "dark"})          # the browser follows the system's look
     m = _DARK_WORDS.match(t)
     if m and len(t.split()) <= 4:
         return ("set_appearance", {"theme": "dark" if m.group("d") else "light"})
