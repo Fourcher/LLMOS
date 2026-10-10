@@ -214,7 +214,43 @@ def set_tor(args):
     return json.dumps([ok, note])
 
 
+APK_NAME_RE = re.compile(r"[a-z0-9][a-z0-9+._-]{0,99}")
+
+
+def _apk_name(name):
+    if not isinstance(name, str) or not APK_NAME_RE.fullmatch(name):
+        raise ValueError("bad args: name")
+    return name
+
+
+def apk_add(args):
+    args = _args_dict(args)
+    names = args.get("names")
+    quiet = args.get("quiet", False)
+    if not isinstance(names, list) or not 1 <= len(names) <= 20:
+        raise ValueError("bad args: names")
+    names = [_apk_name(n) for n in names]
+    if not isinstance(quiet, bool):
+        raise ValueError("bad args: quiet")
+    from . import system
+    rc, out, err = system._apk_add_root(names, quiet=quiet)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
+def apk_del(args):
+    args = _args_dict(args)
+    name = _apk_name(args.get("name"))
+    force = args.get("force", False)
+    if not isinstance(force, bool):
+        raise ValueError("bad args: force")
+    from . import system
+    rc, out, err = system._apk_del_root(name, force=force)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
 VERBS = {
+    "apk_add": apk_add,
+    "apk_del": apk_del,
     "set_timezone": set_timezone,
     "set_hostname": set_hostname,
     "write_setting_file": write_setting_file,
