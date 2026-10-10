@@ -2,11 +2,14 @@
 """Tests for tools/triage.py. Stdlib only."""
 import json
 import os
+import re
 import shutil
+import subprocess
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 import triage  # noqa: E402
 
 FAILURES = []
@@ -86,6 +89,43 @@ def main():
         with open(os.path.join(d, "rerun.txt")) as f:
             rerun = f.read().strip()
         check("bundle-rerun", rerun == "python3 tools/realrun.py suite.json --ids t4", rerun)
+
+        # --queue: append one open line + one draft line per new cluster, deduped by hash.
+        runq = os.path.join(tmp, "runq")
+        os.makedirs(runq)
+        rec(runq, "q1", "FAIL", error="Crash: pid 9 at /a/b.log", step_failed="s1")
+        rec(runq, "q2", "FAIL", reason="expected green", step_failed=None)
+        queue = os.path.join(tmp, "queue.md")
+        original = b"- [open] fake one\n- [done] fake two\n- [open] fake three\n"
+        with open(queue, "wb") as f:
+            f.write(original)
+        cli = os.path.join(HERE, "triage.py")
+        qout = os.path.join(tmp, "qout")
+
+        def run_cli():
+            return subprocess.run([sys.executable, cli, runq, "--suite", "suite.json",
+                                   "--out", qout, "--queue", queue],
+                                  capture_output=True, text=True)
+
+        r1 = run_cli()
+        check("queue-cli-exit", r1.returncode == 0, r1.stderr)
+        with open(queue, "rb") as f:
+            data1 = f.read()
+        check("queue-original-intact", data1.startswith(original), repr(data1[:200]))
+        added = data1[len(original):].decode("utf-8")
+        alines = added.splitlines()
+        cl_lines = [l for l in alines if l.startswith("- [open] (reliability) realrun cluster ")]
+        draft_lines = [l for l in alines if l.startswith("  - draft FIX spec: ")]
+        header_ok = bool(re.search(r"^## Triage \d{4}-\d{2}-\d{2} \d{2}:\d{2} \(2 clusters\)$",
+                                   added, re.M))
+        check("queue-appended-block", added.startswith("\n## Triage ") and len(cl_lines) == 2
+              and len(draft_lines) == 2 and header_ok, added)
+
+        r2 = run_cli()
+        check("queue-rerun-exit", r2.returncode == 0, r2.stderr)
+        with open(queue, "rb") as f:
+            data2 = f.read()
+        check("queue-dedupe-nothing-new", data2 == data1, repr(data2[len(data1):]))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

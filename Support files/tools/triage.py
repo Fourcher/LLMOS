@@ -5,6 +5,7 @@ CLI: triage.py <run_dir> [<run_dir>...] --suite PATH --out run/triage
 Stdlib only.
 """
 import argparse
+import datetime
 import glob
 import hashlib
 import json
@@ -110,11 +111,44 @@ def load_records(run_dirs):
     return recs
 
 
+def queue_block(ranked, outdir, suite, existing, now=None):
+    """Return the text to append to a queue file, or "" if no new clusters.
+
+    Clusters whose hash already appears in `existing` (the current queue text)
+    are skipped. Bundles must already exist under outdir.
+    """
+    lines = []
+    count = 0
+    for e in ranked:
+        h = e["hash"]
+        if h in existing:
+            continue
+        with open(os.path.join(outdir, h, "rerun.txt"), encoding="utf-8") as f:
+            rerun = f.read().strip()
+        examples = e.get("examples") or []
+        step = (examples[0].get("step_failed") if examples else None) or "evaluate"
+        lines.append("- [open] (reliability) realrun cluster %s (%s, score %.2f, runs %d): %s — %s"
+                     " | role: probe | files: read only | bundle: %s/%s | test: %s" % (
+                         h, e["label"], e["score"], e["runs"], ",".join(sorted(e["task_ids"])),
+                         e["signature"][:100], outdir, h, rerun))
+        lines.append("  - draft FIX spec: reproduce with the rerun command; read %s/%s/step-trace.json;"
+                     " the failing step is %s; expected per task file; fix the smallest source change"
+                     " that makes the rerun PASS twice." % (outdir, h, step))
+        count += 1
+    if not count:
+        return ""
+    now = now or datetime.datetime.now()
+    header = "## Triage %s (%d clusters)" % (now.strftime("%Y-%m-%d %H:%M"), count)
+    return "\n" + header + "\n" + "\n".join(lines) + "\n"
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Rank and bundle failing realrun records.")
     ap.add_argument("run_dirs", nargs="+")
     ap.add_argument("--suite", required=True)
     ap.add_argument("--out", default="run/triage")
+    ap.add_argument("--queue", default=None, metavar="PATH",
+                    help="append one open line per new cluster to this queue file (default: off)")
     a = ap.parse_args(argv)
     records = load_records(a.run_dirs)
     ranked = rank(cluster(records), records)
@@ -127,6 +161,17 @@ def main(argv=None):
         print("%4d %7.2f %-6s %4d %-30s %s" % (
             i, e["score"], e["label"], e["runs"], ",".join(sorted(e["task_ids"])),
             e["signature"][:80]))
+    if a.queue:
+        existing = ""
+        if os.path.exists(a.queue):
+            with open(a.queue, encoding="utf-8") as f:
+                existing = f.read()
+        block = queue_block(ranked, a.out, a.suite, existing)
+        if block:
+            with open(a.queue, "a", encoding="utf-8") as f:
+                if existing and not existing.endswith("\n"):
+                    f.write("\n")
+                f.write(block)
     return 0
 
 
