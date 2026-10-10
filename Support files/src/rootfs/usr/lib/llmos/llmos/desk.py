@@ -2302,6 +2302,10 @@ class Desk:
             names = uniq
             self.last_reply = self._said = ("Open now: " + ", ".join(names) + ".") if names else "Nothing is open, just the desk."
             return True
+        if re.fullmatch(r"what(?:'s| is| are| devices are)? (?:plugged|connected) (?:in|into|to) (?:my |the |this )?(?:computer|pc|laptop|machine)|what(?:'s| is) plugged in|(?:list|show)(?: me)? (?:my |the )?(?:usb |connected |plugged[- ]in )?devices", low.rstrip("?.! ")):
+            from . import hardware
+            self.last_reply = self._said = hardware.plugged_in_sentence()
+            return True
         r = self._system_shortcut(low, line)
         if r:
             return True
