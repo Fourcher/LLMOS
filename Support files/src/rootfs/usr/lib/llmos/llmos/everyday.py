@@ -1080,13 +1080,7 @@ def system_more(desk, line, low):
             if not path:
                 return _say(desk, line, f"Couldn't install {sh}: {(err or out).strip()[-150:]}")
         try:
-            pw = open("/etc/passwd").read()
-            pw = re.sub(r"^(root:[^:]*:0:0:[^:]*:[^:]*:)[^\n]*$", lambda mm: mm.group(1) + path, pw, count=1, flags=re.M)
-            with open("/etc/passwd", "w") as f:
-                f.write(pw)
-            if path not in open("/etc/shells").read().split():
-                with open("/etc/shells", "a") as f:
-                    f.write(path + "\n")
+            _system.set_shell("root", path)
         except OSError as e:
             return _say(desk, line, f"Couldn't change it: {_plain_err(e)}.")
         extra = " For oh-my-zsh, say “run the oh-my-zsh installer”." if sh == "zsh" else ""

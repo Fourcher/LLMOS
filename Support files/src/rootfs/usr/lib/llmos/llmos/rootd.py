@@ -399,6 +399,34 @@ def clear_apk_cache(args):
     return json.dumps([freed, msg])
 
 
+SHELL_CHOICES = ("/bin/sh", "/bin/ash", "/bin/bash", "/bin/zsh", "/bin/fish", "/usr/bin/zsh", "/usr/bin/fish")
+
+
+def _is_shell_file(path):
+    """True when path is an existing executable file (a symlink such as /bin/sh -> busybox counts)."""
+    return os.path.isfile(path) and os.access(path, os.X_OK)
+
+
+def set_shell(args):
+    """Change a login shell. Only root's line: the owner account's name is not recorded anywhere yet.
+    The shell must be one of SHELL_CHOICES and installed; PASSWD and SHELLS must be plain files."""
+    args = _args_dict(args)
+    user = args.get("user")
+    shell = args.get("shell")
+    if not isinstance(user, str) or user != "root":
+        raise ValueError("bad args: user")
+    if not isinstance(shell, str) or shell not in SHELL_CHOICES:
+        raise ValueError("bad args: shell")
+    if not _is_shell_file(shell):
+        raise ValueError("bad args: shell is not installed")
+    from . import system
+    for p in (system.PASSWD, system.SHELLS):
+        if os.path.islink(p):
+            raise ValueError("bad args: account file is not a plain file")
+    system._set_shell_root(user, shell)
+    return "ok"
+
+
 VERBS = {
     "apk_add": apk_add,
     "apk_del": apk_del,
@@ -411,6 +439,7 @@ VERBS = {
     "write_hosts": write_hosts,
     "firewall_apply": firewall_apply,
     "set_tor": set_tor,
+    "set_shell": set_shell,
     "set_backlight": set_backlight,
     "apk_update": apk_update,
     "apk_upgrade": apk_upgrade,

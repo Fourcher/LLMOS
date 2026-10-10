@@ -24,8 +24,10 @@ real_run = subprocess.run
 real_which = shutil.which
 real_open = everyday.__dict__.get("open")
 real_glob = everyday.glob.glob
+real_set_shell = system.set_shell
 
 calls = []          # (verb, args, kwargs)
+shell_calls = []    # (user, shell) passed to system.set_shell
 scripted = []       # replies for apk_add / apk_del, in order
 ctx = types.SimpleNamespace()
 
@@ -38,6 +40,10 @@ def fake_apk_add(names, quiet=False, timeout=900):
 def fake_apk_del(name, force=False, timeout=600):
     calls.append(("apk_del", name, {"force": force, "timeout": timeout}))
     return scripted.pop(0)
+
+
+def fake_set_shell(user, shell):
+    shell_calls.append((user, shell))
 
 
 def fake_run(argv, **kw):
@@ -61,6 +67,7 @@ def restore():
     everyday.glob.glob = real_glob
     system.apk_add = real_apk_add
     system.apk_del = real_apk_del
+    system.set_shell = real_set_shell
     subprocess.run = real_run
     shutil.which = real_which
     if real_open is None:
@@ -79,6 +86,7 @@ OUT = {"ok": (0, "ok", ""), "boom": (1, "", "boom"), "timeout": (124, "", "timed
 try:
     system.apk_add = fake_apk_add
     system.apk_del = fake_apk_del
+    system.set_shell = fake_set_shell
     subprocess.run = fake_run
     shutil.which = lambda name, *a, **k: None          # no flatpak fallback on any host
 
@@ -126,12 +134,7 @@ try:
     finally:
         os.unlink(conf.name)
 
-    # ---- everyday.system_more: shell install. Writing /etc/passwd is stubbed out (open raises OSError).
-    def denied_open(*a, **k):
-        raise OSError("denied")
-
-    everyday.open = denied_open
-
+    # ---- everyday.system_more: shell install. The shell change goes through system.set_shell, which is recorded.
     # install failed: zsh is still not found afterwards
     shutil.which = lambda name, *a, **k: None
     del calls[:]
@@ -141,7 +144,7 @@ try:
     check("shell timeout call", calls[0] == ("apk_add", ["zsh"], {"quiet": True, "timeout": 600}), calls)
     check("shell timeout reply", desk.replies == ["Couldn't install zsh: timed out after 900 s"], desk.replies)
 
-    # install succeeded: zsh is found on the second lookup, so the shell step runs (its write is stubbed)
+    # install succeeded: zsh is found on the second lookup, so the shell step runs (set_shell is recorded)
     which_seq = [None]          # first lookup: not installed; afterwards: installed
 
     def which_then(name, *a, **k):
@@ -156,7 +159,8 @@ try:
     scripted.append(OUT["ok"])
     everyday.system_more(desk, "line", "change my shell to zsh")
     check("shell ok call", calls[0] == ("apk_add", ["zsh"], {"quiet": True, "timeout": 600}), calls)
-    check("shell ok reached the shell step", desk.replies == ["Couldn't change it: something went wrong."], desk.replies)
+    check("shell ok set_shell call", shell_calls == [("root", "/bin/zsh")], shell_calls)
+    check("shell ok reply", desk.replies == ["New terminals now use zsh (/bin/zsh). For oh-my-zsh, say “run the oh-my-zsh installer”."], desk.replies)
 finally:
     restore()
 
