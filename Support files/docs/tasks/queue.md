@@ -113,6 +113,7 @@ Boot the VM and drive it like a person (real clicks, real typing, real outcomes)
 - [open] (reliability) i18n.py has pre-existing duplicate keys d_remove, d_done, d_open in every language block (Python keeps the last) — probe which value is intended, remove the dead one | role: probe+fix
 - [running] (capability) rename chain c8cfb29 (contains 4b0da11 notes guard, 33f75b8, 7b5c208, 5e4da7c, 00a71ef) VERIFY PASS: "call it Budget instead" / "rename it to Budget" rename the folder made in the last 10 min; idioms ("call it a day", "name it after my dog", …) untouched; merge after the 1.7.6 build.
 - [running] (ui/reliability) 55047d6 (i18n complete + dedupe + test-i18n-keys) VERIFY PASS; merge after the build.
+- [running] (capability/reliability) chain 706c86e VERIFY PASS (contains c8cfb29 rename, 980acf3 "make this a jpg", 8e00a52 print copies + "whats the date", fbe444a "summarize/sign this pdf", 6e9be26 make a spreadsheet, 706c86e spreadsheet never overwrites + honest "opened it"). Merge after the 1.7.6 build together with 55047d6 (i18n).
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
