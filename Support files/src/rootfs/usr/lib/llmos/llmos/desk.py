@@ -2740,7 +2740,7 @@ class Desk:
                     self.instant_reply(line, "I'm here and working. " + ("I'm still busy with the last request; say \u201cstop\u201d to cancel it." if self.busy
                                                                          else "Ask me anything."))
                     return
-                subprocess.run(["rc-service", "llmos-model", "restart"], capture_output=True, timeout=60)
+                rc, out, err = system.service("llmos-model", "restart", timeout=60)   # rc 124 = timed out; the wait below decides what to say
                 ok = llm.wait_ready(180) if hasattr(llm, "wait_ready") else llm.health()
                 self.instant_reply(line, "The model had stopped; I restarted it and it's answering again." if ok else
                                    "The model had stopped and is still starting up. Give it a minute; buttons and settings work meanwhile.")
@@ -3740,7 +3740,7 @@ class Desk:
                 vault.lock()
             except Exception:
                 pass
-        os.system("poweroff" if how == "poweroff" else "reboot")
+        system.power("poweroff" if how == "poweroff" else "reboot")
 
     # ---- onboarding (one step at a time; the page drives the order)
 
