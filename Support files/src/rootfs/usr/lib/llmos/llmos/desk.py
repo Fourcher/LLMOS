@@ -3185,7 +3185,10 @@ class Desk:
          "To print: open the document, press Ctrl+P, pick the printer and press Print. Or say 'print recipe.pdf' with the file's name and I'll send it. No printer yet? Say 'add a printer'."),
         (r"(?:add|make|create|set up|new) (?:an? |another |a new |a separate )?(?:user|account|login|profile)(?: account)?(?: for (?:my |the |a )?.+)?|"
          r"(?:remove|delete) (?:that|the|this|a|my \w+'?s?) (?:user|account|profile)|(?:switch|change) (?:the )?users?|guest (?:account|mode)|"
-         r"(?:can|how do) (?:my )?(?:\w+ )?(?:have|get|use) (?:their|his|her|my|an?) (?:own )?(?:account|login)",
+         r"(?:can|how do) (?:my )?(?:\w+ )?(?:have|get|use) (?:their|his|her|my|an?) (?:own )?(?:account|login)|"
+         r"(?:a )?second (?:user|account|login|profile)|another (?:user|account|login)|"
+         r"(?:my |the )?\w+ needs (?:her|his|their) own (?:login|account|user)|my (?:wife|husband|son|daughter|kid|partner|friend) needs an? (?:login|account)|"
+         r"can two people use this computer",
          "LLM OS has one account so far, yours: everyone who uses this computer uses it as you. Separate accounts for other people are planned. "
          "Until then, say “lock” when you step away (it opens only with your passphrase), or set “hands-on” so I ask before every change."),
         (r"(?:git )?clone (?:this|a|the|my|that) (?:git )?repo(?:sitory)?|(?:download|get) (?:a |this |the )?(?:git ?hub )?repo(?:sitory)?",
@@ -3202,7 +3205,8 @@ class Desk:
         (r"which (?:apps|programs) (?:can|are allowed to) (?:use|access|see) (?:my )?(?:camera|mic|microphone|location)(?:/(?:camera|mic|microphone|location))*|(?:camera|microphone|location) permissions?",
          "Programs here can use the camera and microphone once they're open; websites must ask you first (the browser shows Allow / Block), "
          "and the browser's padlock menu lists what each site may use. Nothing here tracks your location."),
-        (r"can i (?:dual[- ]?boot|keep windows|have (?:both|windows too)|install (?:it )?next to windows)(?: with windows)?|dual[- ]?boot(?: with windows)?",
+        (r"can i (?:dual[- ]?boot|keep windows|have (?:both|windows too)|install (?:it )?next to windows)(?: with windows)?|dual[- ]?boot(?: with windows)?|"
+         r"install alongside windows|install next to windows|keep windows and install (?:llm os|this)|install (?:llm os |this )?without (?:erasing|deleting|removing) windows",
          "Yes: say \u201cinstall LLM OS on this computer\u201d and choose \u201cnext to what's there\u201d. It shrinks the free space, keeps Windows "
          "and its files, and you pick which one to start when the computer turns on."),
         (r"(?:it|the computer|llm os) (?:won'?t|will not|doesn'?t|does not) (?:boot|start|turn on)|(?:my )?computer won'?t start",
@@ -3427,7 +3431,7 @@ class Desk:
             self.emit({"t": "toast", "text": syspanels.clear_caches().capitalize()})
             self.open_window(syspanels.storage())
             return True
-        if re.fullmatch(r"install (?:the |all (?:the )?)?updates[.!]?|update (?:the |my |all (?:my |the )?)?(?:system|computer|os|llm os|everything|apps|programs|software|applications)(?: now)?[.!]?", low):
+        if re.fullmatch(r"install (?:the |all (?:the )?)?updates[.!]?|(?:update|upgrade) (?:the |my |all (?:my |the )?)?(?:system|computer|os|llm os|everything|apps|programs|software|applications)(?: now)?[.!]?", low):
             def upd():                    # (asked for in so many words: done, not asked about again)
                 self.emit({"t": "toast", "text": "Installing updates…", "sticky": "upd"})
                 ok, note = syspanels.updates_apply()
