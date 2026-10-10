@@ -593,6 +593,28 @@ def _app_showing(ctx):
     return bool(r.get("text") or r.get("controls"))
 
 
+def _page_key(ctx):
+    """A comparable value for what the read bridge shows now (its text and controls); None when there is no bridge,
+    no page, or the bridge raised. Used to tell a page that opened from the one that was already on the screen."""
+    reader = getattr(ctx, "app_read", None)
+    if not reader:
+        return None
+    try:
+        r = reader() or {}
+        text, controls = r.get("text"), r.get("controls")
+    except Exception:
+        return None
+    if not (text or controls):
+        return None
+    return (text, repr(controls))
+
+
+def _page_changed(ctx, before):
+    """True once the read bridge shows a page that is not the one `before` (taken before the app was opened)."""
+    k = _page_key(ctx)
+    return k is not None and k != before
+
+
 def _wait_ready(check, limit=2.0, step=0.1):
     """Poll check() every `step` seconds, up to `limit` seconds in total. Returns as soon as check() is truthy;
     an exception from check() counts as 'not ready yet'. Returns True if ready, False if the limit ran out."""
@@ -669,12 +691,15 @@ def run(ctx, user_text, history):
         lead = re.match(r"^(?P<first>.+?)(?:,\s*|\s+)(?:and\s+)?then\s+(?P<rest>.+)$", user_text, re.I | re.S)
         first = intent.match(lead.group("first")) if lead else None
         if first:
+            opening = first[0] == "open_app" and hasattr(ctx, "app_read")
+            before = _page_key(ctx) if opening else None     # the page already on screen, before the app opens
             out1 = execute(ctx, first[0], first[1])
             if not _failed(out1):
                 done = _cap(_shortcut_reply(first[0], first[1], out1))
                 ctx.status(done)
-                if first[0] == "open_app" and hasattr(ctx, "app_read"):
-                    _wait_ready(lambda: _app_showing(ctx))   # continue as soon as the app shows a page (2 s at most)
+                if opening:
+                    # continue as soon as the read bridge shows a page other than the one before (2 s at most)
+                    _wait_ready(lambda: _page_changed(ctx, before))
                 else:
                     time.sleep(2)                  # no readiness signal for this step: the old fixed wait
                 rest, notes, page_text, result_value = _screen_steps(ctx, lead.group("rest").strip())

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Host-side test of the wait between the first and the second step of a compound request ("X, then Y").
-After an app opens, run() polls the open app's read bridge every 0.1 s and goes on as soon as it shows a page
-(2 s at most). Other first steps keep the fixed 2 s sleep. time.sleep and time.monotonic are replaced by a fake clock.
+After an app opens, run() takes a snapshot of the read bridge before the open, then polls it every 0.1 s and goes on
+as soon as it shows a page different from that snapshot (2 s at most). Other first steps keep the fixed 2 s sleep.
+time.sleep and time.monotonic are replaced by a fake clock.
 Run: python3 tools/test-compound-wait.py  (no VM needed). Exit status 0 = pass."""
 import os
 import sys
@@ -13,6 +14,10 @@ sys.path.insert(0, os.path.join(_ROOT, "usr/lib/llmos"))
 os.environ.setdefault("LLMOS_SHARE", os.path.join(_ROOT, "usr/share/llmos"))
 
 from llmos import agent
+
+
+PAGE_CALC = {"text": "Calculator 0", "controls": ["display value: 0", "7", "+"]}
+PAGE_NOTES = {"text": "Notes", "controls": ["New note"]}
 
 
 class Clock:
@@ -30,20 +35,23 @@ class Clock:
 
 
 class Ctx:
-    """A fake agent context. app_read() returns None (no page yet) until the `ready_on`-th call, then a page.
-    ready_on=None means the page never shows. has_bridge=False means the context has no app_read at all."""
-    def __init__(self, clock, ready_on=None, has_bridge=True):
+    """A fake agent context. app_read() counts its calls in `reads`. Read 1 is the snapshot taken before the open
+    (when there is one); from read `new_from` on it returns `new`, before that `old`. None means no page.
+    new_from=None means the page never changes. has_bridge=False means the context has no app_read at all."""
+    def __init__(self, clock, old=None, new=None, new_from=None, has_bridge=True):
         self.clock = clock
-        self.ready_on = ready_on
+        self.old = old
+        self.new = new
+        self.new_from = new_from
         self.reads = 0
         if has_bridge:
             self.app_read = self._app_read
 
     def _app_read(self):
         self.reads += 1
-        if self.ready_on is not None and self.reads >= self.ready_on:
-            return {"text": "Calculator 0", "controls": ["display value: 0", "7", "+"]}
-        return None
+        if self.new_from is not None and self.reads >= self.new_from:
+            return self.new
+        return self.old
 
     def new_stream(self):
         return "s"
@@ -85,19 +93,19 @@ def _fail(msg):
     sys.exit(1)
 
 
-# Case A: the app shows its page on the 3rd check -> about 0.3 s waited, and the second step still runs
+# Case A: no page before, the calculator's page shows on the 3rd poll check -> about 0.3 s, second step runs
 clock = Clock()
-ctx = Ctx(clock, ready_on=3)
+ctx = Ctx(clock, old=None, new=PAGE_CALC, new_from=4)      # read 1 = snapshot, reads 2-4 = polls 1-3
 waited, ran = run_case("open the calculator, then press 7", ctx, clock)
 if not ran:
     _fail("case A: second step did not run")
 if abs(waited - 0.3) > 0.05:
     _fail(f"case A: waited {waited:.2f}s, wanted about 0.3s")
-print(f"ok case A: app ready on check 3, waited {waited:.2f}s, second step ran")
+print(f"ok case A: no page before, new page on poll 3, waited {waited:.2f}s, second step ran")
 
 # Case B: the page never shows -> waits 2 s in total, then the second step still runs
 clock = Clock()
-ctx = Ctx(clock, ready_on=None)
+ctx = Ctx(clock, old=None, new=None)
 waited, ran = run_case("open the calculator, then press 7", ctx, clock)
 if not ran:
     _fail("case B: second step did not run")
@@ -105,9 +113,9 @@ if abs(waited - 2.0) > 0.05:
     _fail(f"case B: waited {waited:.2f}s, wanted 2.0s")
 print(f"ok case B: never ready, waited {waited:.2f}s, second step ran")
 
-# Case C: the first step is not an app open -> the old fixed 2 s sleep, and the second step runs
+# Case C: the first step is not an app open -> the old fixed 2 s sleep, no polling, and the second step runs
 clock = Clock()
-ctx = Ctx(clock, ready_on=1)
+ctx = Ctx(clock, old=None, new=PAGE_CALC, new_from=1)
 waited, ran = run_case("make a folder called Test, then open it", ctx, clock)
 if not ran:
     _fail("case C: second step did not run")
@@ -138,5 +146,26 @@ with patch.object(agent.time, "sleep", clock.sleep), patch.object(agent.time, "m
 if got is not True or len(calls) != 3 or abs(clock.now - 0.3) > 0.05:
     _fail(f"case E: got {got}, calls {len(calls)}, waited {clock.now:.2f}s")
 print(f"ok case E: exceptions are not ready, waited {clock.now:.2f}s")
+
+# Case F: an old page is already open and does not change (the open is 'already open', or a program window)
+# -> the full 2 s passes, then the second step runs
+clock = Clock()
+ctx = Ctx(clock, old=PAGE_NOTES, new=None)
+waited, ran = run_case("open the calculator, then press 7", ctx, clock)
+if not ran:
+    _fail("case F: second step did not run")
+if abs(waited - 2.0) > 0.05:
+    _fail(f"case F: old page unchanged, waited {waited:.2f}s, wanted 2.0s")
+print(f"ok case F: old page unchanged, waited {waited:.2f}s, second step ran")
+
+# Case G: an old page is open, the calculator's page replaces it on the 4th poll check -> about 0.4 s
+clock = Clock()
+ctx = Ctx(clock, old=PAGE_NOTES, new=PAGE_CALC, new_from=5)   # read 1 = snapshot, reads 2-5 = polls 1-4
+waited, ran = run_case("open the calculator, then press 7", ctx, clock)
+if not ran:
+    _fail("case G: second step did not run")
+if abs(waited - 0.4) > 0.05:
+    _fail(f"case G: waited {waited:.2f}s, wanted about 0.4s")
+print(f"ok case G: old page before, different page on poll 4, waited {waited:.2f}s, second step ran")
 
 print("all good")
