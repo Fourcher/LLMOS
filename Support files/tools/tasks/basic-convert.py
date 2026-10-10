@@ -22,7 +22,10 @@ ROW = re.compile(r'^\|\s*(S\d+)\s*\|\s*"([^"]*)"\s*\|\s*(.*?)\s*\|\s*(P\d)\s*\|\
 THEME_WORDS = ["theme", "purple", "colour", "color", "dark", "light"]
 MUSIC_WORDS = ["music", "playing", "mpv"]
 FOLDER_NAME = re.compile(r"\bfolder\s+(?:called\s+)?([A-Za-z0-9_.-]+)", re.IGNORECASE)
-SETTINGS_CMD = "cat /etc/llmos/settings.json"
+SETTINGS_CMD = "cat /etc/llmos/settings.json; echo"
+# prints 'dark' or 'light' from appearance.background, normalised by the OS's own ui.parse_color (#rgb, #rrggbb, names);
+# bad or missing colour -> white -> light; any exception -> light. No '!' in it, so tsh types it as-is.
+DARK_LIGHT_CMD = r'''cd /usr/lib/llmos && python3 -c "import json;from llmos import ui;exec('try:\n a=json.load(open(\'/etc/llmos/settings.json\')).get(\'appearance\',{})\n c=ui.parse_color(a.get(\'background\') or \'#ffffff\') or (255,255,255)\n print(\'dark\' if sum(c)/3<128 else \'light\')\nexcept Exception:\n print(\'light\')')"'''
 REPLY_EXCLUDE = ["No such tool", "error:", "Traceback"]
 
 
@@ -53,6 +56,13 @@ def evaluator_for(instruction, expected):
         word = next((w for w in THEME_WORDS if w in phrase), None)
         if word is None:
             word = next(w for w in THEME_WORDS if w in text)
+        if word in ("dark", "light"):
+            opposite = "light" if word == "dark" else "dark"
+            return {
+                "func": "include_exclude",
+                "result": {"type": "vm_command_line", "command": DARK_LIGHT_CMD},
+                "expected": {"include": [word], "exclude": [opposite]},
+            }, False
         return {
             "func": "include_exclude",
             "result": {"type": "vm_command_line", "command": SETTINGS_CMD},
