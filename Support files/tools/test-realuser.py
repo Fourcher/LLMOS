@@ -156,4 +156,19 @@ try:
 except RuntimeError:
     check(True, "rect raises RuntimeError on ok:false")
 
+# 6. rect parses JSON followed by a vmctl trailer
+q = FakeQMP()
+rect_json = json.dumps(dict(RECTS["#field"], vw=VW))
+u = RealUser(q, lambda cmd: rect_json + "\n[vmctl: matched after 0.4s]", grab=grab)
+r = u.rect("#field")
+check(r["x"] == 100 and r["w"] == 200 and r["vw"] == VW, "rect parses JSON followed by vmctl trailer")
+
+# 7. rect with only a vmctl timeout raises RuntimeError
+u = RealUser(q, lambda cmd: "[vmctl: TIMEOUT after 30.0s]", grab=grab)
+try:
+    u.rect("#field")
+    check(False, "rect raises RuntimeError on timeout-only output")
+except RuntimeError as e:
+    check("no JSON in output" in str(e), "rect raises RuntimeError on timeout-only output")
+
 print("all good")

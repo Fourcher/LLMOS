@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evaluators  # noqa: E402
 import tasklib  # noqa: E402
 from realuser import INPUT  # noqa: E402
+from vmjson import vm_json  # noqa: E402
 
 OUTDIR = "run/realrun"
 REPLY_KEY = "reply"  # desk.py:4038 _state() -> {"reply": self.last_reply, ...}
@@ -60,7 +61,9 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
         if rtype == "vm_command_line":
             return run_in_vm(spec["command"])
         if rtype == "reply":
-            obj = json.loads(run_in_vm("llmos desk-state"))
+            obj = vm_json(run_in_vm("llmos desk-state"))
+            if obj is None:
+                raise ValueError("desk-state is not JSON")
             cur = obj[REPLY_KEY]
             if ctx["before_reply"] and cur == ctx["before_reply"]:
                 ctx["stale"] = True  # reply left by the previous task: no new reply
@@ -74,7 +77,9 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
         timed("reset", lambda: run_in_vm("llmos desk-ctl testreset"))
         for cmd in task.get("setup", []):
             timed("setup", lambda c=cmd: run_in_vm(c))
-        before = timed("state", lambda: json.loads(run_in_vm("llmos desk-state")))
+        before = timed("state", lambda: vm_json(run_in_vm("llmos desk-state")))
+        if before is None:
+            raise ValueError("desk-state is not JSON")
         ctx["before_reply"] = before.get(REPLY_KEY) or ""
         if path == "say":
             timed("say", lambda: run_in_vm("llmos say " + shlex.quote(task["instruction"])))
@@ -84,10 +89,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
             timed("press", lambda: user.press("ret"))
         timeout_s = task.get("timeout_s", 120)
         waited = timed("wait", lambda: run_in_vm("llmos desk-ctl wait %s" % timeout_s))
-        try:
-            wait_state = json.loads(waited)
-        except (TypeError, ValueError):
-            wait_state = None
+        wait_state = vm_json(waited)
         busy = isinstance(wait_state, dict) and bool(wait_state.get("busy"))
         if busy:
             step_failed = "wait"
@@ -235,10 +237,7 @@ def _slow():
 
 
 def _desk_ready(out):
-    try:
-        data = json.loads(out)
-    except (TypeError, ValueError):
-        return False
+    data = vm_json(out)
     return isinstance(data, dict) and data.get("screen") == DESK_SCREEN
 
 

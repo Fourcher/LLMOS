@@ -305,6 +305,40 @@ def main():
               repr((calls, s.get("repeat"))))
         print("ok repeat=1 summary label=%s" % s["tasks"][0]["label"])
 
+        # 9b. vm_json on the shapes tools/tsh prints (tsh keeps the echoed command, the prompt and the
+        # "[vmctl: ...]" trailer; grep drops only blank, DONE_, "!" and bare-prompt lines)
+        desk_json = json.dumps({"screen": "wizard", "busy": False, "reply": "", "windows": []})
+        echo_line = '!llmos desk-state; echo DONE_""12345'
+        check("vm_json: pure JSON unchanged", realrun.vm_json(desk_json) == json.loads(desk_json))
+        check("vm_json: echo line before the JSON",
+              realrun.vm_json(echo_line + "\n" + desk_json + "\n\n[vmctl: matched after 1.2s]\n")
+              == json.loads(desk_json))
+        check("vm_json: JSON line then prompt/marker line",
+              realrun.vm_json(desk_json + "\nllmos:/# \n[vmctl: matched after 0.8s]\n") == json.loads(desk_json))
+        check("vm_json: timeout only -> None",
+              realrun.vm_json("[vmctl: TIMEOUT after 30.4s]\n") is None)
+        nested = {"screen": "desk", "reply": "use {x} and } here", "busy": False}
+        check("vm_json: nested braces inside a string value",
+              realrun.vm_json(echo_line + "\n" + json.dumps(nested) + "\n[vmctl: matched after 2.0s]\n")
+              == nested)
+        check("vm_json: last JSON line wins",
+              realrun.vm_json('{"a": 1}\n' + desk_json + "\n") == json.loads(desk_json))
+        check("vm_json: non-JSON text -> None", realrun.vm_json("Traceback: nope") is None)
+        check("vm_json: None input -> None", realrun.vm_json(None) is None)
+        check("vm_json: wait output with echo and trailer",
+              realrun.vm_json(echo_line + "\n{\"busy\": true}\n\n[vmctl: matched after 9.0s]\n") == {"busy": True})
+        # the wrapped reply path: desk-state with echo/trailer lines is read as the reply
+        vm_wrapped = make_vm(after="Canberra")
+
+        def wrapped(cmd):
+            out = vm_wrapped(cmd)
+            if cmd == "llmos desk-state":
+                return echo_line + "\n" + out + "\n[vmctl: matched after 1.0s]\n"
+            return out
+        rec = realrun.run_task(reply_task("wrapped-1"), FakeUser(), wrapped, clock=FakeClock(), outdir=outroot)
+        check("run_task reads desk-state through tsh-shaped output", rec["verdict"] == "PASS", json.dumps(rec)[:300])
+        print("ok vm_json shapes: echo, prompt, timeout, nested braces")
+
         # 10. fresh_overlay: readiness, onboarding, desk-ready polls with a fake clock (sleep advances it)
         class FakeTime:
             def __init__(self):

@@ -10,6 +10,8 @@ import json
 import os
 import shlex
 
+import vmjson
+
 SUPPORT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_SHOT = os.path.join(SUPPORT_DIR, "run", "realuser.ppm")
 
@@ -61,7 +63,9 @@ class RealUser:
     def rect(self, sel):
         self._n += 1
         out = self.run_in_vm(f"llmos desk-ctl rect {self._n} {shlex.quote(sel)}")
-        obj = json.loads(out)
+        obj = vmjson.vm_json(out)
+        if obj is None:
+            raise RuntimeError(f"rect: no JSON in output: {out[:200]!r}")
         if obj.get("ok") is False:
             raise RuntimeError("rect %s failed: %s" % (sel, obj.get("error")))
         return obj
