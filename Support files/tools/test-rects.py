@@ -144,5 +144,21 @@ refused = off.control("rects 1 .btn")
 check(refused == {"error": "unknown command"}, f"testshell off: refused: {refused}")
 check(off.emitted == [], "testshell off: nothing emitted to the page")
 
+# 7. a page reply on the first-run wizard: delivered with the test shell on, ignored with it off
+def wizard_reply(flag):
+    flags["testshell"] = flag
+    w = FakeDesk()
+    w.screen = "wizard"
+    slot = [threading.Event(), None]
+    w._rect_wait["6"] = slot
+    Desk.handle.__get__(w)(items_reply("6", [ITEM]))
+    return slot
+
+
+slot = wizard_reply("1")
+check(slot[0].is_set() and slot[1] == items_reply("6", [ITEM]), "wizard, testshell on: rects.result for a waiting id is delivered")
+slot = wizard_reply("")
+check(not slot[0].is_set() and slot[1] is None, "wizard, testshell off: rects.result is ignored")
+
 print("all good" if fails == 0 else f"{fails} FAILED")
 sys.exit(1 if fails else 0)
