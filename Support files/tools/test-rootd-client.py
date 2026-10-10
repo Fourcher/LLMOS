@@ -64,6 +64,32 @@ def fake_server(path, payload):
     threading.Thread(target=run, daemon=True).start()
 
 
+def slow_server(path, payload, delay, got):
+    """Reads the request to EOF, records it in got, waits delay seconds, then sends payload (a late reply may fail)."""
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(path)
+    srv.listen(1)
+
+    def run():
+        conn, _ = srv.accept()
+        with conn:
+            buf = b""
+            while True:
+                part = conn.recv(65536)
+                if not part:
+                    break
+                buf += part
+            got.append(buf)
+            time.sleep(delay)
+            try:
+                conn.sendall(payload)
+            except OSError:
+                pass
+        srv.close()
+
+    threading.Thread(target=run, daemon=True).start()
+
+
 # --- (a) non-root user, over the socket
 assert os.geteuid() != 0, "run this test as a non-root user"
 sock_dir = tempfile.mkdtemp(prefix="rc-", dir="/tmp")
@@ -95,12 +121,33 @@ rootd_client.SOCK = os.path.join(sock_dir, "big.sock")
 fake_server(rootd_client.SOCK, b'{"ok": true, "out": "' + b"x" * (1024 * 1024 + 10) + b'"}')
 expect_raises("reply over 1 MiB", lambda: rootd_client.call("set_hostname", name="kitchen"), "reply too large")
 
+# --- (c) _timeout: a reply after 2 s; _timeout is the socket wait only and is not sent as an arg
+got = []
+rootd_client.SOCK = os.path.join(sock_dir, "slow.sock")
+slow_server(rootd_client.SOCK, b'{"ok": true, "out": "done"}', 2, got)
+wait_for(rootd_client.SOCK)
+out = rootd_client.call("set_hostname", _timeout=5, name="kitchen")
+assert out == "done", out
+sent = json.loads(got[0].decode("utf-8"))
+assert sent == {"verb": "set_hostname", "args": {"name": "kitchen"}}, sent
+print(f"ok _timeout=5 waits for a 2 s reply -> {out!r}; sent {sent}")
+
+got = []
+rootd_client.SOCK = os.path.join(sock_dir, "slow2.sock")
+slow_server(rootd_client.SOCK, b'{"ok": true, "out": "late"}', 2, got)
+wait_for(rootd_client.SOCK)
+expect_raises("_timeout=1 gives up on a 2 s reply",
+              lambda: rootd_client.call("set_hostname", _timeout=1, name="kitchen"), "did not answer")
+time.sleep(0.2)
+assert got and b"_timeout" not in got[0], got
+print("ok _timeout not sent to rootd on a timed-out call either")
+
 # --- (b) root: the verb runs in this process, no socket used
 rootd_client.SOCK = os.path.join(sock_dir, "never-created.sock")
 real_geteuid = os.geteuid
 os.geteuid = lambda: 0
 try:
-    out = rootd_client.call("set_hostname", name="root-pc")
+    out = rootd_client.call("set_hostname", _timeout=1, name="root-pc")
     assert out == "ok", out
     assert open(os.path.join(etc, "etc", "hostname")).read() == "root-pc\n"
     assert not os.path.exists(rootd_client.SOCK), "in-process call touched a socket"

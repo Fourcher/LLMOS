@@ -1,5 +1,6 @@
 """System policies that are enforced by the OS, not just promised by the
 agent: the firewall (internet on/off), Tor routing, and focus mode."""
+import json
 import os
 import re
 import subprocess
@@ -115,7 +116,7 @@ table inet llmos {{
 """
 
 
-def apply_firewall(internet=None):
+def _apply_firewall_root(internet=None):
     internet = internet or config.settings.get("internet", "yes")
     os.makedirs(os.path.dirname(NFT_RULES), exist_ok=True)
     with open(NFT_RULES, "w") as f:
@@ -124,7 +125,18 @@ def apply_firewall(internet=None):
     return p.returncode == 0, p.stderr.strip()
 
 
-def set_tor(on):
+def apply_firewall(internet=None):
+    """Apply the firewall: directly as root, else through rootd's firewall_apply verb."""
+    if os.geteuid() == 0:
+        return _apply_firewall_root(internet)
+    try:
+        ok, err = json.loads(rootd_client.call("firewall_apply", internet=internet))
+        return ok, err
+    except rootd_client.RootdError as e:
+        return False, str(e)
+
+
+def _set_tor_root(on):
     if on:
         subprocess.run(["rc-update", "add", "tor", "default"], capture_output=True)
         p = subprocess.run(["rc-service", "tor", "start"], capture_output=True, text=True)
@@ -137,17 +149,28 @@ def set_tor(on):
                                capture_output=True, text=True)
             if '"IsTor":true' in p.stdout.replace(" ", ""):
                 config.settings.set("tor", True)
-                apply_firewall()
+                _apply_firewall_root()
                 return True, ""
             time.sleep(1)
         config.settings.set("tor", True)
-        apply_firewall()
+        _apply_firewall_root()
         return True, "Tor is still connecting; requests will work once it is ready."
     config.settings.set("tor", False)
-    apply_firewall()
+    _apply_firewall_root()
     subprocess.run(["rc-service", "tor", "stop"], capture_output=True)
     subprocess.run(["rc-update", "del", "tor", "default"], capture_output=True)
     return True, ""
+
+
+def set_tor(on):
+    """Turn Tor on or off: directly as root, else through rootd's set_tor verb."""
+    if os.geteuid() == 0:
+        return _set_tor_root(on)
+    try:
+        ok, note = json.loads(rootd_client.call("set_tor", _timeout=120, on=on))
+        return ok, note
+    except rootd_client.RootdError as e:
+        return False, str(e)
 
 
 def _hosts_name_ok(name):

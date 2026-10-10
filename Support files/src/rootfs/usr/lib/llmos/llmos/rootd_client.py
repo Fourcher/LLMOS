@@ -39,10 +39,10 @@ def _in_process(verb, args):
         raise RootdError(f"failed: {type(e).__name__}")
 
 
-def _over_socket(payload):
+def _over_socket(payload, timeout):
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
-        s.settimeout(TIMEOUT)
+        s.settimeout(timeout)
         try:
             s.connect(SOCK)
         except OSError:
@@ -83,8 +83,11 @@ def _parse(data):
     raise RootdError(err if isinstance(err, str) else "failed")
 
 
-def call(verb, **args):
+def call(verb, _timeout=None, **args):
+    """_timeout (seconds, default TIMEOUT) is the socket wait for rootd's reply. It is not sent as an arg.
+    The in-process (root) path runs the verb directly and ignores it."""
     payload = _encode(verb, args)
     if os.geteuid() == 0:
         return _in_process(verb, args)
-    return _parse(_over_socket(payload))
+    timeout = TIMEOUT if _timeout is None else _timeout
+    return _parse(_over_socket(payload, timeout))
