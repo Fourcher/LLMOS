@@ -239,7 +239,7 @@ def _desk_ready(out):
         data = json.loads(out)
     except (TypeError, ValueError):
         return False
-    return isinstance(data, dict) and bool(data.get("screen")) and data.get("screen") != WIZARD_SCREEN
+    return isinstance(data, dict) and data.get("screen") == DESK_SCREEN
 
 
 def fresh_overlay(run_in_vm, boot=_fresh_overlay, clock=time.monotonic, sleep=time.sleep):

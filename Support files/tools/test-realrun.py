@@ -344,6 +344,28 @@ def main():
             err = str(e)
         check("fresh: desk never ready -> RuntimeError", err == "fresh: desk not ready", repr(err))
         print("ok fresh timeouts raise RuntimeError")
+
+        # desk-ready requires screen == "desk": lock keeps polling, missing screen keeps polling
+        lock = json.dumps({"screen": "lock", "busy": False, "reply": ""})
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": ["up"], "desk": [lock, lock, desk]})
+        realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+        check("fresh: lock then desk succeeds after 3 desk-state polls",
+              calls.count("llmos desk-state") == 3, repr(calls))
+        print("ok fresh lock-then-desk polls=%d" % calls.count("llmos desk-state"))
+
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": ["up"], "desk": [lock] * 10000})
+        try:
+            realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+            err = None
+        except RuntimeError as e:
+            err = str(e)
+        check("fresh: lock forever -> RuntimeError", err == "fresh: desk not ready", repr(err))
+        print("ok fresh lock-only raises RuntimeError")
+
+        check("desk-ready: missing screen key is not ready",
+              realrun._desk_ready(json.dumps({"busy": False, "reply": ""})) is False)
     finally:
         shutil.rmtree(outroot, ignore_errors=True)
 
