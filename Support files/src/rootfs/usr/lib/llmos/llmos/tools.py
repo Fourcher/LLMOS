@@ -3868,7 +3868,7 @@ def open_app(a, ctx):
     if a.get("graphical") and prog in ("bash", "sh", "ash", "zsh", "terminal", "console", "shell", "xterm"):
         cmd, prog = "foot", "foot"
     if not shutil.which(prog):
-        return f"'{prog}' is not installed; install it with install_app first (e.g. firefox-esr for a web browser)"
+        return f"error: {prog} isn't on this computer yet. Say “install {prog}” to get it."
     if prog == "mpv" and cmd.strip() == "mpv":
         # the player on its own: a window that waits for something to play (this desktop needs the wlshm video output;
         # the default X11 one closes at once)
