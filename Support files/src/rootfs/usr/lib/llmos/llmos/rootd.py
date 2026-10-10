@@ -5,6 +5,7 @@ Stdlib only. One JSON request per connection: {"verb": "...", "args": {...}}. On
 Not wired into anything yet: no init script, no callers.
 """
 import grp
+import ipaddress
 import json
 import os
 import re
@@ -18,6 +19,7 @@ ETC_ROOT = "/"
 LOG_PATH = "/run/llmos/rootd.log"
 MAX_REQUEST = 512 * 1024
 MAX_SETTING = 256 * 1024
+MAX_HOSTS = 1024 * 1024
 CONN_TIMEOUT = 5.0
 MAX_CONN = 16
 
@@ -25,25 +27,36 @@ MAX_CONN = 16
 ZONE_RE = re.compile(r"[A-Za-z_]+(?:/[A-Za-z0-9_+-]+){0,2}")
 HOST_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 SETTING_NAMES = {"settings.json", "conduct.txt"}
+# A hostname label or dotted name: letters, digits, inner dashes.
+HOSTS_NAME_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*")
 
 
 def _etc(*parts):
     return os.path.join(ETC_ROOT, "etc", *parts)
 
 
+def _plain_etc(what="settings folder"):
+    """Return ETC_ROOT/etc, refusing it if it is a symlink or leads outside ETC_ROOT."""
+    etc = _etc()
+    if os.path.islink(etc):
+        raise ValueError(f"bad args: {what} is not a plain folder")
+    if os.path.realpath(etc) != os.path.join(os.path.realpath(ETC_ROOT), "etc"):
+        raise ValueError(f"bad args: {what} is not a plain folder")
+    return etc
+
+
 def _llmos_dir():
     """Return ETC_ROOT/etc/llmos, refusing it if any part from etc down is a symlink or it leads outside ETC_ROOT."""
-    etc = _etc()
+    _plain_etc()
     llmos = _etc("llmos")
-    for p in (etc, llmos):
-        if os.path.islink(p):
-            raise ValueError("bad args: settings folder is not a plain folder")
+    if os.path.islink(llmos):
+        raise ValueError("bad args: settings folder is not a plain folder")
     if os.path.realpath(llmos) != os.path.join(os.path.realpath(ETC_ROOT), "etc", "llmos"):
         raise ValueError("bad args: settings folder is not a plain folder")
     return llmos
 
 
-def _write_atomic(path, text):
+def _write_atomic(path, text, mode=None):
     """Write text to path through a temp file in the same directory, then os.replace."""
     d = os.path.dirname(path)
     os.makedirs(d, exist_ok=True)
@@ -51,6 +64,8 @@ def _write_atomic(path, text):
     try:
         with os.fdopen(fd, "w") as f:
             f.write(text)
+        if mode is not None:
+            os.chmod(tmp, mode)
         os.replace(tmp, path)
     except BaseException:
         try:
@@ -125,6 +140,48 @@ def write_setting_file(args):
     return "ok"
 
 
+def _check_hosts(text):
+    """Raise ValueError unless text is a hosts file this service will write."""
+    if not isinstance(text, str):
+        raise ValueError("bad args: hosts must be text")
+    if len(text.encode("utf-8")) > MAX_HOSTS:
+        raise ValueError("bad args: hosts too large")
+    keeps_localhost = False
+    for n, line in enumerate(text.split("\n"), 1):
+        bad = ValueError(f"bad args: hosts line {n}")
+        if "\0" in line or "\r" in line:
+            raise bad
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        # Trailing comments are allowed, e.g. "0.0.0.0 example.com # llmos focus mode".
+        fields = line.split("#", 1)[0].split()
+        if len(fields) < 2:
+            raise bad
+        ip, names = fields[0], fields[1:]
+        if "%" in ip:
+            raise bad
+        try:
+            addr = ipaddress.ip_address(ip)
+        except ValueError:
+            raise bad from None
+        for name in names:
+            if len(name) > 253 or not HOSTS_NAME_RE.fullmatch(name):
+                raise bad
+        if str(addr) == "127.0.0.1" and "localhost" in names:
+            keeps_localhost = True
+    if not keeps_localhost:
+        raise ValueError("bad args: hosts must keep localhost")
+
+
+def write_hosts(args):
+    args = _args_dict(args)
+    text = args.get("text")
+    _check_hosts(text)
+    etc = _plain_etc("etc folder")
+    _write_atomic(os.path.join(etc, "hosts"), text, mode=0o644)
+    return "ok"
+
+
 def remove_setting_file(args):
     args = _args_dict(args)
     name = args.get("name")
@@ -142,6 +199,7 @@ VERBS = {
     "set_hostname": set_hostname,
     "write_setting_file": write_setting_file,
     "remove_setting_file": remove_setting_file,
+    "write_hosts": write_hosts,
 }
 
 
