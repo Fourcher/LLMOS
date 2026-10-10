@@ -208,6 +208,52 @@ def _fresh_overlay():
                    stdout=subprocess.DEVNULL)
 
 
+# the onboarding command, quoted exactly as tools/calc-smoke.sh:21 sends it (the \" are literal)
+ONBOARD_CMD = ('cd /usr/lib/llmos && python3 -c "from llmos import config; '
+               'config.settings.set(\\"onboarded\\", True)"')
+WIZARD_SCREEN = "wizard"  # desk.py:1289 set_screen("wizard"); desk.py:4038 _state() reports self.screen
+DESK_SCREEN = "desk"      # desk.py:1315 set_screen("desk"); desk.py:4038 _state() reports self.screen
+
+
+def _poll(probe, limit, clock, sleep):
+    """Call probe() until it returns True; False when `limit` seconds of `clock()` have passed.
+    A probe that raises counts as not ready. The only place that sleeps between tries."""
+    deadline = clock() + limit
+    while True:
+        try:
+            if probe():
+                return True
+        except Exception:
+            pass
+        if clock() >= deadline:
+            return False
+        sleep(2)
+
+
+def _slow():
+    return float(os.environ.get("LLMOS_SLOW", "1") or "1")
+
+
+def _desk_ready(out):
+    try:
+        data = json.loads(out)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(data, dict) and bool(data.get("screen")) and data.get("screen") != WIZARD_SCREEN
+
+
+def fresh_overlay(run_in_vm, boot=_fresh_overlay, clock=time.monotonic, sleep=time.sleep):
+    """Reboot onto a fresh overlay, then wait until the VM answers, onboard it (as calc-smoke does)
+    and wait until the desk is past the first-run wizard. Raises RuntimeError if either wait times out."""
+    slow = _slow()
+    boot()
+    if not _poll(lambda: "up" in run_in_vm("echo up"), 300 * slow, clock, sleep):
+        raise RuntimeError("fresh: VM not ready")
+    run_in_vm(ONBOARD_CMD)
+    if not _poll(lambda: _desk_ready(run_in_vm("llmos desk-state")), 120 * slow, clock, sleep):
+        raise RuntimeError("fresh: desk not ready")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Run a task suite as a real user through QMP.")
     ap.add_argument("suite", help="task file (JSON with a tasks list)")
@@ -232,7 +278,7 @@ def main(argv=None):
     def fresh():
         # the reboot kills the old QMP socket: close it, reboot on a new overlay, reconnect
         q.close()
-        _fresh_overlay()
+        fresh_overlay(run_in_vm)
         user.qmp = QMP("run/tqmp.sock")
 
     try:

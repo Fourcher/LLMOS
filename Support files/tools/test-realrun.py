@@ -142,7 +142,11 @@ def main():
         # 6. no fixed sleeps in realrun.py
         with open(os.path.join(HERE, "realrun.py"), encoding="utf-8") as f:
             src = f.read()
-        check("no sleep( in realrun.py", "sleep(" not in src)
+        poll_at = src.index("def _poll(")
+        poll_end = src.index("def _slow(")
+        check("sleep( only inside _poll", src.count("sleep(") == 1 and
+              src.count("sleep(", poll_at, poll_end) == 1,
+              "total=%d in_poll=%d" % (src.count("sleep("), src.count("sleep(", poll_at, poll_end)))
 
         # 7a. wait reports the desk still busy -> FAIL at step "wait", evaluate skipped
         rec = realrun.run_task(reply_task("busy-1"), FakeUser(),
@@ -266,6 +270,80 @@ def main():
         check("repeat=1 never calls fresh", calls == [] and s["repeat"] == 1 and s["tasks"][0]["label"] == "pass",
               repr((calls, s.get("repeat"))))
         print("ok repeat=1 summary label=%s" % s["tasks"][0]["label"])
+
+        # 10. fresh_overlay: readiness, onboarding, desk-ready polls with a fake clock (sleep advances it)
+        class FakeTime:
+            def __init__(self):
+                self.t = 0.0
+
+            def clock(self):
+                return self.t
+
+            def sleep(self, s):
+                self.t += s
+
+        def scripted_vm(answers):
+            calls = []
+
+            def vm(cmd):
+                calls.append(cmd)
+                if cmd == "echo up":
+                    out = answers["up"].pop(0)
+                    if isinstance(out, Exception):
+                        raise out
+                    return out
+                if cmd == realrun.ONBOARD_CMD:
+                    return ""
+                if cmd == "llmos desk-state":
+                    return answers["desk"].pop(0)
+                raise AssertionError("unexpected command %r" % cmd)
+            return vm, calls
+
+        onboard_literal = 'cd /usr/lib/llmos && python3 -c "from llmos import config; config.settings.set(\\"onboarded\\", True)"'
+        check("onboard command quoted as calc-smoke", realrun.ONBOARD_CMD == onboard_literal, repr(realrun.ONBOARD_CMD))
+
+        wizard = json.dumps({"screen": "wizard", "busy": False, "reply": ""})
+        desk = json.dumps({"screen": "desk", "busy": False, "reply": ""})
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": [RuntimeError("no answer"), OSError("refused"), "up\n"],
+                                 "desk": [wizard, desk]})
+        realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+        onboard_calls = [c for c in calls if c == realrun.ONBOARD_CMD]
+        check("fresh: VM up after two failures, onboarded once, desk after wizard",
+              len(onboard_calls) == 1 and calls.count("echo up") == 3 and
+              calls.count("llmos desk-state") == 2,
+              repr(calls))
+        print("ok fresh succeeds: onboard issued %d time, polls up=%d desk=%d" %
+              (len(onboard_calls), calls.count("echo up"), calls.count("llmos desk-state")))
+
+        # desk-state that is not JSON keeps polling
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": ["up"], "desk": ["Traceback: nope", desk]})
+        realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+        check("fresh: non-JSON desk-state keeps polling", calls.count("llmos desk-state") == 2,
+              repr(calls))
+
+        # VM never answers -> RuntimeError
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": [RuntimeError("never")] * 10000, "desk": []})
+        try:
+            realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+            err = None
+        except RuntimeError as e:
+            err = str(e)
+        check("fresh: VM never up -> RuntimeError", err == "fresh: VM not ready", repr(err))
+        check("fresh: never-up does not onboard", realrun.ONBOARD_CMD not in calls, repr(calls[-3:]))
+
+        # desk never leaves the wizard -> RuntimeError
+        ft = FakeTime()
+        vm, calls = scripted_vm({"up": ["up"], "desk": [wizard] * 10000})
+        try:
+            realrun.fresh_overlay(vm, boot=lambda: None, clock=ft.clock, sleep=ft.sleep)
+            err = None
+        except RuntimeError as e:
+            err = str(e)
+        check("fresh: desk never ready -> RuntimeError", err == "fresh: desk not ready", repr(err))
+        print("ok fresh timeouts raise RuntimeError")
     finally:
         shutil.rmtree(outroot, ignore_errors=True)
 
