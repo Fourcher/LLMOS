@@ -1842,8 +1842,34 @@ def _fix_schedule(r):
     return (r[0], a)
 
 
+TYPOS = {"opn": "open", "oepn": "open", "opne": "open", "wat": "what", "waht": "what", "whats": "what's", "hwo": "how",
+         "chang": "change", "chnage": "change", "volum": "volume", "voluem": "volume", "teh": "the", "pls": "please",
+         "plz": "please", "brwoser": "browser", "broswer": "browser", "firefx": "firefox", "fierfox": "firefox",
+         "clsoe": "close", "colse": "close", "tunr": "turn", "trun": "turn", "screem": "screen", "shwo": "show",
+         "sohw": "show", "delte": "delete", "remvoe": "remove", "folde": "folder", "foler": "folder", "fiel": "file",
+         "flie": "file", "musci": "music", "pirnt": "print", "prnt": "print", "seach": "search", "serach": "search",
+         "wifi": "wifi", "blutooth": "bluetooth", "bluetoth": "bluetooth", "brightnes": "brightness",
+         "birghtness": "brightness", "timr": "timer", "tiemr": "timer", "alrm": "alarm", "calender": "calendar",
+         "calcualtor": "calculator", "calulator": "calculator"}
+
+
+def _retype(text):
+    """Whole-word typo fix (case-insensitive); the rest of the text is left exactly as typed."""
+    if not TYPOS:
+        return text
+    pat = re.compile(r"\b(" + "|".join(re.escape(k) for k in sorted(TYPOS, key=len, reverse=True)) + r")\b", re.I)
+    return pat.sub(lambda m: TYPOS[m.group(1).lower()], text)
+
+
 def match(text):
-    return _fix_schedule(_match(text))
+    r = _fix_schedule(_match(text))
+    if r is not None:
+        return r
+    typed = str(text or "")
+    fixed = _retype(typed)                    # one retry on the typo-fixed copy; the first pass result wins when it is not None
+    if fixed == typed:
+        return None
+    return _fix_schedule(_match(fixed))
 
 
 def _analyze_program(t):
