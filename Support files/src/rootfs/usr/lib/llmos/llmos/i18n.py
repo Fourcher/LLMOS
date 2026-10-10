@@ -71,7 +71,7 @@ EN = {
     "s_version": "Version",
     "hint": "Tell me what you want.",
     "loading_model": "Getting ready…",
-    "model_down": "The assistant isn't answering right now. Try again in a moment, or say \"the model is not answering\".",
+    "model_down": "The assistant isn't answering right now. Try again in a moment, or say \"the assistant isn't answering\".",
     "stopped": "Stopped.",
     "allow": "Allow",
     "skipped": "Skipped: no answer in 10 minutes.",

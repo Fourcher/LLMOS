@@ -17,7 +17,7 @@ REF = "llmos-1.5.0"
 BLOCKS = ["EN", "ZH", "ES", "FR", "DE", "JA"]
 NEW = {
     "loading_model": "Getting ready…",
-    "model_down": "The assistant isn't answering right now. Try again in a moment, or say \"the model is not answering\".",
+    "model_down": "The assistant isn't answering right now. Try again in a moment, or say \"the assistant isn't answering\".",
     "w_model_none": "This computer's memory is too small to run the assistant here.",
     "d_online_failed": "This computer couldn't finish it on its own.",
     "w_text": "This computer does what you tell it — in plain words, typed or spoken. The assistant runs on this computer itself; nothing you do leaves it unless you ask for something from the internet. A few quick questions, then it's yours.",
