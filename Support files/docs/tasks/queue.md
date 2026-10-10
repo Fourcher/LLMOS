@@ -159,9 +159,9 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - [done] (reliability) 1.7.7 smokes | evidence: isosmoke "desk socket: yes"; calc-smoke "all good"
 - [done] (top) P1-8/P1-9 GATE on 1.7.7 | evidence: RUN "rect2 value: 'hello world' (P1-8 PASS)"; "Enter-to-reply: 30.4 s"; desk-state reply "Hello! What would you like me to do?" (P1-9 PASS); click at 662,744 on 1280x800
 - [done] (speed) "hello world" 30.4 s -> instant greeting (7e063ea merged; VERIFY "Hello World! greeting=True")
-- [open] (top) P1-12/13 realuser smoke: first run failed (parser; fixed 0882d17), second failed at wizard step 1 (desk ignored rect.result on wizard; fixed b9e92de, needs next build) | role: run | after: 1.7.8 build
+- [done] (top) P1-12/13 realuser smoke on 1.7.8 | evidence: "step 1: Begin … step 9: Start using it / wizard done: desk reached / reply: Hi. What would you like to do? / REALUSER OK" exit=0. PHASE 1 COMPLETE.
 - [failed] (top) P2-5 realrun basic.json on 1.7.7: 0/50 (all at the shot step — QEMU-relative screendump path; and desk wait returned before requests ran). Fixed 8c3815d (tools) + 64c2ee3 (desk). Rerun on 1.7.8. | evidence: summary "pass": 0, "fail": 50, 848 s
-- [running] (reliability) 1.7.8 build + checks + smokes | role: run
+- [done] (reliability) 1.7.8 build | evidence: "BUILT-FROM: dist/ matches commit d2c0a24 (v1.7.8)"; isosmoke "desk socket: yes"; calc-smoke "all good"
 
 ## Post-1.7.8-build src merge list
 - 8f4b4b5 (warm-up sends the same prefix as the first turn; None ctx cached 5 s; VERIFY PASS: hung /props two calls 3.01 s)
