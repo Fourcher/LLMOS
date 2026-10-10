@@ -214,13 +214,18 @@ def _set_shell_root(user, shell):
     """As root: point the user's line in PASSWD at shell, and add shell to SHELLS once. PASSWD is written first.
     Checks everything before writing: a bad input, or a user with no line in PASSWD, raises ValueError and writes nothing."""
     check_shell_change(user, shell)
+    for p in (PASSWD, SHELLS):
+        if os.path.islink(p):
+            raise ValueError("refusing a linked file")
     pw = open(PASSWD).read()
     pw, n = re.subn(r"^(" + re.escape(user) + r":[^:]*:0:0:[^:]*:[^:]*:)[^\n]*$", lambda mm: mm.group(1) + shell, pw, count=1, flags=re.M)
     if n != 1:
         raise ValueError("no such user")
     shells = open(SHELLS).read()
     _replace_keep_owner(PASSWD, pw)
-    if shell not in shells.split():
+    if shell not in [line.strip() for line in shells.splitlines()]:
+        if shells and not shells.endswith("\n"):
+            shells += "\n"
         _replace_keep_owner(SHELLS, shells + shell + "\n")
 
 

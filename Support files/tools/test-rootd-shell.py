@@ -221,6 +221,56 @@ for user, shell, want, label in direct_cases:
     check(f"direct: rejects {label} ({got})", got == want)
     check(f"direct: {label} writes nothing", read(PASSWD_T) == PASSWD_BODY and read(SHELLS_T) == SHELLS_BODY)
 
+# ---- 3c. system._set_shell_root: no trailing newline in SHELLS, and linked files via the direct path ----
+reset()
+with open(SHELLS_T, "w") as f:
+    f.write("/bin/sh\n/bin/ash")
+system._set_shell_root("root", "/bin/bash")
+check("nonl: one clean appended line, no merge",
+      read(SHELLS_T) == "/bin/sh\n/bin/ash\n/bin/bash\n")
+system._set_shell_root("root", "/bin/bash")
+check("nonl: second call adds nothing", read(SHELLS_T) == "/bin/sh\n/bin/ash\n/bin/bash\n")
+reset()
+with open(SHELLS_T, "w") as f:
+    f.write("/bin/sh\n/bin/bash")
+system._set_shell_root("root", "/bin/bash")
+check("nonl: shell already on last line without newline -> no change",
+      read(SHELLS_T) == "/bin/sh\n/bin/bash")
+reset()
+
+# direct path: a symlinked PASSWD or SHELLS raises ValueError before any write; the targets are untouched.
+pw_target = os.path.join(tmp, "direct-target-passwd")
+sh_target = os.path.join(tmp, "direct-target-shells")
+with open(pw_target, "w") as f:
+    f.write(PASSWD_BODY)
+with open(sh_target, "w") as f:
+    f.write(SHELLS_BODY)
+pw_link = os.path.join(tmp, "direct-passwd-link")
+sh_link = os.path.join(tmp, "direct-shells-link")
+os.symlink(pw_target, pw_link)
+os.symlink(sh_target, sh_link)
+system.PASSWD = pw_link
+system.SHELLS = SHELLS_T
+try:
+    system._set_shell_root("root", "/bin/bash")
+    check("direct link: symlinked PASSWD refused", False)
+except ValueError as e:
+    check("direct link: symlinked PASSWD refused with 'refusing a linked file'", str(e) == "refusing a linked file")
+check("direct link: PASSWD symlink target untouched", read(pw_target) == PASSWD_BODY)
+check("direct link: SHELLS untouched when PASSWD is linked", read(SHELLS_T) == SHELLS_BODY)
+system.PASSWD = PASSWD_T
+system.SHELLS = sh_link
+try:
+    system._set_shell_root("root", "/bin/bash")
+    check("direct link: symlinked SHELLS refused", False)
+except ValueError as e:
+    check("direct link: symlinked SHELLS refused with 'refusing a linked file'", str(e) == "refusing a linked file")
+check("direct link: SHELLS symlink target untouched", read(sh_target) == SHELLS_BODY)
+check("direct link: PASSWD untouched when SHELLS is linked", read(PASSWD_T) == PASSWD_BODY)
+system.PASSWD = PASSWD_T
+system.SHELLS = SHELLS_T
+reset()
+
 # ---- 4. everyday: calls system.set_shell and keeps its replies ----
 
 
