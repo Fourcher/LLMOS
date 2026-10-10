@@ -1025,7 +1025,7 @@ class Desk:
                 self._reloaded = False
                 for wid, spec in list(self.windows.items()):    # the windows that were open before the page ended
                     self.emit({"t": "window", "id": wid, "spec": spec})
-        elif t == "rect.result":
+        elif t in ("rect.result", "rects.result"):
             slot = self._rect_wait.get(str(msg.get("id")))
             if slot is not None:
                 slot[1] = msg
@@ -4146,6 +4146,24 @@ class Desk:
                       'window.webkit.messageHandlers.llmos.postMessage({t:"rect.result",id:' + json.dumps(rid) + ',found:!!e,x:r?r.x:0,y:r?r.y:0,w:r?r.width:0,h:r?r.height:0,'
                       'text:e?(e.innerText||"").slice(0,500):"",value:e&&("value" in e)?String(e.value).slice(0,500):null,'
                       'dpr:window.devicePixelRatio,vw:window.innerWidth,vh:window.innerHeight});})()')
+                self.emit({"t": "eval", "js": js})
+                ev.wait(5)
+                got = self._rect_wait.pop(rid, [ev, None])[1]
+                out = got if got is not None else {"ok": False, "error": "timeout"}
+            elif cmd == "rects" and _fwcfg("testshell"):   # tests: "rects <id> <css selector>": every match's box, text and state on the page
+                words = line.split()
+                rid = words[1] if len(words) > 1 else ""
+                sel = " ".join(words[2:])
+                ev = threading.Event()
+                self._rect_wait[rid] = [ev, None]
+                js = ('(function(){var post=function(m){window.webkit.messageHandlers.llmos.postMessage(m);};var list;'
+                      'try{list=document.querySelectorAll(' + json.dumps(sel) + ');}catch(err){post({t:"rects.result",id:' + json.dumps(rid) + ',error:"bad selector"});return;}'
+                      'var items=[];for(var i=0;i<list.length&&i<200;i++){var e=list[i];var r=e.getBoundingClientRect();'
+                      'items.push({i:i,x:r.x,y:r.y,w:r.width,h:r.height,'
+                      'text:String(e.innerText||e.value||e.getAttribute("aria-label")||e.title||"").slice(0,80),'
+                      'tag:e.tagName.toLowerCase(),id:e.id,cls:String(e.className||"").slice(0,80),'
+                      'visible:r.width>0&&r.height>0&&getComputedStyle(e).visibility!=="hidden",disabled:!!e.disabled});}'
+                      'post({t:"rects.result",id:' + json.dumps(rid) + ',items:items,vw:window.innerWidth,vh:window.innerHeight,dpr:window.devicePixelRatio});})()')
                 self.emit({"t": "eval", "js": js})
                 ev.wait(5)
                 got = self._rect_wait.pop(rid, [ev, None])[1]
