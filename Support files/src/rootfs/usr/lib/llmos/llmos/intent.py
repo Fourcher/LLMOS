@@ -1098,6 +1098,22 @@ _OPEN_URL = re.compile(r"^\s*(?:please\s+)?(?:(?:open|go to|visit|browse|show me
                        r"(?:\s+in\s+(?:the\s+|a\s+)?(?:web\s+)?browser)?\s*[.!]?\s*$", re.I)
 
 
+_DEFAULT_APP_OPEN = re.compile(r"^(?:please\s+)?(?:always\s+open|open\s+all)\s+(?:my\s+)?(?P<k>[\w\s]+?)\s+(?:in|with|using)\s+(?P<a>[\w .-]+?)\s*[.!]?$", re.I)
+_DEFAULT_APP_SET = re.compile(r"^(?:please\s+)?(?:make|set)\s+(?P<a>[\w .-]+?)\s+(?:as\s+)?(?:my\s+|the\s+)?default\s+(?:app\s+|program\s+)?for\s+(?P<k>[\w\s]+?)\s*[.!]?$", re.I)
+
+
+def _default_app(text):
+    """'always open pdfs in firefox' / 'make vlc my default for videos' -> set_default_app; only for kinds of file the tool knows."""
+    m = _DEFAULT_APP_OPEN.match(text) or _DEFAULT_APP_SET.match(text)
+    if not m:
+        return None
+    from . import tools
+    k = m.group("k").strip().lower()
+    if k not in tools.DEFAULT_KINDS:
+        return None
+    return ("set_default_app", {"kind": k, "app": m.group("a").strip()})
+
+
 def _open_url(text):
     m = _OPEN_URL.match(text)
     if not m:
@@ -1857,6 +1873,9 @@ def _match(text):
     lk = _look(t)
     if lk:
         return lk
+    dap = _default_app(t)
+    if dap:
+        return dap
     ou = _open_url(t)
     if ou:
         return ou

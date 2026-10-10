@@ -4286,3 +4286,119 @@ def which_file(a, ctx):
         return ("nothing is open to print. Open the document, then say 'print' (or say its name: 'print recipe.pdf').")
     return (f"which file? Say its name (for example '{v} recipe.pdf'), or say 'find my recipe' to look for it, "
             "or open your files and use the buttons there")
+
+
+# ------------------------------------------------------------ default apps
+
+# the owner's words for a kind of file -> the MIME types that kind covers
+DEFAULT_KINDS = {}
+for _words, _mimes in [
+    (("pdf", "pdfs"), ["application/pdf"]),
+    (("picture", "pictures", "photo", "photos", "image", "images"), ["image/jpeg", "image/png", "image/gif", "image/webp"]),
+    (("video", "videos", "movie", "movies"), ["video/mp4", "video/x-matroska", "video/webm"]),
+    (("music", "song", "songs", "audio"), ["audio/mpeg", "audio/flac", "audio/ogg", "audio/x-wav"]),
+    (("web", "link", "links", "website", "websites", "browser"), ["x-scheme-handler/http", "x-scheme-handler/https", "text/html"]),
+    (("text", "txt", "text file", "text files"), ["text/plain"]),
+]:
+    for _w in _words:
+        DEFAULT_KINDS[_w] = _mimes
+
+# where the installed programs' .desktop files live (the test points this at a temp folder)
+APP_DIRS = ["/usr/share/applications"]
+
+
+def _desktop_files():
+    dirs = list(APP_DIRS) + [os.path.join(config.home(), ".local", "share", "applications")]
+    for d in dirs:
+        if not os.path.isdir(d):
+            continue
+        for fn in sorted(os.listdir(d)):
+            if fn.endswith(".desktop"):
+                yield os.path.join(d, fn)
+
+
+def _find_desktop(app):
+    """(desktop file name, program name) for the owner's word, matched case-insensitively against the file stem or Name=."""
+    want = str(app or "").strip().lower()
+    if not want:
+        return None, None
+    for path in _desktop_files():
+        stem = os.path.basename(path)[:-len(".desktop")]
+        name = None
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if line.startswith("Name="):
+                        name = line[len("Name="):].strip()
+                        break
+        except OSError:
+            continue
+        if want in (stem.lower(), (name or "").lower()):
+            return os.path.basename(path), (name or stem)
+    return None, None
+
+
+def _write_mimeapps(path, pairs):
+    """Set mime=desktop lines under [Default Applications]; every other line and section is kept as it was."""
+    lines = []
+    if os.path.exists(path):
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+    out, section, seen, done = [], None, False, set()
+
+    def flush():
+        for k, v in pairs.items():
+            if k not in done:
+                out.append(f"{k}={v}")
+                done.add(k)
+
+    for line in lines:
+        s = line.strip()
+        if s.startswith("["):
+            if section == "Default Applications":
+                flush()
+            section = s.strip("[]")
+            seen = seen or section == "Default Applications"
+            out.append(line)
+            continue
+        if section == "Default Applications" and "=" in s and not s.startswith("#"):
+            key = s.split("=", 1)[0].strip()
+            if key in pairs:
+                if key not in done:
+                    out.append(f"{key}={pairs[key]}")
+                    done.add(key)
+                continue
+        out.append(line)
+    if section == "Default Applications":
+        flush()
+    if not seen:
+        if out and out[-1].strip():
+            out.append("")
+        out.append("[Default Applications]")
+        flush()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
+
+
+@tool("set_default_app", "Make an installed program the owner's default for a kind of file or link: 'always open pdfs in "
+      "firefox', 'make vlc my default for videos'. Kinds: pdfs, pictures, videos, music, web links, text files.",
+      {"kind": {"type": "string", "description": "the kind of file, in the owner's words: pdfs, pictures, videos, music, web links, text files"},
+       "app": {"type": "string", "description": "the program, in the owner's words (for example firefox, vlc)"}},
+      ["kind", "app"], risk=CHANGE)
+def set_default_app(a, ctx):
+    kind = str(a.get("kind") or "").strip()
+    app = str(a.get("app") or "").strip()
+    mimes = DEFAULT_KINDS.get(kind.lower())
+    if not mimes:
+        return f"error: I don't know that kind of file yet: {kind}"
+    desktop, name = _find_desktop(app)
+    if not desktop:
+        return f"error: no installed program called {app}"
+    _write_mimeapps(os.path.join(config.home(), ".config", "mimeapps.list"), {m: desktop for m in mimes})
+    if shutil.which("xdg-mime"):
+        try:
+            subprocess.run(["xdg-mime", "default", desktop, *mimes], capture_output=True, timeout=20)
+        except Exception:
+            pass
+    return f"Done: {kind.capitalize()} now open in {name}."
