@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import evaluators  # noqa: E402
 import tasklib  # noqa: E402
 from realuser import INPUT  # noqa: E402
-from vmjson import vm_json  # noqa: E402
+from vmjson import vm_json, vm_text  # noqa: E402
 
 OUTDIR = "run/realrun"
 REPLY_KEY = "reply"  # desk.py:4038 _state() -> {"reply": self.last_reply, ...}
@@ -63,7 +63,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
     def getter(spec):
         rtype = spec.get("type")
         if rtype == "vm_command_line":
-            return run_in_vm(spec["command"])
+            return vm_text(run_in_vm(spec["command"]))
         if rtype == "reply":
             obj = vm_json(run_in_vm("llmos desk-state"))
             if obj is None:

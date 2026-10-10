@@ -1,5 +1,6 @@
 """Parse the JSON object out of VM command output (tsh output). Stdlib only."""
 import json
+import re
 
 
 def vm_json(text):
@@ -32,3 +33,26 @@ def vm_json(text):
         if isinstance(obj, dict):
             return obj
     return None
+
+
+_TRAILER = re.compile(r"^\[vmctl: (matched|TIMEOUT) after [\d.]+s\]$")
+
+
+def vm_text(out):
+    """The text of VM command output with the "[vmctl: matched after N.Ns]" and "[vmctl: TIMEOUT after N.Ns]"
+    trailer lines removed and trailing whitespace stripped. Output with a TIMEOUT trailer gives None (no
+    output); a non-string gives None."""
+    if not isinstance(out, str):
+        return None
+    kept = []
+    timed_out = False
+    for line in out.splitlines():
+        m = _TRAILER.match(line.strip())
+        if m:
+            if m.group(1) == "TIMEOUT":
+                timed_out = True
+            continue
+        kept.append(line)
+    if timed_out:
+        return None
+    return "\n".join(kept).rstrip()
