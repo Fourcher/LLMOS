@@ -35,6 +35,8 @@ from . import clip, record, folderlock, everyday, reset, agent, apps, programs, 
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
+# app-ids testreset must never force-quit, even if someone adds them to wm.PROCS later
+NEVER_KILL = {"org.llmos.desk", "python3", "python", "llama-server", "llmos"}
 # what the page may send while each screen other than the desk is showing: nothing typed or spoken on the
 # lock screen, the first-run wizard or the boot screen may reach the assistant (anything else is dropped)
 SCREEN_MESSAGES = {
@@ -4158,6 +4160,9 @@ class Desk:
                     except Exception:
                         ext = []
                 for aid in ext:
+                    if aid in NEVER_KILL or aid not in wm.PROCS:   # only known programs are force-quit
+                        print("desk: testreset left %s open (unknown program)" % aid, file=sys.stderr)
+                        continue
                     try:
                         wm.force_quit(aid)
                     except Exception:
@@ -4202,6 +4207,9 @@ class Desk:
                     except Exception:
                         ext = []
                 for aid in ext:
+                    if aid in NEVER_KILL or aid not in wm.PROCS:   # only known programs are force-quit
+                        print("desk: testreset left %s open (unknown program)" % aid, file=sys.stderr)
+                        continue
                     try:
                         wm.force_quit(aid)
                     except Exception:
