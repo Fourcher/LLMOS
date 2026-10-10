@@ -140,6 +140,22 @@ try:
         assert calls["system"] == [] and calls["run"] == [] and calls["write"] == [] and calls["rpc"] == [], calls
     print("ok power rejects: no command or write for any bad action")
 
+    # 2b. Suspend: a sync timeout or OSError must not stop the write; a write OSError is reported as (False, msg).
+    euid["value"] = 0
+    reset()
+    fake["run_error"] = subprocess.TimeoutExpired(["sync"], 30)
+    check("root suspend sync timeout still writes mem and returns ok",
+          system.power("suspend") == (True, "") and calls["write"] == [("/sys/power/state", "mem")], f"{calls}")
+
+    reset()
+    fake["run_error"] = OSError("no sync")
+    check("root suspend sync OSError still writes mem and returns ok",
+          system.power("suspend") == (True, "") and calls["write"] == [("/sys/power/state", "mem")], f"{calls}")
+
+    reset()
+    fake["open_error"] = OSError("suspend refused")
+    check("root suspend write OSError -> (False, msg)", system.power("suspend") == (False, "suspend refused"))
+
     # 3. Non-root path: the rootd call, with the reply parsed and RootdError turned into (False, msg).
     euid["value"] = 1000
     reset()
