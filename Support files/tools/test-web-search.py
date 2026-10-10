@@ -79,9 +79,9 @@ assert err is None and out == HIT2, (out, err)
 assert dt < 1.0, f"KeyError + list took {dt:.2f}s, limit is 1s"
 print(f"ok KeyError, Brave list returned in {dt:.2f}s")
 
-# 7. both engines WebError -> plain messages joined, no "WebError:" prefix
+# 7. both engines WebError -> the plain sentence for both services failing, no "WebError:" prefix
 out, err, dt = run_search(fake(0.01, exc=web.WebError("X 503")), fake(0.01, exc=web.WebError("Y 429")))
-assert out is None and str(err) == "X 503; Y 429", (out, str(err))
+assert out is None and str(err) == "the search services aren't answering right now; try again in a minute", (out, str(err))
 print(f"ok both WebError -> {str(err)!r} in {dt:.2f}s")
 
 # 8. both ValueError -> type-prefixed messages joined

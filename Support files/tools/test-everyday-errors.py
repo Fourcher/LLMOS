@@ -102,6 +102,25 @@ for msg, want in web_cases:
     check(got == want, f"WebError({msg[:50]!r}) -> {got!r}")
     check("curl" not in got and "/" not in got, f"WebError({msg[:30]!r}) reply has no curl or path")
 
+print("web errors from web._status_msg pass through unchanged")
+status_cases = (
+    (("DuckDuckGo", 503), "DuckDuckGo isn't answering right now; try again in a minute"),
+    (("Brave", 429), "Brave is getting too many requests; try again in a minute"),
+    (("Wikimedia", 404), "that page doesn't exist"),
+    (("Brave", 403), "Brave refused the request"),
+    (("DuckDuckGo", 418), "DuckDuckGo didn't answer properly"),
+    (("DuckDuckGo", 0), "DuckDuckGo didn't answer properly"),
+)
+for args, want_msg in status_cases:
+    msg = web._status_msg(*args)
+    check(msg == want_msg, f"_status_msg{args} -> {msg!r}")
+    got = everyday._plain_err(web.WebError(msg, args[1]))
+    check(got == msg, f"WebError(_status_msg{args}) passes through -> {got!r}")
+    check("curl" not in got and "/" not in got, f"_status_msg{args} reply has no curl or path")
+got = everyday._plain_err(web.WebError("the search services aren't answering right now; try again in a minute"))
+check(got == "the search services aren't answering right now; try again in a minute",
+      f"the search-services sentence passes through -> {got!r}")
+
 print("the forecast reply for network failures")
 forecast_cases = (
     ("curl: (6) Could not resolve host: api.open-meteo.com", "no internet connection"),
@@ -119,6 +138,18 @@ for msg, want in forecast_cases:
     check("curl:" not in said, "forecast reply has no curl:")
     check(said.endswith(".") and not said.endswith(".."), "forecast reply ends with a single '.'")
 print("ok web errors: 16 WebError cases, 4 curl forecast cases")
+
+print("the forecast reply with the new web._status_msg sentences")
+for args in (("DuckDuckGo", 503), ("Brave", 429)):
+    msg = web._status_msg(*args)
+    dk = Desk()
+    with mock.patch.object(web, "fetch", side_effect=web.WebError(msg, args[1])):
+        everyday.weather(dk, "weather in denver", "weather in denver")
+    said = dk.said or ""
+    want_reply = f"I couldn't get the forecast just now: {msg}."
+    check(said == want_reply, f"forecast reply for _status_msg{args} -> {said!r}")
+    check(said.endswith(".") and not said.endswith(".."), f"forecast reply for _status_msg{args} ends with a single '.'")
+    check(said.count(".") == 1, f"forecast reply for _status_msg{args} has exactly one '.'")
 
 print()
 print("all good" if fails == 0 else f"{fails} FAILED")
