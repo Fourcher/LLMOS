@@ -150,3 +150,4 @@ Pending VERIFY: d9947ce P1-11 realuser.py.
 - [done] (capability) "open the task list app" (c18ff22 VERIFY PASS: "open_app task list") -> open_app command "open the task list" (verb kept in command) | role: fix | files: intent.py _OPEN_APP
 - 059904f (web search: engines in parallel, 10 s cap, plain error text; VERIFY PASS: "search failed: DuckDuckGo returned 503; Brave returned 429")
 - [open] (reliability) packages/LLM OS 1.7.7.zip actually holds the 1.7.6 build; next package.sh run after the 1.7.7 build overwrites it | role: run | files: packages/
+- 769a120 (everyday: instant "15 percent of 240" answers; VERIFY PASS: "15% of 240 is 36.")
