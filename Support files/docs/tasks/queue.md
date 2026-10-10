@@ -124,3 +124,13 @@ Session state note (2026-10-09):
 - dist/ is an INCOHERENT INTERMEDIATE: arm64 qcow2 was rebuilt to 1.7.2 to test M1, but RELEASE.json/SHA256SUMS still say 1.7.1 and the x86 image is the old 1.7.1 build. check-fresh says STALE (source now fb26f07). dist/SHA256SUMS is modified-uncommitted on purpose. Do NOT ship from dist/ until a full `tools/release.sh all` regenerates a coherent 1.7.2 (after M1/M2 land). The 1.7.1 zip on ~/Desktop is the real shipped 1.7.1.
 - M1 wizard experiment: do NOT dismiss onboarding by `pkill labwc` — it leaves a stale desk socket (Connection refused). Instead pre-set `onboarded:true` in the image build (or drive the wizard to completion via the desk's wizard_step) and boot fresh, then test the calculator.
 - docs/tasks/orchestration.md is adopted and tracked in git.
+
+## Post-1.7.6-build src merge list (all VERIFY PASS; merge in this order once release.sh exits)
+- df416e6 (intent chain incl. 4eea691 aria, last_saved, notes guard, spreadsheet, _free_path)
+- 55047d6 (i18n 6 langs × 440 keys)
+- 6c6218f (P1-4 rect 65b5641 + P2-14 testreset-min)
+- ee5d199 (P3-2 testshell temperature 0 / seed 42)
+- a943c66 (photo route "my pics from X", action-clause guard)
+- d343bf1 ("skipped" toast = no answer in 10 minutes; trial-merged clean with 55047d6)
+Merged tools-only this round: c9f69f8 P1-1, 8d05067 P2-1, 60395ff P2-12, 0821a15 P2-3, bb105d6 evaluator gaps, d3786d3 P2-11, 30fb221 P2-2, 71edf5f P1-5, fa75052 P1-3.
+Pending VERIFY: d9947ce P1-11 realuser.py.
