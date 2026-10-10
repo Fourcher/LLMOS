@@ -63,6 +63,89 @@ check(first_stmt == "self.decline_dialogs()",
 check("self.push_status()" in body and body.index("self.push_status()") < body.index("out = {\"ok\": True}"),
       "branch calls self.push_status() just before out = {\"ok\": True}")
 
+# (e) both reset branches close the external program windows, skipping the desk, and SIGTERM the launched programs
+for label, br in (("testreset", tr_branch), ("testreset-min", branch)):
+    check("wm.windows()" in br, label + " reads the open program windows with wm.windows()")
+    check('wm.act("close", aid)' in br, label + ' closes program windows with wm.act("close", aid)')
+    check('a != "org.llmos.desk"' in br, label + ' skips the desk window (org.llmos.desk)')
+    check("wm.force_quit(aid)" in br, label + " force-quits windows still open after the poll")
+    check("for pid in list(self.apps):" in br and "self.close_app(pid)" in br,
+          label + " calls self.close_app(pid) over self.apps")
+    check("self._focus_desk()" in br, label + " refocuses the desk with self._focus_desk()")
+
+# (f) the focus control command and the helper: the helper holds the wlrctl focus, gtkwin.present and the input focus
+focus_start = src.find('elif cmd == "focus"')
+focus_branch = src[focus_start:src.find("elif cmd ", focus_start + 10)] if focus_start != -1 else ""
+check("self._focus_desk()" in focus_branch and "wlrctl" not in focus_branch,
+      'the "focus" branch calls self._focus_desk()')
+h_start = src.find("def _focus_desk(self):")
+h_body = src[h_start:src.find("\n    def ", h_start + 10)] if h_start != -1 else ""
+check(h_start != -1 and "app_id:org.llmos.desk" in h_body and "gtkwin.present()" in h_body
+      and "getElementById('in')" in h_body, "_focus_desk() holds the wlrctl focus, gtkwin.present and the input focus")
+
+# (g) run the testreset-min close block against stubs: only firefox is closed, the desk is never touched
+import textwrap
+blk_start = branch.find("try:                          # program windows")
+blk_end = branch.find("self._focus_desk()\n") + len("self._focus_desk()\n")
+if blk_start != -1 and blk_end > blk_start:
+    code = textwrap.dedent(" " * 16 + branch[blk_start:blk_end])
+    import time as _time
+
+    class WM:
+        def __init__(self):
+            self.open = ["org.llmos.desk", "firefox"]
+            self.acted = []
+            self.forced = []
+        def windows(self):
+            return list(self.open)
+        def act(self, what, target):
+            self.acted.append((what, target))
+            if what == "close" and target in self.open:
+                self.open.remove(target)
+            return True, ""
+        def force_quit(self, target):
+            self.forced.append(target)
+            return True, ""
+
+    class Desk:
+        def __init__(self):
+            self.apps = {101: {}, 102: {}}
+            self.closed = []
+            self.focused = 0
+        def close_app(self, pid):
+            self.closed.append(pid)
+        def _focus_desk(self):
+            self.focused += 1
+
+    wm_stub = WM()
+    desk_stub = Desk()
+    sleeps = []
+    time_stub = type("T", (), {"time": staticmethod(lambda: 0.0), "sleep": staticmethod(lambda s: sleeps.append(s))})
+    g = {"wm": wm_stub, "time": time_stub, "self": desk_stub}
+    try:
+        exec(compile(code, "<testreset-min-close>", "exec"), g)
+        ran = True
+    except Exception as e:
+        print("FAIL close block raised: %r" % (e,))
+        ran = False
+    check(ran and wm_stub.acted == [("close", "firefox")],
+          'stub run: act("close") called only for firefox (acted=%s)' % (wm_stub.acted,))
+    check(ran and "org.llmos.desk" in wm_stub.open and not wm_stub.forced,
+          "stub run: the desk window is never closed and nothing is force-quit once firefox is gone")
+    check(ran and desk_stub.closed == [101, 102] and desk_stub.focused == 1,
+          "stub run: close_app over both launched pids, then the desk is refocused once")
+    check(ran and sleeps == [0.2],
+          "stub run: the poll takes one 0.2 s step, then stops once firefox is gone (sleeps=%s)" % (sleeps,))
+    wm_none = WM()
+    wm_none.open = ["org.llmos.desk"]
+    sleeps.clear()
+    g2 = {"wm": wm_none, "time": time_stub, "self": Desk()}
+    exec(compile(code, "<testreset-min-close>", "exec"), g2)
+    check(not sleeps and not wm_none.acted,
+          "stub run: no external windows -> no act, no delay (sleeps=%s)" % (sleeps,))
+else:
+    check(False, "testreset-min close block located for the stub run")
+
 if fails:
     print("FAIL %d check(s): %s" % (len(fails), "; ".join(fails)))
     sys.exit(1)
