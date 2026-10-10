@@ -6,12 +6,38 @@ get_result(result_spec) is supplied by the runner; it returns the observed text
 (command output, reply text, or rect JSON as text). It may raise or return None.
 """
 
+import threading
+
 REFUSAL_PHRASES = ("can't", "cannot", "isn't possible", "not able")
 STATE_FUNCS = ("include_exclude", "equals", "file_exists", "setting_is", "proc_running")
 
 
+class _GetterTimeout(Exception):
+    pass
+
+
 def _verdict(passed, reason, observed):
     return {"verdict": "PASS" if passed else "FAIL", "reason": reason, "observed": observed}
+
+
+def _call_with_timeout(get_result, spec, timeout_s):
+    """Run get_result in a daemon thread; wait at most timeout_s. Re-raises getter errors."""
+    box = {}
+
+    def work():
+        try:
+            box["value"] = get_result(spec)
+        except BaseException as e:  # noqa: BLE001 - re-raised in caller
+            box["error"] = e
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        raise _GetterTimeout()
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
 
 
 def _include_exclude(observed, expected):
@@ -49,8 +75,15 @@ def evaluate(task, get_result):
     expected = evaluator.get("expected", {})
     spec = evaluator["result"]
 
+    has_any_rule = any(expected.get(k) for k in ("include", "exclude", "equals"))
+    if not has_any_rule and not task.get("weak", False) and task.get("feasible", True):
+        return _verdict(False, "no rules: the task checks nothing", "")
+
+    timeout_s = task.get("timeout_s", 120)
     try:
-        observed = get_result(spec)
+        observed = _call_with_timeout(get_result, spec, timeout_s)
+    except _GetterTimeout:
+        return _verdict(False, "timeout after %ss" % timeout_s, "")
     except TimeoutError as e:
         return _verdict(False, "timeout: %s" % e, "")
     except Exception as e:
