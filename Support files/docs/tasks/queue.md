@@ -63,12 +63,15 @@ Operating rules come from the owner's prompt and later messages: one task at a t
 - [done] (merged 9819426 → a8a609a) (speed) "what's on my screen" 27 s -> lists open windows at once; VERIFY PASS 9819426 ("CASE1: Open now: Firefox, Foot, Calculator."); merge after the 1.7.3 build finishes (no merges during a build) | files: src/rootfs/usr/lib/llmos/llmos/desk.py tools/test-screen-open.py
 - [open] (reliability) timed-sweep reads only the first reply; replies like "Checking now; the result follows." arrive later via instant_reply. After the idle wait, read the final reply from `llmos desk-state` ("reply") | role: fix | files: tools/timed-sweep.sh (after the 1.7.3 RUN finishes using it)
 - [open] (process) prune merged worktrees (60+ under .claude/worktrees) | role: run | files: none
-- [running] (capability) delete of a missing folder waits on a confirm (242 s): return "nothing called X" before asking; bare click miss -> "I can't see “X” on the screen." | role: fix | files: src/rootfs/usr/lib/llmos/llmos/agent.py tools/test-agent-small.py
-- [running] (speed) "change the volume up" -> model (11 s): _VOL accepts change|put|set|move | role: fix | files: src/rootfs/usr/lib/llmos/llmos/intent.py tools/test-intent.py
-- [running] (reliability) timed-sweep follows "the result follows" replies | role: fix | files: tools/timed-sweep.sh
-- [running] (capability) "show my biggest files" -> "18 items in /." and "what's plugged into my computer" -> "I couldn't finish that." | role: run probe with desk.log on 1.7.3
+- [done] (merged c9d4693 VERIFY PASS: "ok delete of a missing path answers without asking"; existing path still confirms) (capability) delete of a missing folder waits on a confirm (242 s): return "nothing called X" before asking; bare click miss -> "I can't see “X” on the screen." | role: fix | files: src/rootfs/usr/lib/llmos/llmos/agent.py tools/test-agent-small.py
+- [done] (merged d53abb9 VERIFY PASS: "volume guards: 2/2"; "set it up" -> None) (speed) "change the volume up" -> model (11 s): _VOL accepts change|put|set|move | role: fix | files: src/rootfs/usr/lib/llmos/llmos/intent.py tools/test-intent.py
+- [done] (merged e43496b VERIFY PASS) (reliability) timed-sweep follows "the result follows" replies | role: fix | files: tools/timed-sweep.sh
+- [done] (merged ee689f3 + 98173be VERIFY PASS: "show my biggest files" -> biggest_files ~; plugged-in from /sys, "Plugged in: USB Keyboard (Logitech); a camera; …") (capability) "show my biggest files" -> "18 items in /." and "what's plugged into my computer" -> "I couldn't finish that." | role: run probe with desk.log on 1.7.3
 - [open] (speed) "what's the capital of australia" correct but 69 s (web_search + model). Probe the time split via desk.log | role: run probe
 - [open] (freedom) RUN tools/refusal-probe.py on the 1.7.3 VM | role: run
+- [open] (reliability) build 1.7.4 with this round (missing-path delete, click miss, volume, biggest files, plugged-in, screen-open); RUN smokes + timed sweep (expect "show my biggest files", "what's plugged in", "what's on my screen" under 3 s) | role: run
+- [open] (capability) "find the biggest file in Downloads" -> find_files (wrong) | role: fix
+- [open] (process) test-hardware/test-recall/test-screen-open copy desk regexes; make desk expose the patterns as module constants and test those | role: fix
 
 Notes:
 - docs/tasks/orchestration.md IS the adopted policy (rewritten 2026-10-09 to match the owner's standing consent). The orchestrator plans and dispatches; workers do all code edits in worktrees; the orchestrator owns VM/image builds and may stop VMs, download from Alpine's signed repos, and run precarious installs. Owner instruction (2026-10-09): never ask the owner; outside-Alpine downloads, publishing and pushing are pre-approved.
