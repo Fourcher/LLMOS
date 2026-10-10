@@ -607,6 +607,7 @@ class Desk:
         self._pending = []           # messages emitted before the page was ready
         self._rect_wait = {}         # test shell: "rect <id> <selector>" waiting for the page's answer
         self._req_pending = 0        # requests queued or running (counted from say() until the worker finishes them)
+        self._req_done = 0           # requests the worker has finished (a counter: wait "N after M" tells a finished one from none)
         self._pending_lock = threading.Lock()
 
     # ---- GTK / WebKit
@@ -2257,6 +2258,7 @@ class Desk:
             finally:
                 with self._pending_lock:
                     self._req_pending = max(0, self._req_pending - 1)
+                    self._req_done += 1
                 self.turn_done.set()
                 if done:
                     done.set()
@@ -4067,7 +4069,7 @@ class Desk:
 
     def _state(self):
         return {"screen": self.screen, "busy": self.busy, "reply": self.last_reply,
-                "queued": self.requests.qsize(),
+                "queued": self.requests.qsize(), "done": self._req_done,
                 "dialogs": [{"id": k, "title": v[2], "text": v[3]} for k, v in self.dialogs.items() if len(v) > 3],
                 "windows": [{"id": w["id"], "title": w["title"], "kind": w["kind"],
                              "blocks": [b["type"] for b in w["blocks"]], "rows": uispec.to_rows(w)[:40],
@@ -4093,12 +4095,23 @@ class Desk:
             elif cmd == "state":
                 out = self._state()
             elif cmd == "wait":            # until the request(s) asked for are finished, not only queued
+                # "wait N after M": M = requests finished before this one was sent (the desk-state "done" count)
+                words = arg.split()
+                after = None
+                if len(words) == 3 and words[1] == "after" and words[2].isdigit():
+                    arg, after = words[0], int(words[2])
                 start_reply = self.last_reply
                 # grace: up to 3 s for a request to start (a shortcut can finish before busy is ever set)
-                for _ in range(30):
-                    if self._req_pending > 0 or self.busy or self.last_reply != start_reply:
-                        break
-                    time.sleep(0.1)
+                if after is None:
+                    for _ in range(30):
+                        if self._req_pending > 0 or self.busy or self.last_reply != start_reply:
+                            break
+                        time.sleep(0.1)
+                else:
+                    for _ in range(30):
+                        if self._req_done > after or self._req_pending > 0 or self.busy:
+                            break
+                        time.sleep(0.1)
                 for _ in range(int(arg or 600) * 4):
                     if self._req_pending == 0 and not self.busy and self.requests.empty():
                         break

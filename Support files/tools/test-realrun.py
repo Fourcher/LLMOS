@@ -611,6 +611,39 @@ def main():
 
         check("desk-ready: missing screen key is not ready",
               realrun._desk_ready(json.dumps({"busy": False, "reply": ""})) is False)
+        # 7c. the desk reports "done": the wait asks for the requests finished after the count it read
+        def vm_done(extra, waits):
+            st = {"reply": ""}
+
+            def vm(cmd):
+                if cmd.startswith("llmos desk-ctl testreset"):
+                    return "ok"
+                if cmd.startswith("llmos desk-ctl wait"):
+                    waits.append(cmd)
+                    st["reply"] = "Canberra"
+                    return "ok"
+                if cmd == "llmos desk-state":
+                    d = {"screen": "desk", "busy": False, "reply": st["reply"], "queued": 0,
+                         "dialogs": [], "windows": [], "apps": []}
+                    d.update(extra)
+                    return json.dumps(d)
+                if "ls " in cmd:
+                    return "/root/Desktop/Test"
+                return "ok"
+            return vm
+
+        waits = []
+        realrun.run_task(reply_task("done-1"), FakeUser(), vm_done({"done": 7}, waits),
+                         clock=FakeClock(), outdir=outroot)
+        check("desk with done=7 -> wait 'after 7'", waits == ["llmos desk-ctl wait 120 after 7"], repr(waits))
+        if waits == ["llmos desk-ctl wait 120 after 7"]:
+            print("ok desk with done=7 waits 'after 7'")
+        waits = []
+        realrun.run_task(reply_task("done-2"), FakeUser(), vm_done({}, waits),
+                         clock=FakeClock(), outdir=outroot)
+        check("older desk without done -> old wait command", waits == ["llmos desk-ctl wait 120"], repr(waits))
+        if waits == ["llmos desk-ctl wait 120"]:
+            print("ok older desk without done uses the old wait command")
     finally:
         shutil.rmtree(outroot, ignore_errors=True)
 

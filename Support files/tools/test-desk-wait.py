@@ -120,5 +120,38 @@ elapsed, out, trace = run_case([])
 print("case2 nothing queued elapsed %.2f s" % elapsed)
 check(2.8 <= elapsed <= 3.6 and out == {"pending": 0}, "nothing started: returns after the 3 s grace")
 
+# (g) the done counter: incremented in _worker's finally under the lock, reported by _state()
+check("self._req_done = 0" in src, "__init__ defines _req_done")
+dinc = worker_body.find("self._req_done += 1")
+check(fin != -1 and dinc > fin and "with self._pending_lock:" in worker_body[fin:dinc],
+      "_worker() increments _req_done inside its finally, under _pending_lock")
+state_body = slice_between("    def _state(self):", "    def _control_conn(self, conn):")
+check('"done": self._req_done' in state_body, "_state() reports done")
+
+
+# (h) behaviour: wait "10 after 3" with done already 5 (> 3) skips the grace and returns at once
+class DoneStub(Stub):
+    def __init__(self):
+        Stub.__init__(self)
+        self._req_done = 5
+
+    def _state(self):
+        return {"done": self._req_done}
+
+
+done_stub = DoneStub()
+t = time.time()
+out_done = wait_fn(done_stub, "10 after 3")
+el_done = time.time() - t
+check(el_done < 0.5 and out_done == {"done": 5}, "wait N after M with done > M returns at once (%.2f s)" % el_done)
+
+# (i) wait "N after M" with nothing new started or finished still waits the 3 s grace
+none_stub = DoneStub()
+none_stub._req_done = 2
+t = time.time()
+wait_fn(none_stub, "10 after 2")
+el_none = time.time() - t
+check(2.8 <= el_none <= 3.6, "wait N after M with nothing new: 3 s grace (%.2f s)" % el_none)
+
 print("all good" if not fails else "FAILED: %d" % len(fails))
 sys.exit(1 if fails else 0)
