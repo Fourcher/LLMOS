@@ -8,6 +8,18 @@
 # Output: run/realrun-nightly/<YYYY-MM-DD>/ (records) and .../triage (bundles)
 set -u
 
+# -h/--help anywhere in the arguments: print usage and exit before anything else
+for a in "$@"; do
+  case "$a" in
+    -h|--help)
+      echo "usage: realrun-nightly.sh [--run] [suite.json]"
+      echo "  --run boots the nightly test VM and runs the suite; without it only the chosen suite path is printed"
+      echo "  NIGHTLY_DRY=1 prints the chosen suite path and exits (no boot)"
+      echo "  NIGHTLY_DATE=YYYY-MM-DD uses this date instead of today (tests)"
+      exit 0 ;;
+  esac
+done
+
 # --run is required to boot; without it the script only prints the chosen suite
 RUN=0
 if [ "${1:-}" = "--run" ]; then RUN=1; shift; fi

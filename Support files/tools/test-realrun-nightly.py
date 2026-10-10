@@ -71,6 +71,14 @@ check("no args exits 0 and names --run", r.returncode == 0 and "--run" in r.stdo
 check("no args prints a suite json", last.endswith(".json"), repr(last))
 check("no args creates no target.pid", not (pid_files() - before), str(pid_files() - before))
 
+# 1c. -h and --help: usage on stdout, exit 0, no target.pid
+for flag in ["--help", "-h"]:
+    before = pid_files()
+    r = run_script([flag])
+    check("%s exits 0 and names --run" % flag, r.returncode == 0 and "--run" in r.stdout,
+          "rc=%s out=%r err=%s" % (r.returncode, r.stdout, r.stderr))
+    check("%s creates no target.pid" % flag, not (pid_files() - before), str(pid_files() - before))
+
 # 2. rotation: script dry mode vs independent computation, three dates
 for date_str in ["2026-01-01", "2026-10-10", "2027-03-15"]:
     want = expected_suite(date_str)
