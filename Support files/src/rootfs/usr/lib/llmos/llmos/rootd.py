@@ -148,12 +148,16 @@ def handle(request_bytes):
     return json.dumps(reply).encode("utf-8")
 
 
+_LOG_LOCK = threading.Lock()
+
+
 def _log(verb, ok):
     try:
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
         line = f"{datetime.now().isoformat(timespec='seconds')} {verb} {'ok' if ok else 'error'}\n"
-        with open(LOG_PATH, "a") as f:
-            f.write(line)
+        with _LOG_LOCK:
+            with open(LOG_PATH, "a") as f:
+                f.write(line)
     except OSError:
         pass
 
