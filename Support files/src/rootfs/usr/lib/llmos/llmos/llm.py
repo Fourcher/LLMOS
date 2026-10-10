@@ -85,7 +85,7 @@ _ctx_cache = [0.0, None]
 def context_size():
     """The model server's context window in tokens (from llama-server's /props), or None if it cannot say.
     Checked at most once a minute: switching models restarts the server, possibly with another size."""
-    if time.time() - _ctx_cache[0] < 60:
+    if _ctx_cache[1] is not None and time.time() - _ctx_cache[0] < 60:
         return _ctx_cache[1]
     n = None
     try:
@@ -97,7 +97,8 @@ def context_size():
         n = int((d.get("default_generation_settings") or {}).get("n_ctx") or d.get("n_ctx") or 0) or None
     except (OSError, ValueError):
         n = None
-    _ctx_cache[:] = [time.time(), n]
+    if n is not None:                 # a failed check is not cached: the server may not be ready yet
+        _ctx_cache[:] = [time.time(), n]
     return n
 
 

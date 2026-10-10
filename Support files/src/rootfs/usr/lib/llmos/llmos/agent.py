@@ -372,11 +372,25 @@ def build_messages(ctx, user_text, history, private=False):
 
 def warm_up():
     """Process the static prefix (system prompt + tools) once so the first
-    real request doesn't pay for it. Called in the background at startup."""
+    real request doesn't pay for it. Called in the background at startup.
+    The prefix must match the first real turn exactly: the context size (which picks the tool list) is waited for
+    while the model server is still starting, and the thinking setting is the one a turn uses."""
+    for i in range(10):
+        try:
+            if llm.context_size():
+                break
+        except Exception:
+            pass
+        if i < 9:
+            time.sleep(1)
     try:
+        try:
+            tl = tool_schemas()
+        except Exception:             # a context size that cannot be read counts as None (the full list)
+            tl = tools.schemas(compact=True)
         llm.chat([{"role": "system", "content": system_prompt()},
                   {"role": "user", "content": "[context]\n[/context]\n\nhi"}],
-                 tools=tool_schemas(), max_tokens=1, think=False)
+                 tools=tl, max_tokens=1, think=bool(config.settings.get("think")))
     except Exception:
         pass
 
