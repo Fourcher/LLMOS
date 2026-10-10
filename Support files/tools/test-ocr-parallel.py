@@ -8,8 +8,10 @@ Run: python3 tools/test-ocr-parallel.py
 """
 import glob
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from unittest.mock import patch
 
@@ -51,27 +53,32 @@ def fake_ocr(psm, path=control.SHOT, dy=0):
 
 
 def main():
-    for stale in glob.glob(control.BOX + ".*") + glob.glob(control.STRIP + ".*"):
-        os.remove(stale)
+    # Private temp dir so parallel test runs sharing /tmp do not see each other's crop files.
+    d = tempfile.mkdtemp()
+    try:
+        with patch.object(control, "SHOT", os.path.join(d, "shot.png")), \
+                patch.object(control, "BOX", os.path.join(d, "box.png")), \
+                patch.object(control, "STRIP", os.path.join(d, "strip.png")), \
+                patch.object(control, "_run", side_effect=fake_run), \
+                patch.object(control, "_size", return_value=(1600, 1600)), \
+                patch.object(control.shutil, "which", return_value="/usr/bin/x"), \
+                patch.object(control, "_ocr", side_effect=fake_ocr):
+            t0 = time.time()
+            control.read_screen()
+            elapsed = time.time() - t0
 
-    with patch.object(control, "_run", side_effect=fake_run), \
-            patch.object(control, "_size", return_value=(1600, 1600)), \
-            patch.object(control.shutil, "which", return_value="/usr/bin/x"), \
-            patch.object(control, "_ocr", side_effect=fake_ocr):
-        t0 = time.time()
-        control.read_screen()
-        elapsed = time.time() - t0
+        serial_floor = DELAY * (N_BOXES + N_STRIPS + 3)
+        limit = serial_floor / 2
+        check(f"read_screen finishes in {elapsed:.2f}s (serial would take about {serial_floor:.1f}s, limit {limit:.1f}s)",
+              elapsed < limit, f"{elapsed:.2f}s >= {limit:.2f}s")
 
-    serial_floor = DELAY * (N_BOXES + N_STRIPS + 3)
-    limit = serial_floor / 2
-    check(f"read_screen finishes in {elapsed:.2f}s (serial would take about {serial_floor:.1f}s, limit {limit:.1f}s)",
-          elapsed < limit, f"{elapsed:.2f}s >= {limit:.2f}s")
+        left = glob.glob(os.path.join(d, "box.png") + ".*") + glob.glob(os.path.join(d, "strip.png") + ".*")
+        check("no temporary crop files left behind", not left, str(left))
 
-    left = glob.glob(control.BOX + ".*") + glob.glob(control.STRIP + ".*")
-    check("no temporary crop files left behind", not left, str(left))
-
-    print("all good" if not FAILS else "FAILED: " + ", ".join(FAILS))
-    return 1 if FAILS else 0
+        print("all good" if not FAILS else "FAILED: " + ", ".join(FAILS))
+        return 1 if FAILS else 0
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 if __name__ == "__main__":
