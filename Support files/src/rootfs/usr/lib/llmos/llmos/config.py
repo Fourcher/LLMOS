@@ -9,12 +9,15 @@ Two stores:
                                         encrypted vault when the user enabled one.
 """
 import contextlib
+import copy
 import errno
 import fcntl
 import json
 import os
+import sys
 import tempfile
 import threading
+import time
 
 ETC = os.environ.get("LLMOS_ETC", "/etc/llmos")
 LIB = os.environ.get("LLMOS_LIB", "/var/lib/llmos")
@@ -264,6 +267,54 @@ def _merge(defaults, value):
     return out
 
 
+_good_settings = None   # the last settings object this process parsed or wrote cleanly; the fallback when the file is corrupt
+
+
+def _read_settings(path):
+    """(state, value, raw). state is "missing" (no file), "ok" (value is the parsed JSON object) or "bad" (the file
+    exists but is empty, not JSON, not a JSON object, or unreadable). raw is the file's text when it could be read."""
+    try:
+        with open(path, "rb") as f:
+            raw = f.read().decode("utf-8", errors="replace")
+    except FileNotFoundError:
+        return "missing", None, None
+    except OSError:
+        return "bad", None, None
+    try:
+        val = json.loads(raw)
+    except ValueError:
+        return "bad", None, raw
+    if not isinstance(val, dict):
+        return "bad", None, raw
+    return "ok", val, raw
+
+
+def _keep_broken(raw):
+    """Keep a copy of a settings file that does not parse, beside it as settings.json.broken-<YYYYmmdd-HHMMSS>, so
+    the owner's words are not lost when the next change is written. The copy is written directly while ETC is
+    writable. A non-root desk cannot write there, and rootd's write_setting_file takes only settings.json and
+    conduct.txt, so there the copy is logged and skipped."""
+    if raw is None:
+        print("llmos: settings.json is unreadable; no copy kept", file=sys.stderr)
+        return
+    if os.path.isdir(ETC):
+        writable = os.access(ETC, os.W_OK)
+    else:
+        writable = os.access(os.path.dirname(ETC) or ".", os.W_OK)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    name = f"settings.json.broken-{stamp}"
+    n = 1
+    while os.path.exists(os.path.join(ETC, name)):
+        n += 1
+        name = f"settings.json.broken-{stamp}-{n}"
+    if not writable:
+        print(f"llmos: settings.json does not parse; copy not kept (ETC not writable here, would be {name})",
+              file=sys.stderr)
+        return
+    _write_etc(name, raw)
+    print(f"llmos: settings.json does not parse; copy kept as {name}", file=sys.stderr)
+
+
 class Settings:
     """Public settings, re-read on every access so all consoles and the
     scheduler agree without any IPC."""
@@ -282,7 +333,11 @@ class Settings:
         cache_key, cached = Settings._cache
         if key is not None and key == cache_key and cached is not None:
             return cached
-        val = _merge(PUBLIC_DEFAULTS, load_json(self.path, {}))
+        global _good_settings
+        state, loaded, _raw = _read_settings(self.path)
+        if state == "ok":
+            _good_settings = copy.deepcopy(loaded)
+        val = _merge(PUBLIC_DEFAULTS, loaded if state == "ok" else {})
         Settings._cache = (key, val)
         return val
 
@@ -295,13 +350,23 @@ class Settings:
         return cur
 
     def set(self, key, value):
-        cur = load_json(self.path, {})
+        global _good_settings
+        state, loaded, raw = _read_settings(self.path)
+        if state == "ok":
+            cur = loaded
+        elif state == "missing":
+            cur = {}
+        else:
+            # exists but does not parse: keep its text, then build on the last good values this process had
+            _keep_broken(raw)
+            cur = copy.deepcopy(_good_settings) if _good_settings is not None else {}
         node = cur
         parts = key.split(".")
         for part in parts[:-1]:
             node = node.setdefault(part, {})
         node[parts[-1]] = value
         _write_etc("settings.json", json.dumps(cur, ensure_ascii=False, indent=1))
+        _good_settings = copy.deepcopy(cur)
 
 
 settings = Settings()
