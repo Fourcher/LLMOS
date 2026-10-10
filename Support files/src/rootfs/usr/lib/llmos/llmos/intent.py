@@ -925,7 +925,7 @@ def _device(text):
 
 
 def _files(text):
-    m = re.match(r"^\s*(?:please\s+)?(?:find|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:file|document|thing)s?\s+(?:that\s+)?i\s+(?:was|were|have\s+been|'ve\s+been|was\s+just)\s+working\s+on(?:\s+(?:yesterday|today|last\s+night|earlier|before))?\s*[?.!]?\s*$"
+    m = re.match(r"^\s*(?:please\s+)?(?:find|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:file|document|thing)s?\s+(?:that\s+)?i(?:\s+(?:was\s+just|was|were|have\s+been)|['’]ve\s+been)\s+working\s+on(?:\s+(?:yesterday|today|last\s+night|earlier|before))?\s*[?.!]?\s*$"
                  r"|^\s*(?:please\s+)?(?:show|open|list)\s+(?:me\s+)?(?:my\s+)?(?:recent|latest|newest)\s+(?:files|documents)\s*[?.!]?\s*$", text, re.I)
     if m:
         return ("show_files", {"path": "~", "sort": "date"})
