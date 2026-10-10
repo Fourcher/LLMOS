@@ -438,13 +438,15 @@ def set_timezone(name, chosen_by_user=True):
     return zone
 
 
-def sync_time():
+def sync_time(automatic=False):
     """Set the clock from the network once (busybox ntpd), when the owner allows the internet. A PC's clock is
-    often off after another OS used it, and a wrong clock breaks every secure web site."""
+    often off after another OS used it, and a wrong clock breaks every secure web site.
+    automatic=True (the boot timer) only runs when internet is "yes"; the owner's own ask runs unless "no"."""
     import shutil
     import subprocess
     from . import config as _c
-    if _c.settings.get("internet", "yes") == "no" or not shutil.which("ntpd"):
+    internet = _c.settings.get("internet", "yes")
+    if (internet != "yes" if automatic else internet == "no") or not shutil.which("ntpd"):
         return False
     try:
         p = subprocess.run(["ntpd", "-q", "-n", "-p", "pool.ntp.org"], capture_output=True, timeout=30)
