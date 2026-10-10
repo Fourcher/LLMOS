@@ -969,7 +969,7 @@ def _files(text):
                  r"(?:\s+(?:in|with|using|on)\s+(?:firefox|the\s+browser|my\s+browser|a\s+browser|the\s+web\s+browser))?\s*[.!]?\s*$", text, re.I)
     if m:
         return ("browse", {"site": m.group("u").rstrip(".,;")})
-    m = re.match(r"^\s*(?:please\s+)?(?:convert|turn|save|export|make)\s+(?P<p>(?:~|/)\S.*?|this|that|it)\s+(?:to|into|as)\s+(?:a\s+)?pdf\s*[.!]?\s*$", text, re.I)
+    m = re.match(r"^\s*(?:please\s+)?(?:convert|turn|save|export|make)\s+(?P<p>(?:~|/)\S.*?|this|that|it|(?:my|the|a|this|that)?\s*(?:word\s+)?(?:doc|docx|document|file|letter|essay|report|spreadsheet|presentation|slides|resume|cv)s?)\s+(?:to|into|as)\s+(?:a\s+)?pdf\s*[.!]?\s*$", text, re.I)
     if m:
         return ("convert_to_pdf", {"path": m.group("p")}) if m.group("p")[0] in "~/" else ("which_file", {"request": text.strip()})
     m = re.match(r"^\s*(?:please\s+)?(?:connect\s+(?:to\s+)?|open\s+|sync\s+(?:with\s+)?|set\s+up\s+|use\s+)(?:my\s+)?(?P<s>google\s+drive|one\s*drive|dropbox|icloud(?:\s+drive)?)\b.*$", text, re.I)
