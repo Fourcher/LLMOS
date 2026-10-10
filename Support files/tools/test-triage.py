@@ -126,6 +126,24 @@ def main():
         with open(queue, "rb") as f:
             data2 = f.read()
         check("queue-dedupe-nothing-new", data2 == data1, repr(data2[len(data1):]))
+
+        # Signature containing '|' must not add fields; line keeps 5 parts; <=100 chars.
+        bdir = os.path.join(tmp, "bund")
+        sig = "Crash: a | b | " + "word " * 40
+        entry = {"hash": "abc123", "label": "real", "score": 2.0, "runs": 2,
+                 "task_ids": ["t9"], "signature": sig, "examples": [{"step_failed": "s1"}]}
+        os.makedirs(os.path.join(bdir, "abc123"))
+        with open(os.path.join(bdir, "abc123", "rerun.txt"), "w") as f:
+            f.write("python3 tools/realrun.py suite.json --ids t9\n")
+        blk = triage.queue_block([entry], bdir, "suite.json", "",
+                                 now=triage.datetime.datetime(2026, 1, 2, 3, 4))
+        blines = [l for l in blk.splitlines() if l.startswith("- [open] (reliability) realrun cluster ")]
+        parts = blines[0].split(" | ") if blines else []
+        check("queue-line-5-parts", len(parts) == 5, repr(blines))
+        check("queue-sig-no-pipe-and-short", parts and "|" not in parts[0]
+              and "…" in parts[0] and len(triage.queue_sig(sig)) <= 100,
+              repr(triage.queue_sig(sig)))
+        check("queue-header-singular", "## Triage 2026-01-02 03:04 (1 cluster)\n" in blk, repr(blk[:120]))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

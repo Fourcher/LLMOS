@@ -111,6 +111,19 @@ def load_records(run_dirs):
     return recs
 
 
+def queue_sig(sig, limit=100):
+    """Signature as shown on a queue line: no '|' (it is the field separator),
+    at most `limit` chars, cut at a word boundary with '…' when shortened."""
+    s = sig.replace("|", " / ")
+    if len(s) <= limit:
+        return s
+    cut = s[:limit - 1]
+    sp = cut.rfind(" ")
+    if sp > 0:
+        cut = cut[:sp]
+    return cut.rstrip() + "…"
+
+
 def queue_block(ranked, outdir, suite, existing, now=None):
     """Return the text to append to a queue file, or "" if no new clusters.
 
@@ -130,7 +143,7 @@ def queue_block(ranked, outdir, suite, existing, now=None):
         lines.append("- [open] (reliability) realrun cluster %s (%s, score %.2f, runs %d): %s — %s"
                      " | role: probe | files: read only | bundle: %s/%s | test: %s" % (
                          h, e["label"], e["score"], e["runs"], ",".join(sorted(e["task_ids"])),
-                         e["signature"][:100], outdir, h, rerun))
+                         queue_sig(e["signature"]), outdir, h, rerun))
         lines.append("  - draft FIX spec: reproduce with the rerun command; read %s/%s/step-trace.json;"
                      " the failing step is %s; expected per task file; fix the smallest source change"
                      " that makes the rerun PASS twice." % (outdir, h, step))
@@ -138,7 +151,8 @@ def queue_block(ranked, outdir, suite, existing, now=None):
     if not count:
         return ""
     now = now or datetime.datetime.now()
-    header = "## Triage %s (%d clusters)" % (now.strftime("%Y-%m-%d %H:%M"), count)
+    noun = "cluster" if count == 1 else "clusters"
+    header = "## Triage %s (%d %s)" % (now.strftime("%Y-%m-%d %H:%M"), count, noun)
     return "\n" + header + "\n" + "\n".join(lines) + "\n"
 
 
