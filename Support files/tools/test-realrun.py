@@ -206,6 +206,66 @@ def main():
               repr(page_summary.get("path")))
         shutil.rmtree(say_suite_dir, ignore_errors=True)
         print("ok path say summary %s pass=%s" % (say_summary["path"], say_summary["pass"]))
+
+        # 9. --repeat: scripted outcomes per repeat (True = reply right, False = reply wrong)
+        def scripted(outcomes):
+            cur = {"vm": make_vm(after="Canberra" if outcomes[0] else "Wrong")}
+            calls = []
+
+            def run_in_vm(cmd):
+                return cur["vm"](cmd)
+
+            def fresh():
+                calls.append(1)
+                i = len(calls)
+                cur["vm"] = make_vm(after="Canberra" if outcomes[i] else "Wrong")
+            return run_in_vm, fresh, calls
+
+        def one_task_suite(tid):
+            p = os.path.join(outroot, "suite-%s.json" % tid)
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump({"tasks": [reply_task(tid)]}, f)
+            return p
+
+        rep_dir = os.path.join(outroot, "rep-flaky")
+        run_in_vm, fresh, calls = scripted([True, False, True])
+        s = realrun.run_suite(one_task_suite("rep-flaky"), FakeUser(), run_in_vm,
+                              outdir=rep_dir, repeat=3, fresh=fresh)
+        row = s["tasks"][0]
+        check("flaky 2 of 3 -> rate 0.67", row["rate"] == 0.67 and row["passes"] == 2 and row["runs"] == 3,
+              json.dumps(row))
+        check("flaky label", row["label"] == "flaky", repr(row["label"]))
+        check("summary repeat field", s["repeat"] == 3, repr(s.get("repeat")))
+        check("fresh called repeat-1 times (flaky)", len(calls) == 2, repr(len(calls)))
+        check("repeat writes r{r}/<id>.json",
+              all(os.path.exists(os.path.join(rep_dir, "r%d" % r, "rep-flaky.json")) for r in (1, 2, 3)))
+
+        run_in_vm, fresh, calls = scripted([True, True, True])
+        s = realrun.run_suite(one_task_suite("rep-pass"), FakeUser(), run_in_vm,
+                              outdir=os.path.join(outroot, "rep-pass"), repeat=3, fresh=fresh)
+        row = s["tasks"][0]
+        check("3 of 3 -> pass", row["label"] == "pass" and row["rate"] == 1.0, json.dumps(row))
+        check("fresh called repeat-1 times (pass)", len(calls) == 2, repr(len(calls)))
+
+        run_in_vm, fresh, calls = scripted([False, False, False])
+        s = realrun.run_suite(one_task_suite("rep-fail"), FakeUser(), run_in_vm,
+                              outdir=os.path.join(outroot, "rep-fail"), repeat=3, fresh=fresh)
+        row = s["tasks"][0]
+        check("0 of 3 -> fail", row["label"] == "fail" and row["rate"] == 0.0 and row["passes"] == 0,
+              json.dumps(row))
+        check("fresh called repeat-1 times (fail)", len(calls) == 2, repr(len(calls)))
+
+        # repeat=1: flat layout, no fresh call, no repeat dirs
+        one_dir = os.path.join(outroot, "rep-one")
+        run_in_vm, fresh, calls = scripted([True])
+        s = realrun.run_suite(one_task_suite("rep-one"), FakeUser(), run_in_vm, outdir=one_dir,
+                              fresh=fresh)
+        check("repeat=1 writes {outdir}/<id>.json",
+              os.path.exists(os.path.join(one_dir, "rep-one.json"))
+              and not os.path.exists(os.path.join(one_dir, "r1")))
+        check("repeat=1 never calls fresh", calls == [] and s["repeat"] == 1 and s["tasks"][0]["label"] == "pass",
+              repr((calls, s.get("repeat"))))
+        print("ok repeat=1 summary label=%s" % s["tasks"][0]["label"])
     finally:
         shutil.rmtree(outroot, ignore_errors=True)
 
