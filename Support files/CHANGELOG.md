@@ -4,6 +4,15 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.7.4
+- "What's on my screen" lists the open windows at once.
+- "What's plugged into my computer" lists USB devices, cameras, drives and sound.
+- "Show my biggest files" and "what's taking up space" are answered without the model.
+- "Change the volume up" works.
+- Deleting something that isn't there says so instead of asking first.
+- A click on something not on the screen says so.
+- The speed sweep now records the follow-up answer.
+
 ## 1.7.3
 - The first-run wizard starts on "On its own" (hands-off).
 - Tool errors and desk messages are in plain words.
