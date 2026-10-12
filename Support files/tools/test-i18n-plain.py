@@ -91,6 +91,41 @@ for k in PAGE_USED:
     check(k in page_keys, f"desk.py _PAGE_KEYS contains {k}")
     check(k in en, f"i18n EN contains {k}")
 
+# desk.js also builds keys from template literals (the wizard quiz), which the regex above cannot see. The
+# expansions are hard-coded here from the source named in each comment; each anchor must still appear verbatim in
+# desk.js, and each array the expansion depends on must still read the same, so the list cannot drift silently.
+QN = {"autonomy": 3, "internet": 3, "brain": 3, "guidance": 2, "motion": 3}   # desk.js line 314: const Q = [...] (k, n)
+DESK_JS_ANCHORS = [
+    'const Q = [{ k: "autonomy", n: 3 }, { k: "internet", n: 3 }, { k: "brain", n: 3 }, { k: "capability", n: 3 }, { k: "guidance", n: 2 }, { k: "motion", n: 3 }];',
+    'const TIER = ["fast", "balanced", "capable"];',                                  # desk.js line 315
+    '["hands-off", "balanced", "hands-on"]', '["yes", "ask", "no"]', '["local", "ask", "cloud"]',
+    '["owner", "standard"]', '["off", "reduced", "full"]',                             # desk.js line 450-454 pick orders
+    "t(`q_capability_${TIER.indexOf(x.tier)}_s`)",                                    # desk.js line 346
+    "t(`q_capability_${TIER.indexOf(r.tier)}_s`)",                                    # desk.js line 350
+    "t(`q_${q.k}_${i}_s`)",                                                           # desk.js line 353
+    "t(`q_${q.k}_${cur}`)",                                                           # desk.js line 355
+    "t(`q_motion_${rec().motion}_s`)",                                                # desk.js line 356
+    "t(`q_${k}_${i}_s`)",                                                             # desk.js line 450
+]
+for anchor in DESK_JS_ANCHORS:
+    check(anchor in desk_js, f"desk.js still contains {anchor[:60]}")
+TEMPLATE_KEYS = sorted(set(
+    [f"q_capability_{i}_s" for i in range(3)]                                         # line 346, 350: TIER.indexOf -> 0..2
+    + [f"q_{k}_{i}_s" for k, n in QN.items() for i in range(n)]                        # line 353, 450: q_${k}_${i}_s over Q / pick orders
+    + [f"q_{k}_{i}" for k, n in QN.items() for i in range(n)]                          # line 355: q_${q.k}_${cur} (no _s) over Q
+    + ["q_motion_1_s", "q_motion_2_s"]                                                # line 356: desk.py _recommend motion is 2 or 1
+))
+# keys the expansion produces that desk.py _PAGE_KEYS or the EN block lack; they are shown as gaps, not hidden.
+# A key listed here must still be missing (the check below fails when a gap is fixed, so the entry gets removed).
+KNOWN_MISSING = set()
+check(len(TEMPLATE_KEYS) == 31, f"desk.js template-literal keys expanded ({len(TEMPLATE_KEYS)})")
+for k in TEMPLATE_KEYS:
+    if k in KNOWN_MISSING:
+        check(k not in page_keys or k not in en, f"KNOWN_MISSING {k} is still missing (remove it from KNOWN_MISSING)")
+    else:
+        check(k in page_keys, f"desk.py _PAGE_KEYS contains template key {k}")
+        check(k in en, f"i18n EN contains template key {k}")
+
 # the importable module still loads and gives the new text
 sys.path.insert(0, ROOTFS)
 import llmos.i18n as i18n  # noqa: E402
