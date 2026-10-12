@@ -53,7 +53,7 @@ check(old_src.returncode == 0, f"reference {REF}:i18n.py readable")
 old = blocks_from_source(old_src.stdout) if old_src.returncode == 0 else {}
 
 check(sorted(new) == sorted(BLOCKS), "all six language blocks present")
-NEW_KEYS = {"no_model", "d_maximize", "d_window"}  # keys added to every block (no assistant set up yet; window controls)
+NEW_KEYS = {"no_model", "d_maximize", "d_window", "d_sure", "d_slow_turn"}  # keys added to every block (no assistant set up yet; window controls; sure-press and slow-turn notices)
 for b in BLOCKS:
     if b in old:
         check(set(new[b]) == set(old[b]) | NEW_KEYS, f"{b}: key set = {REF} + no_model ({len(new[b])} keys)")
@@ -77,7 +77,7 @@ for key, text in NEW.items():
             ph_b = sorted(PLACEHOLDER.findall(new[b][key]))
             check(ph_en == ph_b, f"{b} {key}: placeholders match English {ph_en}")
 
-# every t("...") key the page uses for the new labels must be in desk.py _PAGE_KEYS, or the page shows the raw key
+# every t("...") key desk.js uses must be in desk.py _PAGE_KEYS and present in the EN block, or the page shows the raw key
 DESK_JS = os.path.join(HERE, "..", "src/rootfs/usr/share/llmos/desk/desk.js")
 desk_js = open(DESK_JS, encoding="utf-8").read()
 desk_py = ast.parse(open(os.path.join(LLMOS_DIR, "desk.py"), encoding="utf-8").read())
@@ -85,10 +85,11 @@ page_keys = set()
 for node in desk_py.body:
     if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_PAGE_KEYS" for t in node.targets):
         page_keys = set(ast.literal_eval(node.value))
-PAGE_USED = {"d_maximize", "d_window", "q_autonomy_0_s", "q_autonomy_1_s", "q_autonomy_2_s"}
-for k in sorted(PAGE_USED):
-    check(f't("{k}")' in desk_js, f"desk.js uses t(\"{k}\")")
+PAGE_USED = sorted(set(re.findall(r'(?<![\w.])t\("([a-z][\w-]*)"\s*[,)]', desk_js)))
+check(len(PAGE_USED) > 50, f"desk.js t() keys found ({len(PAGE_USED)})")
+for k in PAGE_USED:
     check(k in page_keys, f"desk.py _PAGE_KEYS contains {k}")
+    check(k in en, f"i18n EN contains {k}")
 
 # the importable module still loads and gives the new text
 sys.path.insert(0, ROOTFS)
