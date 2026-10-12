@@ -3,6 +3,7 @@ user's chosen autonomy level."""
 import json
 import os
 import re
+import threading
 import time
 
 from . import ui, config, i18n, intent, llm, mail, store, tools
@@ -370,7 +371,31 @@ def build_messages(ctx, user_text, history, private=False):
     return msgs
 
 
+_warm_done = threading.Event()   # set when the warm-up has finished (success, failure or exception)
+_warm_started = False            # a warm-up has begun in this process
+WARM_WAIT = 60                   # seconds a model turn waits for a warm-up still in progress
+
+
 def warm_up():
+    """Run the warm-up (see _warm_prefix) and mark it done for turns waiting on it, whatever happens."""
+    global _warm_started
+    _warm_done.clear()
+    _warm_started = True
+    try:
+        _warm_prefix()
+    finally:
+        _warm_done.set()
+
+
+def _wait_warm():
+    """A turn sent while the warm-up is still prefilling would queue behind it on the one model slot and
+    prefill the prefix a second time, so the model call waits for it (at most WARM_WAIT). No warm-up
+    started, or it is done: no wait."""
+    if _warm_started and not _warm_done.is_set():
+        _warm_done.wait(WARM_WAIT)
+
+
+def _warm_prefix():
     """Process the static prefix (system prompt + tools) once so the first
     real request doesn't pay for it. Called in the background at startup.
     The prefix must match the first real turn exactly: the context size (which picks the tool list) is waited for
@@ -798,6 +823,8 @@ def run(ctx, user_text, history):
         for step in range(MAX_STEPS):
             if getattr(ctx, "cancel", None) is not None and ctx.cancel.is_set():
                 raise Cancelled()
+            if where != "cloud":
+                _wait_warm()          # the local model slot: let a warm-up in progress finish first
             stream = ctx.new_stream()
             est = expect_seconds(where, fresh)
             if est:
