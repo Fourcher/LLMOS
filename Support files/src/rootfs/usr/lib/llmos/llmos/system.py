@@ -497,7 +497,7 @@ def mount_dev(dev):
 def umount_mp(mountpoint):
     """Unmount a /media/<name> mount point through rootd's umount_mp verb (root runs the same checks in-process).
     Returns (rc, out, err). A mount point outside /media/<name> is refused as (1, "", ...)."""
-    if not isinstance(mountpoint, str) or rootd.MEDIA_MP_RE.fullmatch(mountpoint) is None or mountpoint.rsplit("/", 1)[1] in (".", ".."):
+    if not rootd.media_mp_ok(mountpoint):
         return 1, "", "not a drive folder under /media"
     try:
         rc, out, err = json.loads(rootd_client.call("umount_mp", mountpoint=mountpoint, _timeout=40))

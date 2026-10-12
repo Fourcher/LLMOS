@@ -205,7 +205,7 @@ try:
             check(f"public mount_dev {dev!r} rejected", False, "accepted")
         except ValueError:
             check(f"public mount_dev {dev!r} rejected", True)
-    for mp in ("/etc", "/media/../etc", "/media/a b", "/media/.", "/media/..", "/media/", "/media/usb2\n", "/media/sdb1/x", None):
+    for mp in ("/etc", "/media/../etc", "/media/a b", "/media/.", "/media/..", "/media/", "/media/usb2\n", "/run/media", "/run/media/alice/../../etc", None):
         r = system.umount_mp(mp)
         check(f"public umount_mp {mp!r} refused", r[0] == 1 and r[1] == "", r)
     check("bad input never reaches rootd or subprocess", rootd_calls == [] and run_calls == [], (rootd_calls, run_calls))
@@ -331,6 +331,113 @@ try:
     check("syspanels calls system.mount_dev and system.umount_mp",
           "system.mount_dev(" in sp_src and "system.umount_mp(" in sp_src)
     check("syspanels keeps udisks power-off", '"power-off"' in sp_src)
+
+    # ---- 9. /run/media drives: mount table decoding and umount_mp checks ----
+    # /proc/mounts writes a space as \040. The fixture stores the escaped text, as the kernel does.
+    DRIVE_MOUNTS = (DEFAULT_MOUNTS
+                    + "/dev/sdb1 /run/media/alice/My\\040USB vfat rw 0 0\n"
+                    + "/dev/mapper/root /media/alice/x ext4 rw 0 0\n"
+                    + "/dev/sdc1 /run/media/alice/bad\\012name vfat rw 0 0\n"
+                    + "/dev/sdc1 /run/media vfat rw 0 0\n"
+                    + "/dev/sdc1 /media vfat rw 0 0\n"
+                    + "/dev/sdd1 /run/media/alice/Dot..x vfat rw 0 0\n")
+    set_mounts(DRIVE_MOUNTS, "drive")
+    as_uid(0)
+    reset()
+    check("mount table decodes \\040 to a space",
+          ("/dev/sdb1", "/run/media/alice/My USB") in rootd._mounts(), rootd._mounts())
+    check("mount table decodes \\012 to a newline",
+          ("/dev/sdc1", "/run/media/alice/bad\nname") in rootd._mounts(), rootd._mounts())
+
+    reset()
+    reply = verb("umount_mp", {"mountpoint": "/run/media/alice/My USB"})
+    check("verb umounts /run/media/alice/My USB from /dev/sdb1",
+          reply.get("ok") is True and run_calls[-1][0] == ["umount", "/run/media/alice/My USB"], (reply, run_calls))
+
+    reset()
+    reply = verb("umount_mp", {"mountpoint": "/run/media/alice/Dot..x"})
+    check("verb umounts a label holding .. inside a name",
+          reply.get("ok") is True and run_calls[-1][0] == ["umount", "/run/media/alice/Dot..x"], (reply, run_calls))
+
+    adversarial_mp = [
+        "/media/alice/x",                    # source is /dev/mapper/root, not a removable partition
+        "/run/media/alice/../../etc",        # traversal
+        "/run/media/alice/..",               # dot-dot as the label
+        "/run/media/alice/.",                # dot as the label
+        "/run/media",                        # bare folder
+        "/media",                            # bare folder
+        "/run/media/",                       # trailing slash
+        "/",                                 # the system root
+        "/run/media/alice/bad\nname",        # label with a newline (fullmatch, not $)
+        "/run/media/alice/My\\040USB",       # the raw escaped text is not the decoded name
+        "/run/media/alice/Other",            # not in the mount table
+        "/run/media/alice/a/b/c",            # three levels
+        "/run/media/alice/" + "a" * 65,      # label too long
+        "/run/media/alice/bad_mp!",          # character outside the allowed set
+    ]
+    for mp in adversarial_mp:
+        reset()
+        reply = verb("umount_mp", {"mountpoint": mp})
+        check(f"verb rejects /run/media mountpoint {mp!r}", reply.get("ok") is False and "Traceback" not in reply.get("error", ""), reply)
+        check(f"verb /run/media mountpoint {mp!r} runs nothing", run_calls == [], run_calls)
+
+    # Mounted, but the source is not a removable partition: refused, nothing run.
+    reset()
+    reply = verb("umount_mp", {"mountpoint": "/media/alice/x"})
+    check("verb refuses /media/alice/x from /dev/mapper/root", reply.get("ok") is False and run_calls == [], reply)
+    check("umount_mp refuses /media/alice/x from /dev/mapper/root", "not a drive" in reply.get("error", ""), reply)
+    check("media_mp_ok accepts /run/media/alice/My USB", rootd.media_mp_ok("/run/media/alice/My USB") is True)
+    check("media_mp_ok rejects /media/alice/..", rootd.media_mp_ok("/media/alice/..") is False)
+
+    # Public helper: the same shape rule, so a valid /run/media name reaches rootd.
+    as_uid(1000)
+    reset()
+    rootd_reply.update(value=json.dumps([0, "", ""]))
+    r = system.umount_mp("/run/media/alice/My USB")
+    check("public umount_mp /run/media/alice/My USB calls rootd",
+          rootd_calls == [("umount_mp", 40, {"mountpoint": "/run/media/alice/My USB"})] and r == (0, "", ""), (rootd_calls, r))
+    reset()
+    r = system.umount_mp("/run/media/alice/../../etc")
+    check("public umount_mp refuses traversal before rootd", r[0] == 1 and rootd_calls == [], (r, rootd_calls))
+    rootd_reply.update(value=None)
+
+    # ---- 10. syspanels eject: udisksctl unmount first, then system.umount_mp ----
+    real_removable = syspanels.removable
+    EJECT_PARTS = [{"path": "/dev/sdb1", "disk": "/dev/sdb", "mountpoint": "/run/media/alice/My USB", "label": "", "size": "", "fstype": "vfat"},
+                   {"path": "/dev/sdb2", "disk": "/dev/sdb", "mountpoint": "", "label": "", "size": "", "fstype": "vfat"}]
+    syspanels.removable = lambda: EJECT_PARTS
+    system.shutil.which = lambda name: "/usr/bin/" + name
+    try:
+        as_uid(1000)
+        reset()
+        run_result.update(rc=0, out="", err="")
+        r = syspanels.eject("/dev/sdb1")
+        unmounts = [c for c in run_calls if c[0][:2] == ["udisksctl", "unmount"]]
+        check("eject udisks unmount argv",
+              unmounts and unmounts[0][0] == ["udisksctl", "unmount", "-b", "/dev/sdb1", "--no-user-interaction"]
+              and unmounts[0][1].get("timeout") == 30, run_calls)
+        check("eject udisks success -> no rootd call", rootd_calls == [], rootd_calls)
+        check("eject udisks success -> safe to remove", r == (True, "safe to remove"), r)
+
+        reset()
+        run_result.update(rc=1, out="", err="udisks busy")
+        rootd_reply.update(value=json.dumps([0, "", ""]))
+        r = syspanels.eject("/dev/sdb1")
+        check("eject falls back to umount_mp after udisks fails",
+              rootd_calls == [("umount_mp", 40, {"mountpoint": "/run/media/alice/My USB"})], rootd_calls)
+        check("eject fallback success -> safe to remove", r == (True, "safe to remove"), r)
+
+        reset()
+        run_result.update(rc=1, out="", err="udisks busy")
+        rootd_reply.update(value=None, **{"raise": rootd_client.RootdError("bad args: mountpoint")})
+        r = syspanels.eject("/dev/sdb1")
+        check("eject both fail -> still in use",
+              r[0] is False and r[1].startswith("still in use"), r)
+        rootd_reply.update(**{"raise": None})
+        run_result.update(rc=0, out="", err="")
+    finally:
+        syspanels.removable = real_removable
+        system.shutil.which = real_which
 
 finally:
     subprocess.run = real_run

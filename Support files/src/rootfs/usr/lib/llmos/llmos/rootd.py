@@ -335,19 +335,33 @@ def radio(args):
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
-# Drives (USB sticks): device nodes only, and mount points only under /media/<name>.
+# Drives (USB sticks): device nodes only. Mount points: one or two levels under /media or /run/media (udisks uses
+# /run/media/<user>/<label>; the label level may hold spaces). Never a bare /media or /run/media, never . or .. segments.
 MOUNT_DEV_RE = re.compile(r"/dev/(?:sd[a-z]{1,2}[0-9]{1,3}|nvme[0-9]n[0-9]p[0-9]{1,3}|mmcblk[0-9]p[0-9]{1,3})")
-MEDIA_MP_RE = re.compile(r"/media/[A-Za-z0-9_.-]{1,64}")
+MEDIA_MP_RE = re.compile(r"/(?:run/)?media/[A-Za-z0-9_.-]{1,64}(?:/[A-Za-z0-9_. -]{1,64})?")
+_PROC_ESCAPE_RE = re.compile(r"\\([0-7]{3})")
+
+
+def media_mp_ok(mp):
+    """True when mp is a drive folder under /media or /run/media (one or two levels, no . or .. segment)."""
+    if not isinstance(mp, str) or MEDIA_MP_RE.fullmatch(mp) is None:
+        return False
+    return all(seg not in (".", "..") for seg in mp.split("/")[1:])
+
+
+def _proc_unescape(text):
+    """/proc/mounts writes space, tab, newline and backslash as \\040 \\011 \\012 \\134. Undo that."""
+    return _PROC_ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 8)), text)
 
 
 def _mounts():
-    """[(source, mountpoint)] from the kernel's mount table."""
+    """[(source, mountpoint)] from the kernel's mount table, with the octal escapes decoded."""
     out = []
     with open(PROC_MOUNTS, encoding="utf-8") as f:
         for line in f:
             parts = line.split()
             if len(parts) >= 2:
-                out.append((parts[0], parts[1]))
+                out.append((_proc_unescape(parts[0]), _proc_unescape(parts[1])))
     return out
 
 
@@ -386,10 +400,13 @@ def umount_mp(args):
     if set(args) - {"mountpoint"}:
         raise ValueError("bad args: unexpected argument")
     mp = args.get("mountpoint")
-    if not isinstance(mp, str) or MEDIA_MP_RE.fullmatch(mp) is None or mp.rsplit("/", 1)[1] in (".", ".."):
+    if not media_mp_ok(mp):
         raise ValueError("bad args: mountpoint")
-    if not any(m == mp for _, m in _mounts()):
+    sources = [src for src, m in _mounts() if m == mp]
+    if not sources:
         raise ValueError("bad args: mountpoint is not mounted")
+    if any(MOUNT_DEV_RE.fullmatch(src) is None for src in sources):
+        raise ValueError("bad args: mountpoint is not a drive")
     from . import system
     rc, out, err = system._umount_root(mp)
     return json.dumps([rc, out[-20000:], err[-20000:]])

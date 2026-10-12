@@ -184,7 +184,12 @@ def eject(dev):
     busy = []
     for x in removable():
         if x["disk"] == disk and x["mountpoint"]:
-            rc, _, err = system.umount_mp(x["mountpoint"])
+            # udisks mounted it (under /run/media or /media): let udisks unmount it first, then fall back.
+            rc = 1
+            if shutil.which("udisksctl"):
+                rc, _, _ = _run(["udisksctl", "unmount", "-b", x["path"], "--no-user-interaction"], 30)
+            if rc:
+                rc, _, _ = system.umount_mp(x["mountpoint"])
             if rc:
                 busy.append(x["mountpoint"])
     if busy:
