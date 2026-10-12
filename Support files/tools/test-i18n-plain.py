@@ -53,12 +53,12 @@ check(old_src.returncode == 0, f"reference {REF}:i18n.py readable")
 old = blocks_from_source(old_src.stdout) if old_src.returncode == 0 else {}
 
 check(sorted(new) == sorted(BLOCKS), "all six language blocks present")
-NEW_KEYS = {"no_model"}  # the one key added to every block (no assistant set up yet)
+NEW_KEYS = {"no_model", "d_maximize", "d_window"}  # keys added to every block (no assistant set up yet; window controls)
 for b in BLOCKS:
     if b in old:
         check(set(new[b]) == set(old[b]) | NEW_KEYS, f"{b}: key set = {REF} + no_model ({len(new[b])} keys)")
         check(all(isinstance(new[b].get(k), str) and "{" not in new[b][k] for k in NEW_KEYS),
-              f"{b}: no_model present and has no placeholder braces")
+              f"{b}: new keys present and have no placeholder braces")
         if b != "EN":
             check({k: v for k, v in new[b].items() if k not in NEW_KEYS}
                   == {k: v for k, v in old[b].items() if k not in NEW_KEYS},
@@ -76,6 +76,19 @@ for key, text in NEW.items():
             ph_en = sorted(PLACEHOLDER.findall(en.get(key, "")))
             ph_b = sorted(PLACEHOLDER.findall(new[b][key]))
             check(ph_en == ph_b, f"{b} {key}: placeholders match English {ph_en}")
+
+# every t("...") key the page uses for the new labels must be in desk.py _PAGE_KEYS, or the page shows the raw key
+DESK_JS = os.path.join(HERE, "..", "src/rootfs/usr/share/llmos/desk/desk.js")
+desk_js = open(DESK_JS, encoding="utf-8").read()
+desk_py = ast.parse(open(os.path.join(LLMOS_DIR, "desk.py"), encoding="utf-8").read())
+page_keys = set()
+for node in desk_py.body:
+    if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_PAGE_KEYS" for t in node.targets):
+        page_keys = set(ast.literal_eval(node.value))
+PAGE_USED = {"d_maximize", "d_window", "q_autonomy_0_s", "q_autonomy_1_s", "q_autonomy_2_s"}
+for k in sorted(PAGE_USED):
+    check(f't("{k}")' in desk_js, f"desk.js uses t(\"{k}\")")
+    check(k in page_keys, f"desk.py _PAGE_KEYS contains {k}")
 
 # the importable module still loads and gives the new text
 sys.path.insert(0, ROOTFS)

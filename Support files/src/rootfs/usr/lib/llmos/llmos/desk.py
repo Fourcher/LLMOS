@@ -79,7 +79,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "ask_passphrase", "ask_passphrase_again", "passphrase_mismatch", "creating_vault", "onboard_done",
               "v_hands-off", "v_balanced", "v_hands-on", "v_yes", "v_no", "v_ask", "listening", "heard",
               "no_mic", "stopped", "error", "model_down", "loading_model", "shutting_down", "restarting",
-              "allow", "d_stop", "d_history", "d_close", "d_minimize", "d_next", "d_back", "d_skip", "d_done",
+              "allow", "d_stop", "d_history", "d_close", "d_minimize", "d_maximize", "d_window", "d_next", "d_back", "d_skip", "d_done",
               "d_unlock", "d_working", "d_apps", "d_close_app", "d_conversation", "d_you", "d_dont",
               "d_other_language", "d_open", "d_pause", "d_resume", "d_volume", "d_now_playing", "d_yes_start",
               "d_no_thanks", "d_type_language", "d_keep", "d_send", "d_clear", "d_shortcuts", "d_empty",
