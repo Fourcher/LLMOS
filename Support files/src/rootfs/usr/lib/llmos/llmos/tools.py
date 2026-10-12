@@ -1684,6 +1684,8 @@ def manage_models(a, ctx):
             ctx.status(f"loading {m['name']}…")
             from . import llm
             llm.wait_ready(600)
+            if m.get("bigger_than_ram_note"):
+                return f"now using {m['name']}. {m['bigger_than_ram_note']}"
             return f"now using {m['name']}"
         if act == "remove":
             m = models.remove(mid)

@@ -241,6 +241,10 @@ def _bigger_than_ram(m, mem):
     return mem > 0 and m.get("ram_gb", 0) > mem + 0.5
 
 
+UNKNOWN_RAM_NOTE = ("I couldn't read how much memory this computer has, so I can't tell if it fits. "
+                    "If it's too big it will run from disk, slower.")
+
+
 def use(mid):
     if host_mode():
         raise ValueError(HOST_MODE_MSG)
@@ -250,10 +254,10 @@ def use(mid):
     if not os.path.exists(path_of(m)):
         raise ValueError(f"{m['name']} is not downloaded yet")
     mem = ram_gb()
-    if m.get("ram_gb", 0) > mem + 0.5:
-        if mem <= 0:
-            # memory size unknown: the refusal stays exactly as it was
-            raise ValueError(f"{m['name']} needs about {m['ram_gb']} GB of memory; this machine has {mem:.1f} GB")
+    if not mem:
+        # memory size unknown: allowed, disclosed (we cannot tell whether it fits)
+        m = dict(m, bigger_than_ram_note=UNKNOWN_RAM_NOTE)
+    elif m.get("ram_gb", 0) > mem + 0.5:
         # bigger than memory: allowed, disclosed. llama-server maps the file from disk, so it runs, much slower.
         m = dict(m, bigger_than_ram_note=f"This model is bigger than memory ({m['ram_gb']} GB vs {mem:.1f} GB). "
                                          "It will run from disk, much slower.")
