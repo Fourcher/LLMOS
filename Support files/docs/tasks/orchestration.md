@@ -72,3 +72,4 @@ Rule for every FIX spec that changes existing behaviour: open with a PROBE-sourc
 - 2026-10-10 follow-up review (24 merges after 10:30; 17 first-try; 9 follow-ups: 4 edge cases, 3 regressions, 2 other — none from missing files or tests). Two lines are now required in every FIX spec that replaces or wraps existing behaviour:
   * "Keep identical:" — the exact old timeouts, argv, owner-facing messages, return shapes and limits (from the PROBE), so the worker tests them.
   * "Adversarial inputs:" — symlinks, "..", option-like names, wrong types, stale/cached state, an already-open window — whatever applies, so VERIFY isn't the first to try them.
+- 2026-10-12: a weekly usage limit killed every worker mid-task (Oct 10 19:22 → Oct 12 15:00). On resume: check `git status` for half-written build outputs (dist/), re-dispatch each killed task from its spec, and never trust a partial dist/ — rebuild with release.sh all.
