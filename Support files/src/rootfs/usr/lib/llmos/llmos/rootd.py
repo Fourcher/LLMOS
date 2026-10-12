@@ -369,6 +369,30 @@ def _same_dev(a, b):
     return a == b or os.path.realpath(a) == os.path.realpath(b)
 
 
+# The whole disk a partition node belongs to: sda2 -> sda, nvme0n1p3 -> nvme0n1, mmcblk0p2 -> mmcblk0.
+_PART_TO_DISK_RES = (
+    re.compile(r"(/dev/sd[a-z]{1,2})[0-9]{1,3}"),
+    re.compile(r"(/dev/nvme[0-9]n[0-9]+)p[0-9]{1,3}"),
+    re.compile(r"(/dev/mmcblk[0-9]+)p[0-9]{1,3}"),
+)
+
+
+def _whole_disk(dev):
+    """The whole disk of a partition device node, or None when dev is not a partition node we know."""
+    for rx in _PART_TO_DISK_RES:
+        m = rx.fullmatch(dev)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _on_system_disk(mounts, src):
+    """True when src is on the same whole disk as the root filesystem (the "/" entry in the mount table).
+    When the root source has no comparable disk (/dev/root, overlay), this is False: nothing is refused."""
+    disk = _whole_disk(src)
+    return disk is not None and any(m == "/" and _whole_disk(s) == disk for s, m in mounts)
+
+
 def mount_dev(args):
     args = _args_dict(args)
     if set(args) - {"dev"}:
@@ -384,7 +408,7 @@ def mount_dev(args):
         raise ValueError("bad args: dev is not a block device")
     mounts = _mounts()
     mp = "/media/" + os.path.basename(dev)
-    if any(m == "/" and _same_dev(src, dev) for src, m in mounts):
+    if any(m == "/" and _same_dev(src, dev) for src, m in mounts) or _on_system_disk(mounts, dev):
         raise ValueError("bad args: dev is the system disk")
     if any(_same_dev(src, dev) for src, _ in mounts):
         raise ValueError("bad args: dev is already mounted")
@@ -402,11 +426,14 @@ def umount_mp(args):
     mp = args.get("mountpoint")
     if not media_mp_ok(mp):
         raise ValueError("bad args: mountpoint")
-    sources = [src for src, m in _mounts() if m == mp]
+    mounts = _mounts()
+    sources = [src for src, m in mounts if m == mp]
     if not sources:
         raise ValueError("bad args: mountpoint is not mounted")
     if any(MOUNT_DEV_RE.fullmatch(src) is None for src in sources):
         raise ValueError("bad args: mountpoint is not a drive")
+    if any(_on_system_disk(mounts, src) for src in sources):
+        raise ValueError("bad args: system disk")
     from . import system
     rc, out, err = system._umount_root(mp)
     return json.dumps([rc, out[-20000:], err[-20000:]])

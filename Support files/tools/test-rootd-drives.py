@@ -48,6 +48,10 @@ FAKE_MODES = {
     "/dev/sda2": stat.S_IFBLK,
     "/dev/nvme0n1p1": stat.S_IFBLK,
     "/dev/mmcblk0p1": stat.S_IFBLK,
+    "/dev/mmcblk0p2": stat.S_IFBLK,
+    "/dev/nvme0n1p2": stat.S_IFBLK,
+    "/dev/nvme0n1p5": stat.S_IFBLK,
+    "/dev/sda3": stat.S_IFBLK,
     "/dev/sdc1": stat.S_IFREG,
 }
 real_stat = os.stat
@@ -438,6 +442,47 @@ try:
     finally:
         syspanels.removable = real_removable
         system.shutil.which = real_which
+
+    # ---- 11. system disk: the whole disk of the root filesystem is refused, by both verbs ----
+    # The mount table is a temp file per case: root on one device, then the extra line under test.
+    as_uid(0)
+
+    def sysdisk_table(root_src, extra):
+        set_mounts(f"{root_src} / ext4 rw 0 0\nproc /proc proc rw 0 0\n" + extra, "sysdisk")
+
+    sysdisk_cases = [
+        # (label, root source, extra mount line, verb, args, expect accepted)
+        ("umount bind of root partition", "/dev/sda2", "/dev/sda2 /media/x ext4 rw 0 0\n", "umount_mp", {"mountpoint": "/media/x"}, False),
+        ("umount other partition of root disk", "/dev/sda2", "/dev/sda3 /media/y ext4 rw 0 0\n", "umount_mp", {"mountpoint": "/media/y"}, False),
+        ("umount stick on another disk", "/dev/sda2", "/dev/sdb1 /run/media/alice/USB vfat rw 0 0\n", "umount_mp", {"mountpoint": "/run/media/alice/USB"}, True),
+        ("umount nvme partition of root disk", "/dev/nvme0n1p2", "/dev/nvme0n1p5 /media/z ext4 rw 0 0\n", "umount_mp", {"mountpoint": "/media/z"}, False),
+        ("umount mmcblk partition of root disk", "/dev/mmcblk0p2", "/dev/mmcblk0p1 /media/boot vfat rw 0 0\n", "umount_mp", {"mountpoint": "/media/boot"}, False),
+        ("umount with root source /dev/root (unknown disk)", "/dev/root", "/dev/sda2 /media/x ext4 rw 0 0\n", "umount_mp", {"mountpoint": "/media/x"}, True),
+        ("umount with root source overlay (unknown disk)", "overlay", "/dev/sda2 /media/x ext4 rw 0 0\n", "umount_mp", {"mountpoint": "/media/x"}, True),
+        ("mount_dev other partition of root disk", "/dev/sda2", "", "mount_dev", {"dev": "/dev/sda3"}, False),
+        ("mount_dev nvme partition of root disk", "/dev/nvme0n1p2", "", "mount_dev", {"dev": "/dev/nvme0n1p5"}, False),
+        ("mount_dev mmcblk partition of root disk", "/dev/mmcblk0p2", "", "mount_dev", {"dev": "/dev/mmcblk0p1"}, False),
+        ("mount_dev stick on another disk", "/dev/sda2", "", "mount_dev", {"dev": "/dev/sdb1"}, True),
+        ("mount_dev with root source /dev/root (unknown disk)", "/dev/root", "", "mount_dev", {"dev": "/dev/sda2"}, True),
+    ]
+    for label, root_src, extra, vname, vargs, accepted in sysdisk_cases:
+        sysdisk_table(root_src, extra)
+        reset()
+        reply = verb(vname, vargs)
+        if accepted:
+            if vname == "umount_mp":
+                ran = run_calls and run_calls[-1][0] == ["umount", vargs["mountpoint"]]
+            else:
+                dev = vargs["dev"]
+                ran = run_calls and run_calls[-1][0] == ["mount", dev, "/media/" + os.path.basename(dev)]
+            check(f"sysdisk accepts: {label}", reply.get("ok") is True and bool(ran), (reply, run_calls))
+        else:
+            # umount_mp says "system disk"; mount_dev keeps its existing "dev is the system disk" reply.
+            want_error = "bad args: system disk" if vname == "umount_mp" else "bad args: dev is the system disk"
+            check(f"sysdisk refuses: {label}",
+                  reply.get("ok") is False and reply.get("error") == want_error and run_calls == [] and makedirs_calls == [],
+                  (reply, run_calls, makedirs_calls))
+    set_mounts(DEFAULT_MOUNTS, "default")
 
 finally:
     subprocess.run = real_run
