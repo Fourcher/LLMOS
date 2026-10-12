@@ -458,6 +458,54 @@ def radio(kind, on):
         return 1, "", str(e)
 
 
+def _mount_root(dev, mountpoint):
+    """Mount a drive partition at mountpoint, as root (never a shell). Makes the folder if missing.
+    Returns (returncode, stdout, stderr)."""
+    try:
+        os.makedirs(mountpoint, exist_ok=True)
+        p = subprocess.run(["mount", dev, mountpoint], capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timed out after 30 s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def _umount_root(mountpoint):
+    """Unmount one mount point, as root (never a shell). Returns (returncode, stdout, stderr)."""
+    try:
+        p = subprocess.run(["umount", mountpoint], capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        return 124, "", "timed out after 30 s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def mount_dev(dev):
+    """Mount a drive partition under /media/<name> through rootd's mount_dev verb (root runs the same checks in-process).
+    Returns (rc, out, err). A refused request gives (1, "", "") so the caller says it could not open the drive."""
+    if not isinstance(dev, str) or rootd.MOUNT_DEV_RE.fullmatch(dev) is None:
+        raise ValueError("bad drive name")
+    try:
+        rc, out, err = json.loads(rootd_client.call("mount_dev", dev=dev, _timeout=40))
+        return rc, out, err
+    except rootd_client.RootdError:
+        return 1, "", ""
+
+
+def umount_mp(mountpoint):
+    """Unmount a /media/<name> mount point through rootd's umount_mp verb (root runs the same checks in-process).
+    Returns (rc, out, err). A mount point outside /media/<name> is refused as (1, "", ...)."""
+    if not isinstance(mountpoint, str) or rootd.MEDIA_MP_RE.fullmatch(mountpoint) is None or mountpoint.rsplit("/", 1)[1] in (".", ".."):
+        return 1, "", "not a drive folder under /media"
+    try:
+        rc, out, err = json.loads(rootd_client.call("umount_mp", mountpoint=mountpoint, _timeout=40))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
 def _printer_name_ok(name):
     return isinstance(name, str) and PRINTER_NAME_RE.fullmatch(name) is not None
 

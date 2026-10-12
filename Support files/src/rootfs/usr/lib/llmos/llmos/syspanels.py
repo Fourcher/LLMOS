@@ -170,8 +170,10 @@ def mount(dev):
         if rc == 0 and m:
             return True, m.group(1)
     mp = os.path.join("/media", os.path.basename(dev))
-    os.makedirs(mp, exist_ok=True)
-    rc, out, err = _run(["mount", dev, mp], 30)
+    try:
+        rc, out, err = system.mount_dev(dev)
+    except ValueError:
+        return False, "could not open the drive"
     return (rc == 0, mp if rc == 0 else (err.strip() or "could not open the drive"))
 
 
@@ -182,7 +184,7 @@ def eject(dev):
     busy = []
     for x in removable():
         if x["disk"] == disk and x["mountpoint"]:
-            rc, _, err = _run(["umount", x["mountpoint"]], 30)
+            rc, _, err = system.umount_mp(x["mountpoint"])
             if rc:
                 busy.append(x["mountpoint"])
     if busy:

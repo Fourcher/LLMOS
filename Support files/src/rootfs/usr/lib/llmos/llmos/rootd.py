@@ -10,11 +10,13 @@ import json
 import os
 import re
 import socket
+import stat
 import tempfile
 import threading
 from datetime import datetime
 
 ZONEINFO = "/usr/share/zoneinfo"
+PROC_MOUNTS = "/proc/mounts"
 ETC_ROOT = "/"
 LOG_PATH = "/run/llmos/rootd.log"
 MAX_REQUEST = 2 * 1024 * 1024
@@ -333,6 +335,66 @@ def radio(args):
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
+# Drives (USB sticks): device nodes only, and mount points only under /media/<name>.
+MOUNT_DEV_RE = re.compile(r"/dev/(?:sd[a-z]{1,2}[0-9]{1,3}|nvme[0-9]n[0-9]p[0-9]{1,3}|mmcblk[0-9]p[0-9]{1,3})")
+MEDIA_MP_RE = re.compile(r"/media/[A-Za-z0-9_.-]{1,64}")
+
+
+def _mounts():
+    """[(source, mountpoint)] from the kernel's mount table."""
+    out = []
+    with open(PROC_MOUNTS, encoding="utf-8") as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) >= 2:
+                out.append((parts[0], parts[1]))
+    return out
+
+
+def _same_dev(a, b):
+    return a == b or os.path.realpath(a) == os.path.realpath(b)
+
+
+def mount_dev(args):
+    args = _args_dict(args)
+    if set(args) - {"dev"}:
+        raise ValueError("bad args: unexpected argument")
+    dev = args.get("dev")
+    if not isinstance(dev, str) or MOUNT_DEV_RE.fullmatch(dev) is None:
+        raise ValueError("bad args: dev")
+    try:
+        mode = os.stat(dev).st_mode
+    except OSError:
+        raise ValueError("bad args: dev is not a block device")
+    if not stat.S_ISBLK(mode):
+        raise ValueError("bad args: dev is not a block device")
+    mounts = _mounts()
+    mp = "/media/" + os.path.basename(dev)
+    if any(m == "/" and _same_dev(src, dev) for src, m in mounts):
+        raise ValueError("bad args: dev is the system disk")
+    if any(_same_dev(src, dev) for src, _ in mounts):
+        raise ValueError("bad args: dev is already mounted")
+    if any(m == mp for _, m in mounts):
+        raise ValueError("bad args: mountpoint is in use")
+    from . import system
+    rc, out, err = system._mount_root(dev, mp)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
+def umount_mp(args):
+    args = _args_dict(args)
+    if set(args) - {"mountpoint"}:
+        raise ValueError("bad args: unexpected argument")
+    mp = args.get("mountpoint")
+    if not isinstance(mp, str) or MEDIA_MP_RE.fullmatch(mp) is None or mp.rsplit("/", 1)[1] in (".", ".."):
+        raise ValueError("bad args: mountpoint")
+    if not any(m == mp for _, m in _mounts()):
+        raise ValueError("bad args: mountpoint is not mounted")
+    from . import system
+    rc, out, err = system._umount_root(mp)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
 # Printer queue names (lpadmin's -p NAME) and CUPS device addresses. A name never starts with "-" (lpadmin would
 # read it as an option), and a URI must start with a CUPS scheme and contain no whitespace.
 PRINTER_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,63}")
@@ -491,6 +553,8 @@ VERBS = {
     "apk_del": apk_del,
     "power": power,
     "radio": radio,
+    "mount_dev": mount_dev,
+    "umount_mp": umount_mp,
     "printer_add": printer_add,
     "printer_default": printer_default,
     "service": service,
