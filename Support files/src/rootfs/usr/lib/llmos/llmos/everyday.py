@@ -142,6 +142,7 @@ MATCH = re.compile(
     r"(?:bring|take|grab|wear) (?:an? )?(?:coat|jacket|jumper|sweater)\b|(?:will|is) it (?:going to )?(?:rain|snow|be (?:hot|cold|sunny|windy))|do i need an? (?:umbrella|coat|jacket)|how (?:hot|cold|warm) (?:is it|will it be)|"
     r"internet (?:working|up|down|ok|on|connected)|am i (?:online|connected)|do i have (?:the )?internet|(?:wi-?fi|network) working|are we online|"
     r"^what day (?:of the week )?(?:is|was|will be|falls on|does)\b|"
+    r"^world clock\b|^current time in\b|^(?!(?:the|my|your|our|this|that|what|what's|current|local|real|bed|lunch|next|last|day|night|good|game|show|meeting)\b)[a-z][a-z .'-]{1,30} time[?.!]?$|"
     r"\.(?:txt|md|csv|log)$|"
     r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)|" + _FACT_MATCH + "|" + _JOKE_PAT, re.I)
 
@@ -1286,11 +1287,13 @@ def quick(desk, line, low):
         if not str(r).lower().startswith("error"):
             return _say(desk, line, val)
     # the time somewhere else
-    m = re.fullmatch(r"what(?:'s| is) (?:the )?time (?:is it )?in (?P<c>[a-z .'-]+)|what time is it in (?P<c2>[a-z .'-]+)|time in (?P<c3>[a-z .'-]+)", q)
+    m = re.fullmatch(r"what(?:'s| is) (?:the )?time (?:is it )?in (?P<c>[a-z .'-]+)|what time is it in (?P<c2>[a-z .'-]+)|time in (?P<c3>[a-z .'-]+)|"
+                     r"current time in (?P<c6>[a-z .'-]+)|world clock (?:in |for )?(?!app\b)(?P<c4>[a-z .'-]+)|"
+                     r"(?!(?:the|my|your|our|this|that|what|what's|current|local|real|bed|lunch|next|last|day|night|good|game|show|meeting)\b)(?P<c5>[a-z][a-z .'-]*?) time", q)
     if m:
         from . import system
         system.apply_timezone_env()           # (the owner may have changed this computer's zone since the desk started)
-        place = (m.group("c") or m.group("c2") or m.group("c3")).strip()
+        place = next(g for g in (m.group("c"), m.group("c2"), m.group("c3"), m.group("c4"), m.group("c5"), m.group("c6")) if g).strip()
         zone = system.find_timezone(place)
         if zone:
             import zoneinfo
