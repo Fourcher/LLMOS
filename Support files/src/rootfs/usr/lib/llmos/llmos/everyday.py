@@ -1325,7 +1325,7 @@ def quick(desk, line, low):
         from . import web
         wikt = f"https://en.wiktionary.org/api/rest_v1/page/definition/{urllib.parse.quote(w)}"
         if not _net_ok(desk, "read_webpage", {"url": wikt}):
-            return _say(desk, line, _net_no(_OFF_WEATHER))
+            return _say(desk, line, _net_no("The internet is switched off, so I can't look that up."))
         try:      # Wiktionary's own API (free, no key)
             raw = web.fetch(wikt, max_bytes=400000, timeout=8)[3]
             for e in json.loads(raw).get("en", []):
@@ -1337,7 +1337,7 @@ def quick(desk, line, low):
             pass
         free = f"https://api.dictionaryapi.dev/api/v2/entries/en/{urllib.parse.quote(w)}"
         if not _net_ok(desk, "read_webpage", {"url": free}):
-            return _say(desk, line, _net_no(_OFF_WEATHER))
+            return _say(desk, line, _net_no("The internet is switched off, so I can't look that up."))
         try:      # the Free Dictionary API (built on Wiktionary too)
             raw = web.fetch(free, max_bytes=200000, timeout=8)[3]
             mean = json.loads(raw)[0]["meanings"][0]
@@ -1349,7 +1349,7 @@ def quick(desk, line, low):
         w = m.group("w") or m.group("w2") or m.group("w3")
         syn = f"https://api.datamuse.com/words?rel_syn={urllib.parse.quote(w)}&max=8"
         if not _net_ok(desk, "read_webpage", {"url": syn}):
-            return _say(desk, line, _net_no(_OFF_WEATHER))
+            return _say(desk, line, _net_no("The internet is switched off, so I can't look that up."))
         try:
             from . import web
             raw = web.fetch(syn, max_bytes=50000, timeout=8)[3]
@@ -1599,7 +1599,7 @@ def service_status(desk, line, low):
         return False                       # an unknown service: the model looks it up on the web
     from . import web
     if not _net_ok(desk, "read_webpage", {"url": f"https://{page}/api/v2/status.json"}):
-        return _say(desk, line, _net_no(_OFF_WEATHER))
+        return _say(desk, line, _net_no("The internet is switched off, so I can't look that up."))
     try:
         st = json.loads(web.fetch(f"https://{page}/api/v2/status.json", max_bytes=100000, timeout=8)[3])["status"]
     except Exception:

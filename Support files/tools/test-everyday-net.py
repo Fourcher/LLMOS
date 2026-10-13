@@ -15,6 +15,7 @@ from llmos import everyday, web  # noqa: E402
 fails = 0
 DECLINED = "Okay, no internet for that."
 OFF_FORECAST = "The internet is switched off in settings, so I can't get the forecast."
+OFF_LOOKUP = "The internet is switched off, so I can't look that up."
 
 
 def same(a, b):
@@ -110,7 +111,7 @@ CASES = [
     ("weather", lambda dk: everyday.weather(dk, "what's the weather in denver", "what's the weather in denver"), 2, OFF_FORECAST),
     ("net_and_dates", lambda dk: everyday.net_and_dates(dk, "am i online", "am i online"), 1,
      "The internet is switched off in settings (say “turn the internet on”)."),
-    ("service_status", lambda dk: everyday.service_status(dk, "is github down", "is github down"), 1, OFF_FORECAST),
+    ("service_status", lambda dk: everyday.service_status(dk, "is github down", "is github down"), 1, OFF_LOOKUP),
     ("who won", lambda dk: everyday.live_lookup(dk, "who won the cup final", "who won the cup final"), 1,
      "The internet is switched off in settings, so I can't look up results."),
     ("fact", lambda dk: everyday.live_lookup(dk, "how tall is mount everest", "how tall is mount everest"), 1,
@@ -121,8 +122,8 @@ CASES = [
      "The internet is switched off in settings, so I can't check that."),
     ("news", lambda dk: everyday.news(dk, "what's the news", "what's the news"), 1,
      "The internet is switched off in settings, so I can't get the news."),
-    ("dictionary", lambda dk: everyday.quick(dk, "define serendipity", "define serendipity"), 1, OFF_FORECAST),
-    ("synonyms", lambda dk: everyday.quick(dk, "synonyms for happy", "synonyms for happy"), 1, OFF_FORECAST),
+    ("dictionary", lambda dk: everyday.quick(dk, "define serendipity", "define serendipity"), 1, OFF_LOOKUP),
+    ("synonyms", lambda dk: everyday.quick(dk, "synonyms for happy", "synonyms for happy"), 1, OFF_LOOKUP),
 ]
 
 
@@ -164,9 +165,9 @@ for name, runner, allowed_calls, off in CASES:
 
 print("service status and dictionary: the owner's switch is honoured before any page is contacted")
 got, said, calls, asked = run(CASES[2][1], "no")
-check(calls == 0 and said == OFF_FORECAST, "service status under no: no status page is contacted")
+check(calls == 0 and said == OFF_LOOKUP, "service status under no: no status page is contacted")
 got, said, calls, asked = run(CASES[8][1], "no")
-check(calls == 0 and said == OFF_FORECAST, "dictionary under no: no dictionary site is contacted")
+check(calls == 0 and said == OFF_LOOKUP, "dictionary under no: no dictionary site is contacted")
 
 print("a question the internet is not needed for is not gated")
 got, said, calls, asked = run(lambda dk: everyday.live_lookup(dk, "is it down", "is it down"), "ask", answer=False)
