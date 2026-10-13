@@ -2123,9 +2123,10 @@ class Desk:
         return val == "yes"
 
     def decline_dialogs(self):
-        for d in list(self.dialogs.values()):
+        for did, d in list(self.dialogs.items()):
             d[1] = "no"
             d[0].set()
+            self.emit({"t": "dialog.close", "id": did})
 
     def describe_tool(self, tool, args, confirm=False):
         n = tool.name
@@ -3546,7 +3547,7 @@ class Desk:
                 ok, note = syspanels.updates_apply()
                 self.emit({"t": "toast", "text": "", "sticky": "upd"})
                 self.emit({"t": "toast", "text": note.capitalize(), "long": True})
-                self.open_window(syspanels.updates_panel())
+                self.open_window(syspanels.updates_panel(asked=True))
             threading.Thread(target=upd, daemon=True).start()
             self.last_reply = self._said = "Installing the updates; you can keep working. I'll say when they're done."
             return True
