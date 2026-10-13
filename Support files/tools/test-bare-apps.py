@@ -22,7 +22,7 @@ CASES = {
     # kept: matched before this change, same result
     "open firefox": ("browse", {}),
     "open my documents": ("show_files", {"path": "~/Documents"}),
-    "open the file manager": None,
+    "open the file manager": ("open_app", {"command": "file manager"}),
     "open calculator": ("open_app", {"command": "calculator"}),
     "open the calculator": ("open_app", {"command": "calculator"}),
     "stopwatch": ("open_app", {"command": "stopwatch"}),
@@ -31,11 +31,11 @@ CASES = {
     "unit converter": ("open_app", {"command": "unit converter"}),
     "open unit converter": ("open_app", {"command": "unit converter"}),
     "open scientific calculator": ("open_app", {"command": "scientific calculator"}),
+    "youtube music": ("browse", {"site": "https://music.youtube.com"}),           # batch 3: the YouTube Music site
+    "open youtube music": ("browse", {"site": "https://music.youtube.com"}),
     # must NOT match (no route; the model handles them)
     "messenger": None,
     "open messenger": None,
-    "youtube music": None,
-    "open youtube music": None,
     "podcasts": None,
     "open podcasts": None,
     "discord is down": None,
@@ -44,7 +44,7 @@ CASES = {
     "calculator broken": None,
     "messenger bag": None,
     "podcasts about history": None,
-    "open the calculator, please": None,
+    "open the calculator, please": ("open_app", {"command": "calculator"}),
 }
 
 fails = 0

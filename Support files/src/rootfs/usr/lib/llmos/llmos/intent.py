@@ -85,6 +85,9 @@ _IMPERATIVE = re.compile(
 _QUESTION = re.compile(r"\?\s*$|^\s*(?:what|when|where|who|why|how|is|are|do|does|did|can|could|will|would|should)\b", re.I)
 
 
+_QUESTION_TASK = re.compile(r"^(?:remind me (?:what|when|where|who|how|which|why|if|whether)|what(?:'s| is)|when|where|who|how|is there|are there|do i have|did i)\b", re.I)
+
+
 def _schedule(text):
     if _QUESTION.search(text):
         return None
@@ -95,6 +98,8 @@ def _schedule(text):
         when, task = m.group("when").strip(), m.group("task").strip().rstrip(".,;")
         if not _IMPERATIVE.match(task):
             continue
+        if _QUESTION_TASK.match(task) or "?" in task:
+            continue                             # "remind me what's on tonight": the text before the time is a question, not a task
         try:
             from . import store
             store.parse_when(when)
@@ -650,6 +655,10 @@ def _online_model(text):
     if m:
         p = m.group("p").lower().replace(" ", "")
         return ("online_model", {"action": "sign in", "provider": "claude" if p in ("claude", "anthropic") else "chatgpt"})
+    m = re.match(r"^\s*(?:please\s+)?use\s+my\s+(claude|anthropic|chatgpt|chat\s*gpt|openai)\s+account\s*[.!]?\s*$", text, re.I)
+    if m:                                     # same return shape as the _SIGNIN route above
+        p = m.group(1).lower().replace(" ", "")
+        return ("online_model", {"action": "sign in", "provider": "claude" if p in ("claude", "anthropic") else "chatgpt"})
     if _OTHER_ONLINE.match(text):
         return ("online_model", {"action": "set up", "provider": "other"})     # the form for any OpenAI-compatible service
     m = _CLOUD_SETUP.match(text)
@@ -870,7 +879,58 @@ _TIMER = re.compile(r"^\s*(?:please\s+)?(?:(?:set|start)\s+)?(?:a\s+)?(?:timer|c
 _REMIND = re.compile(r"^\s*(?:please\s+)?(?:remind|ping|tell|alert)\s+me\s+in\s+(?P<n>\d+)\s*" + _UNIT + r"\b(?:\s+(?P<conn>to|that|about)\s+(?P<what>.+?))?\s*[.!]?\s*$", re.I)
 
 
+_REMIND_AT = re.compile(r"^\s*(?:please\s+)?(?:remind|ping|tell|alert)\s+me\s+at\s+(?P<t>\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)\s+"
+                        r"(?:to|that|about)\s+(?P<what>.+?)\s*[.!]?\s*$", re.I)
+
+
+# Trailing polite filler on an "at <time> to <task>" reminder: only ", please/thanks/…" (comma) or a bare " please"/" pls".
+# "say thanks" and "call now" keep their words, since those can be part of the task itself.
+_REMIND_AT_FILLER = re.compile(r"(?:,\s*(?:please|pls|thanks|thank\s+you|for\s+me|right\s+now|now)|\s+(?:please|pls))\s*[.!?]*\s*$", re.I)
+# a task that is only one of these is no task at all: defer to the model
+_REMIND_AT_NO_TASK = {"please", "pls", "thanks", "thank you", "now", "right now", "for me"}
+
+
+_REMIND_TO = re.compile(r"^\s*(?:please\s+)?(?:remind|ping|tell|alert)\s+me\s+to\s+(?P<rest>.+?)\s*[.!?]*\s*$", re.I)
+# where the time phrase may start. "next week" is not split on: store.parse_when rejects it.
+# "later today" is not split on either: parse_when reads it as 09:00 (drops "later").
+_REMIND_TO_WHEN = re.compile(r"\s+(?=(?:at|in|on|tomorrow|tonight|this\s+(?:morning|afternoon|evening)|"
+                             r"next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b)", re.I)
+_REMIND_TO_TIME = re.compile(rf"^(?:{_WHEN}|on\s+\w+(?:\s+at\s+\d{{1,2}}(?::\d{{2}})?\s*(?:am|pm)?)?)$", re.I)   # the whole when must be a time phrase
+
+
+def _remind_to(text):
+    """"remind me to take my pills at 3" / "… in 20 minutes" / "… tomorrow at 9": same fields as "remind me at 3 to …"."""
+    m = _REMIND_TO.match(text)
+    if not m:
+        return None
+    rest = _REMIND_AT_FILLER.sub("", m.group("rest")).strip()
+    for sp in _REMIND_TO_WHEN.finditer(rest):
+        task, when = rest[:sp.start()].strip(), rest[sp.end():].strip()
+        if not task or not when or re.sub(r"[^\w\s]", "", task).strip().lower() in _REMIND_AT_NO_TASK:
+            continue
+        if not _REMIND_TO_TIME.match(when) and not re.match(
+                r"(?:this\s+(?:morning|afternoon|evening)|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))"
+                r"(?:\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?$", when, re.I):
+            continue                             # "in the park at 5": the time is only the last part
+        try:
+            from . import store
+            store.parse_when(when)
+        except Exception:
+            continue                             # not a time phrase: try the next split ("meet in the park at 5")
+        return ("schedule_task", {"when": when.lower(), "task": task, "kind": "reminder"})
+    return None
+
+
 def _timer(text):
+    ma = _REMIND_AT.match(text)                  # "remind me at 3pm to call mum": same route as "remind me in 20 minutes to …"
+    if ma:
+        task = _REMIND_AT_FILLER.sub("", ma.group("what")).strip()
+        if not task or re.sub(r"[^\w\s]", "", task).strip().lower() in _REMIND_AT_NO_TASK:
+            return None                          # the task is only a filler word ("remind me at 3 to please")
+        return ("schedule_task", {"when": f"at {ma.group('t').strip().lower()}", "task": task, "kind": "reminder"})
+    rt = _remind_to(text)                        # "remind me to call mum at 3pm": the time is the when, not part of the task
+    if rt:
+        return rt
     m = _TIMER.match(text) or _REMIND.match(text)
     if not m:
         return None
@@ -1474,7 +1534,12 @@ def _apps(text):
             return ("open_app", {"command": cmd})
     m = _OPEN_APP.match(text)
     if m:
-        n = m.group("n").strip()
+        raw = m.group("n").strip()
+        n = _TRAIL_FILLER.sub("", raw).strip()          # a trailing please/thanks/now is not part of the name
+        if n != raw:
+            n = re.sub(r"\s+(?:app|application|program)$", "", n, flags=re.I).strip()   # "notes app thanks" -> "notes"
+        if not n:
+            return None
         if re.search(r"\blists?$", n, re.I) and re.match(r"^\s*(?:please\s+)?(?:show|see|open|read)\s+(?:my|the)\s+", text, re.I):
             return None              # "show my to do list": a list of notes, the notes route takes it, not a program
         from . import tools as _T
@@ -1674,7 +1739,7 @@ def _everyday2(text):
         f = m.group("f").strip()
         return ("mail_send", {"to": m.group("to"), "subject": f[:1].upper() + f[1:], "body": f"Please find {f} attached.", "attach": [f]})
     # email in plain words (only with an account; otherwise the agent says how to set one up)
-    if re.match(r"^(?:how many|do i have any|have i got any|any)\s+(?:new\s+|unread\s+)*(?:e-?mails?|mail|messages)(?:\s+do\s+i\s+have)?$", low):
+    if re.match(r"^(?:how many|do i have(?: any)?|have i got(?: any)?|any)\s+(?:new\s+|unread\s+)*(?:e-?mails?|mail|messages)(?:\s+do\s+i\s+have)?$", low):
         return ("mail_inbox", {})
     if re.match(r"^(?:read|open|show)\s+(?:me\s+)?(?:my\s+|the\s+)?(?:latest|newest|last|most recent|new)\s+(?:e-?mail|mail|message)$", low):
         return ("mail_read", {"id": "latest"})
@@ -1786,6 +1851,8 @@ def _everyday2(text):
     if re.match(r"^(?:(?:make|set|put|change)\s+)?(?:everything|all|the\s+text|text|it)?\s*(?:back\s+)?(?:to\s+)?(?:normal|regular|default|standard)\s+(?:text\s+)?size(?:d)?(?:\s+(?:everything|again|text))?$"
                 r"|^(?:everything|text)\s+(?:back\s+)?(?:to\s+)?(?:normal|regular|default)\s+size$", low):
         return ("set_appearance", {"scale": "default"})
+    if re.fullmatch(r"share (?:over|on) the network", low.strip()):
+        return ("share_folder", {})           # the same as "share this folder" with no folder named
     m = re.match(r"^(?:share|send)\s+(?:this|that|the|my|a)?\s*(?P<f>[\w .~/-]+?)?\s*(?:folder|files?|photos|pictures|documents)?\s+"
                  r"(?:with|to)\s+(?:my\s+|the\s+|another\s+|other\s+)*(?:other\s+)?(?:computer|laptop|pc|mac|phone|tablet|ipad|devices?)s?(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$"
                  r"|^share\s+(?:this|that|the|my)?\s*(?P<f2>[\w .~/-]+?)?\s*folder(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$", low)
@@ -1823,6 +1890,14 @@ def _everyday2(text):
     m = _DARK_WORDS.match(t)
     if m and len(t.split()) <= 4:
         return ("set_appearance", {"theme": "dark" if m.group("d") else "light"})
+    m = re.match(r"^(?:please\s+)?(?:show\s+me\s+)?(?:a\s+)?map\s+of\s+(?P<p>.+?)\s*[.!?]*$", t, re.I)
+    if m:
+        import urllib.parse as _u
+        place = _TRAIL_FILLER.sub("", m.group("p").strip()).strip(" .,")
+        if place:
+            return ("browse", {"site": "https://www.openstreetmap.org/search?query=" + _u.quote(place)})
+    if re.fullmatch(r"(?:please\s+)?(?:(?:open|go\s+to|launch)\s+)?youtube\s+music(?:\s+please)?", low.strip()):
+        return ("browse", {"site": "https://music.youtube.com"})
     m = re.match(r"^(?:give\s+me\s+|get\s+|show\s+me\s+)?(?:the\s+)?(?:directions|route|way)\s+(?:to|for)\s+(?P<p>.+)$|^how\s+do\s+i\s+get\s+to\s+(?P<p2>.+)$|^(?:navigate|drive)\s+to\s+(?P<p3>.+)$", low)
     if m:
         place = (m.group("p") or m.group("p2") or m.group("p3")).strip()
@@ -1977,9 +2052,15 @@ def match(text):
         return r
     typed = str(text or "")
     fixed = _retype(typed)                    # one retry on the typo-fixed copy; the first pass result wins when it is not None
-    if fixed == typed:
+    if fixed != typed:
+        r = _fix_schedule(_match(fixed))
+        if r is not None:
+            return r
+    # last: a trailing please/thanks/now is set aside and the rest matched again (only when nothing matched above)
+    stripped = _TRAIL_FILLER.sub("", fixed).strip()
+    if not stripped or stripped == fixed.strip():
         return None
-    return _fix_schedule(_match(fixed))
+    return _fix_schedule(_match(stripped))
 
 
 def _analyze_program(t):
@@ -2109,7 +2190,61 @@ def _match(text):
         if len(fact) < 3 or _NOT_MEMORY.search(t):
             return None
         return ("remember", {"fact": _first_person(fact)})
+    nw = _new_words(t)
+    if nw:
+        return nw
     return _restyle(t)
+
+
+# Phrases that had no route: a program named by its kind ("open the file manager", "open word"), a file by its path
+# ("open /etc/hosts", "open ~/notes.txt"), an uninstall by one word ("uninstall foo", "remove the foo app"), and apt/apk
+# installs of one name. Only these exact shapes; they run after every route above, so nothing that matched before changes.
+_OPEN_WORD = re.compile(r"^\s*(?:please\s+)?(?:i'?d\s+like\s+to\s+)?(?:open|launch|start)\s+(?:the\s+|a\s+|an\s+|my\s+)?"
+                        r"(?P<n>file\s+manager|image\s+viewer|text\s+editor|notes\s+app|word|excel)\s*[.!?]*\s*$", re.I)
+_OPEN_WORD_CMD = {"file manager": "file manager", "image viewer": "image viewer", "text editor": "text editor",
+                  "notes app": "notes", "word": "word processor", "excel": "spreadsheet"}
+_NOTES_APP = re.compile(r"^\s*(?:please\s+)?(?:the\s+|my\s+)?notes\s+app\s*[.!?]*\s*$", re.I)
+_OPEN_PATH = re.compile(r"^\s*(?:please\s+)?open\s+(?P<p>\"[^\"\n]+\"|'[^'\n]+'|[~/][^\n]*?)\s*[.!?]*\s*$", re.I)
+_UNINSTALL_ANY = re.compile(r"^\s*(?:please\s+)?uninstall\s+(?P<n>[a-z][a-z0-9+.-]{1,24})\s*[.!?]*\s*$", re.I)
+_REMOVE_APP_ANY = re.compile(r"^\s*(?:please\s+)?(?:remove|uninstall)\s+(?:the\s+|my\s+)?(?P<n>[a-z][a-z0-9+.-]{1,24})\s+app\s*[.!?]*\s*$", re.I)
+_PKG = r"[a-z0-9][a-z0-9+._-]{0,40}"
+_APT_INSTALL = re.compile(r"^\s*(?:please\s+)?(?:apt(?:-get)?\s+install|apk\s+add)\s+(?P<n>" + _PKG + r"(?:\s+" + _PKG + r"){0,9})\s*[.!?]*\s*$", re.I)
+_NOT_A_PROGRAM = frozenset({"the", "a", "an", "my", "this", "that", "it", "these", "those", "them", "all", "everything", "anything",
+                            "something", "some", "any", "stuff", "one", "program", "programs", "app", "apps", "software", "update",
+                            "updates", "file", "files", "photo", "photos", "picture", "background", "duplicates", "connector",
+                            "connection", "plugin", "model", "voice", "account", "driver", "service", "extension", "list", "note"})
+
+
+# A polite or filler word at the very end ("open /etc/hosts please", "apt install htop for me"), set apart by a space
+# (or a comma and a space), so "/tmp/please.txt" keeps its name. Only the open-path and apt/apk routes use it.
+_TRAIL_FILLER = re.compile(r",?\s+(?:please|pls|thanks|thank\s+you|for\s+me|right\s+now|now)\s*[.!?]*\s*$", re.I)
+
+
+def _new_words(t):
+    u = _TRAIL_FILLER.sub("", t)                          # the open-app shapes take a trailing filler word too
+    m = _OPEN_WORD.match(u)
+    if m:
+        return ("open_app", {"command": _OPEN_WORD_CMD[" ".join(m.group("n").lower().split())]})
+    if _NOTES_APP.match(u):
+        return ("open_app", {"command": "notes"})
+    m = _OPEN_PATH.match(_TRAIL_FILLER.sub("", t))
+    if m:
+        p = m.group("p")
+        if len(p) >= 2 and p[0] == p[-1] and p[0] in "\"'":
+            p = p[1:-1]                                   # the owner's quotes around a path with spaces
+        if not (p.startswith("/") or p == "~" or p.startswith("~/")):
+            return None
+        if p.startswith("-") or ".." in p or re.search(r"[;&|`$<>]", p):
+            return None                                   # left to the model
+        return ("open_file", {"path": p})
+    for rx in (_UNINSTALL_ANY, _REMOVE_APP_ANY):
+        m = rx.match(t)
+        if m and m.group("n").lower() not in _NOT_A_PROGRAM:
+            return ("remove_software", {"name": m.group("n").lower()})
+    m = _APT_INSTALL.match(_TRAIL_FILLER.sub("", t))
+    if m:
+        return ("install_app", {"packages": " ".join(m.group("n").lower().split())})
+    return None
 
 
 # A whole-look change the fixed look options can't express ("make the windows look like ...", "turn the interface into ...")
