@@ -27,6 +27,15 @@ CASES = [
     ("set an alarm for 7am", ALARM),                            # existing
     ("make an alarm at 6:30 am", ("schedule_task", {"when": "6:30 am", "task": "Alarm", "kind": "reminder"})),  # existing
     ("add an alarm for 7am", ALARM),                            # existing
+    ("alarm for noon", ("schedule_task", {"when": "noon", "task": "Alarm", "kind": "reminder"})),  # NEW
+    ("alarm for tomorrow at 7", ("schedule_task", {"when": "tomorrow at 7", "task": "Alarm", "kind": "reminder"})),  # NEW
+    ("set an alarm for the meeting tomorrow", ("schedule_task", {"when": "the meeting tomorrow", "task": "Alarm", "kind": "reminder"})),  # existing verb form
+    ("make an alarm for my sister", ("schedule_task", {"when": "my sister", "task": "Alarm", "kind": "reminder"})),  # existing verb form
+    ("alarm for the meeting tomorrow", None),                   # verbless, no clock: unchanged (None)
+    ("alarm for my sister", None),                              # verbless, no clock: unchanged (None)
+    ("alarm for school", None),                                 # verbless, no clock: unchanged (None)
+    ("alarm clock", None),                                      # negative
+    ("false alarm", None),                                      # negative
     ("what alarm apps are there", None),                        # negative
     ("my alarm didn't go off", None),                           # negative
 

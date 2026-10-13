@@ -1694,11 +1694,13 @@ def _everyday2(text):
     if m:
         return ("schedule_task", {"when": m.group("when"), "task": m.group("what"), "kind": "reminder"})
     # alarms and the list of what's scheduled
-    m = re.match(r"^(?:please\s+)?(?:(?:set|make|add)\s+)?(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)(?:\s+(?:to|and)\s+(?P<why>.+))?$"
+    m = re.match(r"^(?:please\s+)?(?:(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)"
+                 r"|(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?=(?:\d|noon\b|midnight\b|tomorrow\s+at\s+\d|in\s+\d+\s+(?:minutes?|hours?)\b))(?P<w4>.+?))"
+                 r"(?:\s+(?:to|and)\s+(?P<why>.+))?$"
                  r"|^wake\s+me\s+(?:up\s+)?(?:at|for)\s+(?P<w2>.+?)(?:\s+(?:to|and)\s+(?P<why2>.+))?$", low)
     if m:
         why = (m.group("why") or m.group("why2") or "").strip()
-        return ("schedule_task", {"when": m.group("w") or m.group("w2"), "task": "Alarm" + (f": {why}" if why else ""), "kind": "reminder"})
+        return ("schedule_task", {"when": m.group("w") or m.group("w4") or m.group("w2"), "task": "Alarm" + (f": {why}" if why else ""), "kind": "reminder"})
     if re.match(r"^(?:what|which)\s+(?:reminders|alarms|timers|tasks)\s+(?:do\s+i\s+have|are\s+(?:set|on|there))|^(?:show|list|see)\s+(?:me\s+)?(?:all\s+)?"
                 r"(?:my\s+|the\s+)?(?:reminders|alarms|timers)$|^what(?:'s|\s+is)\s+scheduled$|^my\s+(?:reminders|alarms|timers)$", low):
         return ("manage_tasks", {"action": "list"})
