@@ -128,3 +128,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 9abccc8 ("what can you do": 2 sentences + 3 instant examples) VERIFY PASS — merge after the 1.8.1 build.
 - [held] f595072 ("remind me at <time> to <task>") VERIFY: own checks PASS, trial merge voided by lockout — follow-up: strip trailing please from the task; re-run trial merge.
 - [open] warm-up speed fix stranded in worktree agent-a066c43d616a4d55b (agent.py, test-rare-tools.py) — needs test-warmup-prefix.py expectation update + commit.
+- [held] e231f47 (guard_untrusted off/on by plain phrases; "trust everything" -> hands-off with the full-trust dialog) VERIFY PASS — merge after the 1.8.1 build.
