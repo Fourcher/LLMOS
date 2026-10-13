@@ -64,7 +64,10 @@ ADDED_KEYS = {"w_model_slow", "w_more_models"}
 # the "online for everything" description gained the sentence "Your name and saved memory go with each request." (test-privacy-disclosure.py)
 ALLOWED_EDITS = {"q_brain_2",
                  # the "yes" internet choice says it also keeps the clock right (the boot timer syncs it; test-net-disclosure.py)
-                 "w_net_yes_d"}
+                 "w_net_yes_d",
+                 # plain-words rewording of the connector and cloud texts (test-plain-connectors.py)
+                 "d_conduct_hint", "d_connectors_intro", "d_conn_tools", "d_connector_form_intro",
+                 "d_connector_form_hint", "w_cloud_text"}
 for b in BLOCKS:
     if b in old:
         check(set(new[b]) == set(old[b]) | NEW_KEYS | ADDED_KEYS,
