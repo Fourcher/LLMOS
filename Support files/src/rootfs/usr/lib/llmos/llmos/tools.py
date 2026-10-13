@@ -3229,19 +3229,11 @@ def format_drive(a, ctx):
     d = drives[0]
     disk = d.get("disk") or d["path"]
     label = re.sub(r"[^A-Za-z0-9 _-]", "", str(a.get("name") or "USB"))[:11] or "USB"
-    for x in drives:
-        if x.get("mountpoint"):
-            subprocess.run(["umount", x["mountpoint"]], capture_output=True, timeout=60)
-    tool_ = shutil.which("mkfs.exfat") or shutil.which("mkexfatfs")
-    if not tool_:
+    if not (shutil.which("mkfs.exfat") or shutil.which("mkexfatfs")):
         return "the formatting program is missing (say 'install exfatprogs')"
-    subprocess.run(["wipefs", "-a", disk], capture_output=True, timeout=60)
-    p = subprocess.run(["sh", "-c", f"printf 'label: dos\n,,7\n' | sfdisk -q {shlex.quote(disk)}"], capture_output=True, text=True, timeout=60)
-    part = disk + ("p1" if re.search(r"\d$", disk) else "1")
-    time.sleep(1.5)
-    p2 = subprocess.run([tool_, "-L" if "mkfs" in tool_ else "-n", label, part], capture_output=True, text=True, timeout=600)
-    if p.returncode or p2.returncode:
-        return f"could not format it: {(p.stderr or p2.stderr or p2.stdout).strip()[:200]}"
+    rc, out, err = system.format_drive(disk, label)
+    if rc:
+        return f"could not format it: {(err or out).strip()[:200]}"
     return f"the drive is empty and ready, named {label} (works on Windows, Mac and Linux). Done: tell the owner in one sentence."
 
 

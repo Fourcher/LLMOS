@@ -10,11 +10,13 @@ import json
 import os
 import re
 import socket
+import stat
 import tempfile
 import threading
 from datetime import datetime
 
 ZONEINFO = "/usr/share/zoneinfo"
+PROC_MOUNTS = "/proc/mounts"
 ETC_ROOT = "/"
 LOG_PATH = "/run/llmos/rootd.log"
 MAX_REQUEST = 2 * 1024 * 1024
@@ -333,6 +335,159 @@ def radio(args):
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
+# Drives (USB sticks): device nodes only. Mount points: one or two levels under /media or /run/media (udisks uses
+# /run/media/<user>/<label>; the label level may hold spaces). Never a bare /media or /run/media, never . or .. segments.
+MOUNT_DEV_RE = re.compile(r"/dev/(?:sd[a-z]{1,2}[0-9]{1,3}|nvme[0-9]n[0-9]p[0-9]{1,3}|mmcblk[0-9]p[0-9]{1,3})")
+MEDIA_MP_RE = re.compile(r"/(?:run/)?media/[A-Za-z0-9_.-]{1,64}(?:/[A-Za-z0-9_. -]{1,64})?")
+_PROC_ESCAPE_RE = re.compile(r"\\([0-7]{3})")
+
+
+def media_mp_ok(mp):
+    """True when mp is a drive folder under /media or /run/media (one or two levels, no . or .. segment)."""
+    if not isinstance(mp, str) or MEDIA_MP_RE.fullmatch(mp) is None:
+        return False
+    return all(seg not in (".", "..") for seg in mp.split("/")[1:])
+
+
+def _proc_unescape(text):
+    """/proc/mounts writes space, tab, newline and backslash as \\040 \\011 \\012 \\134. Undo that."""
+    return _PROC_ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 8)), text)
+
+
+def _mounts():
+    """[(source, mountpoint)] from the kernel's mount table, with the octal escapes decoded."""
+    out = []
+    with open(PROC_MOUNTS, encoding="utf-8") as f:
+        for line in f:
+            parts = line.split()
+            if len(parts) >= 2:
+                out.append((_proc_unescape(parts[0]), _proc_unescape(parts[1])))
+    return out
+
+
+def _same_dev(a, b):
+    return a == b or os.path.realpath(a) == os.path.realpath(b)
+
+
+# The whole disk a partition node belongs to: sda2 -> sda, nvme0n1p3 -> nvme0n1, mmcblk0p2 -> mmcblk0.
+_PART_TO_DISK_RES = (
+    re.compile(r"(/dev/sd[a-z]{1,2})[0-9]{1,3}"),
+    re.compile(r"(/dev/nvme[0-9]n[0-9]+)p[0-9]{1,3}"),
+    re.compile(r"(/dev/mmcblk[0-9]+)p[0-9]{1,3}"),
+)
+
+
+def _whole_disk(dev):
+    """The whole disk of a partition device node, or None when dev is not a partition node we know."""
+    for rx in _PART_TO_DISK_RES:
+        m = rx.fullmatch(dev)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _on_system_disk(mounts, src):
+    """True when src is on the same whole disk as the root filesystem (the "/" entry in the mount table).
+    When the root source has no comparable disk (/dev/root, overlay), this is False: nothing is refused."""
+    disk = _whole_disk(src)
+    return disk is not None and any(m == "/" and _whole_disk(s) == disk for s, m in mounts)
+
+
+def mount_dev(args):
+    args = _args_dict(args)
+    if set(args) - {"dev"}:
+        raise ValueError("bad args: unexpected argument")
+    dev = args.get("dev")
+    if not isinstance(dev, str) or MOUNT_DEV_RE.fullmatch(dev) is None:
+        raise ValueError("bad args: dev")
+    try:
+        mode = os.stat(dev).st_mode
+    except OSError:
+        raise ValueError("bad args: dev is not a block device")
+    if not stat.S_ISBLK(mode):
+        raise ValueError("bad args: dev is not a block device")
+    mounts = _mounts()
+    mp = "/media/" + os.path.basename(dev)
+    if any(m == "/" and _same_dev(src, dev) for src, m in mounts) or _on_system_disk(mounts, dev):
+        raise ValueError("bad args: dev is the system disk")
+    if any(_same_dev(src, dev) for src, _ in mounts):
+        raise ValueError("bad args: dev is already mounted")
+    if any(m == mp for _, m in mounts):
+        raise ValueError("bad args: mountpoint is in use")
+    from . import system
+    rc, out, err = system._mount_root(dev, mp)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
+def umount_mp(args):
+    args = _args_dict(args)
+    if set(args) - {"mountpoint"}:
+        raise ValueError("bad args: unexpected argument")
+    mp = args.get("mountpoint")
+    if not media_mp_ok(mp):
+        raise ValueError("bad args: mountpoint")
+    mounts = _mounts()
+    sources = [src for src, m in mounts if m == mp]
+    if not sources:
+        raise ValueError("bad args: mountpoint is not mounted")
+    if any(MOUNT_DEV_RE.fullmatch(src) is None for src in sources):
+        raise ValueError("bad args: mountpoint is not a drive")
+    if any(_on_system_disk(mounts, src) for src in sources):
+        raise ValueError("bad args: system disk")
+    from . import system
+    rc, out, err = system._umount_root(mp)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
+# Erasing a drive: a WHOLE disk only (sdb, nvme0n1, mmcblk0), never a partition, and only media that sysfs calls
+# removable or that sits on USB. The label is what mkfs.exfat gets, so it is limited to the same plain characters.
+SYS_BLOCK = "/sys/block"
+FORMAT_DISK_RE = re.compile(r"/dev/(?:sd[a-z]{1,2}|nvme[0-9]n[0-9]|mmcblk[0-9])")
+FORMAT_LABEL_RE = re.compile(r"[A-Za-z0-9 _-]{1,11}")
+
+
+def _is_system_disk(mounts, disk):
+    """True when the root filesystem ("/") is on this whole disk, or on one of its partitions."""
+    return any(m == "/" and (s == disk or _whole_disk(s) == disk) for s, m in mounts)
+
+
+def _removable_disk(disk):
+    """True when sysfs marks the whole disk removable, or its device path runs through USB."""
+    base = os.path.join(SYS_BLOCK, os.path.basename(disk))
+    try:
+        with open(os.path.join(base, "removable"), encoding="utf-8") as f:
+            if f.read().strip() == "1":
+                return True
+    except OSError:
+        pass
+    return "/usb" in os.path.realpath(base)
+
+
+def format_drive(args):
+    args = _args_dict(args)
+    if set(args) != {"disk", "label"}:
+        raise ValueError("bad args: disk and label only")
+    disk = args.get("disk")
+    label = args.get("label")
+    if not isinstance(disk, str) or FORMAT_DISK_RE.fullmatch(disk) is None:
+        raise ValueError("bad args: disk")
+    if not isinstance(label, str) or FORMAT_LABEL_RE.fullmatch(label) is None:
+        raise ValueError("bad args: label")
+    try:
+        mode = os.stat(disk).st_mode
+    except OSError:
+        raise ValueError("bad args: disk is not a block device")
+    if not stat.S_ISBLK(mode):
+        raise ValueError("bad args: disk is not a block device")
+    if _is_system_disk(_mounts(), disk):
+        raise ValueError("bad args: disk is the system disk")
+    if not _removable_disk(disk):
+        raise ValueError("bad args: disk is not a USB stick or drive")
+    from . import system
+    rc, out, err = system._format_root(disk, label)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
 # Printer queue names (lpadmin's -p NAME) and CUPS device addresses. A name never starts with "-" (lpadmin would
 # read it as an option), and a URI must start with a CUPS scheme and contain no whitespace.
 PRINTER_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,63}")
@@ -491,6 +646,9 @@ VERBS = {
     "apk_del": apk_del,
     "power": power,
     "radio": radio,
+    "mount_dev": mount_dev,
+    "umount_mp": umount_mp,
+    "format_drive": format_drive,
     "printer_add": printer_add,
     "printer_default": printer_default,
     "service": service,
