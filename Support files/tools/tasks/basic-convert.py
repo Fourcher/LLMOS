@@ -72,7 +72,7 @@ def evaluator_for(instruction, expected):
     if "folder" in text:
         m = FOLDER_NAME.search(instruction)
         if m:
-            base = "/root/Desktop/" if "desktop" in phrase else "/root/"
+            base = "{home}/Desktop/" if "desktop" in phrase else "{home}/"
             path = base + m.group(1)
             if re.match(r"(delete|remove)\b", phrase):
                 expected_block = {"exclude": [path]}
