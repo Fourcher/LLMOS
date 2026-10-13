@@ -229,3 +229,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] c955850 (supersedes 54205c6: quick facts + every everyday web lookup obeys internet yes/ask/no) VERIFY PASS — merge after build (merge c955850 instead of 54205c6).
 - [held] 8858eda (on-accent/on-danger text colour by WCAG) VERIFY PASS — merge after build.
 - [open] (ui) default accent #7c5cff gives 4.35:1 with either text colour (below 4.5). Option: nudge the default accent slightly darker (e.g. #7350ff ~4.8 with white) — check how it looks on the VM screenshot before changing | role: fix after a screenshot
+- [open] (freedom) owner rule: no size/RAM limits after install — PROBE every limit (catalog filters, _model_tiers 321, models panel ~1702, add_catalog_entry, custom URL/file add, download caps), then FIX one per file: full list shows every model with size + "runs from disk, slow" note; only free disk refuses.
