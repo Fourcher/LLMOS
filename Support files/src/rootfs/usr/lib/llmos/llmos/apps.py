@@ -122,7 +122,7 @@ PALETTES = [  # (words, bg, fg, accent, font)
     (("minimal", "clean", "simple", "white", "paper"), "#ffffff", "#111111", "#111111", ""),
     (("gold", "luxury", "elegant", "classy"), "#121008", "#f5ecd0", "#d4af37", "serif"),
     (("light", "bright", "day"), "#f6f6f8", "#16171d", "#5b5bd6", ""),
-    (("dark", "night", "black", "midnight"), "#0e1016", "#e8e9ef", "#7c5cff", ""),
+    (("dark", "night", "black", "midnight"), "#0e1016", "#e8e9ef", "#7a52ff", ""),
 ]
 FONTS = {"mono": "'JetBrains Mono', monospace", "serif": "'Noto Serif', serif", "sans": "Inter, 'Noto Sans', sans-serif",
          "pixel": "Terminus, 'JetBrains Mono', monospace"}

@@ -94,6 +94,34 @@ else:
 
 check(best_text("#7a52ff") == "#ffffff" and ratio("#7a52ff", "#ffffff") >= 4.5, "ok default accent #7a52ff keeps white at %.2f:1 (needs 4.5)" % ratio("#7a52ff", "#ffffff"))
 
+# ---- the named "dark" palette (themes.py) is strict: its accent reaches 4.5:1 with the chosen text colour
+dark_accents = [acc for names, bg, fg, acc, font in literal_assign(THEMES_PY, "PALETTES") if names[0] == "dark"]
+check(len(dark_accents) == 1, "ok themes.py has one 'dark' palette")
+dark_acc = dark_accents[0] if dark_accents else "#000000"
+dark_chosen = best_text(dark_acc)
+check(dark_chosen == "#ffffff" and ratio(dark_acc, dark_chosen) >= 4.5,
+      "ok dark palette accent %s picks %s at %.2f:1 (needs 4.5)" % (dark_acc, dark_chosen, ratio(dark_acc, dark_chosen)))
+
+# ---- labwc window menu highlight (themerc): active text on active bg reaches 4.5:1 with ui.contrast
+def load_ui_contrast():
+    ui_py = os.path.join(ROOT, "usr/lib/llmos/llmos/ui.py")
+    wanted = {"_lum", "contrast"}
+    body = [n for n in ast.parse(read(ui_py)).body if isinstance(n, ast.FunctionDef) and n.name in wanted]
+    ns = {}
+    exec(compile(ast.Module(body=body, type_ignores=[]), ui_py, "exec"), ns)
+    return ns["contrast"]
+
+ui_contrast = load_ui_contrast()
+themerc = read(os.path.join(ROOT, "usr/share/themes/llmos/labwc/themerc"))
+def rc(key):
+    m = re.search(r"^" + re.escape(key) + r":\s*(#[0-9a-fA-F]{6})\b", themerc, re.M)
+    return m.group(1) if m else None
+mb, mt = rc("menu.items.active.bg.color"), rc("menu.items.active.text.color")
+check(mb is not None and mt is not None, "ok themerc has menu.items.active bg and text colours (%s, %s)" % (mb, mt))
+if mb and mt:
+    cr = ui_contrast(tuple(int(mb[i:i + 2], 16) for i in (1, 3, 5)), tuple(int(mt[i:i + 2], 16) for i in (1, 3, 5)))
+    check(cr >= 4.5, "ok themerc window menu highlight %s on %s is %.2f:1 (needs 4.5)" % (mt, mb, cr))
+
 # ---- desk.css: no white left on the accent or danger fills; the variables exist with their white fallback
 css = read(DESK_CSS)
 root = re.search(r":root\s*\{([^}]*)\}", css).group(1)

@@ -24,7 +24,7 @@ PALETTES = [
     (("space", "galaxy", "cosmic", "stars", "night sky"), "#05060f", "#e6e8ff", "#8f7cff", ""),
     (("coffee", "mocha", "latte", "brown"), "#1c1410", "#f1e4d8", "#c48a5a", "serif"),
     (("light", "bright", "day", "daytime"), "#f6f6f8", "#16171d", "#5b5bd6", ""),
-    (("dark", "night", "black", "midnight", "dim"), "#0b0d14", "#e8e9ef", "#7c5cff", ""),
+    (("dark", "night", "black", "midnight", "dim"), "#0b0d14", "#e8e9ef", "#7a52ff", ""),
 ]
 DEFAULT = ("#0b0d14", "#e8e9ef", "#7a52ff")
 FONTS = {
