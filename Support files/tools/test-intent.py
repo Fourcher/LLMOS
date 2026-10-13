@@ -420,6 +420,25 @@ CASES = {
     # "no corners and everything to be rounded" (the brief): no corners means rounded
     "no corners": ("set_appearance", {"corners": "rounded"}),
     "make everything purple with no corners": ("set_appearance", {"theme": "purple", "corners": "rounded"}),
+    # view wordings: bigger icons is icons; smaller icons has no safe mapping (leave it to the model)
+    "bigger icons": ("show_files", {"path": "~", "view": "icons"}),
+    "show them as icons": ("show_files", {"path": "~", "view": "icons"}),
+    "show as a grid": ("show_files", {"path": "~", "view": "icons"}),
+    "details view": ("show_files", {"path": "~", "view": "list"}),
+    "smaller icons": None,
+    # default app wordings with "by default" or "use X for Y"; a kind is required
+    "open pdfs with evince by default": ("set_default_app", {"kind": "pdfs", "app": "evince"}),
+    "use evince for pdfs": ("set_default_app", {"kind": "pdfs", "app": "evince"}),
+    "open pdfs": None,
+    "open firefox by default": None,
+    # the app word must be a real program: no pronoun/determiner, 1-3 words
+    "use my phone for music": None,
+    "make me a playlist for videos": None,
+    "use the default for pdfs": None,
+    "use a different app for pdfs": None,
+    "make it the default for videos": None,
+    "make icons": None,
+    "big icons are ugly": None,
 }
 
 bad = 0
@@ -562,7 +581,35 @@ for text in OPEN_LAST_GUARD_CASES:
         obad += 1
         print(f"OPEN LAST GUARD MISMATCH {text!r}\n   got    {got!r}")
 print(f"open-last guards: {len(OPEN_LAST_GUARD_CASES) - obad}/{len(OPEN_LAST_GUARD_CASES)} as expected")
-total = bad + app_bad + reply_bad + tbad + gbad + nbad + rbad + fbad + dbad + obad
+# default-app adversarial cases: the older phrasings keep their base behaviour (word shape only), the loose
+# phrasings ("use X for Y", "open Y in X by default") need the program to be installed when a program menu exists.
+# The host has no program menu, so the installed check is simulated with a temp folder holding only firefox.desktop.
+import tempfile
+from llmos import tools
+_DA_SIM = {
+    "always open pdfs in okular": ("set_default_app", {"kind": "pdfs", "app": "okular"}),
+    "use okular for pdfs": None,
+    "use firefox for web links": ("set_default_app", {"kind": "links", "app": "firefox"}),
+    "use my phone for music": None,
+}
+_da_saved = tools.APP_DIRS
+_da_dir = tempfile.mkdtemp(prefix="llmos-test-apps-")
+with open(os.path.join(_da_dir, "firefox.desktop"), "w") as _f:
+    _f.write("[Desktop Entry]\nName=Firefox\nExec=firefox\nType=Application\n")
+dabad = 0
+try:
+    tools.APP_DIRS = [_da_dir]
+    for text, want in _DA_SIM.items():
+        got = intent.match(text)
+        if got != want:
+            dabad += 1
+            print(f"DEFAULT APP MISMATCH {text!r}\n   got    {got!r}\n   wanted {want!r}")
+finally:
+    tools.APP_DIRS = _da_saved
+    import shutil
+    shutil.rmtree(_da_dir, ignore_errors=True)
+print(f"default app (installed check): {len(_DA_SIM) - dabad}/{len(_DA_SIM)} as expected")
+total = bad + app_bad + reply_bad + tbad + gbad + nbad + rbad + fbad + dbad + obad + dabad
 if total:
     print(f"{total} FAILED")
 else:
