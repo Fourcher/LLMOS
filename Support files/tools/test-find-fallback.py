@@ -33,9 +33,10 @@ def check(label, got, want_in=None, want_not_in=None):
 
 
 class Ctx:
-    def __init__(self):
+    def __init__(self, request=""):
         self.shown = []
         self.statuses = []
+        self.current_request = request
 
     def show_ui(self, spec):
         self.shown.append(spec)
@@ -46,7 +47,7 @@ class Ctx:
 
 home = tempfile.mkdtemp(prefix="llmos-find-fallback-")
 try:
-    for name in ("taxes-2025.pdf", "resume.docx"):
+    for name in ("taxes-2025.pdf", "taxes-notes.txt", "resume.docx"):
         with open(os.path.join(home, name), "w") as f:
             f.write("x")
 
@@ -59,12 +60,31 @@ try:
         ctx = Ctx()
 
         r = tools.find_by_meaning({"query": "taxes", "kind": "documents"}, ctx)
-        check("unavailable: taxes/documents finds taxes-2025.pdf", r, want_in="1 file(s) are listed",
+        check("unavailable: taxes/documents with no type lists both", r, want_in="2 file(s) are listed",
               want_not_in="newer model runtime")
         titles = [i["title"] for s in ctx.shown for b in s["blocks"] for i in b["items"]]
-        check("unavailable: the listed file is taxes-2025.pdf", " ".join(titles), want_in="taxes-2025.pdf")
+        check("unavailable: no type lists taxes-2025.pdf", " ".join(titles), want_in="taxes-2025.pdf")
+        check("unavailable: no type lists taxes-notes.txt", " ".join(titles), want_in="taxes-notes.txt")
 
-        ctx = Ctx()
+        ctx = Ctx("find the pdf about taxes")
+        r = tools.find_by_meaning({"query": "taxes", "kind": "documents"}, ctx)
+        check("unavailable: pdf type lists only the pdf", r, want_in="1 file(s) are listed")
+        titles = [i["title"] for s in ctx.shown for b in s["blocks"] for i in b["items"]]
+        check("unavailable: pdf type lists taxes-2025.pdf and not the txt", " ".join(titles),
+              want_in="taxes-2025.pdf", want_not_in="taxes-notes.txt")
+
+        ctx = Ctx("find my letter about taxes")
+        r = tools.find_by_meaning({"query": "taxes", "kind": "documents"}, ctx)
+        check("unavailable: no type in the request lists both", r, want_in="2 file(s) are listed")
+
+        ctx = Ctx("find the pdf about notes")
+        r = tools.find_by_meaning({"query": "notes", "kind": "documents"}, ctx)
+        titles = [i["title"] for s in ctx.shown for b in s["blocks"] for i in b["items"]]
+        check("unavailable: pdf type with only a txt match falls back to the txt", " ".join(titles),
+              want_in="taxes-notes.txt")
+        check("unavailable: the fallback reply counts the txt", r, want_in="1 file(s) are listed")
+
+        ctx = Ctx("find my resume")
         r = tools.find_by_meaning({"query": "resume", "kind": "any"}, ctx)
         check("unavailable: resume/any finds resume.docx", r, want_in="1 file(s) are listed",
               want_not_in="newer model runtime")
