@@ -79,7 +79,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "ask_passphrase", "ask_passphrase_again", "passphrase_mismatch", "creating_vault", "onboard_done",
               "v_hands-off", "v_balanced", "v_hands-on", "v_yes", "v_no", "v_ask", "listening", "heard",
               "no_mic", "stopped", "error", "model_down", "loading_model", "shutting_down", "restarting",
-              "allow", "d_stop", "d_history", "d_close", "d_minimize", "d_next", "d_back", "d_skip", "d_done",
+              "allow", "d_stop", "d_history", "d_close", "d_minimize", "d_maximize", "d_window", "d_next", "d_back", "d_skip", "d_done",
               "d_unlock", "d_working", "d_apps", "d_close_app", "d_conversation", "d_you", "d_dont",
               "d_other_language", "d_open", "d_pause", "d_resume", "d_volume", "d_now_playing", "d_yes_start",
               "d_no_thanks", "d_type_language", "d_keep", "d_send", "d_clear", "d_shortcuts", "d_empty",
@@ -105,7 +105,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "w_cloud_check", "w_cloud_checking", "w_cloud_key", "w_cloud_model", "w_cloud_url", "w_cloud_key_where", "w_cloud_none_note",
               "w_done_choices", "v_brain_local", "v_brain_ask", "v_brain_cloud", "v_guidance_owner", "v_guidance_standard", "v_not_set_up",
               "d_brain_chip_ask", "d_online_tag", "v_yes", "v_ask", "v_no", "v_hands-off", "v_balanced", "v_hands-on",
-              "d_usually", "d_left", "d_start_files", "d_shutdown_item", "models", "memory", "tasks", "d_history", "d_lists", "d_clock_title")
+              "d_usually", "d_left", "d_start_files", "d_shutdown_item", "models", "memory", "tasks", "d_history", "d_lists", "d_clock_title", "d_sure", "s_brain", "d_slow_turn")
 
 FWCFG = "/sys/firmware/qemu_fw_cfg/by_name/opt/llmos"
 
@@ -173,6 +173,20 @@ def _wifi_connect(ssid, password):
 
 def _hex(rgb):
     return "#%02x%02x%02x" % tuple(int(c) for c in rgb)
+
+
+def _best_text(hexcol):
+    """#111111 or #ffffff, whichever has the higher WCAG contrast ratio against hexcol (text on an accent or danger fill)."""
+    def lum(c):
+        c /= 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    h = hexcol.lstrip("#")
+    l = 0.2126 * lum(int(h[0:2], 16)) + 0.7152 * lum(int(h[2:4], 16)) + 0.0722 * lum(int(h[4:6], 16))
+
+    def ratio(other):
+        hi, lo = max(l, other), min(l, other)
+        return (hi + 0.05) / (lo + 0.05)
+    return "#111111" if ratio(lum(0x11)) > ratio(1.0) else "#ffffff"
 
 
 def _software_gpu():
@@ -1396,6 +1410,8 @@ class Desk:
             css["--fg"] = _hex(th.fg)
         if th.acc:
             css["--accent"] = _hex(th.acc)
+            css["--on-accent"] = _best_text(css["--accent"])
+        css["--on-danger"] = _best_text("#ef5a6f")
         corners = th.corners if th.corners in ("rounded", "square", "double", "heavy", "none") else "rounded"
         css["--radius"] = {"rounded": "14px", "square": "0px", "none": "24px", "double": "6px", "heavy": "8px"}[corners]
         css["--radius-sm"] = {"rounded": "9px", "square": "0px", "none": "16px", "double": "4px", "heavy": "5px"}[corners]
@@ -2230,6 +2246,8 @@ class Desk:
                                                                             r"(?:sleep|suspend|go to sleep|put (?:it|the computer) to sleep|hibernate)[.!]?|clear (?:the )?caches?[.!]?|install (?:the |all (?:the )?)?updates[.!]?|"
                                                                             r"(?:keyboard layout|use an? |switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )[a-z ()-]+)", low):
             return True
+        if self._howto(low.rstrip("?.!")) is not None:
+            return True                   # a how-to the desk answers from its own table: no model needed
         m = intent.match(text)
         return bool(m) and m[0] not in self._SLOW and not m[0].startswith("mail_")
 
@@ -2546,9 +2564,10 @@ class Desk:
         m = re.fullmatch(r"(?P<zin>(?:make )?(?:the )?(?:text|page|words|font) bigger on (?:this|the) (?:page|website|site)|zoom in(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
                          r"(?P<zout>(?:make )?(?:the )?(?:text|page|words|font) smaller on (?:this|the) (?:page|website|site)|zoom out(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
                          r"(?P<bm>bookmark (?:this|it|this page|the page|this site)|add (?:this|it|this page) to (?:my )?(?:bookmarks|favou?rites)|save this page)|"
-                         r"(?P<bms>(?:open|show)(?: me)? (?:my |the )?(?:bookmarks|favou?rites))", l2)
+                         r"(?P<bms>(?:open|show)(?: me)? (?:my |the )?(?:bookmarks|favou?rites))|"
+                         r"(?P<bms2>(?:open|show)(?: me)? (?:my |the )?(?:browser|firefox) (?:bookmarks|favou?rites)|(?:my )?bookmarks)", l2)
         if m and shutil.which("wtype"):
-            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmarks" if m.group("bms") else "bookmark"
+            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmarks" if (m.group("bms") or m.group("bms2")) else "bookmark"
             ok, note = wm.browser_key(k)
             self.instant_reply(line, ({"zoom in": "Made the page bigger (Ctrl+0 puts it back).", "zoom out": "Made the page smaller.",
                                        "bookmark": "The bookmark window is open in the browser: press Save.",
@@ -3176,7 +3195,7 @@ class Desk:
          "On the old computer, in Chrome: Bookmarks → Bookmark manager → ⋮ → Export bookmarks (a .html file), and Settings → Passwords → "
          "Export passwords (a .csv file). Put the files on a USB stick and plug it in here. Then in Firefox: Ctrl+Shift+O → Import and Backup → "
          "Import Bookmarks from HTML, and for the passwords about:logins → ⋯ → Import from a File. Delete the passwords file afterwards: it isn't encrypted."),
-        (r"(?:how (?:do|can) i )?(?:change|set|pick) (?:the |my )?(?:browser'?s? |firefox'?s? )?(?:home ?page|start ?page|start-up page)",
+        (r"(?:how (?:do|can) i )?(?:change|set|pick) (?:the |my )?(?:browser'?s? |firefox'?s? )?(?:home ?page|start ?page|start-up page)|(?:set|change|make) (?:my |the )?(?:home ?page|start ?page)(?: to .+)?|how do i (?:set|change) (?:my |the )?home ?page",
          "In Firefox: open the menu (☰), choose Settings, then Home, and type the page you want under “Homepage and new windows”."),
         (r"blur (?:my |the )?background(?: (?:in|on|during) (?:the |my )?(?:video )?(?:call|meeting|zoom|teams|meet))?|(?:change|hide) (?:my )?background (?:in|on|during) (?:the |my |a )?(?:video )?(?:call|meeting)|virtual background",
          "That's set in the call itself: in Google Meet, ⋮ → Apply visual effects → Blur; in Zoom, ^ next to Stop Video → Blur my background; in Teams, "

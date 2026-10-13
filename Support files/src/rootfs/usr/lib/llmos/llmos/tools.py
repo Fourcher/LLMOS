@@ -1420,8 +1420,11 @@ def add_model(a, ctx):
         return f"error: {e}"
     if getattr(ctx, "is_desk", False):
         ctx.redraw()
+    mem = models.ram_gb()
+    big = " It's bigger than this computer's memory, so it will run from disk, slowly." \
+        if mem > 0 and entry["ram_gb"] > mem else ""
     return (f"added {entry['name']} ({entry['file']}, {size / 1e9:.1f} GB, needs about {entry['ram_gb']} GB RAM), "
-            f"pinned to its SHA-256. Say 'download the model {entry['id']}' then 'use {entry['id']}'.")
+            f"pinned to its SHA-256. Say 'download the model {entry['id']}' then 'use {entry['id']}'.{big}")
 
 
 def _fsize(f):
@@ -1666,11 +1669,13 @@ def manage_models(a, ctx):
             ctx.show_panel("models")
             if models.host_mode():
                 rows.append("(host-GPU mode: " + models.HOST_MODE_MSG + ")")
+            mem = models.ram_gb()
             for m in models.catalog():
                 tag = "in use" if cur and m["id"] == cur["id"] else "installed" if m in models.installed() else \
                     f"{m['size'] / 1e9:.1f} GB download"
+                slow = ", runs from disk, slow" if m["ram_gb"] > mem and mem > 0 else ""
                 rows.append(f"{m['id']}: {m['name']} by {m['maker']} ({m['origin']}, {m['license']}), "
-                            f"needs {m['ram_gb']} GB RAM, {m['note']} [{tag}]")
+                            f"needs {m['ram_gb']} GB RAM{slow}, {m['note']} [{tag}]")
             return "\n".join(rows) + f"\nthis machine has {models.ram_gb():.1f} GB RAM"
         if act == "download":
             m = models.by_id(mid)
@@ -1684,6 +1689,8 @@ def manage_models(a, ctx):
             ctx.status(f"loading {m['name']}…")
             from . import llm
             llm.wait_ready(600)
+            if m.get("bigger_than_ram_note"):
+                return f"now using {m['name']}. {m['bigger_than_ram_note']}"
             return f"now using {m['name']}"
         if act == "remove":
             m = models.remove(mid)
@@ -2654,11 +2661,12 @@ def find_by_meaning(a, ctx):
     from . import meaning
     q = str(a.get("query", "")).strip()
     kind = a.get("kind") or "any"
+    if not meaning.available():
+        # no meaning search here: search by name with the same code find_files uses. The query text already
+        # carries 'pdf' when the owner said it, and find_files has no kind filter, so kind is not added.
+        return find_files({"query": q}, ctx)
     if not q:
         return "error: what should I look for?"
-    if not meaning.available():
-        return ("searching by meaning needs a newer model runtime than this system has; it comes with the next LLM OS update. "
-                "Until then I can search by name: say 'find my files called …'")
     vision = kind in ("photos", "any") and any(True for _ in meaning._candidates(("image",)))
     try:
         if not meaning.ready(vision=vision):
@@ -3222,19 +3230,11 @@ def format_drive(a, ctx):
     d = drives[0]
     disk = d.get("disk") or d["path"]
     label = re.sub(r"[^A-Za-z0-9 _-]", "", str(a.get("name") or "USB"))[:11] or "USB"
-    for x in drives:
-        if x.get("mountpoint"):
-            subprocess.run(["umount", x["mountpoint"]], capture_output=True, timeout=60)
-    tool_ = shutil.which("mkfs.exfat") or shutil.which("mkexfatfs")
-    if not tool_:
+    if not (shutil.which("mkfs.exfat") or shutil.which("mkexfatfs")):
         return "the formatting program is missing (say 'install exfatprogs')"
-    subprocess.run(["wipefs", "-a", disk], capture_output=True, timeout=60)
-    p = subprocess.run(["sh", "-c", f"printf 'label: dos\n,,7\n' | sfdisk -q {shlex.quote(disk)}"], capture_output=True, text=True, timeout=60)
-    part = disk + ("p1" if re.search(r"\d$", disk) else "1")
-    time.sleep(1.5)
-    p2 = subprocess.run([tool_, "-L" if "mkfs" in tool_ else "-n", label, part], capture_output=True, text=True, timeout=600)
-    if p.returncode or p2.returncode:
-        return f"could not format it: {(p.stderr or p2.stderr or p2.stdout).strip()[:200]}"
+    rc, out, err = system.format_drive(disk, label)
+    if rc:
+        return f"could not format it: {(err or out).strip()[:200]}"
     return f"the drive is empty and ready, named {label} (works on Windows, Mac and Linux). Done: reply in one sentence."
 
 
