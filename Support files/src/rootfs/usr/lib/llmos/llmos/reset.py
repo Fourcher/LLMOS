@@ -27,7 +27,7 @@ def erase():
         except OSError as e:
             if os.path.exists(vault.IMG):
                 left.append(f"vault ({e.strerror})")
-    home = config.home().rstrip("/") or "/root"
+    home = config.home().rstrip("/") or "/"
     if home in ("", "/"):
         return ["home folder (not erased: it is the root of the disk)"]
     for n in os.listdir(home):                # without a vault (or under it): the home folder's contents, hidden ones too

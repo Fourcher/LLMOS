@@ -298,6 +298,11 @@ PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpag
 REGISTRY = {}
 
 
+def _home_text():
+    """The home folder as the model is told it: config.home() without a trailing slash ("/root" on today's desk)."""
+    return config.home().rstrip("/") or "/"
+
+
 def tool(name, desc, params=None, required=None, risk=SAFE, network=False, available=None):
     def deco(fn):
         REGISTRY[name] = Tool(name, desc, params or {}, required or [], fn, risk, network, available)
@@ -439,7 +444,7 @@ def document_text(path):
 
 
 @tool("read_file", "Read a file's text: plain text, PDF, Word (.docx), LibreOffice, PowerPoint (.pptx) or Excel text. "
-      "(The owner's home folder is /root, i.e. ~.)", {"path": STR}, ["path"], risk=READ)
+      f"(The owner's home folder is {_home_text()}, i.e. ~.)", {"path": STR}, ["path"], risk=READ)
 def read_file(a, ctx):
     path = _path(a.get("path", ""))
     try:
@@ -450,7 +455,7 @@ def read_file(a, ctx):
         return f"error: could not read {os.path.basename(path)}: {e}"
 
 
-@tool("write_file", "Create or overwrite a text file (or append to it). The owner's home folder is /root (~). Letters, essays "
+@tool("write_file", f"Create or overwrite a text file (or append to it). The owner's home folder is {_home_text()} (~). Letters, essays "
       "and other documents the owner asked for go in ~/Documents with a plain title as the name (~/Documents/Letter to landlord.txt).",
       {"path": STR, "content": STR, "append": {"type": "boolean"}}, ["path", "content"],
       risk=lambda a: SECURITY if _policy_path(_path(a.get("path", ""))) else CHANGE)
@@ -1266,7 +1271,7 @@ def manage_connectors(a, ctx):
             ctx.show_panel("connectors") if getattr(ctx, "is_desk", False) else None
             return ("No connectors are installed. A connector is an external tool provider (an MCP server) that adds "
                     "abilities, like an app. Add one with a command (local) or a URL. Example: "
-                    "add a connector named files that runs 'npx -y @modelcontextprotocol/server-filesystem /root'.")
+                    f"add a connector named files that runs 'npx -y @modelcontextprotocol/server-filesystem {_home_text()}'.")
         if getattr(ctx, "is_desk", False):
             ctx.show_panel("connectors")
         out = []
@@ -2125,7 +2130,7 @@ def _friendly_when(ts):
 
 
 @tool("show_files", "Show the owner's files as a window: a folder listing with open/delete buttons. The home folder is "
-      "/root (~). Use for 'show my files', 'open my documents folder', 'what's in ~/projects'.",
+      f"{_home_text()} (~). Use for 'show my files', 'open my documents folder', 'what's in ~/projects'.",
       {"path": {"type": "string", "description": "folder to show (default: the home folder)"},
        "sort": {"type": "string", "enum": ["name", "date", "size"], "description": "order (default name; date = newest first)"},
        "hidden": {"type": "boolean", "description": "true to show hidden files (names starting with a dot), false to hide them again"},

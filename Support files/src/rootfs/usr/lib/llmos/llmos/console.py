@@ -91,8 +91,9 @@ class ConsoleCtx:
                 "The key is checked with one tiny request and kept inside the vault. On the desk a form opens instead.")
 
     def setup_connector(self):
+        home = config.home().rstrip("/") or "/"
         return ("From this console, say it in one line, e.g.: \"add a connector named files that runs 'npx -y "
-                "@modelcontextprotocol/server-filesystem /root'\" or \"add a connector named api at https://…/mcp\". "
+                f"@modelcontextprotocol/server-filesystem {home}'\" or \"add a connector named api at https://…/mcp\". "
                 "On the desk a form opens instead.")
 
     def edit_conduct(self):
