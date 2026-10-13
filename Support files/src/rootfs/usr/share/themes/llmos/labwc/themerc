@@ -23,6 +23,6 @@ osd.border.color: #3a3f5c
 osd.label.text.color: #e8e9ef
 menu.items.bg.color: #171a29
 menu.items.text.color: #e8e9ef
-menu.items.active.bg.color: #7c5cff
+menu.items.active.bg.color: #7a52ff
 menu.items.active.text.color: #ffffff
 menu.border.color: #3a3f5c
