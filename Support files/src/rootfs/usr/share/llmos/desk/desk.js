@@ -223,7 +223,10 @@
   }
   setInterval(clock, 1000);
   $("clock").style.cursor = "pointer"; $("clock").title = t("d_clock_title", "Clock & calendar");
-  $("clock").addEventListener("click", () => act("open the clock"));
+  const openClock = () => act("open the clock");
+  $("clock").tabIndex = 0; $("clock").setAttribute("role", "button"); $("clock").setAttribute("aria-label", t("d_clock_title", "Clock & calendar"));
+  $("clock").addEventListener("click", openClock);
+  $("clock").addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openClock(); } });
 
   // ---------------------------------------------------------------- screens
   function ownerStyle() {           // the owner's own style applies to the desk only: never the lock screen or setup
@@ -911,7 +914,7 @@
     d.append(row); ov.append(d);
     ov.dataset.id = m.id;
     d.tabIndex = -1;
-    setTimeout(() => { const no = m.danger && d.querySelector('[data-value="no"]'); (no || d).focus(); }, 30);
+    setTimeout(() => { const first = m.danger ? d.querySelector('[data-value="no"]') : d.querySelector(".btn.primary"); (first || d).focus(); }, 30);
   }
 
   // ---------------------------------------------------------------- input
@@ -933,10 +936,31 @@
   let lastPing = 0;
   const ping = () => { const now = Date.now(); if (now - lastPing > 20000) { lastPing = now; post({ t: "active" }); } };
   for (const ev of ["keydown", "mousedown", "mousemove", "wheel", "touchstart"]) document.addEventListener(ev, ping, { passive: true });
+  // arrow keys move through a radio group (.seg) with wrap-around; the focused option is selected
+  function nextIndex(i, n, key) {
+    if (n < 1 || i < 0) return -1;
+    const step = key === "ArrowLeft" || key === "ArrowUp" ? -1 : key === "ArrowRight" || key === "ArrowDown" ? 1 : 0;
+    if (!step) return -1;
+    return ((i + step) % n + n) % n;
+  }
+  document.addEventListener("keydown", (e) => {
+    const r = e.target;
+    if (r && r.getAttribute && r.getAttribute("role") === "radio" && r.parentElement && r.parentElement.getAttribute("role") === "radiogroup") {
+      const opts = [...r.parentElement.querySelectorAll('[role="radio"]:not(:disabled)')];
+      const j = nextIndex(opts.indexOf(r), opts.length, e.key);
+      if (j >= 0) { e.preventDefault(); opts[j].focus(); opts[j].click(); return; }
+    }
+  });
   document.addEventListener("keydown", (e) => {
     const ov = $("overlay");
     if (!ov.classList.contains("hidden")) {
       if (e.key === "Escape") { dialogDone(ov); post({ t: "dialog", id: ov.dataset.id, value: "no" }); }
+      // Enter confirms a plain question (never a danger one, and never while typing or on a focused button, which clicks itself)
+      else if (e.key === "Enter") {
+        const ae = document.activeElement, tag = ae && ae.tagName;
+        const yes = ov.querySelector(".dlg:not(.danger) .btn.primary");
+        if (yes && tag !== "TEXTAREA" && tag !== "INPUT" && tag !== "BUTTON") { e.preventDefault(); yes.click(); }
+      }
       return;
     }
     if (wizard.active || $("desk").classList.contains("hidden")) return;
