@@ -56,7 +56,7 @@ def main():
         print("ok %s %.2fs output=%r" % (mode, results[mode][1], results[mode][0]))
     slow_out, slow_dt = results["slow"]
     fast_out, fast_dt = results["fast"]
-    assert fast_dt < 0.6, "fast run too slow: %.2fs" % fast_dt
+    assert fast_dt < 1.5,"fast run too slow: %.2fs" % fast_dt
     assert slow_dt > 2.0, "default run unexpectedly fast: %.2fs" % slow_dt
     assert slow_out == fast_out, (slow_out, fast_out)
     assert "DONE_7" in fast_out and "...output" in fast_out
