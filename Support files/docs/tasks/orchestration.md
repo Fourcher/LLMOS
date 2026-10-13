@@ -91,3 +91,4 @@ Rule for every FIX spec that changes existing behaviour: open with a PROBE-sourc
   * VERIFY returns PASS/FAIL on the spec only; wording/style remarks become [note] lines in queue.md, not FAILs.
   * When a held branch contains an older held branch, the older line is marked superseded in the same commit; queue.md keeps ONE merge-order list of chain heads.
   * Host suites only via tools/hostloop.sh; a run voided by a macOS lockout is VOID (re-run), never FAIL.
+- 2026-10-13 OWNER RULE: host tests run ONLY via `bash "Support files/tools/run-host-tests.sh"` (one test: add its path) — it points HOME, LLMOS_HOME and TMPDIR into Support files/run/testhome. Never the old `for t in tools/test-*.py` loop or tools/hostloop.sh without that environment: running the OS code on the Mac with the real home made macOS ask for iCloud Drive / Music access. Nothing may touch anything outside /Volumes/Files/Claude Work Area/LLMOS (a PreToolUse hook enforces it).

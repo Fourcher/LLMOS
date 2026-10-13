@@ -152,3 +152,4 @@ Each merge: git merge --no-ff; resolve trivial conflicts by FIX worker if any; t
 - [done] Merged after VERIFY PASS: b7e3f80 (intent chain incl. reminders), de38295, e231f47, b399357, 3bbdd92, 3377480, 522aa55, bb62538, dd71cba, 3d2252f, 9abccc8, 9fb9041, 7715c48, c5fb41c, 091a5b6, 15e7549 — all merged cleanly.
 - [left for later] 5c05f50 (guard explanation on the button/instant path) — its VERIFY did not finish.
 - [left for later] open items above in this file (vault via rootd, owner-account VM install test A14, usecases-2 re-run on the new build, "Largest (slow, runs from disk)" model option, first-reply timing on VM, tool merges, "next week"/"later today" reminders, remaining model-only phrases).
+- [left for later] tools/hostloop.sh does not set HOME/LLMOS_HOME/TMPDIR like run-host-tests.sh — make it call run-host-tests.sh per test (or retire it).
