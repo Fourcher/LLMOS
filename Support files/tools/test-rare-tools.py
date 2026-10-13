@@ -62,6 +62,20 @@ with patch.object(tools, "_has_wifi", return_value=True), \
         ("encrypt my vault with a passphrase", True),
         ("play some music", False),
         ("what is the capital of France", False),
+        # 1.7.1: natural wordings that used to miss the rare group
+        ("is my computer safe", True),
+        ("connect to my phone's hotspot", True),
+        ("what does this program do", True),
+        ("erase the sd card", True),
+        ("is my network secure", True),
+        ("are my files protected", True),
+        ("how do I stop a hacker", True),
+        ("is there spyware on my laptop", True),
+        ("tether my phone", True),
+        ("list open ports", True),
+        ("who's on my wifi", True),
+        ("devices on my network", True),
+        ("make my files private", False),
     ]
     for req, want in cases:
         got = names(agent.tool_schemas(req))

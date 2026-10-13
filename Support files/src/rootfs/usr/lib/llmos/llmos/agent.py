@@ -126,7 +126,11 @@ _RARE_RE = re.compile(r"security|secure|hack|scan|\bports?\b|network|traffic|pac
                       r"password for wifi|install (?:llm os|this system|to disk|to the drive)|"
                       r"format (?:the |my |this )?(?:drive|disk|usb|stick|card|sd)|wipe|"
                       r"erase (?:the )?(?:drive|disk|usb)|passphrase|vault|encrypt|reverse|binary|disassembl|"
-                      r"malware|virus|analy[sz]e (?:this )?(?:program|file|binary)|firewall")
+                      r"malware|virus|analy[sz]e (?:this )?(?:program|file|binary)|firewall|"
+                      r"\bsafe(?:ty)?\b|\bsecure\b|\bprotected\b|\bhotspot\b|\btether|\bhack(?:ed|er|ing)?\b|"
+                      r"\bspy(?:ware)?\b|\btrojan\b|what does (?:this|that|the) (?:program|app|file|binary|script) do\b|"
+                      r"\berase\b|\bwipe\b|\bdevices? on (?:my|the) network\b|who(?:'s| is) on (?:my|the) (?:wifi|network)\b|"
+                      r"\bopen ports?\b|install (?:it |llm os |this )?(?:to|on) (?:the |this |my )?(?:disk|drive|laptop|computer|pc)\b")
 
 
 def _is_rare(name):
