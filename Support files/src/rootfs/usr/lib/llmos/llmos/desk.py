@@ -478,7 +478,7 @@ class DeskCtx:
         if not (llm.CLOUD_PROVIDERS.get(pid) or {}).get("signin"):
             return self.setup_cloud(pid)
         self.d.GLib.idle_add(self.d._signin_open, pid)
-        return (f"a sign-in window for {llm.CLOUD_PROVIDERS[pid]['name']} is open: the owner signs in, creates a key and "
+        return (f"a sign-in window for {llm.CLOUD_PROVIDERS[pid]['name']} is open: you sign in, create a key and "
                 "presses Copy; the window then closes by itself and the key is checked automatically. Say one sentence at most.")
 
     def setup_cloud(self, provider=None):
@@ -487,7 +487,7 @@ class DeskCtx:
         passes through a model)."""
         if str(provider or "").strip().lower() not in ("other", "other service", "openai-compatible", "openai compatible"):
             self.d.open_connect_panel()
-            return "the connect panel is on the owner's screen: they sign in to a service there. Say one sentence at most."
+            return "the connect panel is on screen: you sign in to a service there. Say one sentence at most."
         import secrets
         self.d.cloud_nonce = secrets.token_hex(12)
         prov = llm.CLOUD_PROVIDERS
@@ -501,7 +501,7 @@ class DeskCtx:
                                         {"name": "nonce", "kind": "hidden", "value": self.d.cloud_nonce}],
              "submit": {"label": T("d_cloud_save"), "post": "cloud.setup"}},
             {"type": "text", "text": T("d_cloud_hint"), "dim": True}]})
-        return "an online-model form is on the owner's screen; they fill it in there. Say one sentence at most."
+        return "an online-model form is on screen; you fill it in there. Say one sentence at most."
 
     def setup_connector(self):
         """"add a connector": a form whose submit posts straight to the OS (nothing runs until it is probed)."""
@@ -516,7 +516,7 @@ class DeskCtx:
                                         {"name": "nonce", "kind": "hidden", "value": self.d.connector_nonce}],
              "submit": {"label": T("d_conn_add_btn", area="settings"), "post": "connector.add"}},
             {"type": "text", "text": T("d_connector_form_hint", area="settings"), "dim": True}]})
-        return "a connector form is on the owner's screen; they fill it in there. Say one sentence at most."
+        return "a connector form is on screen; you fill it in there. Say one sentence at most."
 
     def edit_conduct(self):
         """"pop the hood": the owner edits the conduct section of the system prompt. The text is theirs — it
@@ -530,7 +530,7 @@ class DeskCtx:
                                         {"name": "nonce", "kind": "hidden", "value": self.d.conduct_nonce}],
              "submit": {"label": T("d_conduct_save", area="settings"), "post": "conduct.save"}},
             {"type": "text", "text": T("d_conduct_hint", area="settings"), "dim": True}]})
-        return "the conduct editor is on the owner's screen; they edit it there. Say one sentence at most."
+        return "the conduct editor is on screen; you edit it there. Say one sentence at most."
 
     def interactive(self, cmd):
         return self.d.run_in_terminal(cmd)
@@ -565,7 +565,7 @@ class DeskCtx:
                                             {"name": "p2", "label": T("ask_passphrase_again"), "kind": "password"},
                                             {"name": "nonce", "kind": "hidden", "value": self.d.vault_nonce}],
                  "submit": {"label": "Change it", "post": "vault.change"}}]})
-            return ("nothing is changed yet: a window is open where the owner types the passphrase they use now and the new one. "
+            return ("nothing is changed yet: a window is open where you type the passphrase they use now and the new one. "
                     "Tell them that in one sentence; do not say it is changed.")
         self.d.vault_nonce = secrets.token_hex(12)
         self.d.open_window({"id": "vault-form", "replace": True, "title": T("passphrase"), "size": "s", "slot": "cascade", "blocks": [
@@ -575,7 +575,7 @@ class DeskCtx:
                                         {"name": "nonce", "kind": "hidden", "value": self.d.vault_nonce}],
              "submit": {"label": T("d_set_passphrase"), "post": "vault.create"}},
             {"type": "text", "text": T("w_pass_hint"), "dim": True}]})
-        return ("nothing is set yet: a window is open where the owner types a new passphrase twice. "
+        return ("nothing is set yet: a window is open where you type a new passphrase twice. "
                 "Tell them that in one sentence; do not say it is set.")
 
     def show_ui(self, spec):

@@ -2,7 +2,7 @@
 """Host-side test of the model-visible wording: tool results say "you" / "your" / "on screen" / "reply",
 never "the owner" (the model copied "the owner" from results into its replies).
 
-Checks: (1) tools.py and agent.py compile; (2) no string in code that the model can see contains "the owner",
+Checks: (1) tools.py, agent.py and desk.py compile; (2) no string in code that the model can see (incl. desk.py results) contains "the owner",
 except the prompts and the tool descriptions listed in ALLOW below; (3) the hidden-note regexes still hide
 each note (old and new text); (4) last_saved._opened still recognises the success replies; (5) the
 shortcut and failure matchers in agent.py still work on the new text.
@@ -17,6 +17,7 @@ _ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src/root
 _LLMOS = os.path.join(_ROOT, "usr/lib/llmos", "llmos")
 TOOLS = os.path.join(_LLMOS, "tools.py")
 AGENT = os.path.join(_LLMOS, "agent.py")
+DESK = os.path.join(_LLMOS, "desk.py")
 sys.path.insert(0, os.path.join(_ROOT, "usr/lib/llmos"))
 os.environ.setdefault("LLMOS_SHARE", os.path.join(_ROOT, "usr/share/llmos"))
 
@@ -50,7 +51,7 @@ def walk_visible(path):
     tree = ast.parse(src)
     skip = set()
     for n in ast.walk(tree):
-        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.body and isinstance(n.body[0], ast.Expr):
+        if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n.body and isinstance(n.body[0], ast.Expr):
             skip.add(id(n.body[0].value))
         if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "tool":
             for a in ast.walk(n):
@@ -69,15 +70,15 @@ def walk_visible(path):
 
 
 # (1) compile
-for p in (TOOLS, AGENT):
+for p in (TOOLS, AGENT, DESK):
     try:
         py_compile.compile(p, doraise=True)
         check(True, f"compiles {os.path.basename(p)}")
     except py_compile.PyCompileError as e:
         check(False, f"compiles {os.path.basename(p)}: {e}")
 
-# (2) no model-visible "the owner"
-for p in (TOOLS, AGENT):
+# (2) no model-visible "the owner" (desk.py: the result strings it returns to the model)
+for p in (TOOLS, AGENT, DESK):
     bad = list(walk_visible(p))
     check(not bad, f"no 'the owner' in model-visible strings of {os.path.basename(p)}"
           + ("" if not bad else f": {[(ln, t[:60]) for ln, t in bad[:5]]}"))
