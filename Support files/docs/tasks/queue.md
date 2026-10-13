@@ -119,3 +119,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [open] (capability) "turn off the internet" (word order "off the") is not routed (only "turn the internet off"?) — PROBE intent _INTERNET forms | role: probe
 - [held] dd71cba (contains 0f9fb4f; instant gate for tiling + no-internet forms) VERIFY PASS — merge dd71cba (not 0f9fb4f) after the 1.8.1 build.
 - [held] b399357 (contains 90be8cd+58cb32c; "turn off/disable the firewall" -> setting (asks under balanced); status reply follows the setting) VERIFY PASS — merge after the build, then 3bbdd92 (undo) once verified. Gap: "firewall off please".
+- [held] 3bbdd92 (firewall in undo snapshot; undo re-applies) VERIFY PASS — merge after b399357.
