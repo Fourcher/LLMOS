@@ -2328,7 +2328,10 @@ class Desk:
 
                 def __getattr__(lane, k):
                     return getattr(lane._ctx, k)
-            out = agent.execute(Lane(self.ctx), name, args)
+            lane = Lane(self.ctx)
+            out = agent.execute(lane, name, args)
+            if lane.__dict__.get("after_turn"):    # system_power sets it on the lane object, not on the desk's context
+                self.ctx.after_turn = lane.__dict__["after_turn"]
             if str(out).startswith(agent._NOT_AN_APP):
                 self._enqueue(intent.fix_typos(text), done, "main")   # words, not an app: the model writes them
                 return True
@@ -2338,6 +2341,10 @@ class Desk:
                 self.emit({"t": "toast", "text": reply[:240]})
         except Exception as e:
             self.emit({"t": "toast", "text": agent._plain_error(str(e))})
+        how = self.ctx.after_turn               # a button that restarts or shuts down (system_power): do it now, as
+        if how:                                 # a typed request does after its reply; before this, nothing happened
+            self.ctx.after_turn = None
+            self.shutdown(how)
         return False
 
     def _worker(self):
