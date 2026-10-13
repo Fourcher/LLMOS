@@ -1996,9 +1996,15 @@ def match(text):
         return r
     typed = str(text or "")
     fixed = _retype(typed)                    # one retry on the typo-fixed copy; the first pass result wins when it is not None
-    if fixed == typed:
+    if fixed != typed:
+        r = _fix_schedule(_match(fixed))
+        if r is not None:
+            return r
+    # last: a trailing please/thanks/now is set aside and the rest matched again (only when nothing matched above)
+    stripped = _TRAIL_FILLER.sub("", fixed).strip()
+    if not stripped or stripped == fixed.strip():
         return None
-    return _fix_schedule(_match(fixed))
+    return _fix_schedule(_match(stripped))
 
 
 def _analyze_program(t):

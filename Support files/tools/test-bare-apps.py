@@ -44,7 +44,7 @@ CASES = {
     "calculator broken": None,
     "messenger bag": None,
     "podcasts about history": None,
-    "open the calculator, please": None,
+    "open the calculator, please": ("open_app", {"command": "calculator"}),
 }
 
 fails = 0
