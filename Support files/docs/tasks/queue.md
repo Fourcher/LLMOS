@@ -122,3 +122,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 3bbdd92 (firewall in undo snapshot; undo re-applies) VERIFY PASS — merge after b399357.
 - [running] (reliability) RUN 1.8.1 build #2 (after volume lockout) — NO src merges until it reports.
 - [held] de38295 (more internet-off phrasings) VERIFY PASS (trial merge clean; only the test-recent-files midnight flake, also on base) — merge after the 1.8.1 build.
+- [held] 3d2252f (contains 270169b; sign-out reply "Locked. Signing out here just locks the screen.") VERIFY: diff/compile/named tests PASS, clean merge-tree; host loop void (macOS lockout) — merge after the 1.8.1 build; RUN host suites at build time cover it.
