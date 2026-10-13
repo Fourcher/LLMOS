@@ -648,6 +648,65 @@ def main():
               and nr["drain_seconds"] is None, json.dumps({k: nr[k] for k in ("cancelled", "stuck", "drain_seconds")}))
         print("ok drain: normal task sends no cancel")
 
+        # 9f. a cancelled task (drained idle, not stuck) -> the next task starts on one fresh overlay
+        cf_dir = tempfile.mkdtemp(prefix="realrun-cancel-")
+        cf_suite = os.path.join(cf_dir, "suite.json")
+        with open(cf_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [reply_task("cf-1"), reply_task("cf-2")]}, f)
+        vm, st = make_drain_vm(left=2, busy_waits=1)  # task 1 finds the desk busy; task 2 finds it idle
+
+        def cf_fresh():
+            cf_calls.append("fresh")
+            st.update(busy=False, cancelled=False)
+        cf_calls = []
+        cf_out = os.path.join(outroot, "cancel-next")
+        realrun.run_suite(cf_suite, FakeUser(), vm, outdir=cf_out, fresh=cf_fresh, sleep=no_sleep,
+                          clock=FakeClock())
+        cf1 = json.load(open(os.path.join(cf_out, "cf-1.json"), encoding="utf-8"))
+        cf2 = json.load(open(os.path.join(cf_out, "cf-2.json"), encoding="utf-8"))
+        check("cancelled task (drained idle) -> fresh() called once before task 2", cf_calls == ["fresh"],
+              repr(cf_calls))
+        check("cancelled task 1: cancelled true, stuck false, fresh_before None",
+              cf1["cancelled"] is True and cf1["stuck"] is False and cf1["fresh_before"] is None,
+              json.dumps({k: cf1[k] for k in ("cancelled", "stuck", "fresh_before")}))
+        check("task 2 after cancel: fresh_before names the reason and task 2 PASSes",
+              cf2["fresh_before"] == "previous task cancelled" and cf2["verdict"] == "PASS",
+              json.dumps({k: cf2[k] for k in ("fresh_before", "verdict")}))
+        shutil.rmtree(cf_dir, ignore_errors=True)
+        print("ok cancel: cancelled task -> fresh once before next task, fresh_before recorded")
+
+        # no cancel anywhere -> fresh() never called, fresh_before null
+        nc_dir = tempfile.mkdtemp(prefix="realrun-nocancel-")
+        nc_suite = os.path.join(nc_dir, "suite.json")
+        with open(nc_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [reply_task("nc-1"), reply_task("nc-2"), reply_task("nc-3")]}, f)
+        nc_calls = []
+        nc_out = os.path.join(outroot, "no-cancel")
+        nc_vm, _nc_st = make_drain_vm(busy_waits=0)  # its testreset clears the reply, so no task sees a stale one
+        nc_sum = realrun.run_suite(nc_suite, FakeUser(), nc_vm, outdir=nc_out,
+                                   fresh=lambda: nc_calls.append("fresh"), sleep=no_sleep, clock=FakeClock())
+        check("no cancels -> fresh() never called, all PASS, fresh_before null",
+              nc_calls == [] and nc_sum["pass"] == 3 and all(
+                  json.load(open(os.path.join(nc_out, "nc-%d.json" % i), encoding="utf-8"))["fresh_before"] is None
+                  for i in (1, 2, 3)), repr(nc_calls))
+        shutil.rmtree(nc_dir, ignore_errors=True)
+
+        # last task cancelled -> no trailing fresh() (the next task never runs, so no reboot is made for it)
+        lc_dir = tempfile.mkdtemp(prefix="realrun-lastcancel-")
+        lc_suite = os.path.join(lc_dir, "suite.json")
+        with open(lc_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [reply_task("lc-1")]}, f)
+        vm, st = make_drain_vm(left=2, busy_waits=1)
+        lc_calls = []
+        lc_out = os.path.join(outroot, "last-cancel")
+        realrun.run_suite(lc_suite, FakeUser(), vm, outdir=lc_out,
+                          fresh=lambda: lc_calls.append("fresh"), sleep=no_sleep, clock=FakeClock())
+        lc1 = json.load(open(os.path.join(lc_out, "lc-1.json"), encoding="utf-8"))
+        check("last task cancelled -> no trailing fresh(), record cancelled",
+              lc_calls == [] and lc1["cancelled"] is True, repr((lc_calls, lc1["cancelled"])))
+        shutil.rmtree(lc_dir, ignore_errors=True)
+        print("ok cancel: last task cancelled -> no trailing fresh()")
+
         # 10. fresh_overlay: readiness, onboarding, desk-ready polls with a fake clock (sleep advances it)
         class FakeTime:
             def __init__(self):
