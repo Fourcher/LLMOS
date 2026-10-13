@@ -60,6 +60,15 @@ CASES = [
     ("remind me how to do this", None),
     ("remind me at some point", None),
     ("remind me at three to pay", None),
+    # questions: the text before the time is a question, so no schedule_task (was {"when": "tonight", "task": "remind me what's on"})
+    ("remind me what's on tonight", None),
+    ("remind me what I have tomorrow", None),
+    ("what's on tv tonight", None),
+    ("do i have anything tonight", None),
+    ("remind me what's on tonight please", None),
+    # unchanged non-question rows: a plain task before a time word still schedules
+    ("call mum tonight", ("schedule_task", {"when": "tonight", "task": "call mum"})),
+    ("remind me to call mum tonight", ("schedule_task", {"when": "tonight", "task": "call mum", "kind": "reminder"})),
 ]
 
 

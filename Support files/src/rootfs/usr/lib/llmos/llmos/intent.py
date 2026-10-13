@@ -85,6 +85,9 @@ _IMPERATIVE = re.compile(
 _QUESTION = re.compile(r"\?\s*$|^\s*(?:what|when|where|who|why|how|is|are|do|does|did|can|could|will|would|should)\b", re.I)
 
 
+_QUESTION_TASK = re.compile(r"^(?:remind me (?:what|when|where|who|how|which|why|if|whether)|what(?:'s| is)|when|where|who|how|is there|are there|do i have|did i)\b", re.I)
+
+
 def _schedule(text):
     if _QUESTION.search(text):
         return None
@@ -95,6 +98,8 @@ def _schedule(text):
         when, task = m.group("when").strip(), m.group("task").strip().rstrip(".,;")
         if not _IMPERATIVE.match(task):
             continue
+        if _QUESTION_TASK.match(task) or "?" in task:
+            continue                             # "remind me what's on tonight": the text before the time is a question, not a task
         try:
             from . import store
             store.parse_when(when)
