@@ -457,8 +457,11 @@ class DeskCtx:
                                "yes": T("d_full_trust_yes"), "no": T("d_full_trust_no")}, consent=True)
         # (the agent asks only when a setting the owner chose says to: their autonomy level, or the check on
         # instructions from web pages, files and emails)
+        text = self.d.describe_args(tool, args)
+        if getattr(self, "confirm_tainted", False):      # agent.py sets this on this same DeskCtx for the web-page check
+            text = text + "\n\n" + T("d_guard_tainted")
         return self.d.ask({"title": self.d.describe_tool(tool, args, confirm=True),
-                           "text": self.d.describe_args(tool, args), "danger": risk in ("destructive", "security"),
+                           "text": text, "danger": risk in ("destructive", "security"),
                            "mono": tool.name in ("run_command", "install_app", "write_file")}, consent=True)
 
     def confirm_online(self, text, reason):

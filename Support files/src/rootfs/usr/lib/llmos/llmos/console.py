@@ -70,7 +70,10 @@ class ConsoleCtx:
         return ok
 
     def confirm_action(self, tool, args, risk):
-        return self.c.ask_yes_no(ui.safe(self.c.describe_tool(tool, args, confirm=True)), danger=risk in ("destructive", "security"))
+        question = ui.safe(self.c.describe_tool(tool, args, confirm=True))
+        if getattr(self, "confirm_tainted", False):      # agent.py sets this on this same ConsoleCtx for the web-page check
+            question = question + "\n" + T("d_guard_tainted")
+        return self.c.ask_yes_no(question, danger=risk in ("destructive", "security"))
 
     def confirm_online(self, text, reason):
         """'ask' brain mode: one question before a request leaves this computer."""
