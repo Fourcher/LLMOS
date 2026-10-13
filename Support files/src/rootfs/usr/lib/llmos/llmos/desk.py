@@ -3169,7 +3169,7 @@ class Desk:
                       r"gnumeric|word processor|spreadsheet|photos|image viewer|player|video|mousepad|thunar)(?: window| app| program)?|"
                       r"(?:force quit|kill(?= \w))(?: (?:the )?(?P<killw>\w[\w ]*))?|"
                       r"(?P<reopen>reopen (?:what i closed|the tab i closed|(?:the |my )?(?:last )?closed (?:tab|one)|the last closed tab)|undo (?:the )?close tab)|"
-                      r"(?P<stopf>(?:this|the|my) (?:app|program) (?:is|has|seems) frozen|(?:this|the|my) (?:app|program) froze|it'?s frozen|"
+                      r"(?P<stopf>(?:this|the|my) (?:app|program) (?:is|has|seems) frozen|(?:this|the|my) (?:app|program) froze|"
                       r"(?:this|the|my) (?:app|program) stopped responding)|"
                       r"(?:the )?(?P<frozen>\w[\w ]*?) (?:is|has|seems) (?:frozen|stuck|not responding|hung)")
 
@@ -3485,7 +3485,7 @@ class Desk:
                 self.open_window(syspanels.bluetooth())
             threading.Thread(target=bt, daemon=True).start()
             return True
-        m = re.fullmatch(r"(?:keyboard layout|use an? |add (?:an? |the )?|switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )(?P<k>[a-z ()-]+?)(?: keyboard)?(?: layout)?", low)
+        m = re.fullmatch(r"(?:keyboard layout|use an? |add (?:an? |the )?(?=.*\b(?:keyboard|layout)\b)|switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )(?P<k>[a-z ()-]+?)(?: keyboard)?(?: layout)?", low)
         if m and syspanels.layout_code(m.group("k")):
             code = syspanels.layout_code(m.group("k"))
             config.settings.set("input.layout", code)

@@ -74,9 +74,12 @@ def window(q):
 
 
 print("frozen program: stop it (last program, asks first)")
-for q in ("this app is frozen", "the app is frozen", "it's frozen", "this program froze", "my app stopped responding"):
+for q in ("this app is frozen", "the app is frozen", "this program froze", "my app stopped responding"):
     r, asked, killed = window(q)
     check(r is True and asked == ["Stop Firefox?"] and not killed, f"{q!r} -> stop the last program, asked first")
+for q in ("it's frozen", "its frozen"):
+    r, asked, killed = window(q)
+    check(r is False and not asked and not killed, f"{q!r} is ambiguous: not the stop route (assistant route)")
 r, asked, killed = window("force quit this")
 check(r is True and asked == ["Stop Firefox?"] and not killed, "'force quit this' still reaches the stop path")
 for q, g in (("firefox is frozen", "frozen"), ("force quit firefox", "killw"), ("new tab", "key"),
@@ -118,8 +121,11 @@ def layout(q):
     return syspanels.layout_code(m.group("k"))
 
 
-for q, want in (("add french keyboard", "fr"), ("add a german keyboard", "de"), ("add the spanish keyboard layout", "es")):
+for q, want in (("add french keyboard", "fr"), ("add a german keyboard", "de"), ("add the spanish keyboard layout", "es"),
+                ("add the french layout", "fr")):
     check(layout(q) == want, f"{q!r} -> {want}")
+for q in ("add it", "add in", "add us", "add no", "add french", "add german"):
+    check(layout(q) is None, f"{q!r} is not the keyboard route (no question, no change)")
 for q, want in (("use a german keyboard", "de"), ("keyboard layout french", "fr"), ("switch keyboard to spanish", "es"),
                 ("change keyboard layout to german", "de")):
     check(layout(q) == want, f"existing {q!r} -> {want} unchanged")
