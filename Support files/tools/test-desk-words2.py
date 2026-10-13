@@ -132,5 +132,22 @@ for q, want in (("use a german keyboard", "de"), ("keyboard layout french", "fr"
 for q in ("add french to my languages", "add a keyboard shortcut"):
     check(layout(q) is None, f"{q!r} is not a keyboard layout")
 
+print("_instant gate (what may run at once while the model is busy)")
+sys.path.insert(0, os.path.join(HERE, "..", "src/rootfs/usr/lib/llmos"))
+from llmos.desk import Desk
+
+
+def instant(q):
+    return bool(Desk.__new__(Desk)._instant(q))
+
+
+for q in ("add french keyboard", "add the french layout", "this app is frozen", "my program froze",
+          "the app stopped responding", "voice memo", "voice note"):
+    check(instant(q) is True, f"{q!r} runs at once while busy")
+for q in ("news", "logs", "what time is it", "open firefox", "settings", "help", "stop", "lock", "wifi", "battery"):
+    check(instant(q) is True, f"existing {q!r} still runs at once")
+for q in ("add it", "add in", "my hands are frozen"):
+    check(instant(q) is False, f"{q!r} does not run at once")
+
 print(f"\n{'all good' if not fails else str(fails) + ' failure(s)'}")
 sys.exit(1 if fails else 0)

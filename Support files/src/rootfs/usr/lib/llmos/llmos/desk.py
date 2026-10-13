@@ -2283,7 +2283,7 @@ class Desk:
                                                                             r"(?:natural scrolling|tap to click|left handed mouse) (?:on|off)|mouse (?:faster|slower|normal speed)|"
                                                                             r"key repeat (?:faster|slower|normal)|set resolution \S+ \d+x\d+|"
                                                                             r"(?:sleep|suspend|go to sleep|put (?:it|the computer) to sleep|hibernate)[.!]?|clear (?:the )?caches?[.!]?|install (?:the |all (?:the )?)?updates[.!]?|"
-                                                                            r"(?:keyboard layout|use an? |switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )[a-z ()-]+)", low):
+                                                                            r"add (?:the |an? )?[a-z]+ layout|(?:this |my |the )?(?:app|program)(?: is frozen| froze| stopped responding)|(?:keyboard layout|use an? |switch (?:the )?keyboard to|change (?:the )?keyboard (?:layout )?to )[a-z ()-]+)", low):
             return True
         if self._howto(low.rstrip("?.!")) is not None:
             return True                   # a how-to the desk answers from its own table: no model needed
