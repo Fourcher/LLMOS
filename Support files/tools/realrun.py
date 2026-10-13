@@ -215,21 +215,40 @@ def _wait_cmd(seconds, done0):
     return "llmos desk-ctl wait %s" % seconds
 
 
+def _finished_since(desk, done0):
+    """True when desk-state "done" is above done0 (the turn completed). None when either count is missing
+    (older desks), so the caller falls back to returning on not-busy."""
+    if not isinstance(done0, int) or isinstance(done0, bool) or not isinstance(desk, dict):
+        return None
+    done = desk.get("done")
+    if not isinstance(done, int) or isinstance(done, bool):
+        return None
+    return done > done0
+
+
 def _wait_approving(run_in_vm, clock, timeout_s, done0, ctx):
     """approve tasks: wait in short slices until the task's timeout_s total. After each slice that is still
     busy, if desk-state lists an open ask in "dialogs", answer it with `llmos desk-ctl dialog yes` and count
-    it in ctx["approved"]. Returns the last wait output; still busy at the total is the caller's timeout."""
+    it in ctx["approved"]. A slice that is not busy only ends the wait when desk-state "done" > done0 (the turn
+    completed); done == done0 means the typed line has not reached the desk yet, so the next slice runs.
+    Returns the last wait output; still busy at the total is the caller's timeout."""
     deadline = clock() + timeout_s
     while True:
         slice_s = int(min(APPROVE_SLICE_S, max(1, deadline - clock())))
         out = run_in_vm(_wait_cmd(slice_s, done0))
         st = vm_json(out)
-        if not (isinstance(st, dict) and st.get("busy")) or clock() >= deadline:
+        busy = isinstance(st, dict) and bool(st.get("busy"))
+        if clock() >= deadline:
             return out
         desk = vm_json(run_in_vm("llmos desk-state"))
-        if isinstance(desk, dict) and desk.get("dialogs"):
-            run_in_vm("llmos desk-ctl dialog yes")
-            ctx["approved"] += 1
+        if busy:
+            if isinstance(desk, dict) and desk.get("dialogs"):
+                run_in_vm("llmos desk-ctl dialog yes")
+                ctx["approved"] += 1
+            continue
+        finished = _finished_since(desk, done0)
+        if finished is None or finished:
+            return out
 
 
 def _label(passes, repeat):
