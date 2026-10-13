@@ -2707,7 +2707,7 @@ class Desk:
                 except (OSError, subprocess.SubprocessError):
                     pass
                 public = ""
-                if config.settings.get("internet") != "no":
+                if config.settings.get("internet") == "yes":
                     try:
                         from . import web
                         public = web.fetch("https://api.ipify.org", max_bytes=100, timeout=6)[3].decode("ascii", "replace").strip()[:45]
