@@ -772,7 +772,7 @@
       "weak": false,
       "reachable_by_agent": true,
       "timeout_s": 120,
-      "setup": []
+      "setup": ["mkdir -p '/root/Documents' && printf 'resume\\n' > '/root/Documents/My Resume 2026.pdf'"]
     },
     {
       "id": "uc-38",

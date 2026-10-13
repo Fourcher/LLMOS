@@ -37,7 +37,8 @@
       "result": {"type": "vm_command_line", "command": "llmos desk-state"},
       "expected": {"include": ["\"id\": \"find\""]}
     },
-    "weak": false
+    "weak": false,
+    "setup": ["mkdir -p '/root/Documents' && printf 'resume\\n' > '/root/Documents/My Resume 2026.pdf'"]
   },
   "find duplicates": {
     "evaluator": {
