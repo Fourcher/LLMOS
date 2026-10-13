@@ -520,6 +520,11 @@ _INTERNET = re.compile(
     r"|(?P<off>(?:turn|switch)\s+(?:the\s+)?internet\s+off|(?:no|disable|block|cut)\s+(?:the\s+)?internet(?:\s+access|\s+use)?|go\s+offline|internet\s+off)"
     r"|(?P<on>(?:allow|enable|turn\s+on|switch\s+on)\s+(?:the\s+)?internet(?:\s+use|\s+access)?|(?:turn|switch)\s+(?:the\s+)?internet(?:\s+back)?\s+on|go\s+online|internet\s+on)"
     r")\s*[.!]?\s*$", re.I)
+# the firewall setting: "turn off the firewall" / "firewall on" etc. (off is SECURITY, asked by tools._policy_risk)
+_FIREWALL = re.compile(r"^\s*(?:please\s+)?(?:"
+    r"(?P<off>(?:turn|switch)\s+off\s+(?:the\s+|my\s+)?firewall|(?:turn|switch)\s+(?:the\s+|my\s+)?firewall\s+off|(?:disable|turn\s+off|switch\s+off)\s+(?:the\s+|my\s+)?firewall|firewall\s+off)"
+    r"|(?P<on>(?:turn|switch)\s+(?:the\s+|my\s+)?firewall\s+on|(?:enable|turn\s+on|switch\s+on)\s+(?:the\s+|my\s+)?firewall|firewall\s+on)"
+    r")\s*[.!]?\s*$", re.I)
 _TOR = re.compile(r"^\s*(?:please\s+)?(?:(?P<on>(?:use|enable|turn\s+on|switch\s+on)\s+tor|(?:route|send)\s+(?:everything|all\s+traffic|the\s+internet|my\s+traffic)\s+(?:through|via|over)\s+tor|internet\s+through\s+tor|tor\s+on)"
                   r"|(?P<off>(?:stop\s+using|disable|turn\s+off|switch\s+off)\s+tor|tor\s+off|no\s+tor))\s*[.!]?\s*$", re.I)
 _AUTONOMY = re.compile(r"^\s*(?:please\s+)?(?:(?:switch|change|set|go|put\s+me)\s+(?:back\s+)?(?:to|into|in)\s+|be\s+|use\s+)?"
@@ -685,6 +690,9 @@ def _policy(text):
     m = _INTERNET.match(text)
     if m:
         return ("change_setting", {"setting": "internet", "value": "ask" if m.group("ask") else "no" if m.group("off") else "yes"})
+    m = _FIREWALL.match(text)
+    if m:
+        return ("change_setting", {"setting": "firewall", "value": "off" if m.group("off") else "on"})
     m = _TOR.match(text)
     if m:
         return ("change_setting", {"setting": "tor", "value": "on" if m.group("on") else "off"})
