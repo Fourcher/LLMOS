@@ -84,6 +84,91 @@ check("ask + allowed=True -> download", out == "download" and len(downloads) == 
 out, msg = run_fetch("no")
 check("no -> unchanged message", out == "raised" and msg == NO_MSG and downloads == [])
 
+# find_by_meaning: the model is missing and internet is "ask" -> the owner is asked first (ctx.confirm_network)
+from llmos import tools  # noqa: E402
+
+DECLINED = "you declined internet access for this. Continue without it."
+
+
+class FindCtx:
+    def __init__(self, answer=True, headless=False, has_confirm=True):
+        self.events, self.confirms, self.statuses, self.shown = [], [], [], []
+        self.answer, self.headless = answer, headless
+        self.current_request = ""
+        if has_confirm:
+            self.confirm_network = self._confirm
+
+    def _confirm(self, name, args):
+        self.events.append("confirm")
+        self.confirms.append((name, args))
+        return self.answer
+
+    def status(self, text):
+        self.events.append("status")
+        self.statuses.append(text)
+
+    def show_ui(self, spec):
+        self.shown.append(spec)
+
+
+def run_find(internet, vision=False, model_present=False, **ctx_kw):
+    """Runs find_by_meaning with the model check, fetch, index and search replaced. Returns (ctx, fetch_calls, reply)."""
+    ctx = FindCtx(**ctx_kw)
+    fetch_calls = []
+
+    def fake_fetch(vision=False, progress=None, allowed=False):
+        fetch_calls.append({"vision": vision, "allowed": allowed})
+        ctx.events.append("fetch")
+        if internet == "ask" and not allowed:
+            raise RuntimeError(ASK_MSG)   # the real fetch refuses under "ask" without allowed=True
+
+    saved = (config.settings, meaning.ready, meaning.fetch, meaning.index, meaning.search, meaning._candidates, meaning.available)
+    config.settings = FakeSettings(internet)
+    meaning.available = lambda: True   # meaning search is installed here; the model itself may be missing
+    meaning.ready = lambda vision=False: model_present
+    meaning.fetch = fake_fetch
+    meaning.index = lambda *a, **k: None
+    meaning.search = lambda *a, **k: []
+    meaning._candidates = lambda kinds: ([("image", "/x.jpg")] if vision else [])
+    try:
+        reply = tools.find_by_meaning({"query": "dog on the beach", "kind": "any"}, ctx)
+    finally:
+        config.settings, meaning.ready, meaning.fetch, meaning.index, meaning.search, meaning._candidates, meaning.available = saved
+    return ctx, fetch_calls, reply
+
+
+ctx, calls, reply = run_find("ask", vision=False)
+check("find ask+approve -> one fetch with allowed=True", len(calls) == 1 and calls[0]["allowed"] is True)
+check("find ask+approve -> confirm asked once for find_by_meaning", len(ctx.confirms) == 1 and ctx.confirms[0][0] == "find_by_meaning")
+url = ctx.confirms[0][1].get("url", "") if ctx.confirms else ""
+check("find ask+approve -> confirm text has MB and is <= 60 chars", "MB" in url and len(url) <= 60)
+check("find ask+approve -> asked before the status and fetch", ctx.events[:3] == ["confirm", "status", "fetch"])
+check("find ask+approve -> existing status shown after approval", any("getting the search model once" in s for s in ctx.statuses))
+
+ctx, calls, reply = run_find("ask", vision=True)
+url = ctx.confirms[0][1].get("url", "") if ctx.confirms else ""
+check("find ask+approve pictures -> confirm text says 865 MB", "865 MB" in url and len(url) <= 60)
+
+ctx, calls, reply = run_find("ask", answer=False)
+check("find ask+decline -> no fetch", calls == [])
+check("find ask+decline -> no status shown", ctx.statuses == [])
+check("find ask+decline -> declined text returned", reply == DECLINED)
+
+ctx, calls, reply = run_find("ask", headless=True)
+check("find headless ask -> no confirm", ctx.confirms == [])
+check("find headless ask -> no approved fetch", not any(c["allowed"] for c in calls))
+check("find headless ask -> refusal returned", ASK_MSG in reply and reply.startswith("error:"))
+
+ctx, calls, reply = run_find("ask", has_confirm=False)
+check("find ask no confirm_network -> refusal, no download", not any(c["allowed"] for c in calls) and ASK_MSG in reply)
+
+ctx, calls, reply = run_find("ask", model_present=True)
+check("find model present -> no confirm", ctx.confirms == [])
+check("find model present -> no fetch", calls == [])
+
+ctx, calls, reply = run_find("yes")
+check("find yes -> fetch with allowed=False, no confirm", len(calls) == 1 and calls[0]["allowed"] is False and ctx.confirms == [])
+
 if failures:
     print("FAILED: " + ", ".join(failures))
     sys.exit(1)
