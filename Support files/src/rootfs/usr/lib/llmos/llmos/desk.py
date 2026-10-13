@@ -3084,7 +3084,7 @@ class Desk:
                 self._keybinds(False)
                 self.set_screen("lock", {"note": T("d_lock_open"), "open": True})
             if re.search(r"\b(?:sign|log) (?:me )?(?:out|off)\b", low):
-                self.instant_reply(low, "Locked. There is no separate sign-in to leave, so signing out locks the screen.")
+                self.instant_reply(low, "Locked. Signing out here just locks the screen.")
             return True
         if low in ("voice", "listen"):
             self.voice_turn()

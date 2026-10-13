@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "src", "rootfs", "usr", "lib", "llmo
 import llmos.desk as desk  # noqa: E402
 
 fails = 0
-SIGNOUT_REPLY = "Locked. There is no separate sign-in to leave, so signing out locks the screen."
+SIGNOUT_REPLY = "Locked. Signing out here just locks the screen."
 
 
 def check(cond, what):
