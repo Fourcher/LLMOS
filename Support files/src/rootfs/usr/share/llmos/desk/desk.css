@@ -219,6 +219,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .btn.small { padding: 6px 11px; font-size: 13px; min-height: 30px; }
 .btn:focus-visible, .chip:focus-visible, .choice:focus-visible, .opt:focus-visible, .sw:focus-visible, .tzitem:focus-visible, .win .head button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn:disabled { opacity: .6; cursor: default; }
+/* set-up "More models": the link is the plain .btn; its list is a vertical stack of rows, the picked row in the accent */
+.morem { margin-top: 8px; align-self: flex-start; }
+.modelist { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.modelist .btn { width: 100%; justify-content: flex-start; text-align: left; padding: 10px 12px; font-weight: 500; background: var(--card2); color: var(--fg); }
+.modelist .btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent, #fff); border-color: transparent; }
 
 /* wizard */
 .wizard { width: min(92vw, 640px); }

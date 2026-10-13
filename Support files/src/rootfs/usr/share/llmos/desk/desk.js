@@ -245,10 +245,12 @@
   $("lock-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("lock-go").click(); });
 
   // ---------------------------------------------------------------- first-run set-up
+  // a trailing note reads as its own sentence: capital first letter, full stop at the end (display only, not in i18n)
+  const slowNote = s => { s = String(s); s = s.charAt(0).toUpperCase() + s.slice(1); return /[.!?。！？]$/.test(s) ? s : s + "."; };
   const wizard = {
     active: false, i: 0, data: {}, answers: {}, tz: null, wifiSel: null, nets: null, wifiNeeded: false, cloudNeeded: false, summary: null,
     steps: ["welcome", "language", "name", "timezone", "profile", "passphrase", "wifi", "cloud", "done"],
-    start(data) { this.active = true; this.i = 0; this.data = data; this.answers = {}; this.capTier = null; this.tz = data.tz_label || null; this.wifiNeeded = false; this.cloudNeeded = false; this.summary = null; this.nets = null; this.answers.language = data.lang_hint || "en"; this.render(); },
+    start(data) { this.active = true; this.i = 0; this.data = data; this.answers = {}; this.capTier = null; this.modelPick = ""; this.tz = data.tz_label || null; this.wifiNeeded = false; this.cloudNeeded = false; this.summary = null; this.nets = null; this.answers.language = data.lang_hint || "en"; this.render(); },
     step() { return this.steps[this.i]; },
     hidden(s) { return (s === "wifi" && !this.wifiNeeded) || (s === "cloud" && !this.cloudNeeded); },
     visible() { return this.steps.filter(s => s !== "welcome" && s !== "done" && !this.hidden(s)); },
@@ -317,6 +319,8 @@
         const idx = (q, v) => q.n === 2 ? (v < 50 ? 0 : 1) : (v < 34 ? 0 : v < 67 ? 1 : 2);
         const online = () => !this.answers.profile || idx(Q[1], this.answers.profile.internet) !== 2;
         const tiers = () => (online() ? tiersAll.on : tiersAll.off) || [];
+        const allAll = D.all_models || { on: [], off: [] };
+        const allModels = () => (online() ? allAll.on : allAll.off) || [];   // every model the owner may pick ("More models")
         const rec = () => (online() ? recAll.on : recAll.off) || {};
         if (!this.answers.profile) {
           const r = rec();
@@ -332,22 +336,39 @@
         const box = $("wz-quiz"), cards = {};
         const recNote = (el2, same, choice) => { el2.className = "qx" + (same ? " rec" : ""); el2.textContent = same ? "✓ " + t("w_rec_this") : fmt("w_rec_other", { choice }); };   // in the card's title row
         const fill = (q) => {
-          const card = cards[q.k], seg = card.querySelector(".seg"), qd = card.querySelector(".qd"), qx = card.querySelector(".qx");
-          seg.innerHTML = ""; qx.textContent = ""; qx.className = "qx";
+          const card = cards[q.k], seg = card.querySelector(".seg"), qd = card.querySelector(".qd"), qx = card.querySelector(".qx"), mm = card.querySelector(".morem");
+          seg.innerHTML = ""; qx.textContent = ""; qx.className = "qx"; mm.innerHTML = "";
           let opts = [], desc = "";
           if (q.k === "capability") {
-            const ts = tiers();
-            if (!ts.length) { seg.classList.add("hidden"); qd.textContent = t("w_model_none"); P.model = ""; return; }
+            const ts = tiers(), all = allModels();
+            if (!all.length) { seg.classList.add("hidden"); qd.textContent = t("w_model_none"); P.model = ""; return; }
             seg.classList.remove("hidden");
             // the owner's pick (or the recommendation) where it exists; offline only installed models can be chosen, and
-            // going back online returns to the pick
-            const sel = ts.find(x => x.tier === (this.capTier || rec().capability)) || ts.find(x => x.tier === rec().capability) || ts[0];
-            P.model = sel.id; P.capability = val(q, TIER.indexOf(sel.tier));
-            opts = ts.map(x => ({ label: t(`q_capability_${TIER.indexOf(x.tier)}_s`), on: x === sel, pick: () => { this.capTier = x.tier; fill(q); } }));
+            // going back online returns to the pick. The slider's stop is the tier; a model picked under "More models" wins.
+            const st = ts.find(x => x.tier === (this.capTier || rec().capability)) || ts.find(x => x.tier === rec().capability) || ts[0];
+            const sel = (this.modelPick && all.find(x => x.id === this.modelPick)) || st;
+            P.model = sel.id; P.capability = val(q, TIER.indexOf(st.tier));
+            opts = ts.map(x => ({ label: t(`q_capability_${TIER.indexOf(x.tier)}_s`), on: x === st && sel === st,
+                                  pick: () => { this.capTier = x.tier; this.modelPick = ""; fill(q); } }));
             desc = fmt("w_model_need", { model: sel.name, need: sel.need_gb, ram: sys.ram_gb || "?" }) + " " +
-                   (sel.tight ? t("w_model_tight") : sel.installed ? t("w_model_ready") : fmt("w_model_dl", { size: sel.size_gb }));
+                   (sel.installed ? t("w_model_ready") : fmt("w_model_dl", { size: sel.size_gb })) + (sel.bigger ? " " + slowNote(t("w_model_slow")) : "");
             const r = ts.find(x => x.tier === rec().capability);
             if (r && ts.length > 1) recNote(qx, r === sel, t(`q_capability_${TIER.indexOf(r.tier)}_s`));
+            // "More models": a plain link that opens a list of every model; a row picks that model id into P.model
+            const more = el("button", "btn morem", esc(t("w_more_models")));
+            more.type = "button"; more.setAttribute("aria-expanded", String(!!this.modelsOpen));
+            more.onclick = () => { this.modelsOpen = !this.modelsOpen; fill(q); };
+            mm.appendChild(more);
+            if (this.modelsOpen) {
+              const list = el("div", "modelist");
+              for (const m of all) {
+                const row = el("button", "btn", esc(`${m.name} — ${Number(m.size_gb).toFixed(1)} GB` +(m.bigger ? ` — ${t("w_model_slow")}` : "")));
+                row.type = "button"; row.setAttribute("aria-pressed", String(sel.id === m.id));
+                row.onclick = () => { this.modelPick = m.id; fill(q); };
+                list.appendChild(row);
+              }
+              mm.appendChild(list);
+            }
           } else {
             const lock = q.k === "brain" && !online(), cur = lock ? 0 : idx(q, P[q.k]);
             opts = Array.from({ length: q.n }, (_, i) => ({ label: t(`q_${q.k}_${i}_s`), on: i === cur, off: lock && i > 0,
@@ -366,7 +387,7 @@
         };
         for (const q of Q) {
           const card = el("section", "q");
-          card.innerHTML = `<div class="qh"><span class="qt" id="ql-${q.k}">${esc(t("q_" + q.k))}</span><span class="qx"></span></div><div class="seg" role="radiogroup" aria-labelledby="ql-${q.k}"></div><div class="qd"></div>`;
+          card.innerHTML = `<div class="qh"><span class="qt" id="ql-${q.k}">${esc(t("q_" + q.k))}</span><span class="qx"></span></div><div class="seg" role="radiogroup" aria-labelledby="ql-${q.k}"></div><div class="qd"></div><div class="morem"></div>`;
           cards[q.k] = card; box.appendChild(card);
         }
         Q.forEach(fill);

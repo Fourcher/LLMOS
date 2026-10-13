@@ -71,7 +71,11 @@ installed = {"ministral-3-3b"}
 RAM[0] = 15.3
 on = desk._model_tiers(True)
 check(all(t["need_gb"] <= 15.3 - 1 for t in on), "every choice fits the memory with 1 GB left for the system")
-check(all(not t.get("tight") for t in on), "nothing is marked tight when it fits")
+check(all(not t.get("bigger") for t in on), "nothing is marked running-from-disk when it fits")
+allm = desk._model_all(True)
+check([m["bigger"] for m in allm] == [False] * 11 + [True] and allm[-1]["id"] == "underdog-27b",
+      "16 GB: all_models offers every model; only the 20 GB one is marked running from disk, and it is last")
+check([m["id"] for m in desk._model_all(False)] == ["ministral-3-3b"], "16 GB offline: all_models is only what is installed")
 check([t["id"] for t in off] == ["ministral-3-3b"], "offline: only what is already installed")
 rec = desk._recommend({"cores": 8, "ram_real": 15.3, "accel": True}, on)
 check(rec == {"capability": "balanced", "motion": 2}, f"8 cores, 16 GB, real graphics: Balanced, full animation {rec}")
@@ -84,8 +88,14 @@ check(1 <= len(on) <= 3 and all(t["need_gb"] <= 6.6 for t in on), f"8 GB: {[(t['
 check(len({t["id"] for t in on}) == len(on), "no model offered twice")
 RAM[0] = 3.7
 on = desk._model_tiers(True)
-check(len(on) == 1 and on[0]["id"] == "ministral-3-3b" and on[0].get("tight"), "4 GB: the installed model, marked as tight (slow) instead of nothing")
-check(desk._recommend({"cores": 2, "ram_real": 3.7, "accel": False}, on)["capability"] == "fast", "4 GB: Fast")
+check(len(on) == 1 and on[0]["id"] == "hermes-3-3b" and on[0].get("bigger") and not on[0]["installed"],
+      "3.7 GB, nothing fits: one stop, the smallest model, marked as running from disk (slow)")
+check(desk._recommend({"cores": 2, "ram_real": 3.7, "accel": False}, on)["capability"] == "fast", "3.7 GB: Fast")
+allm = desk._model_all(True)
+check({m["id"] for m in allm} == {m["id"] for m in models.catalog()} and all(m["bigger"] for m in allm),
+      f"3.7 GB: all_models offers every model, all marked running from disk ({len(allm)})")
+check([m["id"] for m in desk._model_all(False)] == ["ministral-3-3b"] and desk._model_all(False)[0]["bigger"],
+      "3.7 GB offline: all_models is only the installed model")
 installed = set()
 check(desk._model_tiers(False) == [], "nothing installed and offline: no choice (the page says so)")
 
