@@ -109,7 +109,7 @@ MATCH = re.compile(
     r"^(?:turn|switch) (?:on|off) (?:the |my )?bluetooth$|^(?:turn|switch) (?:the |my )?bluetooth (?:on|off)$|^bluetooth (?:on|off)$|^(?:yes|yeah|yep|yup|sure|ok|okay)$|(?:the |my )?(?:screen|computer|pc|laptop|everything) (?:has |have )?(?:froze|frozen|locked up|is stuck)$|"
     r"(?:computer|pc|laptop|machine) (?:is |has been |got |feels )?(?:really |very |so |quite )?slow\b|"
     r"\b(?:days? (?:until|till|to|left)|is (?!it\b|this\b|my\b|that\b|the (?:computer|screen|wifi|sound|mouse|printer|keyboard|battery|camera)\b)[a-z][a-z .'-]{1,30} (?:down|broken|having (?:issues|problems|an outage))\b|what time does [a-z' .-]{2,40} (?:open|close)\b|who won (?:the )?[a-z' .-]{2,40}(?: last night| yesterday| today| this week)?\b|countdown|how long (?:until|till)|work timer|^clock (?:in|out)$|i'?m clocking (?:in|out)|track(?:ing)? (?:my )?(?:hours|time)|"
-    r"hours (?:did i|have i) work|port \d+|on \d{2,5}\b|web ?server|serve (?:this|the)|preview (?:this|the|my)|temperature|"
+    r"hours (?:did i|have i) work|port \d+|on \d{2,5}\b|web ?server|serve (?:this|the)|stop (?:the |my )?local website|stop serving|preview (?:this|the|my)|temperature|"
     r"(?:too |so |very |running |getting )?hot\b|overheat|battery (?:health|dying|dead|draining|drains|life|is draining)|"
     r"drive health|disk health|hard ?drive (?:health|failing|dying|ok)|ssd health|smart status|track (?:my )?(?:parcel|package|order|delivery)|"
     r"order status|where is my (?:parcel|package|order)|typing (?:practice|tutor|lessons?|test)|teach me to type|learn (?:to type|\w+ish|french|spanish|german|"
@@ -358,7 +358,7 @@ def ports(desk, line, low):
         port = int(m.group("p") or m.group("p2"))
         who = _listeners(port)
         if not who:
-            return _say(desk, line, f"Nothing is listening on port {port}.")
+            return _say(desk, line, f"Nothing is running on port {port}.")
         for pid, _ in who:
             try:
                 os.kill(pid, signal.SIGTERM)
@@ -378,8 +378,8 @@ def ports(desk, line, low):
         port = int(m.group("p") or m.group("p2") or m.group("p3"))
         who = _listeners(port)
         if not who:
-            return _say(desk, line, f"Nothing is listening on port {port}.")
-        return _say(desk, line, f"Port {port}: {', '.join(f'{n} (process {p})' for p, n in who)}. Say “kill whatever's on {port}” to stop it.")
+            return _say(desk, line, f"Nothing is running on port {port}.")
+        return _say(desk, line, f"Port {port}: {', '.join(n for _, n in who)}. Say “kill whatever's on {port}” to stop it.")
     return False
 
 
@@ -390,12 +390,12 @@ _SERVER = {}
 
 def web_server(desk, line, low):
     from . import tools
-    if re.search(r"(?:stop|end|close|kill) (?:the |my )?(?:local )?web ?server|stop serving", low):
+    if re.search(r"(?:stop|end|close|kill) (?:the |my )?(?:local )?web ?server|(?:stop|end|close|kill) (?:the |my )?local website|stop serving", low):
         p = _SERVER.pop("p", None)
         if p and p.poll() is None:
             p.terminate()
-            return _say(desk, line, "The web server is stopped.")
-        return _say(desk, line, "No web server was running.")
+            return _say(desk, line, "The local website is stopped.")
+        return _say(desk, line, "No local website was running.")
     m = re.search(r"(?:start|run|launch|open|spin up|make) (?:a |the |my )?(?:local |simple |quick )?(?:web ?|http ?)server(?: (?:here|in (?:this|the|my) (?P<f>[\w .~/-]+?)(?: folder)?))?$|"
                   r"^serve (?:this|the|my) (?P<f2>[\w .~/-]+?)?\s*(?:folder|directory|site|files)?$|^preview (?:this|the|my) (?P<h>[\w .~/-]*?\.html?|html(?: file| page)?|(?:web ?)?(?:page|site))$", low)
     if not m:
@@ -429,7 +429,7 @@ def web_server(desk, line, low):
     _open(desk, url)
     home = config.home().rstrip("/")
     shown = "~" + folder[len(home):] if folder.startswith(home) else folder
-    return _say(desk, line, f"Serving {shown} at {url} (this computer only); it's open in the browser. Say “stop the web server” to end it.")
+    return _say(desk, line, f"Showing {shown} at {url} (this computer only); it's open in the browser. Say “stop the local website” to end it.")
 
 
 # ------------------------------------------------------------------ health
@@ -974,7 +974,7 @@ def vpn(desk, line, low):
         ok = r.returncode == 0 and _vpn_wait(before)
         err = [(r.stderr or r.stdout).strip()[-150:]] if not ok else []
     if not ok:
-        return _say(desk, line, f"The VPN from {os.path.basename(f)} didn't connect: {' '.join(err) or 'no answer from its server'}.")
+        return _say(desk, line, f"The VPN from {os.path.basename(f)} didn't connect: {' '.join(err) or 'the other end didn’t answer'}.")
     if config.settings.get("internet") == "no":
         note = " Note: the internet is switched off in settings, so nothing goes out until you turn it on."
     else:
