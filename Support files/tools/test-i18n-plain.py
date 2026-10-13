@@ -54,15 +54,18 @@ old = blocks_from_source(old_src.stdout) if old_src.returncode == 0 else {}
 
 check(sorted(new) == sorted(BLOCKS), "all six language blocks present")
 NEW_KEYS = {"no_model"}  # the one key added to every block (no assistant set up yet)
+# the model-size words for the set-up's "More models" list (every block has them; the old values are unchanged)
+ADDED_KEYS = {"w_model_slow", "w_more_models"}
 for b in BLOCKS:
     if b in old:
-        check(set(new[b]) == set(old[b]) | NEW_KEYS, f"{b}: key set = {REF} + no_model ({len(new[b])} keys)")
-        check(all(isinstance(new[b].get(k), str) and "{" not in new[b][k] for k in NEW_KEYS),
-              f"{b}: no_model present and has no placeholder braces")
+        check(set(new[b]) == set(old[b]) | NEW_KEYS | ADDED_KEYS,
+              f"{b}: key set = {REF} + no_model + model-size words ({len(new[b])} keys)")
+        check(all(isinstance(new[b].get(k), str) and "{" not in new[b][k] for k in NEW_KEYS | ADDED_KEYS),
+              f"{b}: no_model and the model-size words present, no placeholder braces")
         if b != "EN":
-            check({k: v for k, v in new[b].items() if k not in NEW_KEYS}
-                  == {k: v for k, v in old[b].items() if k not in NEW_KEYS},
-                  f"{b}: values unchanged apart from no_model (non-English not edited)")
+            check({k: v for k, v in new[b].items() if k not in NEW_KEYS | ADDED_KEYS}
+                  == {k: v for k, v in old[b].items() if k not in NEW_KEYS | ADDED_KEYS},
+                  f"{b}: values unchanged apart from no_model and the model-size words (non-English not edited)")
 
 en = new.get("EN", {})
 check(en.get("no_model") == "No assistant is set up yet.", "EN no_model == 'No assistant is set up yet.'")

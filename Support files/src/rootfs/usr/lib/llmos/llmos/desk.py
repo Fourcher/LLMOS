@@ -99,7 +99,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "q_brain_0_s", "q_brain_1_s", "q_brain_2_s", "q_capability_0_s", "q_capability_1_s", "q_capability_2_s",
               "q_guidance_0_s", "q_guidance_1_s", "q_motion_0_s", "q_motion_1_s", "q_motion_2_s",
               "w_sys", "w_sys_mem", "w_sys_cores", "w_sys_gpu", "w_sys_gpu_basic", "w_model_need", "w_model_ready", "w_model_dl",
-              "w_rec_this", "w_rec_other", "w_model_none", "w_model_tight", "w_cloud_signin", "w_cloud_signin_how", "w_cloud_waiting", "w_cloud_none",
+              "w_rec_this", "w_rec_other", "w_model_none", "w_model_tight", "w_model_slow", "w_more_models", "w_cloud_signin", "w_cloud_signin_how", "w_cloud_waiting", "w_cloud_none",
               "w_cloud_ok", "w_cloud_paste", "w_cloud_done", "w_cloud_other", "d_signin_none",
               "d_live_chip", "d_live_title", "d_chat_ph", "d_network", "d_sound", "d_power", "d_battery", "d_myapps",
               "w_cloud_check", "w_cloud_checking", "w_cloud_key", "w_cloud_model", "w_cloud_url", "w_cloud_key_where", "w_cloud_none_note",
@@ -321,10 +321,10 @@ def _model_tiers(allow_download):
     fits = [m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (allow_download or m["id"] in inst)]
     fits.sort(key=lambda m: round(m["size"] / 1e9, 1))
     if not fits:
-        # too little memory for any of them: the installed one is what runs anyway (slowly), so it is the choice
-        here = sorted((m for m in models.catalog() if m["id"] in inst), key=lambda m: m["size"])
+        # too little memory for any of them: the smallest one is still offered, one stop, labelled as running from disk (slow)
+        small = sorted((m for m in models.catalog() if allow_download or m["id"] in inst), key=lambda m: m["size"])
         return [{"tier": "fast", "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"], "size_gb": round(m["size"] / 1e9, 1),
-                 "installed": True, "tight": True} for m in here[:1]]
+                 "installed": m["id"] in inst, "bigger": True} for m in small[:1]]
     quick = [m for m in fits if m.get("speed") in ("fast", "fastest")]
     # Fast is the smallest; but an installed quick model no bigger than 1.5x the smallest is the same band, and it is
     # ready at once, so it is Fast instead (a bigger installed model keeps its place in the order)
@@ -339,6 +339,17 @@ def _model_tiers(allow_download):
         out.append({"tier": tier, "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"],
                     "size_gb": round(m["size"] / 1e9, 1), "installed": m["id"] in inst})
     return out
+
+
+def _model_all(allow_download):
+    """Every on-device model the owner can pick (the same installed / downloadable rule as the tiers). Those that fit the
+    memory come first, then the ones that run from disk ("bigger", slow); each group by size. Nothing is blocked by memory."""
+    ram = models.ram_gb()
+    inst = {m["id"] for m in models.installed()}
+    allowed = sorted((m for m in models.catalog() if allow_download or m["id"] in inst),
+                     key=lambda m: (m["ram_gb"] > ram - 1, m["size"]))
+    return [{"id": m["id"], "name": m["name"], "need_gb": m["ram_gb"], "size_gb": round(m["size"] / 1e9, 1),
+             "installed": m["id"] in inst, "bigger": m["ram_gb"] > ram - 1} for m in allowed]
 
 
 def _recommend(sysinfo, tiers):
@@ -1334,6 +1345,7 @@ class Desk:
                 "models": [{"id": m["id"], "name": m["name"], "ram_gb": m["ram_gb"], "size_gb": round(m["size"] / 1e9, 1), "installed": m["id"] in inst}
                            for m in models.catalog()],
                 "system": sysinfo, "tiers": {"on": tiers_on, "off": tiers_off},
+                "all_models": {"on": _model_all(True), "off": _model_all(False)},
                 "recommend": {"on": _recommend(sysinfo, tiers_on), "off": _recommend(sysinfo, tiers_off)},
                 "cloud_providers": [{"id": k, "name": p["name"], "key_hint": p["key_hint"], "console": p["console"], "models": p["models"],
                                      "signin": bool(p.get("signin"))} for k, p in llm.CLOUD_PROVIDERS.items()]}
@@ -1696,6 +1708,8 @@ class Desk:
                 acts.append({"label": T("d_remove"), "say": f"remove the model {m['id']}", "danger": True})
             sub = " · ".join(x for x in [m["maker"], m.get("license", ""), f"{m['size'] / 1e9:.1f} GB",
                                          f"{m['ram_gb']} GB RAM", m.get("speed", "")] if x)
+            if m["ram_gb"] > models.ram_gb() - 1:
+                sub += " · " + T("w_model_slow")
             local.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
                           "meta": T("active") if active else (T("installed") if installed else ""), "actions": acts})
 
@@ -1756,6 +1770,8 @@ class Desk:
             sub = " · ".join(x for x in [L("d_voice_accuracy", a=m.get("accuracy", "")), m.get("speed", ""),
                                          f"{m['size'] / 1e6:.0f} MB", f"{m['ram_gb']} GB RAM",
                                          f"{m.get('langs', '')} {L('d_languages')}"] if x.strip())
+            if m["ram_gb"] > models.ram_gb() - 1:
+                sub += " · " + T("w_model_slow")
             vrows.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
                           "meta": L("d_in_use") if on else (T("installed") if have else ""), "actions": acts})
         blocks.append({"type": "list", "items": vrows})
@@ -3846,7 +3862,7 @@ class Desk:
                 want = str(p.get("model") or "")
                 pick = None
                 tiers = _model_tiers(net_pol != "no")
-                if want and any(x["id"] == want for x in tiers):
+                if want and any(x["id"] == want for x in tiers + _model_all(net_pol != "no")):
                     pick = next((m for m in models.catalog() if m["id"] == want), None)
                 elif tiers:
                     # no model named (an older page): the tier the capability slider points at
