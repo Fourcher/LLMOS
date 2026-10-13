@@ -319,6 +319,8 @@ def _replay(ctx, user_text, rt):
     if online:
         _going_online(ctx, True)
     chat = llm.cloud_chat if online else llm.chat
+    if not online:
+        _wait_warm()             # the local model slot: let a warm-up in progress finish first
     stream = ctx.new_stream()
     try:
         text = chat(msgs, on_text=None, max_tokens=400).get("content", "").strip()
@@ -373,18 +375,26 @@ def build_messages(ctx, user_text, history, private=False):
 
 _warm_done = threading.Event()   # set when the warm-up has finished (success, failure or exception)
 _warm_started = False            # a warm-up has begun in this process
+_warm_running = 0                # warm-ups in progress right now (overlapping calls are counted, not overwritten)
+_warm_lock = threading.Lock()
 WARM_WAIT = 60                   # seconds a model turn waits for a warm-up still in progress
 
 
 def warm_up():
-    """Run the warm-up (see _warm_prefix) and mark it done for turns waiting on it, whatever happens."""
-    global _warm_started
-    _warm_done.clear()
-    _warm_started = True
+    """Run the warm-up (see _warm_prefix) and mark it done for turns waiting on it, whatever happens.
+    Overlapping warm-ups count: the event is cleared when the first starts and set only when the last ends."""
+    global _warm_started, _warm_running
+    with _warm_lock:
+        _warm_running += 1
+        _warm_started = True
+        _warm_done.clear()
     try:
         _warm_prefix()
     finally:
-        _warm_done.set()
+        with _warm_lock:
+            _warm_running -= 1
+            if _warm_running == 0:
+                _warm_done.set()
 
 
 def _wait_warm():
