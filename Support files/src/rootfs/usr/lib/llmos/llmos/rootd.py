@@ -11,6 +11,7 @@ import os
 import re
 import socket
 import stat
+import sys
 import tempfile
 import threading
 from datetime import datetime
@@ -18,7 +19,8 @@ from datetime import datetime
 ZONEINFO = "/usr/share/zoneinfo"
 PROC_MOUNTS = "/proc/mounts"
 ETC_ROOT = "/"
-LOG_PATH = "/run/llmos/rootd.log"
+SOCK_PATH = "/run/llmos-rootd/root.sock"
+LOG_PATH = "/run/llmos-rootd/rootd.log"
 MAX_REQUEST = 2 * 1024 * 1024
 MAX_SETTING = 256 * 1024
 MAX_HOSTS = 1024 * 1024
@@ -752,18 +754,46 @@ def _handle_conn(conn, slots):
         slots.release()
 
 
-def serve(path="/run/llmos/root.sock", group="owner"):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+def _prepare_dir(d, gid):
+    """Make the socket's directory. Refuse a symlink (or non-directory). Owner root:owner 0750 when the group
+    exists (gid given); otherwise root-only 0700. A wrong owner is fixed; if that fails as root, refuse."""
+    try:
+        st = os.lstat(d)
+    except FileNotFoundError:
+        os.mkdir(d, 0o700)
+        st = os.lstat(d)
+    if not stat.S_ISDIR(st.st_mode):
+        print(f"rootd: {d} is a symlink or not a directory; refusing to start", file=sys.stderr)
+        sys.exit(1)
+    try:
+        os.chown(d, 0, gid if gid is not None else 0)
+    except OSError:
+        if os.geteuid() == 0:
+            print(f"rootd: cannot set the owner of {d}; refusing to start", file=sys.stderr)
+            sys.exit(1)
+    os.chmod(d, 0o750 if gid is not None else 0o700)
+
+
+def serve(path=SOCK_PATH, group="owner"):
+    try:
+        gid = grp.getgrnam(group).gr_gid
+    except KeyError:
+        gid = None
+    _prepare_dir(os.path.dirname(path), gid)
     if os.path.lexists(path):
         os.unlink(path)
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(path)
     os.chmod(path, 0o660)
-    try:
-        gid = grp.getgrnam(group).gr_gid
-        os.chown(path, -1, gid)
-    except (KeyError, OSError):
-        pass
+    if gid is None:
+        # no owner group yet: keep the socket root-only rather than world-writable-by-group
+        os.chmod(path, 0o600)
+        print(f"rootd: group '{group}' missing; socket is root-only", file=sys.stderr)
+    else:
+        try:
+            os.chown(path, -1, gid)
+        except OSError:
+            pass
     srv.listen(MAX_CONN)
     slots = threading.BoundedSemaphore(MAX_CONN)
     while True:

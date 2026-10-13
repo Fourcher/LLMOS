@@ -390,7 +390,7 @@ for _ in range(100):
         time.sleep(0.05)
 else:
     raise AssertionError("socket never listened")
-assert oct(os.stat(sock_path).st_mode & 0o777) == "0o660", oct(os.stat(sock_path).st_mode)
+assert oct(os.stat(sock_path).st_mode & 0o777) == "0o600", oct(os.stat(sock_path).st_mode)
 c.sendall(json.dumps({"verb": "set_hostname", "args": {"name": "socket-pc"}}).encode())
 c.shutdown(socket.SHUT_WR)
 reply = json.loads(c.makefile("rb").read().decode())

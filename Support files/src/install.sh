@@ -238,6 +238,22 @@ rc-update del chronyd default 2>/dev/null || true
 echo 'SYSLOGD_OPTS="-C512"' > /etc/conf.d/syslog     # logs stay in RAM
 EOF
 
+# owner account, opt-in at install time (LLMOS_OWNER=1, like PAYLOAD and DISK above); unset, empty or 0 = off.
+# Only the account, its device groups, the rootd service and the marker file; the boot chain is unchanged.
+if [ "${LLMOS_OWNER:-0}" = 1 ]; then
+chroot $TARGET sh -eu <<'EOF' >/dev/null
+getent group owner >/dev/null || addgroup -S owner
+getent passwd owner >/dev/null || adduser -D -h /home/owner -s /bin/sh -G owner owner
+for g in video input audio seat netdev plugdev; do
+  getent group $g >/dev/null || addgroup -S $g
+  id -nG owner | tr ' ' '\n' | grep -qx "$g" || addgroup owner "$g"
+done
+rc-update show default 2>/dev/null | grep -qw llmos-rootd || rc-update add llmos-rootd default
+mkdir -p /etc/llmos
+echo owner > /etc/llmos/owner-user
+EOF
+fi
+
 log "bootloader"
 for d in dev proc sys; do mountpoint -q $TARGET/$d || mount --bind /$d $TARGET/$d; done
 if [ "$ARCH" = aarch64 ]; then
