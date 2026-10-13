@@ -213,7 +213,8 @@ _CORNERS = re.compile(
 _SCALE = re.compile(
     r"^\s*(?:please\s+)?(?:(?:make|turn)\s+(?:everything|the\s+text|the\s+font|the\s+letters|it|the\s+interface|the\s+screen)\s+"
     r"(?:a\s+(?:bit|little)\s+|much\s+|way\s+)?(?P<how>bigger|larger|smaller|tinier|huge|normal\s+size(?:d)?|the\s+default\s+size)"
-    r"|(?P<how2>bigger|larger|smaller)\s+(?:text|font|letters|writing)|zoom\s+(?P<zoom>in|out)|(?:reset|normal)\s+(?:the\s+)?(?:text\s+)?size)"
+    r"|(?P<how2>bigger|larger|smaller)\s+(?:text|font|letters|writing)|(?:text|font|letters|writing)\s+(?P<how4>bigger|larger|smaller)"
+    r"|zoom\s+(?P<zoom>in|out)|(?:reset|normal)\s+(?:the\s+)?(?:text\s+)?size)"
     r"(?:\s+please)?\s*[.!]?\s*$", re.I)
 
 
@@ -221,7 +222,7 @@ def _scale(text):
     m = _SCALE.match(text)
     if not m:
         return None
-    how = (m.group("how") or m.group("how2") or m.group("zoom") or "default").lower()
+    how = (m.group("how") or m.group("how2") or m.group("how4") or m.group("zoom") or "default").lower()
     if how in ("bigger", "larger", "huge", "in"):
         return ("set_appearance", {"scale": "bigger"})
     if how in ("smaller", "tinier", "out"):
@@ -332,6 +333,9 @@ def _look(text):
         if m.group("n"):                       # "size 14": 14 point is the size desks use at about 117 %
             args["scale"] = str(max(80, min(250, round(int(m.group("n")) / 12 * 100 / 5) * 5)))
         return ("set_appearance", args)
+    m = re.fullmatch(r"(?:set\s+)?scale\s+(?:to\s+)?(?P<n>\d{2,3})\s*%?", t)
+    if m:                                  # "scale 150%": the display scale in percent, like "scale 130" in set_appearance
+        return ("set_appearance", {"scale": str(max(80, min(250, int(m.group("n")))))})
     if t in ("high contrast", "more contrast", "higher contrast", "stronger colours", "stronger colors"):
         return ("set_appearance", {"theme": "high contrast"})
     if t in ("bigger", "even bigger", "larger", "smaller", "even smaller", "bigger please", "smaller please"):
@@ -404,7 +408,7 @@ _SCREEN_OFF = re.compile(r"^\s*(?:please\s+)?(?:(?P<keep>keep|leave)\s+(?:the\s+
 
 
 _DND = re.compile(r"^\s*(?:please\s+)?(?:(?P<on>turn\s+on|enable|start|switch\s+on)\s+|(?P<off>turn\s+off|disable|stop|switch\s+off|end)\s+)?"
-                  r"(?:the\s+)?(?P<what>do\s+not\s+disturb|don'?t\s+disturb|dnd|night\s+light|night\s+mode|night\s+shift|blue\s+light\s+filter|warm(?:er)?\s+screen)"
+                  r"(?:the\s+)?(?P<what>do\s+not\s+disturb|don'?t\s+disturb|dnd|night\s+light|night\s+mode|night\s+shift|(?:less\s+)?blue\s+light(?:\s+filter|\s+at\s+night)?|warm(?:er)?\s+screen)"
                   r"(?:\s+(?P<on2>on)|\s+(?P<off2>off))?(?:\s+mode)?\s*[.!]?\s*$|^\s*(?P<quiet>(?:no|stop|hide|silence|mute)\s+(?:the\s+)?notifications|(?P<shownot>show\s+(?:the\s+)?notifications(?:\s+again)?))\s*[.!]?\s*$", re.I)
 
 
@@ -1270,14 +1274,14 @@ _OPEN_APP = re.compile(r"^\s*(?:please\s+)?(?:open|launch|start|run|bring\s+up|p
                        r"(?:app\s+)?(?P<n>[\w' -]{2,40}?)(?:\s+(?:app|application|program))?\s*[.!?]*\s*$", re.I)
 _LIST_APPS = re.compile(r"^\s*(?:please\s+)?(?:(?:show|list|open|see)\s+(?:me\s+)?(?:all\s+)?(?:of\s+)?(?:my|the)\s+(?:apps|programs|applications|software)|"
                         r"(?:what|which)\s+(?:apps|programs|applications|software)\s+(?:do\s+i\s+have|are\s+there|are\s+installed|have\s+i\s+(?:got|made))|"
-                        r"my\s+(?:apps|programs)|apps|programs|all\s+(?:apps|programs)|app\s+menu|start\s+menu)\s*[.!?]*\s*$", re.I)
+                        r"my\s+(?:apps|programs)|apps|programs|all\s+(?:apps|programs)|(?:show|list)\s+all\s+(?:apps|programs|applications|software)|app\s+menu|start\s+menu)\s*[.!?]*\s*$", re.I)
 _REMOVE_APP = re.compile(r"^\s*(?:please\s+)?(?:delete|remove|uninstall|get\s+rid\s+of|trash)\s+(?:the\s+|my\s+)?(?:app\s+)?(?P<n>.+?)"
                          r"(?:\s+app)?\s*[.!?]*\s*$", re.I)
 
 
 _UNDO_RE = re.compile(r"^\s*(?:please\s+)?(?:undo(?:\s+(?:that|it|the\s+last\s+(?:thing|change)|what\s+you\s+(?:just\s+)?did))?|oops|whoops|"
                       r"(?:no,?\s+)?put\s+it\s+back|revert\s+(?:that|it|the\s+last\s+change)|change\s+it\s+back|go\s+back\s+to\s+(?:how\s+it\s+was|before)|"
-                      r"take\s+(?:that|it)\s+back)\s*[.!]?\s*$", re.I)
+                      r"take\s+(?:that|it)\s+back|too\s+(?:dark|bright|light)\s*,?\s+go\s+back)\s*[.!]?\s*$", re.I)
 
 
 _BROWSER_WORDS = r"(?:the\s+)?(?:internet|web|world\s+wide\s+web|browser|web\s+browser|firefox|chrome|google\s+chrome|safari|edge)"
