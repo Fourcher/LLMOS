@@ -27,8 +27,14 @@ for node in ast.walk(tree):
     if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.startswith("Here's what I can do"):
         reply = node.value
     if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_LOCK_WORDS" for t in node.targets):
-        lock_words = ast.literal_eval(node.value)
+        # _LOCK_WORDS is a set union of a literal and a set comprehension (not a literal), so evaluate that
+        # expression alone in an empty namespace: only set, str and comprehension syntax is used.
+        lock_src = ast.get_source_segment(open(DESK, encoding="utf-8").read(), node.value)
+        lock_words = eval(lock_src, {"__builtins__": {}})
 check(reply is not None, "reply found in desk.py")
+check(lock_words is not None and "lock the screen" in lock_words, "'lock the screen' is in _LOCK_WORDS")
+for sp in ("sign out", "log out", "please sign out now", "log me out please", "sign off"):
+    check(lock_words is not None and sp in lock_words, f"sign-out phrase {sp!r} is in _LOCK_WORDS")
 reply = reply or ""
 print(f"     reply ({len(reply)} chars): {reply}")
 
