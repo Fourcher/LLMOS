@@ -43,6 +43,16 @@ CASES = [
     ("remind me at 3 to say thanks", ("schedule_task", {"when": "at 3", "task": "say thanks", "kind": "reminder"})),
     ("remind me at 7 to call now", ("schedule_task", {"when": "at 7", "task": "call now", "kind": "reminder"})),
     ("remind me at 7 to call mum for me", ("schedule_task", {"when": "at 7", "task": "call mum for me", "kind": "reminder"})),
+    # NEW: "tonight", "this morning/afternoon/evening", "next <weekday>" as the when (each one store.parse_when accepts)
+    ("remind me to look at the stars tonight", ("schedule_task", {"when": "tonight", "task": "look at the stars", "kind": "reminder"})),
+    ("remind me to call mum this evening please", ("schedule_task", {"when": "this evening", "task": "call mum", "kind": "reminder"})),
+    ("remind me to call mum this afternoon at 3", ("schedule_task", {"when": "this afternoon at 3", "task": "call mum", "kind": "reminder"})),
+    ("remind me to call mum next monday", ("schedule_task", {"when": "next monday", "task": "call mum", "kind": "reminder"})),
+    # the time is only the tail: "tonight's game" is part of the task, the "at 8" is the when
+    ("remind me to watch tonight's game at 8", ("schedule_task", {"when": "at 8", "task": "watch tonight's game", "kind": "reminder"})),
+    # not split on (parse_when rejects "next week"; "later today" parses to 09:00): still None
+    ("remind me to call mum next week", None),
+    ("remind me to call mum later today", None),
     # Not changed by this test (tomorrow-at is not in the at-order route): still None
     ("remind me tomorrow at 9 to pay rent", None),
     # must NOT match

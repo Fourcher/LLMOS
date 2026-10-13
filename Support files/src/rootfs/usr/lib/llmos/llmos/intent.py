@@ -886,7 +886,10 @@ _REMIND_AT_NO_TASK = {"please", "pls", "thanks", "thank you", "now", "right now"
 
 
 _REMIND_TO = re.compile(r"^\s*(?:please\s+)?(?:remind|ping|tell|alert)\s+me\s+to\s+(?P<rest>.+?)\s*[.!?]*\s*$", re.I)
-_REMIND_TO_WHEN = re.compile(r"\s+(?=(?:at|in|on|tomorrow)\b)", re.I)   # where the time phrase may start
+# where the time phrase may start. "next week" is not split on: store.parse_when rejects it.
+# "later today" is not split on either: parse_when reads it as 09:00 (drops "later").
+_REMIND_TO_WHEN = re.compile(r"\s+(?=(?:at|in|on|tomorrow|tonight|this\s+(?:morning|afternoon|evening)|"
+                             r"next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b)", re.I)
 _REMIND_TO_TIME = re.compile(rf"^(?:{_WHEN}|on\s+\w+(?:\s+at\s+\d{{1,2}}(?::\d{{2}})?\s*(?:am|pm)?)?)$", re.I)   # the whole when must be a time phrase
 
 
@@ -900,7 +903,9 @@ def _remind_to(text):
         task, when = rest[:sp.start()].strip(), rest[sp.end():].strip()
         if not task or not when or re.sub(r"[^\w\s]", "", task).strip().lower() in _REMIND_AT_NO_TASK:
             continue
-        if not _REMIND_TO_TIME.match(when):
+        if not _REMIND_TO_TIME.match(when) and not re.match(
+                r"(?:this\s+(?:morning|afternoon|evening)|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))"
+                r"(?:\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)?$", when, re.I):
             continue                             # "in the park at 5": the time is only the last part
         try:
             from . import store
