@@ -142,5 +142,28 @@ for q in ("turn left at the lights", "left or right?", "I left my notes on the r
     h, rep, c = run(q)
     check(not c, f"{q!r} tiles nothing ({c})")
 
+# --- 3. _instant: the two-window tiling and the no-internet forms answer at once while the model is busy -----
+# the real desk module (as test-busy-fallthrough.py imports it); _instant is called on a Desk.__new__ stub
+sys.path.insert(0, os.path.join(HERE, "..", "src/rootfs/usr/lib/llmos"))
+os.environ.setdefault("LLMOS_SHARE", os.path.join(HERE, "..", "src/rootfs/usr/share/llmos"))
+from llmos import desk as desk_mod  # noqa: E402
+
+inst = desk_mod.Desk.__new__(desk_mod.Desk)
+print("_instant: two-window tiling")
+for q in ("browser left, notes right", "firefox on the left and files on the right", "browser right and files left",
+          "put the browser left and files right"):
+    check(inst._instant(q) is True, f"_instant({q!r}) is True")
+print("_instant: no-internet forms")
+for q in ("connected but no internet", "wifi connected but no internet", "it says connected but nothing loads",
+          "connected to wifi but not online"):
+    check(inst._instant(q) is True, f"_instant({q!r}) is True")
+print("_instant: everything else unchanged (values as at 0f9fb4f)")
+for q, want in (("turn left at the lights", False), ("left or right?", False), ("I left my notes on the right shelf", False),
+                ("I'm connected and it works", False), ("connected to wifi", False), ("connected but nothing works", False),
+                ("connected and offline", False), ("I'm connected but no internet", False), ("connected but slow", False),
+                ("news", True), ("logs", True), ("no internet explorer jokes", True), ("wifi connected", True),
+                ("what time is it", True)):
+    check(inst._instant(q) is want, f"_instant({q!r}) is {want}")
+
 print(f"\n{'all good' if not fails else str(fails) + ' failure(s)'}")
 sys.exit(1 if fails else 0)
