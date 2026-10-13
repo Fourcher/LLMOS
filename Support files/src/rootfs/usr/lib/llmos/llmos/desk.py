@@ -31,7 +31,7 @@ import sys
 import threading
 import time
 
-from . import clip, record, folderlock, everyday, reset, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line, waits
+from . import clip, record, folderlock, everyday, reset, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line, waits, replytr
 
 T = i18n.t
 PAGE = os.path.join(config.SHARE, "desk", "index.html")
@@ -3511,6 +3511,7 @@ class Desk:
 
     def instant_reply(self, request, text):
         """An answer the OS knows itself, shown like any reply (no model involved)."""
+        text = replytr.translate(text, config.llm_language())
         self.emit({"t": "reply.start", "request": request})
         self.emit({"t": "reply.end", "text": text})
         self.last_reply = self._said = text
