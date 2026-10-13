@@ -142,3 +142,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 Superseded/obsolete held lines: 28a7f28, 036f6ba, 9d5c4cd, 79a7311, 564e581, 7ccc48a, f595072, a7eb1b8, 604507d, 0f9fb4f, 270169b, e491709, aa331f5, 90be8cd, 58cb32c, ff268c2, 8b3cb84; 9fe97bc and 0cdf401 already merged via ecb5ab7 / d50b01a.
 Each merge: git merge --no-ff; resolve trivial conflicts by FIX worker if any; then hostloop once at the end.
 - [note] "remind me to look at the stars tonight" keeps the "remind me to" prefix ("tonight" not in the at|in|on|tomorrow split) — small follow-up.
+- [decision] (speed) system-prompt dedupe dropped: only ~108 tokens (1.3% of the first-turn prompt) without removing distinct instructions; not worth the behaviour risk to a prompt that just scored 0 refusals / 0 lectures. Bigger wins remain: merge near-duplicate tools (~900 tok).
