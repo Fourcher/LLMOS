@@ -104,7 +104,7 @@ _LIVE_FACTS = tuple(re.compile(p) for p in _FACT_PATS)
 _FACT_MATCH = "^(?:" + "|".join(_FACT_PATS) + r")[?.!]?$"
 
 MATCH = re.compile(
-    r"^" + _FREE_SPACE_Q + r"[?.!]?$|" +
+    r"updates? (?:from|off|status|source)|updates (?:come|coming) from|^(?:pair|connect|link) .* for updates$|^" + _FREE_SPACE_Q + r"[?.!]?$|" +
     r"^how much (?:free |disk )?(?:space|storage|room)(?: is| do i have)?(?: (?:left|free|remaining))?(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?(?: (?:left|free|remaining))?$|^how much (?:disk )?space (?:is )?(?:left|free)$|"
     r"^(?:turn|switch) (?:on|off) (?:the |my )?bluetooth$|^(?:turn|switch) (?:the |my )?bluetooth (?:on|off)$|^bluetooth (?:on|off)$|^(?:yes|yeah|yep|yup|sure|ok|okay)$|(?:the |my )?(?:screen|computer|pc|laptop|everything) (?:has |have )?(?:froze|frozen|locked up|is stuck)$|"
     r"(?:computer|pc|laptop|machine) (?:is |has been |got |feels )?(?:really |very |so |quite )?slow\b|"
@@ -1124,6 +1124,49 @@ def system_more(desk, line, low):
     return False
 
 
+_OTA = re.compile(r"^(?:please )?(?P<stop>stop|turn off|no more|disable|forget) (?:getting |receiving |the )?updates? from (?:my|the|that) (?:own )?(?:computer|mac|pc|laptop|desktop|build machine)$|"
+                  r"^(?:please )?(?:get|receive|take|accept|pull|turn on|enable) (?:the )?updates? (?:from|off) (?:my |the )?(?:own )?(?:(?P<addr>\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?|computer|mac|pc|laptop|desktop|build machine)(?: over (?:the )?(?:network|wi-?fi|air))?$|"
+                  r"^(?:pair|connect|link) (?:this computer )?(?:with|to) my (?:computer|mac|pc|laptop) for updates$|"
+                  r"^(?P<status>(?:where do|where are) (?:my |the )?updates (?:come|coming) from|updates? source|are updates from my (?:computer|mac) on)$")
+
+
+def ota_updates(desk, line, low):
+    """Updates pushed from the owner's own computer (ota.py): pair, unpair, status."""
+    m = _OTA.match(low)
+    if not m:
+        return False
+    from . import ota
+    if m.group("status"):
+        desk.instant_reply(line, ota.status_text())
+        return True
+    if m.group("stop"):
+        o = ota.unpair()
+        desk.instant_reply(line, f"Done. This computer no longer takes updates from {o['name']}." if o else
+                           "Updates from your computer were already off.")
+        return True
+    if m.group("addr"):
+        found = [s for s in [ota.hello(f"http://{m.group('addr')}:{ota.PORT}")] if s]
+    else:
+        if config.settings.get("internet", "yes") == "no":
+            desk.instant_reply(line, "The internet is off, so I can't look around the network. Say \\u201cget updates "
+                               "from\\u201d and your computer's address, like 192.168.1.20.")
+            return True
+        found = ota.find_servers()
+    if not found:
+        desk.instant_reply(line, "I didn't find an update server. On your computer, run "
+                           "\\u201ctools/ota.py serve\\u201d in the LLM OS folder, then say this again.")
+        return True
+    if len(found) > 1:
+        desk.instant_reply(line, "I found more than one: " + "; ".join(f"{s['name']} at {s['url'].split('//')[1]} "
+                           f"(key {s['fp']})" for s in found) + ". Say \\u201cget updates from\\u201d and the address you want.")
+        return True
+    s = ota.pair(found[0])
+    desk.instant_reply(line, f"Done. Updates now come from {s['name']} ({s['url'].split('//')[1]}). Its key is "
+                       f"{s['fp']}; your computer shows the same. Each one installs on its own and is undone if the desk "
+                       f"doesn't come back. Say \\u201cstop updates from my computer\\u201d to end it.")
+    return True
+
+
 def share_app(desk, line, low):
     m = re.search(r"(?:share|send|export|give|save) (?:the |my |this |that )?(?:app|game|tool)s?(?: (?:i|you|we) made| called (?P<n>[\w .-]+?))?"
                   r"(?: (?:with|to) .+| as a file| to (?:a )?file)?$", low)
@@ -1870,7 +1913,7 @@ def jokes(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, web_block, howto):
+    for fn in (jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, ota_updates, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True

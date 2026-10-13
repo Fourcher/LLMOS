@@ -311,7 +311,7 @@ def apk_del(args):
 
 
 POWER_ACTIONS = ("poweroff", "reboot", "suspend")
-SERVICE_NAMES = ("llmos-model",)
+SERVICE_NAMES = ("llmos-model", "llmos-ota")
 SERVICE_ACTIONS = ("start", "stop", "restart")
 
 

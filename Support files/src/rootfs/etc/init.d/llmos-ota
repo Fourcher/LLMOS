@@ -1,0 +1,24 @@
+#!/sbin/openrc-run
+# Updates from the owner's own computer, once paired ("get updates from my computer"). Outbound only: it keeps one
+# request open to the paired update server; nothing listens on this machine. Idle when not paired.
+
+name="llmos-ota"
+description="LLM OS updates from the owner's computer"
+command="/usr/bin/llmos"
+command_args="ota-client"
+supervisor=supervise-daemon
+respawn_delay=5
+respawn_max=0
+pidfile="/run/llmos-ota.pid"
+output_log="/run/llmos/ota.log"
+error_log="/run/llmos/ota.log"
+
+depend() {
+    need localmount net
+    after llmos-model nftables
+}
+
+start_pre() {
+    checkpath -d -m 0755 /run/llmos
+    checkpath -d -m 0700 /var/lib/llmos/ota
+}

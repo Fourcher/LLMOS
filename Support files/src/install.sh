@@ -129,7 +129,7 @@ PKGS="
   mousepad ristretto abiword gnumeric xarchiver 7zip
   cups cups-filters avahi bluez
   pipewire wireplumber pipewire-pulse pipewire-alsa pavucontrol
-  wlr-randr wlrctl lswt wl-clipboard flatpak mako libnotify swayidle wlopm wlsunset slurp playerctl xdg-desktop-portal xdg-desktop-portal-wlr poppler-utils wf-recorder imagemagick gvfs-mtp gvfs-gphoto2 wvkbd openssh-client git rsync tesseract-ocr tesseract-ocr-data-eng smartmontools adwaita-icon-theme
+  wlr-randr wlrctl lswt wl-clipboard flatpak mako libnotify swayidle wlopm wlsunset slurp playerctl xdg-desktop-portal xdg-desktop-portal-wlr poppler-utils wf-recorder imagemagick gvfs-mtp gvfs-gphoto2 wvkbd openssh-client openssh-keygen git rsync tesseract-ocr tesseract-ocr-data-eng smartmontools adwaita-icon-theme
   nmap clamav tshark tcpdump nikto john hydra aircrack-ng wireshark zaproxy ffuf
 "
 # shellcheck disable=SC2086
@@ -226,6 +226,7 @@ for s in killprocs mount-ro savecache; do rc-update add $s shutdown; done
 rc-update add llmos-hw sysinit
 rc-update add llmos-model default
 rc-update add llmos-scheduler default
+rc-update add llmos-ota default        # idle until the owner pairs it with their computer
 rc-update add nftables default
 rc-update add acpid default
 rc-update add dbus default
