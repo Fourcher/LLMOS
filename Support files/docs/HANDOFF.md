@@ -8,7 +8,7 @@
   (Windows: **Start Here (Windows).bat**, Linux: **Start Here (Linux).sh**).
   LLM OS Setup opens in your browser and takes it from there.
 - The user guide is `dist/README.md`.
-- RELEASE STATUS: <filled in when the final build reports>
+- Release status: built and checked on 2026-10-13. The build is fresh from the current code (v1.8.2), all checksums match, and the smoke tests passed: arm64 install image, x86-64 install image (reached the setup screen), calculator and desktop. Package: `packages/LLM OS 1.8.2.zip` (7.2 GB).
 
 ## 2. What changed since 1.7.1
 
@@ -73,8 +73,8 @@ Reliability
 - A model bigger than memory works but is slow: about 1 to 2 words a second on a 4 GB machine.
 - The encrypted vault can't be turned off by asking.
 - The guard explanation on button prompts is not in this build (see section 5), so those prompts may not say why they ask.
-- "Remind me to look at the stars tonight" and "remind me to X at 3" keep the words "remind me to" inside the saved task.
 - Shorter assistant instructions and merged tools for speed were shelved: the saving was small and the risk to the small model was not worth it.
+- The x86-64 smoke test reached the setup screen but does not print an explicit pass line; it exited cleanly.
 
 ## 5. Left unmerged or open
 
