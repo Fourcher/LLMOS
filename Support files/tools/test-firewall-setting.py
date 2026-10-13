@@ -106,6 +106,59 @@ try:
     got = tools.change_setting({"setting": "firewall", "value": "off"}, Other())
     check(got.startswith("not done") and config.settings.get("firewall") == "on", f"unrelated request is refused: {got!r}")
 
+    # undo: the real undo push is used from here on
+    tools._undo_push = real_undo
+    rootd_client.call = record
+
+    class FwOff(Ctx):
+        current_request = "turn the firewall off"
+
+    class NetOff(Ctx):
+        current_request = "turn the internet off"
+
+    # firewall off -> undo: back to on, and the firewall is re-applied as on
+    config.settings.set("internet", "ask")
+    config.settings.set("firewall", "on")
+    tools._UNDO.clear()
+    tools.change_setting({"setting": "firewall", "value": "off"}, FwOff())
+    check(config.settings.get("firewall") == "off", "setup: firewall is off before undo")
+    sent.clear()
+    got = tools.undo({}, Ctx())
+    check(got == "undone: the settings are back to how they were", f"undo reply: {got!r}")
+    check(config.settings.get("firewall") == "on", f"undo puts firewall back to on: {config.settings.get('firewall')!r}")
+    check(sent == [("firewall_apply", {"internet": "ask", "firewall": "on"})], f"undo applies firewall on: {sent}")
+
+    # firewall never set (absent -> default on): undo puts it back to on and applies on
+    config.settings.set("firewall", "off")
+    tools._UNDO.clear()
+    tools._UNDO.append(("settings", {"firewall": None, "internet": "ask"}, 0))
+    sent.clear()
+    tools.undo({}, Ctx())
+    check(config.settings.get("firewall") == "on", "absent firewall -> undo sets on")
+    check(sent == [("firewall_apply", {"internet": "ask", "firewall": "on"})], f"absent firewall -> apply on: {sent}")
+
+    # internet change -> undo: internet back, apply carries the current firewall value (off)
+    config.settings.set("firewall", "off")
+    tools._UNDO.clear()
+    tools.change_setting({"setting": "internet", "value": "no"}, NetOff())
+    check(config.settings.get("internet") == "no", "setup: internet is no before undo")
+    sent.clear()
+    tools.undo({}, Ctx())
+    check(config.settings.get("internet") == "ask", "undo puts internet back to ask")
+    check(config.settings.get("firewall") == "off", "internet undo keeps firewall off")
+    check(sent == [("firewall_apply", {"internet": "ask", "firewall": "off"})], f"internet undo applies with firewall off: {sent}")
+
+    # unrelated setting -> undo: restored, but no firewall apply
+    config.settings.set("firewall", "on")
+    config.settings.set("speak_replies", False)
+    tools._UNDO.clear()
+    tools._UNDO.append(("settings", tools._settings_snapshot(), 0))
+    config.settings.set("speak_replies", True)
+    sent.clear()
+    tools.undo({}, Ctx())
+    check(config.settings.get("speak_replies") is False, "unrelated undo restores its setting")
+    check(sent == [], f"unrelated undo applies nothing: {sent}")
+
     print("all good" if not fails else f"{fails} FAILED")
 finally:
     rootd_client.call = real_call
