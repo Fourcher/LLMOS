@@ -82,8 +82,12 @@ check("hour", names(run(home, {"since": "hour"})), ["recent30.txt"])
 today_want = ["recent30.txt"] if NOW - 30 * 60 >= MIDNIGHT else []
 check("today", names(run(home, {"since": "today"})), today_want)
 
-# yesterday: yesterday 15:00 only
-check("yesterday", names(run(home, {"since": "yesterday"})), ["yesterday15.txt"])
+# yesterday: yesterday 15:00, plus recent30 when the clock is within its first 30 minutes (recent30 is then yesterday's file).
+# The product takes "yesterday" from datetime.date.today() (not patchable), so the expectation is derived from the same clock.
+yest_recent = NOW - 30 * 60 < MIDNIGHT
+newest_yest = "recent30.txt" if yest_recent else "yesterday15.txt"
+check("yesterday", names(run(home, {"since": "yesterday"})),
+      ["recent30.txt", "yesterday15.txt"] if yest_recent else ["yesterday15.txt"])
 
 # week: the last 7 days, newest first (3 days ago is in, 10 days ago is out)
 check("week order", names(run(home, {"since": "week"})), ["recent30.txt", "yesterday15.txt", "threedays.txt"])
@@ -93,7 +97,7 @@ everything = run(home, {"since": "week"}) + run(home, {})
 check("hidden skipped", [n for n in ("secret", "cached", "lo.txt", "link.txt") if n in everything], [])
 
 # the result line carries folder and time
-line = [l for l in run(home, {"since": "yesterday"}).splitlines() if l.startswith("- ")][0]
+line = [l for l in run(home, {"since": "yesterday"}).splitlines() if l.startswith("- yesterday15.txt ")][0]
 check("yesterday line", line.endswith("in ~/Documents (yesterday 15:00)"), True)
 
 # an unknown period is an error, not a scan
@@ -124,8 +128,8 @@ try:
     check("open newest", (opened, out), ([os.path.join(home3, "Documents", "new.txt")], "Opened new.txt (saved 10 minutes ago)."))
     opened.clear()
     out = run(home, {"since": "yesterday", "open": True})
-    check("open yesterday", (opened, out.startswith("Opened yesterday15.txt (saved yesterday 15:00)")),
-          ([os.path.join(home, "Documents", "yesterday15.txt")], True))
+    check("open yesterday", (opened, out.startswith(f"Opened {newest_yest} (saved yesterday ")),
+          ([os.path.join(home, "Documents", newest_yest)], True))
     opened.clear()
     home4 = make_home({})
     check("open nothing", (run(home4, {"open": True}), opened),
