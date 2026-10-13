@@ -221,3 +221,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 8af8485 (bookmarks/homepage wordings) VERIFY PASS — merge after build. (_instant only matters while busy; homepage covered by the _instant+_howto FIX in flight.)
 - [held] 7493a24 (how-to answers instant while busy) VERIFY PASS — merge after build.
 - [held] 102e5e0 (supersedes e8166b1 + 0c4d264: warm-up + "you" wording in tools/agent/desk) VERIFY PASS — merge after build (merge 102e5e0; skip e8166b1/929e78f). Merge order after build: 1242e4d, e2f8bb0, 4a39e00, 102e5e0, 8af8485, 7493a24, then commit dist manifest.
+- [done] (reliability) PROBE flaky host suites: "120 suites, 0 failures in each of runs 1, 2 and 3" (7 VM suites skipped); slowest test-pointer-sweep 12.4 s.
