@@ -517,7 +517,7 @@ _INTERNET = re.compile(
     r"^\s*(?:please\s+)?(?:"
     r"(?P<ask>ask(?:\s+me)?\s+(?:each\s+time|every\s+time|first|before)(?:\s+(?:before\s+)?(?:you\s+)?(?:use|using|go(?:ing)?\s+(?:on|online)|access(?:ing)?|connect(?:ing)?\s+to)\s+(?:the\s+)?(?:internet|web|network))?"
     r"|(?:set\s+)?(?:the\s+)?internet\s+(?:to\s+)?ask(?:\s+each\s+time)?)"
-    r"|(?P<off>(?:turn|switch)\s+(?:the\s+)?internet\s+off|(?:no|disable|block|cut)\s+(?:the\s+)?internet(?:\s+access|\s+use)?|go\s+offline|internet\s+off)"
+    r"|(?P<off>(?:turn|switch)\s+(?:the\s+)?internet\s+off|(?:turn|switch)\s+off\s+(?:the\s+)?internet|(?:no|disable|block|cut|kill)\s+(?:the\s+)?internet(?:\s+access|\s+use)?|no\s+internet\s+please|disconnect\s+(?:from\s+)?(?:the\s+)?internet|go\s+offline|stay\s+offline|work\s+offline|offline\s+mode|internet\s+off)"
     r"|(?P<on>(?:allow|enable|turn\s+on|switch\s+on)\s+(?:the\s+)?internet(?:\s+use|\s+access)?|(?:turn|switch)\s+(?:the\s+)?internet(?:\s+back)?\s+on|go\s+online|internet\s+on)"
     r")\s*[.!]?\s*$", re.I)
 _TOR = re.compile(r"^\s*(?:please\s+)?(?:(?P<on>(?:use|enable|turn\s+on|switch\s+on)\s+tor|(?:route|send)\s+(?:everything|all\s+traffic|the\s+internet|my\s+traffic)\s+(?:through|via|over)\s+tor|internet\s+through\s+tor|tor\s+on)"
