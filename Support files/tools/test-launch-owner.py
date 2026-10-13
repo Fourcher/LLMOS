@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+"""Owner-account prologue of llmos-desk. Host-only: stubs replace every system command, and every
+absolute path the script uses is relocated into a temp root (identically for the base and new copies).
+
+No marker: the script must behave exactly like the base (same log: argv, env, chown/chmod/mkdir calls).
+Valid owner marker: /run/llmos is chowned to the owner and the desk re-execs as that owner with its home.
+Owner path: seatd is started (only when not already running), /var/cache/llmos is chowned to the owner, labwc is
+launched without seatd-launch and /run/seatd.sock is not removed. Without seatd, or without a usable shell for the
+owner, the root path runs.
+Bad markers and the inner re-exec (LLMOS_DESK_INNER=1): the root path, no su.
+"""
+import os
+import pathlib
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HERE = pathlib.Path(__file__).resolve()
+REPO = HERE.parents[2]
+REL = "Support files/src/rootfs/usr/libexec/llmos-desk"
+SCRIPT = REPO / REL
+
+PASSWD = """root:x:0:0::/var/root:/bin/sh
+toor:x:0:0::/home/owner:/bin/sh
+owner:x:501:20::/home/owner:/bin/sh
+relhome:x:502:20::relhome:/bin/sh
+noshell:x:503:20::/home/noshell:/nonexistent
+"""
+
+STUBS = {
+    "getent": r'''[ "$1" = passwd ] || exit 2
+out=$(awk -F: -v u="$2" '$1==u' "$PASSWD_FILE")
+[ -n "$out" ] || exit 2
+printf '%s\n' "$out"
+''',
+    "chown": r'''printf '%s\n' "chown $*" >> "$LOG"
+''',
+    "chmod": r'''printf '%s\n' "chmod $*" >> "$LOG"
+''',
+    "mkdir": r'''printf '%s\n' "mkdir $*" >> "$LOG"
+exec /bin/mkdir "$@"
+''',
+    "rm": r'''printf '%s\n' "rm $*" >> "$LOG"
+exec /bin/rm "$@"
+''',
+    "rc-service": r'''printf '%s\n' "rc-service $*" >> "$LOG"
+case "$2" in
+  status) [ -e "$SEATD_UP" ] ;;
+  start) : > "$SEATD_UP" ;;
+esac
+''',
+    "seatd": "exit 0\n",
+    "su": r'''printf '%s\n' "su $*" >> "$LOG"
+env | sort | sed 's/^/su-env: /' >> "$LOG"
+for last; do :; done
+exec /bin/sh -c "$last"
+''',
+    "dbus-run-session": r'''DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/llmos-test-bus
+export DBUS_SESSION_BUS_ADDRESS
+shift
+exec "$@"
+''',
+    "seatd-launch": r'''printf '%s\n' "seatd-launch $*" >> "$LOG"
+env | sort | sed 's/^/env: /' >> "$LOG"
+if [ -f "$XDG_RUNTIME_DIR/a11y.env" ]; then sed 's/^/a11y: /' "$XDG_RUNTIME_DIR/a11y.env" >> "$LOG"; fi
+''',
+    "labwc": r'''printf '%s\n' "labwc $*" >> "$LOG"
+env | sort | sed 's/^/env: /' >> "$LOG"
+if [ -f "$XDG_RUNTIME_DIR/a11y.env" ]; then sed 's/^/a11y: /' "$XDG_RUNTIME_DIR/a11y.env" >> "$LOG"; fi
+''',
+    "python3": "exit 0\n",
+    "llmos": r'''printf '%s\n' "llmos $*" >> "$LOG"
+''',
+}
+
+
+def relocate(text, root):
+    pairs = [
+        ("/etc/llmos/owner-user", f"{root}/etc/owner-user"),
+        ("/usr/libexec/llmos-desk", f"{root}/libexec/llmos-desk"),
+        ("/run/llmos", f"{root}/run/llmos"),
+        ("/var/cache/llmos", f"{root}/cache"),
+        ("/usr/bin/llmos", f"{root}/bin/llmos"),
+        ("/run/seatd.sock", f"{root}/run/seatd.sock"),
+    ]
+    for a, b in pairs:
+        text = text.replace(a, b)
+    return text
+
+
+SYSTEM_TOOLS = ["head", "tr", "grep", "cut", "sed", "sort", "awk", "env", "cat", "basename", "readlink", "dirname", "sh"]
+
+
+def run(text, marker=None, inner=False, drop=(), seatd_up=False, sock_up=False, isolated=False):
+    root = tempfile.mkdtemp(prefix="llmos-owner.")
+    try:
+        bindir = os.path.join(root, "bin")
+        os.makedirs(bindir)
+        for name, body in STUBS.items():
+            path = os.path.join(bindir, name)
+            with open(path, "w") as f:
+                f.write("#!/bin/sh\n" + body)
+            os.chmod(path, 0o755)
+        for name in drop:
+            os.remove(os.path.join(bindir, name))
+        passwd = os.path.join(root, "passwd")
+        with open(passwd, "w") as f:
+            f.write(PASSWD)
+        log = os.path.join(root, "log")
+        open(log, "w").close()
+        os.makedirs(os.path.join(root, "etc"))
+        os.makedirs(os.path.join(root, "libexec"))
+        if marker is not None:
+            with open(os.path.join(root, "etc", "owner-user"), "wb") as f:
+                f.write(marker)
+        script = os.path.join(root, "libexec", "llmos-desk")
+        with open(script, "w") as f:
+            f.write(relocate(text, root))
+        os.chmod(script, 0o755)
+        seatd_flag = os.path.join(root, "seatd.up")
+        if seatd_up:
+            open(seatd_flag, "w").close()
+        if sock_up:
+            os.makedirs(os.path.join(root, "run"), exist_ok=True)
+            open(os.path.join(root, "run", "seatd.sock"), "w").close()
+        path = f"{bindir}:/usr/bin:/bin"
+        if isolated:
+            # no system su on this PATH (macOS ships /usr/bin/su), only the listed tools
+            nosu = os.path.join(root, "nosu")
+            os.makedirs(nosu)
+            for name in SYSTEM_TOOLS:
+                found = shutil.which(name)
+                if found:
+                    os.symlink(found, os.path.join(nosu, name))
+            path = f"{bindir}:{nosu}"
+        env = {"PATH": path, "LOG": log, "PASSWD_FILE": passwd, "SEATD_UP": seatd_flag}
+        if inner:
+            env["LLMOS_DESK_INNER"] = "1"
+        p = subprocess.run(["/bin/sh", script], env=env, cwd=root,
+                           capture_output=True, text=True, timeout=60)
+        with open(log) as f:
+            logtext = f.read().replace(root, "@T@")
+        return p.returncode, logtext, (p.stdout + p.stderr).replace(root, "@T@")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def main():
+    fails = []
+
+    def check(cond, label):
+        if cond:
+            print("ok " + label)
+        else:
+            fails.append(label)
+            print("FAIL " + label)
+
+    syn = subprocess.run(["/bin/sh", "-n", str(SCRIPT)], capture_output=True, text=True)
+    check(syn.returncode == 0, "sh -n llmos-desk " + syn.stderr.strip())
+
+    base = subprocess.run(["git", "-C", str(REPO), "show", f"8f5bfda:{REL}"],
+                          capture_output=True, text=True)
+    check(base.returncode == 0, "base script readable from 8f5bfda")
+    old = base.stdout
+    new = SCRIPT.read_text()
+
+    # (1) no marker: identical to the base script
+    rc_o, log_o, _ = run(old)
+    rc_n, log_n, out_n = run(new)
+    check(rc_o == 0 and rc_n == 0, f"no marker: both exit 0 (base {rc_o}, new {rc_n}) {out_n.strip()}")
+    check(log_n == log_o, "no marker: log (argv, env, chown/chmod/mkdir) identical to base")
+    check("seatd-launch -- labwc" in log_n, "no marker: seatd-launch -- labwc reached")
+    check("env: HOME=/root" in log_n, "no marker: HOME=/root")
+    check("a11y: DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/llmos-test-bus" in log_n,
+          "no marker: a11y.env written with bus address")
+    check("su " not in log_n and "chown " not in log_n, "no marker: no su or chown")
+    check("rm -f @T@/run/seatd.sock" in log_n, "no marker: root path still removes /run/seatd.sock")
+
+    # (2) valid owner marker
+    rc, log, out = run(new, marker=b"owner\n")
+    lines = log.splitlines()
+
+    def first(prefix):
+        return next((i for i, l in enumerate(lines) if l.startswith(prefix)), None)
+
+    i_chown = first("chown -R owner:owner @T@/run/llmos")
+    i_chmod = first("chmod 700 @T@/run/llmos")
+    i_su = first("su -p -s /bin/sh owner -c exec @T@/libexec/llmos-desk")
+    i_cache = first("chown -R owner:owner @T@/cache")
+    i_status = first("rc-service seatd status")
+    i_start = first("rc-service seatd start")
+    check(rc == 0, f"owner: exit 0 {out.strip()}")
+    check(i_chown is not None and i_su is not None and i_chown < i_su,
+          "owner: chown -R owner:owner /run/llmos before su")
+    check(i_chmod is not None and i_su is not None and i_chmod < i_su,
+          "owner: chmod 700 /run/llmos before su")
+    check(sum(1 for l in lines if l.startswith("su ")) == 1, "owner: exactly one su re-exec")
+    check("su-env: LLMOS_DESK_INNER=1" in log and "su-env: LLMOS_DESK_HOME=/home/owner" in log
+          and "su-env: USER=owner" in log and "su-env: LOGNAME=owner" in log,
+          "owner: su receives INNER=1, LLMOS_DESK_HOME, USER, LOGNAME")
+    check("env: HOME=/home/owner" in log, "owner: inner desk runs with HOME=/home/owner")
+    check("a11y: DBUS_SESSION_BUS_ADDRESS=unix:path=/tmp/llmos-test-bus" in log,
+          "owner: a11y.env written with bus address")
+    check(i_status is not None and i_start is not None and i_status < i_start < i_su,
+          "owner: seatd status checked, then started, before su")
+    check(sum(1 for l in lines if l == "rc-service seatd start") == 1, "owner: seatd started once")
+    check(i_cache is not None and i_su is not None and i_cache < i_su,
+          "owner: chown -R owner:owner /var/cache/llmos before su")
+    check("seatd-launch" not in log, "owner: no seatd-launch anywhere in the owner session")
+    check(any(l.startswith("labwc -s ") for l in lines), "owner: labwc launched directly")
+    check(not any(l.startswith("rm ") and "seatd.sock" in l for l in lines),
+          "owner: /run/seatd.sock is not removed")
+
+    # (2b) second owner start in the same boot: seatd already running, so it is not started again
+    rc2, log2, out2 = run(new, marker=b"owner\n", seatd_up=True)
+    lines2 = log2.splitlines()
+    check(rc2 == 0 and sum(1 for l in lines2 if l.startswith("su ")) == 1,
+          f"owner, seatd already running: one su, exit 0 {out2.strip()}")
+    check("rc-service seatd status" in lines2 and "rc-service seatd start" not in lines2,
+          "owner, seatd already running: status checked, start not repeated")
+
+    # (2c) seatd missing on the system: the root path runs, with a log line
+    rc3, log3, out3 = run(new, marker=b"owner\n", drop=("seatd",))
+    check(rc3 == 0 and log3 == log_o and "su " not in log3 and "chown " not in log3,
+          f"owner, seatd missing: root path, log identical to base {out3.strip()}")
+    check("seatd is not installed" in out3, "owner, seatd missing: log line printed")
+
+    # (3) adversarial markers: the root path (same log as no marker, no su, no chown)
+    cases = [
+        (b"", False, "empty"),
+        (b"root\n", False, "root"),
+        (b"nosuchuser\n", False, "nonexistent user"),
+        (b"owner; rm -rf /\n", False, "rm -rf / injection"),
+        (b"rm -rf /\n", False, "rm -rf /"),
+        (b"$(id)\n", False, "$(id)"),
+        (b"toor\n", False, "uid-0 alias"),
+        (b"relhome\n", False, "relative home"),
+        (b"noshell\n", False, "user shell missing"),
+    ]
+    for marker, inner, label in cases:
+        rc, log, _ = run(new, marker=marker, inner=inner)
+        check(rc == 0 and log == log_o, f"marker {label}: root path, log identical to no-marker base")
+
+    rc, log, _ = run(new, marker=b"owner\n", inner=True)
+    check(rc == 0 and "su " not in log and "chown " not in log and "env: HOME=/root" in log,
+          "LLMOS_DESK_INNER=1 with valid owner: prologue skipped, HOME=/root, no su")
+
+    # (4) the owner flag is on, su is missing, so the owner path falls back to root while the seatd service runs
+    rc4, log4, out4 = run(new, marker=b"owner\n", drop=("su",), isolated=True, seatd_up=True, sock_up=True)
+    lines4 = log4.splitlines()
+    check(rc4 == 0 and "chown " not in log4 and "su " not in log4,
+          f"owner flag, su missing: owner path not taken, exit 0 {out4.strip()}")
+    check("seatd-launch" not in log4 and not any(l.startswith("rm ") and "seatd.sock" in l for l in lines4),
+          "owner flag, su missing, seatd running: no seatd-launch, /run/seatd.sock not removed")
+    check(any(l.startswith("labwc -s ") for l in lines4) and "rc-service seatd start" not in lines4,
+          "owner flag, su missing, seatd running: labwc launched directly, seatd not started again")
+
+    # (5) default install (no seatd service): the root path is unchanged, rc-service is not called
+    rc5, log5, _ = run(new)
+    check(rc5 == 0 and log5 == log_o and "rc-service" not in log5,
+          "default install: root path identical to base, no rc-service call")
+
+    # (6) seatd running but its socket is missing: the root path as before (seatd-launch, socket removed)
+    rc6, log6, out6 = run(new, seatd_up=True)
+    check(rc6 == 0 and log6 == log_o, f"seatd running, socket missing: identical to base {out6.strip()}")
+
+    # (7) rc-service absent on the system (command not found): treated as not running, identical to base
+    rc7, log7, out7 = run(new, drop=("rc-service",), sock_up=True, seatd_up=True)
+    check(rc7 == 0 and log7 == log_o, f"rc-service absent, socket present: identical to base {out7.strip()}")
+
+    if fails:
+        print("FAILED: " + "; ".join(fails))
+        return 1
+    print("all good")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

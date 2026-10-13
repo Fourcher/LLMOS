@@ -1,9 +1,39 @@
 #!/bin/sh
+# Owner session: when the install names an owner account (/etc/llmos/owner-user), the desk runs as that account
+# with its own home instead of root. Every check must pass; any failure keeps the root path below unchanged.
+if [ "${LLMOS_DESK_INNER:-}" != 1 ] && [ -e /etc/llmos/owner-user ]; then
+    u=$(head -n 1 /etc/llmos/owner-user 2>/dev/null | tr -d ' \t\r\n')
+    if printf '%s\n' "$u" | grep -Eq '^[a-z_][a-z0-9_-]{0,31}$' && [ "$u" != root ]; then
+        pw=$(getent passwd "$u" 2>/dev/null) || pw=""
+        uid=$(printf '%s\n' "$pw" | cut -d: -f3)
+        home=$(printf '%s\n' "$pw" | cut -d: -f6)
+        case "$home" in /*) ;; *) home="" ;; esac
+        shell=$(printf '%s\n' "$pw" | cut -d: -f7)
+        if [ -n "$pw" ] && [ -n "$home" ] && printf '%s\n' "$uid" | grep -Eq '^[1-9][0-9]*$' \
+            && command -v su >/dev/null 2>&1 && [ -x "$shell" ] \
+            && { command -v seatd >/dev/null 2>&1 || { echo "llmos-desk: seatd is not installed; the owner session is skipped, the desk runs as root" >&2; false; }; } \
+            && mkdir -p /run/llmos && chown -R "$u":owner /run/llmos && chmod 700 /run/llmos; then
+            # the seat daemon serves the owner's session (libseat connects to /run/seatd.sock; group seat)
+            rc-service seatd status >/dev/null 2>&1 || rc-service seatd start
+            mkdir -p /var/cache/llmos && chown -R "$u":owner /var/cache/llmos
+            LLMOS_DESK_INNER=1 LLMOS_DESK_HOME=$home USER=$u LOGNAME=$u
+            export LLMOS_DESK_INNER LLMOS_DESK_HOME USER LOGNAME
+            exec su -p -s /bin/sh "$u" -c 'exec /usr/libexec/llmos-desk'
+        fi
+    fi
+fi
 # Start the graphical desk on this screen: seat daemon -> labwc compositor
 # -> the desk application. Falls back to the text console if the graphical
 # stack is missing. Everything renders on the CPU when there is no 3D
 # acceleration (a virtual machine); on real graphics hardware Mesa is used.
-export HOME=/root LANG=C.UTF-8 PYTHONUNBUFFERED=1
+export HOME=${LLMOS_DESK_HOME:-/root} LANG=C.UTF-8 PYTHONUNBUFFERED=1
+# the seat wrapper for the compositor. When the seatd service serves the seat (the owner session, or a seatd service
+# already running), the wrapper is empty and labwc runs directly: a second seatd must not replace the service's socket.
+# The socket is checked first so that a default install (no service) never calls rc-service here.
+SEAT_LAUNCH=seatd-launch
+if [ "${LLMOS_DESK_INNER:-}" = 1 ] || { [ -e /run/seatd.sock ] && rc-service seatd status >/dev/null 2>&1; }; then
+    SEAT_LAUNCH=
+fi
 # caches (fontconfig, Mesa's shader cache, Python) live outside the passphrase vault: a cache file
 # mapped from inside it would keep the vault from closing when the owner locks
 export XDG_CACHE_HOME=/var/cache/llmos XDG_CONFIG_HOME=/var/cache/llmos MESA_SHADER_CACHE_DIR=/var/cache/llmos/mesa
@@ -35,7 +65,7 @@ esac
 if ! command -v labwc >/dev/null 2>&1 || ! python3 -c "import gi; gi.require_version('WebKit','6.0'); from gi.repository import WebKit" 2>/dev/null; then
     exec /usr/bin/llmos console
 fi
-rm -f /run/seatd.sock
+if [ -n "$SEAT_LAUNCH" ]; then rm -f /run/seatd.sock; fi
 mkdir -p /run/llmos; : >> /run/llmos/desk.log; chmod 600 /run/llmos/desk.log
 # a private session bus for the desk (GTK/WebKit expect one; nothing else uses it)
 if command -v dbus-run-session >/dev/null 2>&1; then
@@ -44,9 +74,9 @@ if command -v dbus-run-session >/dev/null 2>&1; then
     dbus-run-session -- sh -c '
         printf "DBUS_SESSION_BUS_ADDRESS=%s\n" "$DBUS_SESSION_BUS_ADDRESS" > '"$A11Y_ENV"'
         [ -x /usr/libexec/at-spi-bus-launcher ] && /usr/libexec/at-spi-bus-launcher --launch-immediately >/dev/null 2>&1 &
-        seatd-launch -- labwc -s "/usr/bin/llmos desk-app 2>>/run/llmos/desk.log"
+        '"${SEAT_LAUNCH:+$SEAT_LAUNCH --}"' labwc -s "/usr/bin/llmos desk-app 2>>/run/llmos/desk.log"
         rm -f '"$A11Y_ENV"'
     '
     exit $?
 fi
-exec seatd-launch -- labwc -s "/usr/bin/llmos desk-app 2>>/run/llmos/desk.log"
+exec ${SEAT_LAUNCH:+$SEAT_LAUNCH --} labwc -s "/usr/bin/llmos desk-app 2>>/run/llmos/desk.log"
