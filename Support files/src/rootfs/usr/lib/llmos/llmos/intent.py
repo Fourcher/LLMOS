@@ -650,6 +650,10 @@ def _online_model(text):
     if m:
         p = m.group("p").lower().replace(" ", "")
         return ("online_model", {"action": "sign in", "provider": "claude" if p in ("claude", "anthropic") else "chatgpt"})
+    m = re.match(r"^\s*(?:please\s+)?use\s+my\s+(claude|anthropic|chatgpt|chat\s*gpt|openai)\s+account\s*[.!]?\s*$", text, re.I)
+    if m:                                     # same return shape as the _SIGNIN route above
+        p = m.group(1).lower().replace(" ", "")
+        return ("online_model", {"action": "sign in", "provider": "claude" if p in ("claude", "anthropic") else "chatgpt"})
     if _OTHER_ONLINE.match(text):
         return ("online_model", {"action": "set up", "provider": "other"})     # the form for any OpenAI-compatible service
     m = _CLOUD_SETUP.match(text)
@@ -1679,7 +1683,7 @@ def _everyday2(text):
         f = m.group("f").strip()
         return ("mail_send", {"to": m.group("to"), "subject": f[:1].upper() + f[1:], "body": f"Please find {f} attached.", "attach": [f]})
     # email in plain words (only with an account; otherwise the agent says how to set one up)
-    if re.match(r"^(?:how many|do i have any|have i got any|any)\s+(?:new\s+|unread\s+)*(?:e-?mails?|mail|messages)(?:\s+do\s+i\s+have)?$", low):
+    if re.match(r"^(?:how many|do i have(?: any)?|have i got(?: any)?|any)\s+(?:new\s+|unread\s+)*(?:e-?mails?|mail|messages)(?:\s+do\s+i\s+have)?$", low):
         return ("mail_inbox", {})
     if re.match(r"^(?:read|open|show)\s+(?:me\s+)?(?:my\s+|the\s+)?(?:latest|newest|last|most recent|new)\s+(?:e-?mail|mail|message)$", low):
         return ("mail_read", {"id": "latest"})
@@ -1791,6 +1795,8 @@ def _everyday2(text):
     if re.match(r"^(?:(?:make|set|put|change)\s+)?(?:everything|all|the\s+text|text|it)?\s*(?:back\s+)?(?:to\s+)?(?:normal|regular|default|standard)\s+(?:text\s+)?size(?:d)?(?:\s+(?:everything|again|text))?$"
                 r"|^(?:everything|text)\s+(?:back\s+)?(?:to\s+)?(?:normal|regular|default)\s+size$", low):
         return ("set_appearance", {"scale": "default"})
+    if re.fullmatch(r"share (?:over|on) the network", low.strip()):
+        return ("share_folder", {})           # the same as "share this folder" with no folder named
     m = re.match(r"^(?:share|send)\s+(?:this|that|the|my|a)?\s*(?P<f>[\w .~/-]+?)?\s*(?:folder|files?|photos|pictures|documents)?\s+"
                  r"(?:with|to)\s+(?:my\s+|the\s+|another\s+|other\s+)*(?:other\s+)?(?:computer|laptop|pc|mac|phone|tablet|ipad|devices?)s?(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$"
                  r"|^share\s+(?:this|that|the|my)?\s*(?P<f2>[\w .~/-]+?)?\s*folder(?:\s+on\s+(?:the|my)\s+(?:wi-?fi|network))?$", low)
@@ -1828,6 +1834,14 @@ def _everyday2(text):
     m = _DARK_WORDS.match(t)
     if m and len(t.split()) <= 4:
         return ("set_appearance", {"theme": "dark" if m.group("d") else "light"})
+    m = re.match(r"^(?:please\s+)?(?:show\s+me\s+)?(?:a\s+)?map\s+of\s+(?P<p>.+?)\s*[.!?]*$", t, re.I)
+    if m:
+        import urllib.parse as _u
+        place = _TRAIL_FILLER.sub("", m.group("p").strip()).strip(" .,")
+        if place:
+            return ("browse", {"site": "https://www.openstreetmap.org/search?query=" + _u.quote(place)})
+    if re.fullmatch(r"(?:please\s+)?(?:(?:open|go\s+to|launch)\s+)?youtube\s+music(?:\s+please)?", low.strip()):
+        return ("browse", {"site": "https://music.youtube.com"})
     m = re.match(r"^(?:give\s+me\s+|get\s+|show\s+me\s+)?(?:the\s+)?(?:directions|route|way)\s+(?:to|for)\s+(?P<p>.+)$|^how\s+do\s+i\s+get\s+to\s+(?P<p2>.+)$|^(?:navigate|drive)\s+to\s+(?P<p3>.+)$", low)
     if m:
         place = (m.group("p") or m.group("p2") or m.group("p3")).strip()

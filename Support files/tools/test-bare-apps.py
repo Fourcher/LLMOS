@@ -31,11 +31,11 @@ CASES = {
     "unit converter": ("open_app", {"command": "unit converter"}),
     "open unit converter": ("open_app", {"command": "unit converter"}),
     "open scientific calculator": ("open_app", {"command": "scientific calculator"}),
+    "youtube music": ("browse", {"site": "https://music.youtube.com"}),           # batch 3: the YouTube Music site
+    "open youtube music": ("browse", {"site": "https://music.youtube.com"}),
     # must NOT match (no route; the model handles them)
     "messenger": None,
     "open messenger": None,
-    "youtube music": None,
-    "open youtube music": None,
     "podcasts": None,
     "open podcasts": None,
     "discord is down": None,
