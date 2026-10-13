@@ -110,6 +110,15 @@ try:
               f"{phrase!r}: MATCH={matched} handled={handled} reply={d.said!r}")
         check(not TECH.search(d.said), f"{phrase!r}: reply has no technical words")
 
+    for phrase in ("close the local website", "end my local website", "kill the local website"):
+        everyday._SERVER["p"] = FakeProc()
+        t = intent.plain(phrase).lower().strip()
+        matched = everyday.MATCH.search(t) is not None
+        d = Desk()
+        handled = everyday.handle(d, phrase)
+        check(matched and handled and d.said == "The local website is stopped." and "p" not in everyday._SERVER,
+              f"{phrase!r}: MATCH={matched} handled={handled} reply={d.said!r}")
+
     d = Desk()
     handled = everyday.handle(d, "stop the local website")
     check(handled and d.said == "No local website was running.", f"stop with nothing running: {d.said!r}")
@@ -124,6 +133,11 @@ try:
     check(not matched and "p" in everyday._SERVER and (d.said is None or "website" not in d.said or "stopped" not in d.said),
           f"{phrase!r}: MATCH={matched} handled={handled} server kept={'p' in everyday._SERVER} reply={d.said!r}")
     everyday._SERVER.pop("p", None)
+
+    # ---- "close the website" (no "local") is not a local-website stop, same as before
+    phrase = "close the website"
+    matched = everyday.MATCH.search(intent.plain(phrase).lower().strip()) is not None
+    check(not matched, f"{phrase!r}: MATCH={matched} (unchanged, not a local-website stop)")
 finally:
     everyday.subprocess, everyday._open, everyday.time.sleep, os.kill = real
 
