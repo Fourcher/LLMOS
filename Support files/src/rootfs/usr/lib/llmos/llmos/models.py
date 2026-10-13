@@ -134,8 +134,9 @@ def download(mid, progress=None):
     if _read_only(config.MODELS):
         raise ValueError("this is the live USB/DVD, whose models can't be changed; say \"install LLM OS\" first, "
                          "then models can be added and switched")
-    if free_disk_gb() < need:
-        raise ValueError(f"not enough disk space: {m['name']} needs {need:.1f} GB free")
+    free = free_disk_gb()
+    if free < need:
+        raise ValueError(f"not enough free disk: need {need:.1f} GB, have {free:.1f} GB")
     os.makedirs(config.MODELS, exist_ok=True)
     part = path_of(m) + ".part"
     url = f"https://huggingface.co/{m['repo']}/resolve/main/{m['file']}"

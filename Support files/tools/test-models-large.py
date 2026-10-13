@@ -53,6 +53,9 @@ class Ctx:
     def progress(self, *a, **k):
         pass
 
+    def show_panel(self, *a, **k):
+        pass
+
 
 def model(ram):
     return {"id": "test-large", "name": "Test Large", "file": "x.gguf", "size": SIZE, "ram_gb": ram}
@@ -156,6 +159,89 @@ check(reply == "now using Test Large", f"tool use fits: reply unchanged: {reply!
 reply = tool_use(model(4), 0)
 check(reply == f"now using Test Large. {UNKNOWN_NOTE}" and not reply.startswith("error"),
       f"tool use RAM 0: unknown-memory note, no error: {reply!r}")
+
+# 8. download(): free disk below the need is refused with the exact message; free disk equal to the need is not
+#    refused (the curl call is replaced by a stop, so nothing is ever fetched)
+class Reached(Exception):
+    pass
+
+
+def fake_popen(cmd, *a, **kw):
+    raise Reached(cmd)
+
+
+NEED = SIZE / 1024 ** 3 + 0.5
+real_dl = models.by_id, models.host_mode, models.path_of, models.free_disk_gb, models._read_only, models.subprocess.Popen
+models.by_id = lambda mid: dict(model(4), repo="example/none") if mid == "test-large" else None
+models.host_mode = lambda: False
+models.path_of = lambda _m: os.path.join(home, "absent.gguf")   # not on disk, so download() goes on to the disk check
+models._read_only = lambda p: False
+models.subprocess.Popen = fake_popen
+real_models_dir = config.MODELS
+config.MODELS = os.path.join(home, "models")                        # the temp home, never the real models folder
+try:
+    models.free_disk_gb = lambda path=None: 1.0
+    try:
+        models.download("test-large")
+        check(False, "download low disk: no refusal")
+    except ValueError as e:
+        check(str(e) == f"not enough free disk: need {NEED:.1f} GB, have 1.0 GB", f"download low disk: refused with exact text: {e}")
+    models.free_disk_gb = lambda path=None: NEED                    # exactly equal: allowed
+    try:
+        models.download("test-large")
+        check(False, "download equal disk: did not reach the fetch")
+    except Reached as e:
+        check("curl" in e.args[0], "download equal disk: not refused, reached the fetch")
+    except ValueError as e:
+        check(False, f"download equal disk: refused: {e}")
+finally:
+    models.by_id, models.host_mode, models.path_of, models.free_disk_gb, models._read_only, models.subprocess.Popen = real_dl
+    config.MODELS = real_models_dir
+
+# 9. manage_models list: the note only on rows bigger than memory; none when memory is unknown
+cat_models = [dict(model(4), maker="m", origin="o", license="l", note="n", size=SIZE),
+              dict(model(16), id="big-one", name="Big", maker="m", origin="o", license="l", note="n", size=SIZE)]
+real_list = models.catalog, models.installed, models.active, models.ram_gb
+models.catalog = lambda: cat_models
+models.installed = lambda: []
+models.active = lambda: None
+models.host_mode = lambda: False
+try:
+    models.ram_gb = lambda: 8.0
+    rows = tools.manage_models({"action": "list"}, Ctx()).split("\n")
+    small_row = next(r for r in rows if r.startswith("test-large:"))
+    big_row = next(r for r in rows if r.startswith("big-one:"))
+    check("runs from disk, slow" not in small_row, f"list fits (4 GB model, 8 GB RAM): no note")
+    check("needs 16 GB RAM, runs from disk, slow, n [" in big_row, f"list bigger (16 GB model, 8 GB RAM): note in row: {big_row!r}")
+    models.ram_gb = lambda: 16.0
+    rows = tools.manage_models({"action": "list"}, Ctx()).split("\n")
+    check("runs from disk" not in next(r for r in rows if r.startswith("big-one:")), "list exactly equal (16 GB model, 16 GB RAM): no note")
+    models.ram_gb = lambda: 0
+    rows = tools.manage_models({"action": "list"}, Ctx()).split("\n")
+    check(not any("runs from disk" in r for r in rows), "list RAM unknown (0): no note on any row")
+finally:
+    models.catalog, models.installed, models.active, models.ram_gb = real_list
+
+# 10. add_model: the note only when the new model is bigger than memory (RAM known); equal and unknown get none
+real_add = tools._hf_json, models.add_catalog_entry, models.ram_gb
+SHA = "a" * 64
+tree = [{"path": "big-Q4_K_M.gguf", "size": 6_000_000_000, "lfs": {"oid": "sha256:" + SHA, "size": 6_000_000_000}}]
+tools._hf_json = lambda url: tree
+models.add_catalog_entry = lambda entry: entry
+ADD_NOTE = " It's bigger than this computer's memory, so it will run from disk, slowly."
+try:
+    models.ram_gb = lambda: 4.0          # new model needs 7 GB: bigger
+    reply = tools.add_model({"repo": "owner/big"}, Ctx())
+    check(reply.startswith("added ") and reply.endswith(ADD_NOTE),
+          f"add_model bigger: note appended: ...{reply[-120:]!r}")
+    models.ram_gb = lambda: 7.0          # exactly equal: no note
+    reply = tools.add_model({"repo": "owner/big"}, Ctx())
+    check(ADD_NOTE not in reply and reply.startswith("added "), f"add_model equal RAM: no note: ...{reply[-80:]!r}")
+    models.ram_gb = lambda: 0            # unknown: no note
+    reply = tools.add_model({"repo": "owner/big"}, Ctx())
+    check(ADD_NOTE not in reply and reply.startswith("added "), f"add_model RAM unknown: no note: ...{reply[-80:]!r}")
+finally:
+    tools._hf_json, models.add_catalog_entry, models.ram_gb = real_add
 
 os.unlink(GGUF.name)
 print("all good" if fails == 0 else f"{fails} FAILED")

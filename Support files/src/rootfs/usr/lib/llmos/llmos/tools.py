@@ -1420,8 +1420,11 @@ def add_model(a, ctx):
         return f"error: {e}"
     if getattr(ctx, "is_desk", False):
         ctx.redraw()
+    mem = models.ram_gb()
+    big = " It's bigger than this computer's memory, so it will run from disk, slowly." \
+        if mem > 0 and entry["ram_gb"] > mem else ""
     return (f"added {entry['name']} ({entry['file']}, {size / 1e9:.1f} GB, needs about {entry['ram_gb']} GB RAM), "
-            f"pinned to its SHA-256. Say 'download the model {entry['id']}' then 'use {entry['id']}'.")
+            f"pinned to its SHA-256. Say 'download the model {entry['id']}' then 'use {entry['id']}'.{big}")
 
 
 def _fsize(f):
@@ -1666,11 +1669,13 @@ def manage_models(a, ctx):
             ctx.show_panel("models")
             if models.host_mode():
                 rows.append("(host-GPU mode: " + models.HOST_MODE_MSG + ")")
+            mem = models.ram_gb()
             for m in models.catalog():
                 tag = "in use" if cur and m["id"] == cur["id"] else "installed" if m in models.installed() else \
                     f"{m['size'] / 1e9:.1f} GB download"
+                slow = ", runs from disk, slow" if m["ram_gb"] > mem and mem > 0 else ""
                 rows.append(f"{m['id']}: {m['name']} by {m['maker']} ({m['origin']}, {m['license']}), "
-                            f"needs {m['ram_gb']} GB RAM, {m['note']} [{tag}]")
+                            f"needs {m['ram_gb']} GB RAM{slow}, {m['note']} [{tag}]")
             return "\n".join(rows) + f"\nthis machine has {models.ram_gb():.1f} GB RAM"
         if act == "download":
             m = models.by_id(mid)
