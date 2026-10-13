@@ -33,7 +33,8 @@ if [ "$1" = -S ]; then
   : > "$STATE/group.$2"; exit 0
 fi
 [ -e "$STATE/group.$2" ] || { echo "addgroup: unknown group $2" >&2; exit 1; }
-exit 0
+if [ -e "$STATE/member.$1.$2" ]; then echo "addgroup: user '$1' already in group '$2'" >&2; exit 1; fi
+: > "$STATE/member.$1.$2"; exit 0
 ''',
     "adduser": '''#!/bin/sh
 echo "adduser $*" >> "$LOG"
@@ -41,8 +42,26 @@ echo "adduser $*" >> "$LOG"
 if [ -e "$STATE/passwd.owner" ]; then echo "adduser: user 'owner' in use" >&2; exit 1; fi
 : > "$STATE/passwd.owner"; exit 0
 ''',
+    # id and rc-update show are queries: they reflect state and are not logged
+    "id": '''#!/bin/sh
+[ "$1" = -nG ] && [ "$2" = owner ] || exit 2
+[ -e "$STATE/passwd.owner" ] || { echo "id: 'owner': no such user" >&2; exit 1; }
+out=owner
+for g in video input audio seat netdev plugdev; do
+  [ -e "$STATE/member.owner.$g" ] && out="$out $g"
+done
+echo "$out"; exit 0
+''',
     "rc-update": '''#!/bin/sh
+if [ "$1" = show ]; then
+  [ -e "$STATE/rc.llmos-rootd" ] && echo "llmos-rootd | $2"
+  exit 0
+fi
 echo "rc-update $*" >> "$LOG"
+if [ "$1" = add ]; then
+  if [ -e "$STATE/rc.$2" ]; then echo "rc-update: $2 already added" >&2; exit 1; fi
+  : > "$STATE/rc.$2"
+fi
 exit 0
 ''',
     # chroot stub: rewrites /etc/ to the test target, then runs the command (stdin passes through)
@@ -159,7 +178,9 @@ def main():
         calls = read_log(log)
         check(not any(c.startswith("addgroup -S") or c.startswith("adduser") for c in calls),
               "on-again: no duplicate addgroup -S / adduser")
-        check("rc-update add llmos-rootd default" in calls, "on-again: rc-update still runs")
+        check(not any(c.startswith("addgroup owner ") for c in calls), "on-again: no addgroup owner <g> (already members)")
+        check(not any(c.startswith("rc-update add") for c in calls), "on-again: no rc-update add (already added)")
+        check(os.path.exists(os.path.join(st, "rc.llmos-rootd")), "on-again: llmos-rootd still in default")
         check(open(marker).read() == "owner\n", "on-again: marker still owner")
 
         # C, D, E: off (0, empty, unset) on fresh hosts

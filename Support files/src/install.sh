@@ -246,9 +246,9 @@ getent group owner >/dev/null || addgroup -S owner
 getent passwd owner >/dev/null || adduser -D -h /home/owner -s /bin/sh -G owner owner
 for g in video input audio seat netdev plugdev; do
   getent group $g >/dev/null || addgroup -S $g
-  addgroup owner $g
+  id -nG owner | tr ' ' '\n' | grep -qx "$g" || addgroup owner "$g"
 done
-rc-update add llmos-rootd default
+rc-update show default 2>/dev/null | grep -qw llmos-rootd || rc-update add llmos-rootd default
 mkdir -p /etc/llmos
 echo owner > /etc/llmos/owner-user
 EOF
