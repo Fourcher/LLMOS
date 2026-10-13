@@ -878,10 +878,18 @@ _REMIND_AT = re.compile(r"^\s*(?:please\s+)?(?:remind|ping|tell|alert)\s+me\s+at
                         r"(?:to|that|about)\s+(?P<what>.+?)\s*[.!]?\s*$", re.I)
 
 
+# Trailing polite filler on an "at <time> to <task>" reminder: only ", please/thanks/…" (comma) or a bare " please"/" pls".
+# "say thanks" and "call now" keep their words, since those can be part of the task itself.
+_REMIND_AT_FILLER = re.compile(r"(?:,\s*(?:please|pls|thanks|thank\s+you|for\s+me|right\s+now|now)|\s+(?:please|pls))\s*[.!?]*\s*$", re.I)
+
+
 def _timer(text):
     ma = _REMIND_AT.match(text)                  # "remind me at 3pm to call mum": same route as "remind me in 20 minutes to …"
     if ma:
-        return ("schedule_task", {"when": f"at {ma.group('t').strip().lower()}", "task": ma.group("what").strip(), "kind": "reminder"})
+        task = _REMIND_AT_FILLER.sub("", ma.group("what")).strip()
+        if not task:
+            return None
+        return ("schedule_task", {"when": f"at {ma.group('t').strip().lower()}", "task": task, "kind": "reminder"})
     m = _TIMER.match(text) or _REMIND.match(text)
     if not m:
         return None

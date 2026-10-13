@@ -21,6 +21,13 @@ CASES = [
     ("remind me in 20 minutes to check the oven", ("schedule_task", {"when": "in 20 minutes", "task": "check the oven", "kind": "reminder"})),
     ("remind me to take my pills at 3", ("schedule_task", {"when": "at 3", "task": "remind me to take my pills"})),
     ("remind me to call mum at 3pm", ("schedule_task", {"when": "at 3pm", "task": "remind me to call mum"})),
+    # trailing filler: a bare please/pls or a comma + filler is dropped; "thanks"/"now"/"for me" without a comma stay (they can be the task)
+    ("remind me at 3 to take my pills please", ("schedule_task", {"when": "at 3", "task": "take my pills", "kind": "reminder"})),
+    ("remind me at 3 to take my pills, please", ("schedule_task", {"when": "at 3", "task": "take my pills", "kind": "reminder"})),
+    ("remind me at 3 to call mum, thanks.", ("schedule_task", {"when": "at 3", "task": "call mum", "kind": "reminder"})),
+    ("remind me at 3 to say thanks", ("schedule_task", {"when": "at 3", "task": "say thanks", "kind": "reminder"})),
+    ("remind me at 7 to call now", ("schedule_task", {"when": "at 7", "task": "call now", "kind": "reminder"})),
+    ("remind me at 7 to call mum for me", ("schedule_task", {"when": "at 7", "task": "call mum for me", "kind": "reminder"})),
     # Not changed by this test (tomorrow-at is not in the at-order route): still None
     ("remind me tomorrow at 9 to pay rent", None),
     # must NOT match
