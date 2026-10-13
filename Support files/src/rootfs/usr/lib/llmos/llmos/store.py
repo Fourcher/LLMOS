@@ -138,7 +138,8 @@ def audit(tool, args, result, allowed=True, who="agent"):
         line = json.dumps(rec, ensure_ascii=False) + "\n"
         with config.data_lock():
             _audit_trim(path, len(line.encode("utf-8")))
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            # O_NOFOLLOW: a symlinked audit.log fails with ELOOP and the entry is skipped (the outer OSError handler)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
             with os.fdopen(fd, "a", encoding="utf-8") as f:
                 f.write(line)
     except OSError:
