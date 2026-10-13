@@ -3659,16 +3659,27 @@ def _page_key(ctx):
 
 def _screen_after(limit=40, ctx=None, before=None):
     """Describe the screen after an action. With `before` (the page key taken just before the action), poll every
-    0.1 s for up to 0.8 s and stop as soon as the page key differs; otherwise (or with no ctx) wait the full 0.8 s."""
+    0.1 s for up to 0.8 s; once the page key differs, keep polling until it is the same on two consecutive polls
+    (the page has settled), then stop. Otherwise (or with no ctx) wait the full 0.8 s."""
     from . import control
     if before is None or ctx is None:
         time.sleep(0.8)
     else:
+        changed = False
+        last = None
         for _ in range(8):
             time.sleep(0.1)
             k = _page_key(ctx)
-            if k is not None and k != before:
+            if k is None:
+                continue
+            if not changed:
+                if k != before:
+                    changed = True
+                    last = k
+                continue
+            if k == last:
                 break
+            last = k
     try:
         return control.describe(limit=limit)
     except RuntimeError as e:

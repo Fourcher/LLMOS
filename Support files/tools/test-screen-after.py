@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Host-side unit test for tools._screen_after: it returns as soon as the page key changes (max 0.8 s),
-waits the full 0.8 s when the page does not change, when the key raises, or when there is no ctx.
+"""Host-side unit test for tools._screen_after: once the page key changes it keeps polling until the key is
+the same on two consecutive polls (max 0.8 s in total); it waits the full 0.8 s when the page keeps changing,
+when it does not change, when the key raises, or when there is no ctx.
 Only the screen reader (control.describe) and the ctx are faked; the real _screen_after and _page_key run.
 Run: python3 tools/test-screen-after.py  (no VM needed)."""
 import os
@@ -18,18 +19,23 @@ from llmos import tools, control
 
 class FakeCtx:
     """app_read() shows page A until `change_at` seconds after creation, then page B.
-    change_at=None: never changes. raise_after=True: raises on every call after the first snapshot."""
-    def __init__(self, change_at=None, raise_after=False):
+    change_at=None: never changes. raise_after=True: raises on every call after the first snapshot.
+    flicker=True: alternates A/B on every call after the first snapshot (never settles)."""
+    def __init__(self, change_at=None, raise_after=False, flicker=False):
         self.t0 = time.monotonic()
         self.change_at = change_at
         self.raise_after = raise_after
+        self.flicker = flicker
         self.calls = 0
 
     def app_read(self):
         self.calls += 1
         if self.raise_after and self.calls > 1:
             raise RuntimeError("bridge gone")
-        page = "B" if (self.change_at is not None and time.monotonic() - self.t0 >= self.change_at) else "A"
+        if self.flicker:
+            page = "B" if self.calls % 2 == 0 else "A"
+        else:
+            page = "B" if (self.change_at is not None and time.monotonic() - self.t0 >= self.change_at) else "A"
         return {"text": f"page {page}", "controls": ["OK"]}
 
 
@@ -51,12 +57,18 @@ def check(name, elapsed, lo, hi):
         failures.append(name)
 
 
-# 1. page changes at 0.2 s -> returns early (about 0.2-0.3 s, never more than 0.4 s)
+# 1. page changes at 0.2 s and then stays -> returns about 0.3 s (settled on the second equal poll)
 ctx = FakeCtx(change_at=0.2)
 before = tools._page_key(ctx)
 assert before == ("page A", repr(["OK"])), before
 t = timed_after(ctx, before)
-check("page changes at 0.2 s", t, 0.15, 0.4)
+check("page changes at 0.2 s then stable", t, 0.25, 0.45)
+
+# 1b. page flickers on every poll -> full 0.8 s (never settles)
+ctx = FakeCtx(flicker=True)
+before = tools._page_key(ctx)
+t = timed_after(ctx, before)
+check("page flickers every poll", t, 0.75, 0.95)
 
 # 2. page never changes (typing into the same page) -> full 0.8 s as today
 ctx = FakeCtx(change_at=None)
