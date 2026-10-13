@@ -3653,7 +3653,7 @@ def _display_available():
 # ---- undo: the last few changes the owner can take back ("undo that", "oops", "put it back")
 _UNDO = []
 _UNDO_KEYS = ("appearance", "autonomy", "internet", "tor", "brain", "guidance", "speak_replies", "think", "language",
-              "settings_language", "focus")
+              "settings_language", "focus", "firewall")
 
 
 def _undo_push(kind, data):
@@ -3871,11 +3871,22 @@ def undo(a, ctx):
     kind, data, _ = _UNDO.pop()
     if kind == "settings":
         before = config.settings.get("internet")
+        before_fw = config.settings.get("firewall", "on")
         for k, v in data.items():
             if v is not None:
                 config.settings.set(k, v)
-        if config.settings.get("internet") != before:
-            system.apply_firewall(config.settings.get("internet"))
+        if data.get("firewall") is None and "firewall" in data:
+            config.settings.set("firewall", "on")  # the firewall was never set before: its default is on
+        fw_now = config.settings.get("firewall", "on")
+        if config.settings.get("internet") != before or fw_now != before_fw:
+            if os.geteuid() == 0:
+                system.apply_firewall(config.settings.get("internet"))
+            else:
+                from . import rootd_client
+                try:
+                    json.loads(rootd_client.call("firewall_apply", internet=config.settings.get("internet", "yes"), firewall=fw_now))
+                except rootd_client.RootdError:
+                    pass
         ui.reload_theme()
         if hasattr(ctx, "redraw"):
             ctx.redraw()
