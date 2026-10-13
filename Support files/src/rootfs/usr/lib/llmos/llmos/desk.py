@@ -3132,7 +3132,9 @@ class Desk:
                       r"(?:minimi[sz]e|hide) (?:the )?(?P<minw>\w[\w ]*)|"
                       r"(?:close|quit|exit) (?:the )?(?P<closew>firefox|browser|internet|files|file manager|terminal|editor|text editor|abiword|"
                       r"gnumeric|word processor|spreadsheet|photos|image viewer|player|video|mousepad|thunar)(?: window| app| program)?|"
-                      r"(?:force quit|kill) (?:the )?(?P<killw>\w[\w ]*)|(?:the )?(?P<frozen>\w[\w ]*?) (?:is|has|seems) (?:frozen|stuck|not responding|hung)")
+                      r"(?:force quit|kill(?= \w))(?: (?:the )?(?P<killw>\w[\w ]*))?|"
+                      r"(?P<reopen>reopen (?:what i closed|the tab i closed|(?:the |my )?(?:last )?closed (?:tab|one)|the last closed tab)|undo (?:the )?close tab)|"
+                      r"(?:the )?(?P<frozen>\w[\w ]*?) (?:is|has|seems) (?:frozen|stuck|not responding|hung)")
 
     def _window_shortcut(self, low):
         """Program windows (the browser, files, a terminal…): switch, maximize, close, unfreeze; the browser's own keys."""
@@ -3141,8 +3143,8 @@ class Desk:
             return False
         g = m.groupdict()
         for k in ("maxw", "minw", "killw"):          # a name that is not a program's ("hide the clock": a desk window) is not for here
-            if g[k] and not wm.app_id(g[k]):
-                return False
+            if g[k] and not wm.app_id(g[k]) and not (k == "killw" and m.group(0).startswith("force quit") and g[k] in ("it", "this", "this app")):
+                return False                          # ("force quit it/this": the last program, in stop() below)
         frozen = (g["frozen"] or "").strip()
         if frozen and frozen not in ("screen", "computer", "desk", "everything", "it", "system", "the screen", "my computer", "llm os") \
                 and not wm.app_id(frozen):
@@ -3157,6 +3159,9 @@ class Desk:
             t = wm.app_id(g["focus"]) or ""
             ok, note = wm.act("focus", t)
             done = f"Switched to {wm.NAMES.get(t, t)}."
+        elif g["reopen"]:
+            ok, note = wm.browser_key("reopen tab")
+            done = "Reopened the last closed tab."
         elif m.group(0).startswith(("maximi", "make", "bigger", "full")):
             target = wm.app_id(g["maxw"]) if g["maxw"] else wm.last_program()
             ok, note = wm.act("maximize", target) if target else (False, "there is no program window to make bigger")
