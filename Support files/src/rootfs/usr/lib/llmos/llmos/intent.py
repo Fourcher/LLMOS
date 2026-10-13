@@ -874,7 +874,14 @@ _TIMER = re.compile(r"^\s*(?:please\s+)?(?:(?:set|start)\s+)?(?:a\s+)?(?:timer|c
 _REMIND = re.compile(r"^\s*(?:please\s+)?(?:remind|ping|tell|alert)\s+me\s+in\s+(?P<n>\d+)\s*" + _UNIT + r"\b(?:\s+(?P<conn>to|that|about)\s+(?P<what>.+?))?\s*[.!]?\s*$", re.I)
 
 
+_REMIND_AT = re.compile(r"^\s*(?:please\s+)?(?:remind|ping|tell|alert)\s+me\s+at\s+(?P<t>\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)\s+"
+                        r"(?:to|that|about)\s+(?P<what>.+?)\s*[.!]?\s*$", re.I)
+
+
 def _timer(text):
+    ma = _REMIND_AT.match(text)                  # "remind me at 3pm to call mum": same route as "remind me in 20 minutes to …"
+    if ma:
+        return ("schedule_task", {"when": f"at {ma.group('t').strip().lower()}", "task": ma.group("what").strip(), "kind": "reminder"})
     m = _TIMER.match(text) or _REMIND.match(text)
     if not m:
         return None
