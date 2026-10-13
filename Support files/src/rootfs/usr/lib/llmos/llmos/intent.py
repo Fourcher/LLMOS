@@ -1272,6 +1272,8 @@ _LOOKISH = re.compile(r"theme|look|style|colou?r|dark|light|neon|retro|pastel|fo
                       r"red|orange|yellow|green|blue|purple|pink|black|white|gold|silver|teal|cyan|magenta|grey|gray|brown", re.I)
 _OPEN_APP = re.compile(r"^\s*(?:please\s+)?(?:open|launch|start|run|bring\s+up|pull\s+up|show\s+me|show)\s+(?:up\s+)?(?:the\s+|my\s+)?"
                        r"(?:app\s+)?(?P<n>[\w' -]{2,40}?)(?:\s+(?:app|application|program))?\s*[.!?]*\s*$", re.I)
+# a bare name, or "open (the) <name> (please)": only the names listed in _apps below; anything else is left to the model
+_BARE_APP = re.compile(r"^\s*(?:(?:please\s+)?(?:open|launch|start)\s+(?:the\s+)?)?(?P<n>discord|scientific\s+calculator)(?:\s+please)?\s*[.!?]*\s*$", re.I)
 _LIST_APPS = re.compile(r"^\s*(?:please\s+)?(?:(?:show|list|open|see)\s+(?:me\s+)?(?:all\s+)?(?:of\s+)?(?:my|the)\s+(?:apps|programs|applications|software)|"
                         r"(?:what|which)\s+(?:apps|programs|applications|software)\s+(?:do\s+i\s+have|are\s+there|are\s+installed|have\s+i\s+(?:got|made))|"
                         r"my\s+(?:apps|programs)|apps|programs|all\s+(?:apps|programs)|(?:show|list)\s+all\s+(?:apps|programs|applications|software)|app\s+menu|start\s+menu)\s*[.!?]*\s*$", re.I)
@@ -1481,6 +1483,14 @@ def _apps(text):
         from . import programs
         if apps.find(n) or (apps.match_template(n) and len(n.split()) <= 3) or programs.find(n):
             return ("open_app", {"command": n})
+    # a bare name with no route above ("discord", "scientific calculator please"): nothing above matched, so no earlier result changes
+    m = _BARE_APP.match(text)
+    if m:
+        n = " ".join(m.group("n").lower().split())
+        if n == "discord":
+            return ("open_app", {"command": "discord"})
+        if n == "scientific calculator":
+            return ("make_app", {"what": "scientific calculator"})
     return None
 
 
