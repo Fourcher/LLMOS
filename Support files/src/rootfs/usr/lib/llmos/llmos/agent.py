@@ -719,6 +719,9 @@ def run(ctx, user_text, history):
 
     # Deterministic shortcut for a few unambiguous intents small models fumble
     # (explicit "remember X"). Runs the same tool through the same policy path.
+    # first steps that can change the screen (so run() waits for the page to change); every other tool continues at once
+    _FIRST_SCREEN_TOOLS = ("open_app", "open_file", "open_latest", "browse", "click", "type_text", "fill_in",
+                           "press_keys", "scroll", "focus_window")
     # "open <page>, then click Download": the first step is one the OS knows, so it is done here and the model is
     # given only the rest (a small model otherwise loses the first step and works on whatever is on the screen)
     # Also handle "open the calculator, then press 7 then + then 2 then = and tell me the result" completely
@@ -735,8 +738,9 @@ def run(ctx, user_text, history):
                 if opening:
                     # continue as soon as the read bridge shows a page other than the one before (2 s at most)
                     _wait_ready(lambda: _page_changed(ctx, before))
-                else:
-                    _wait_ready(lambda: _page_changed(ctx, before), limit=2.0, step=0.1)     # any other step: continue once the page changes (2 s at most)
+                elif first[0] in _FIRST_SCREEN_TOOLS:
+                    _wait_ready(lambda: _page_changed(ctx, before), limit=2.0, step=0.1)     # any other screen step: continue once the page changes (2 s at most)
+                # any other first step (write_file, web_search, remember, change_setting, ...) cannot change the page: no wait
                 rest, notes, page_text, result_value = _screen_steps(ctx, lead.group("rest").strip())
                 done = " ".join([done] + notes)
                 # If nothing is left or only result questions remain, and we have a result, answer directly
