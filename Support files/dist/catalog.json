@@ -66,7 +66,10 @@
   "limits": [
    "basic reasoning",
    "shorter answers"
-  ]
+  ],
+  "chat_kwargs": {
+   "enable_thinking": false
+  }
  },
  {
   "id": "granite-4.2-3b",
@@ -116,7 +119,10 @@
   "limits": [
    "a little slower than E2B",
    "needs 6 GB of memory"
-  ]
+  ],
+  "chat_kwargs": {
+   "enable_thinking": false
+  }
  },
  {
   "id": "ministral-3-8b",
@@ -229,7 +235,10 @@
   "limits": [
    "wants a 16 GB machine",
    "slower on an old laptop"
-  ]
+  ],
+  "chat_kwargs": {
+   "enable_thinking": false
+  }
  },
  {
   "id": "ministral-3-14b",
