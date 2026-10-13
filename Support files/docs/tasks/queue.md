@@ -222,3 +222,5 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 7493a24 (how-to answers instant while busy) VERIFY PASS — merge after build.
 - [held] 102e5e0 (supersedes e8166b1 + 0c4d264: warm-up + "you" wording in tools/agent/desk) VERIFY PASS — merge after build (merge 102e5e0; skip e8166b1/929e78f). Merge order after build: 1242e4d, e2f8bb0, 4a39e00, 102e5e0, 8af8485, 7493a24, then commit dist manifest.
 - [done] (reliability) PROBE flaky host suites: "120 suites, 0 failures in each of runs 1, 2 and 3" (7 VM suites skipped); slowest test-pointer-sweep 12.4 s.
+- [held] 54205c6 (quick fact answers via web search) VERIFY PASS — merge after build.
+- [open] (freedom) everyday live_lookup (who-won, status, hours, and the new fact branch) only checks internet == "no"; under "ask" it goes online without asking — against the owner's setting. Find how the agent's web tools ask (confirm_network) and make everyday web lookups ask the same way under "ask". | role: probe then fix | files: everyday.py
