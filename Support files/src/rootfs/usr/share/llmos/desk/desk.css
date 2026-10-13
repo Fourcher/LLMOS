@@ -17,6 +17,8 @@
   --dim: color-mix(in srgb, var(--fg) 70%, var(--bg));
   --dim2: color-mix(in srgb, var(--fg) 36%, var(--bg));
   --danger: #ef5a6f;
+  --on-accent: #fff;
+  --on-danger: #fff;
   --ok: #3ecf8e;
   --warn: #f2b84b;
   --glow: color-mix(in srgb, var(--accent) 45%, transparent);
@@ -166,7 +168,7 @@ a:hover { text-decoration: underline; }
 .seg button { flex: 1 1 auto; min-height: 40px; padding: 6px 12px; border: 0; border-radius: var(--radius-sm); background: transparent; white-space: nowrap;
   color: var(--fg); font: inherit; font-size: 15px; font-weight: 600; line-height: 1.2; cursor: pointer; transition: background-color calc(.12s * var(--dur)); }
 .seg button:hover:not(:disabled):not([aria-checked="true"]) { background: color-mix(in srgb, var(--fg) 8%, transparent); }
-.seg button[aria-checked="true"] { background: var(--accent); color: #fff; }
+.seg button[aria-checked="true"] { background: var(--accent); color: var(--on-accent, #fff); }
 .seg button:disabled { opacity: .35; cursor: default; }
 .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* set-up, the last step: what was chosen */
@@ -210,7 +212,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
   transition: transform calc(.08s * var(--dur)), background-color calc(.15s * var(--dur)), border-color calc(.15s * var(--dur)), color calc(.3s * var(--dur)); }
 .btn:hover { background: color-mix(in srgb, var(--fg) 16%, var(--bg)); }
 .btn:active { transform: scale(.96); }
-.btn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.btn.primary { background: var(--accent); color: var(--on-accent, #fff); border-color: transparent; }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.ghost { background: transparent; }
 .btn.danger { color: var(--danger); }
@@ -250,7 +252,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .opt span { color: var(--dim); font-size: 14px; }
 .opts.grid { grid-template-columns: repeat(3, 1fr); }
 .opts.grid .opt { text-align: center; }
-.opts.grid .opt.sel { background: var(--accent); border-color: var(--accent); color: #fff; }   /* the picked one, unmistakable */
+.opts.grid .opt.sel { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }   /* the picked one, unmistakable */
 
 /* ---- desk layout */
 #desk { position: fixed; inset: 0; background: var(--bg); overflow: hidden; animation: fade calc(.6s * var(--dur)) ease-out;
@@ -406,8 +408,8 @@ table.tbl tr:last-child td { border-bottom: 0; }
   transition: background-color calc(.15s * var(--dur)), transform calc(.1s * var(--dur)); }
 .mic:hover, .send:hover { background: color-mix(in srgb, var(--fg) 16%, transparent); }
 .mic:active, .send:active { transform: scale(.92); }
-.send { background: var(--accent); color: #fff; }
-.mic.on { background: var(--danger); color: #fff; animation: pulse calc(1s * var(--dur)) steps(4) infinite; }
+.send { background: var(--accent); color: var(--on-accent, #fff); }
+.mic.on { background: var(--danger); color: var(--on-danger, #fff); animation: pulse calc(1s * var(--dur)) steps(4) infinite; }
 .mic.off { opacity: .45; }
 #reply { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(720px, 76vw); max-height: 42vh; overflow: auto; z-index: 6;
   padding: 12px 18px 12px; background: color-mix(in srgb, var(--card) 99%, transparent); border: var(--border-w) var(--border-style) var(--line);
@@ -495,7 +497,7 @@ table.tbl tr:last-child td { border-bottom: 0; }
 .win.kind-chat .body { padding: 0; display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
 .chatlog { flex: 1; overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .chatlog .msg { max-width: 86%; padding: 9px 13px; border-radius: 14px; line-height: 1.45; }
-.chatlog .msg.me { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.chatlog .msg.me { align-self: flex-end; background: var(--accent); color: var(--on-accent, #fff); border-bottom-right-radius: 4px; }
 .chatlog .msg.ai { align-self: flex-start; background: var(--card2); border-bottom-left-radius: 4px; }
 .chatlog .msg.ai p { margin: 0 0 6px; } .chatlog .msg.ai p:last-child { margin: 0; }
 .chatlog .msg.err { color: var(--danger); }
