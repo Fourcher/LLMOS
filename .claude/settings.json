@@ -25,6 +25,7 @@
     ]
   },
   "env": {
-    "LLMOS_HOME": "/Volumes/Files/Claude Work Area/LLMOS/Support files/run/testhome"
+    "LLMOS_HOME": "/Volumes/Files/Claude Work Area/LLMOS/Support files/run/testhome",
+    "TMPDIR": "/Volumes/Files/Claude Work Area/LLMOS/Support files/run/tmp"
   }
 }
