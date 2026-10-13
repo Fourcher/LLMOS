@@ -230,3 +230,5 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 8858eda (on-accent/on-danger text colour by WCAG) VERIFY PASS — merge after build.
 - [open] (ui) default accent #7c5cff gives 4.35:1 with either text colour (below 4.5). Option: nudge the default accent slightly darker (e.g. #7350ff ~4.8 with white) — check how it looks on the VM screenshot before changing | role: fix after a screenshot
 - [open] (freedom) owner rule: no size/RAM limits after install — PROBE every limit (catalog filters, _model_tiers 321, models panel ~1702, add_catalog_entry, custom URL/file add, download caps), then FIX one per file: full list shows every model with size + "runs from disk, slow" note; only free disk refuses.
+- [held] 71b389a (supersedes e2f8bb0: big models allowed + disk-only refusal + slow notes) VERIFY PASS — merge after build (merge 71b389a instead of e2f8bb0).
+- [open] (freedom) voice.py:219 voice-model download refusal wording -> "not enough free disk: need X GB, have Y GB" (same rule) | role: fix | files: voice.py
