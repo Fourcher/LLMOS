@@ -727,7 +727,7 @@ def run(ctx, user_text, history):
         first = intent.match(lead.group("first")) if lead else None
         if first:
             opening = first[0] == "open_app" and hasattr(ctx, "app_read")
-            before = _page_key(ctx) if opening else None     # the page already on screen, before the app opens
+            before = _page_key(ctx)     # the page already on screen, before the step runs (opening or not)
             out1 = execute(ctx, first[0], first[1])
             if not _failed(out1):
                 done = _cap(_shortcut_reply(first[0], first[1], out1))
@@ -736,7 +736,7 @@ def run(ctx, user_text, history):
                     # continue as soon as the read bridge shows a page other than the one before (2 s at most)
                     _wait_ready(lambda: _page_changed(ctx, before))
                 else:
-                    time.sleep(2)                  # no readiness signal for this step: the old fixed wait
+                    _wait_ready(lambda: _page_changed(ctx, before), limit=2.0, step=0.1)     # any other step: continue once the page changes (2 s at most)
                 rest, notes, page_text, result_value = _screen_steps(ctx, lead.group("rest").strip())
                 done = " ".join([done] + notes)
                 # If nothing is left or only result questions remain, and we have a result, answer directly
