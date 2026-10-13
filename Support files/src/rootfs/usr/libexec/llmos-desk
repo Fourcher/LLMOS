@@ -27,10 +27,13 @@ fi
 # stack is missing. Everything renders on the CPU when there is no 3D
 # acceleration (a virtual machine); on real graphics hardware Mesa is used.
 export HOME=${LLMOS_DESK_HOME:-/root} LANG=C.UTF-8 PYTHONUNBUFFERED=1
-# the seat wrapper for the compositor. The owner session has the seatd service instead (it cannot start seatd-launch
-# as a non-root user), so there the wrapper is empty and labwc runs directly
+# the seat wrapper for the compositor. When the seatd service serves the seat (the owner session, or a seatd service
+# already running), the wrapper is empty and labwc runs directly: a second seatd must not replace the service's socket.
+# The socket is checked first so that a default install (no service) never calls rc-service here.
 SEAT_LAUNCH=seatd-launch
-[ "${LLMOS_DESK_INNER:-}" = 1 ] && SEAT_LAUNCH=
+if [ "${LLMOS_DESK_INNER:-}" = 1 ] || { [ -e /run/seatd.sock ] && rc-service seatd status >/dev/null 2>&1; }; then
+    SEAT_LAUNCH=
+fi
 # caches (fontconfig, Mesa's shader cache, Python) live outside the passphrase vault: a cache file
 # mapped from inside it would keep the vault from closing when the owner locks
 export XDG_CACHE_HOME=/var/cache/llmos XDG_CONFIG_HOME=/var/cache/llmos MESA_SHADER_CACHE_DIR=/var/cache/llmos/mesa
@@ -62,7 +65,7 @@ esac
 if ! command -v labwc >/dev/null 2>&1 || ! python3 -c "import gi; gi.require_version('WebKit','6.0'); from gi.repository import WebKit" 2>/dev/null; then
     exec /usr/bin/llmos console
 fi
-[ "${LLMOS_DESK_INNER:-}" = 1 ] || rm -f /run/seatd.sock
+if [ -n "$SEAT_LAUNCH" ]; then rm -f /run/seatd.sock; fi
 mkdir -p /run/llmos; : >> /run/llmos/desk.log; chmod 600 /run/llmos/desk.log
 # a private session bus for the desk (GTK/WebKit expect one; nothing else uses it)
 if command -v dbus-run-session >/dev/null 2>&1; then

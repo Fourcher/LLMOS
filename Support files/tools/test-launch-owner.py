@@ -89,7 +89,10 @@ def relocate(text, root):
     return text
 
 
-def run(text, marker=None, inner=False, drop=(), seatd_up=False):
+SYSTEM_TOOLS = ["head", "tr", "grep", "cut", "sed", "sort", "awk", "env", "cat", "basename", "readlink", "dirname", "sh"]
+
+
+def run(text, marker=None, inner=False, drop=(), seatd_up=False, sock_up=False, isolated=False):
     root = tempfile.mkdtemp(prefix="llmos-owner.")
     try:
         bindir = os.path.join(root, "bin")
@@ -118,7 +121,20 @@ def run(text, marker=None, inner=False, drop=(), seatd_up=False):
         seatd_flag = os.path.join(root, "seatd.up")
         if seatd_up:
             open(seatd_flag, "w").close()
-        env = {"PATH": f"{bindir}:/usr/bin:/bin", "LOG": log, "PASSWD_FILE": passwd, "SEATD_UP": seatd_flag}
+        if sock_up:
+            os.makedirs(os.path.join(root, "run"), exist_ok=True)
+            open(os.path.join(root, "run", "seatd.sock"), "w").close()
+        path = f"{bindir}:/usr/bin:/bin"
+        if isolated:
+            # no system su on this PATH (macOS ships /usr/bin/su), only the listed tools
+            nosu = os.path.join(root, "nosu")
+            os.makedirs(nosu)
+            for name in SYSTEM_TOOLS:
+                found = shutil.which(name)
+                if found:
+                    os.symlink(found, os.path.join(nosu, name))
+            path = f"{bindir}:{nosu}"
+        env = {"PATH": path, "LOG": log, "PASSWD_FILE": passwd, "SEATD_UP": seatd_flag}
         if inner:
             env["LLMOS_DESK_INNER"] = "1"
         p = subprocess.run(["/bin/sh", script], env=env, cwd=root,
@@ -229,6 +245,29 @@ def main():
     rc, log, _ = run(new, marker=b"owner\n", inner=True)
     check(rc == 0 and "su " not in log and "chown " not in log and "env: HOME=/root" in log,
           "LLMOS_DESK_INNER=1 with valid owner: prologue skipped, HOME=/root, no su")
+
+    # (4) the owner flag is on, su is missing, so the owner path falls back to root while the seatd service runs
+    rc4, log4, out4 = run(new, marker=b"owner\n", drop=("su",), isolated=True, seatd_up=True, sock_up=True)
+    lines4 = log4.splitlines()
+    check(rc4 == 0 and "chown " not in log4 and "su " not in log4,
+          f"owner flag, su missing: owner path not taken, exit 0 {out4.strip()}")
+    check("seatd-launch" not in log4 and not any(l.startswith("rm ") and "seatd.sock" in l for l in lines4),
+          "owner flag, su missing, seatd running: no seatd-launch, /run/seatd.sock not removed")
+    check(any(l.startswith("labwc -s ") for l in lines4) and "rc-service seatd start" not in lines4,
+          "owner flag, su missing, seatd running: labwc launched directly, seatd not started again")
+
+    # (5) default install (no seatd service): the root path is unchanged, rc-service is not called
+    rc5, log5, _ = run(new)
+    check(rc5 == 0 and log5 == log_o and "rc-service" not in log5,
+          "default install: root path identical to base, no rc-service call")
+
+    # (6) seatd running but its socket is missing: the root path as before (seatd-launch, socket removed)
+    rc6, log6, out6 = run(new, seatd_up=True)
+    check(rc6 == 0 and log6 == log_o, f"seatd running, socket missing: identical to base {out6.strip()}")
+
+    # (7) rc-service absent on the system (command not found): treated as not running, identical to base
+    rc7, log7, out7 = run(new, drop=("rc-service",), sock_up=True, seatd_up=True)
+    check(rc7 == 0 and log7 == log_o, f"rc-service absent, socket present: identical to base {out7.strip()}")
 
     if fails:
         print("FAILED: " + "; ".join(fails))
