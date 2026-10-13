@@ -127,7 +127,7 @@ with patch.object(llm, "_conn", side_effect=lambda timeout=900: FakeConn()), \
 
     reset_ctx([6144])
     turn_msgs = agent.build_messages(ctx, "hi", [], private=False)
-    turn_tools = agent.tool_schemas()
+    turn_tools = agent.tool_schemas("")
     turn = {"messages": turn_msgs, "tools": turn_tools,
             "think": bool(config.settings.get("think"))}
 

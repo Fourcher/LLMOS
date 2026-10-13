@@ -48,7 +48,13 @@ with patch.object(tools, "_has_wifi", return_value=True), \
     cases = [
         ("scan my network for devices", True),
         ("what's the weather", False),
-        ("format this document nicely", True),          # 'format' matches: over-inclusion, accepted
+        ("format this document nicely", False),         # 'format' only with a drive/disk/usb/stick/card/sd
+        ("write a report", False),                      # 'port' only as a whole word
+        ("contact support", False),
+        ("this is important", False),
+        ("scan my ports", True),
+        ("format the usb stick", True),
+        ("format my sd card", True),
         ("is my wifi secure", True),
         ("open the calculator", False),
         ("write a note to buy milk", False),
@@ -84,6 +90,21 @@ with patch.object(tools, "_has_wifi", return_value=True), \
     reprefill = sum(len(json.dumps(sch[n])) for n in full[first_rare:] if not rare(n)) / 3.6
     print(f"     rare group saves about {saved:.0f} tokens on a non-matching request")
     print(f"     non-rare tools after the first rare one ({full[first_rare]}) re-prefill once: about {reprefill:.0f} tokens")
+
+# warm-up sends the same tool list, in the same order, as a normal non-rare turn (byte-for-byte JSON)
+import json
+with patch.object(tools, "_has_wifi", return_value=True), \
+     patch.object(tools, "_connectors_synced", True), \
+     patch.object(llm, "context_size", return_value=BIG), \
+     patch.object(llm, "chat") as chat_mock, \
+     patch.object(agent.time, "sleep", return_value=None):
+    agent.warm_up()
+    check(chat_mock.call_count == 1, "warm-up sent one request")
+    warm_tools = chat_mock.call_args.kwargs["tools"]
+    normal = agent.tool_schemas("what's the weather")
+    check(json.dumps(warm_tools) == json.dumps(normal),
+          f"warm-up tool list == non-rare turn's list, byte-for-byte ({len(normal)} tools)")
+    check(not any(rare(n) for n in names(warm_tools)), "warm-up tool list has no rare tool")
 
 # small context: budget kept, rare group only from what fits the budget
 with patch.object(tools, "_has_wifi", return_value=True), \

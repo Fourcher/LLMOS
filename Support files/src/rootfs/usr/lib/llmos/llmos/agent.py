@@ -122,8 +122,9 @@ ROUTE_QUESTION = ("[Routing question, answer with one letter: is this request (A
 # the "rare" tools (about 700 tokens of schema): offered only when the request is about them
 RARE_TOOLS = {"web_security_scan", "scan_network", "capture_traffic", "security_check", "install_to_disk",
               "analyze_program", "set_passphrase", "format_drive"}
-_RARE_RE = re.compile(r"security|secure|hack|scan|port|network|traffic|packet|sniff|wifi|wi-fi|wireless|"
-                      r"password for wifi|install (?:llm os|this system|to disk|to the drive)|format|wipe|"
+_RARE_RE = re.compile(r"security|secure|hack|scan|\bports?\b|network|traffic|packet|sniff|wifi|wi-fi|wireless|"
+                      r"password for wifi|install (?:llm os|this system|to disk|to the drive)|"
+                      r"format (?:the |my |this )?(?:drive|disk|usb|stick|card|sd)|wipe|"
                       r"erase (?:the )?(?:drive|disk|usb)|passphrase|vault|encrypt|reverse|binary|disassembl|"
                       r"malware|virus|analy[sz]e (?:this )?(?:program|file|binary)|firewall")
 
@@ -446,7 +447,7 @@ def _warm_prefix():
             time.sleep(1)
     try:
         try:
-            tl = tool_schemas()
+            tl = tool_schemas("")     # the list a normal (non-rare) turn sends, so the cached prefix matches it
         except Exception:             # a context size that cannot be read counts as None (the full list)
             tl = tools.schemas(compact=True)
         llm.chat([{"role": "system", "content": system_prompt()},
