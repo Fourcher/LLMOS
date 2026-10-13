@@ -2854,7 +2854,7 @@ class Desk:
             self._said = "(checking the model)"
             return True
         if re.fullmatch(r"(?:the )?(?:wi-?fi|internet|network|connection) (?:is ?n'?t|is not|isnt|doesn'?t|does not|not|stopped|keeps) (?:working|work|connecting|dropping)|"
-                        r"no (?:internet|wi-?fi|connection)|(?:i )?(?:can'?t|cannot) (?:get online|connect(?: to (?:the )?(?:internet|wi-?fi))?)|(?:the )?internet is (?:down|slow|out)", l2):
+                        r"no (?:internet|wi-?fi|connection)|(?:it says )?(?:(?:the )?(?:wi-?fi|network) )?connected(?: to (?:the |my )?(?:wi-?fi|network|internet))?,? (?:but|yet|and)(?: (?:there'?s|there is|it'?s|it is|nothing))? (?:no internet|not online|nothing (?:loads|works|opens)|no connection|offline)|(?:i )?(?:can'?t|cannot) (?:get online|connect(?: to (?:the )?(?:internet|wi-?fi))?)|(?:the )?internet is (?:down|slow|out)", l2):
             threading.Thread(target=self.network_panel, daemon=True).start()
             wifi = _wifi_device()
             state = ("You're on Wi-Fi (" + _wifi_now() + ") and online." if _online() else "You're on Wi-Fi (" + _wifi_now() + ") but the internet isn't answering; try another network or restart the router.") \
@@ -3255,6 +3255,7 @@ class Desk:
                         r"(?:is it|can i) (?:safe to )?(?:remove|unplug|take out|pull out) (?:the |my )?(?:usb|stick|flash ?drive|drive)")
     _DESKTOP = re.compile(r"show (?:me )?(?:the )?desktop|minimi[sz]e (?:everything|all(?: (?:the )?windows)?)|hide (?:all (?:the )?)?(?:windows|programs|everything)|clear the screen")
     _TILE = re.compile(r"(?:put|move|snap) (?:the )?(?P<w>[\w ]+?) (?:on|to) the (?P<side>left|right)(?: side| half)?")
+    _TILE2 = re.compile(r"(?:(?:put|move|snap) )?(?:the )?(?P<a>[\w ]+?) (?:on the )?(?P<s1>left|right)(?:,| and) (?:the )?(?P<b>[\w ]+?) (?:on the )?(?P<s2>left|right)")
 
     _HOWTO = [
         (r"(?:import|bring|move|copy|transfer|get) (?:over )?(?:my )?(?:bookmarks|passwords|favou?rites|history)(?: ?(?:and|/|&|or) ?(?:my )?(?:bookmarks|passwords|favou?rites|history))*"
@@ -3423,6 +3424,13 @@ class Desk:
             ok, note = wm.tile(wm.app_id(m.group("w")), m.group("side"))
             self.instant_reply(line, note[:1].upper() + note[1:])
             return True
+        m = self._TILE2.fullmatch(low)
+        if m and m.group("s1") != m.group("s2") and shutil.which("wlrctl"):
+            a, b = wm.app_id(m.group("a")), wm.app_id(m.group("b"))
+            if a and b and a != b:
+                notes = [wm.tile(a, m.group("s1"))[1], wm.tile(b, m.group("s2"))[1]]
+                self.instant_reply(line, " ".join(notes))
+                return True
         if shutil.which("wlrctl") and self._window_shortcut(low):
             return True
         for rx, which in self._SYS:
