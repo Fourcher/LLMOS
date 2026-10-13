@@ -125,3 +125,6 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 3d2252f (contains 270169b; sign-out reply "Locked. Signing out here just locks the screen.") VERIFY: diff/compile/named tests PASS, clean merge-tree; host loop void (macOS lockout) — merge after the 1.8.1 build; RUN host suites at build time cover it.
 - [held] 7ccc48a (contains the 564e581 intent chain + retry with trailing please/thanks stripped: 228 "+please" forms gain their route, 0 changed) VERIFY PASS — merge 7ccc48a (supersedes 564e581) after the 1.8.1 build.
 - [dropped] (capability) not reproduced on 7ccc48a (all close/quit/exit forms -> None); was BUG pre-existing: "close the calculator app." -> open_app 'close the calculator' (an _OPEN_APP-style route opens instead of closing) — PROBE which regex, then FIX | role: probe+fix | files: intent.py
+- [held] 9abccc8 ("what can you do": 2 sentences + 3 instant examples) VERIFY PASS — merge after the 1.8.1 build.
+- [held] f595072 ("remind me at <time> to <task>") VERIFY: own checks PASS, trial merge voided by lockout — follow-up: strip trailing please from the task; re-run trial merge.
+- [open] warm-up speed fix stranded in worktree agent-a066c43d616a4d55b (agent.py, test-rare-tools.py) — needs test-warmup-prefix.py expectation update + commit.
