@@ -20,17 +20,34 @@ FLAKY = (
 )
 
 
-def make_tree(root):
+OUTAGE_ONCE = (
+    "import os, sys\n"
+    "m = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'outage.marker')\n"
+    "if os.path.exists(m):\n"
+    "    sys.exit(0)\n"
+    "open(m, 'w').close()\n"
+    "sys.stderr.write('Operation not permitted\\n')\n"
+    "sys.exit(1)\n"
+)
+OUTAGE_ALWAYS = (
+    "import sys\n"
+    "sys.stderr.write('Operation not permitted\\n')\n"
+    "sys.exit(1)\n"
+)
+DEFAULT_FILES = (("test-ok.py", OK), ("test-bad.py", BAD), ("test-flaky.py", FLAKY))
+
+
+def make_tree(root, files=DEFAULT_FILES):
     tools = os.path.join(root, "tools")
     os.makedirs(tools)
-    for name, body in (("test-ok.py", OK), ("test-bad.py", BAD), ("test-flaky.py", FLAKY)):
+    for name, body in files:
         with open(os.path.join(tools, name), "w") as fh:
             fh.write(body)
 
 
-def run(args):
+def run(args, files=DEFAULT_FILES):
     root = tempfile.mkdtemp(prefix="hostloop-")
-    make_tree(root)
+    make_tree(root, files)
     env = dict(os.environ, HOSTLOOP_SLEEP="0")
     proc = subprocess.run(
         ["bash", SCRIPT] + args,
@@ -59,6 +76,20 @@ def main():
     check("FAIL" not in out, "--skip run still reports FAIL\n" + out)
     check("HOSTLOOP: 2 run, 0 failed, 0 outage" in out, "--skip summary wrong\n" + out)
     print("ok --skip test-bad.py: exit 0")
+
+    rc, out = run([], files=(("test-ok.py", OK), ("test-outage-once.py", OUTAGE_ONCE)))
+    check("FAIL" not in out, "outage-once reported as FAIL\n" + out)
+    check("OUTAGE" not in out, "outage-once reported as OUTAGE\n" + out)
+    check("HOSTLOOP: 2 run, 0 failed, 0 outage" in out, "outage-once summary wrong\n" + out)
+    check(rc == 0, "outage-once expected exit 0, got %d\n%s" % (rc, out))
+    print("ok outage-once: passes on re-run, not FAIL, not OUTAGE")
+
+    rc, out = run([], files=(("test-ok.py", OK), ("test-outage-always.py", OUTAGE_ALWAYS)))
+    check("OUTAGE tools/test-outage-always.py" in out, "always-outage not reported as OUTAGE\n" + out)
+    check("FAIL" not in out, "always-outage reported as FAIL\n" + out)
+    check("HOSTLOOP: 2 run, 0 failed, 1 outage" in out, "always-outage summary wrong\n" + out)
+    check(rc == 2, "always-outage expected exit 2, got %d\n%s" % (rc, out))
+    print("ok outage-always: OUTAGE, exit 2")
 
     print("all good")
 

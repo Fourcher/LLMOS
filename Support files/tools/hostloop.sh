@@ -36,6 +36,7 @@ run_test() {
 
 n=0; f=0; o=0
 ERRF="$(mktemp)"
+trap 'rm -f "$ERRF"' EXIT
 for t in tools/test-*.py; do
   [ -e "$t" ] || continue
   if is_skipped "$t"; then continue; fi
@@ -44,27 +45,26 @@ for t in tools/test-*.py; do
   if [ $? -eq 0 ]; then continue; fi
 
   if [ ! -r "$t" ] || grep -q "Operation not permitted" "$ERRF"; then
-    # Outage: wait for the file to become readable, then re-run once.
+    # Outage: wait until the file is readable and the tree answers a probe,
+    # up to 6 steps of SLEEP_S, then re-run once.
     waited=0
-    while [ ! -r "$t" ] && [ "$waited" -lt 6 ]; do
+    while { [ ! -r "$t" ] || ! ls tools >/dev/null 2>&1; } && [ "$waited" -lt 6 ]; do
       sleep "$SLEEP_S"
       waited=$((waited + 1))
     done
-    if [ ! -r "$t" ]; then
-      echo "OUTAGE $t"
-      o=$((o + 1))
-      continue
-    fi
   fi
 
   # Flake check: one re-run (immediate, or after an outage wait).
   run_test "$t" "$ERRF"
-  if [ $? -ne 0 ]; then
+  if [ $? -eq 0 ]; then continue; fi
+  if [ ! -r "$t" ] || grep -q "Operation not permitted" "$ERRF"; then
+    echo "OUTAGE $t"
+    o=$((o + 1))
+  else
     echo "FAIL $t"
     f=$((f + 1))
   fi
 done
-rm -f "$ERRF"
 
 echo "HOSTLOOP: $n run, $f failed, $o outage"
 if [ "$f" -gt 0 ]; then exit 1; fi
