@@ -2546,9 +2546,10 @@ class Desk:
         m = re.fullmatch(r"(?P<zin>(?:make )?(?:the )?(?:text|page|words|font) bigger on (?:this|the) (?:page|website|site)|zoom in(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
                          r"(?P<zout>(?:make )?(?:the )?(?:text|page|words|font) smaller on (?:this|the) (?:page|website|site)|zoom out(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
                          r"(?P<bm>bookmark (?:this|it|this page|the page|this site)|add (?:this|it|this page) to (?:my )?(?:bookmarks|favou?rites)|save this page)|"
-                         r"(?P<bms>(?:open|show)(?: me)? (?:my |the )?(?:bookmarks|favou?rites))", l2)
+                         r"(?P<bms>(?:open|show)(?: me)? (?:my |the )?(?:bookmarks|favou?rites))|"
+                         r"(?P<bms2>(?:open|show)(?: me)? (?:my |the )?(?:browser|firefox) (?:bookmarks|favou?rites)|(?:my )?bookmarks)", l2)
         if m and shutil.which("wtype"):
-            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmarks" if m.group("bms") else "bookmark"
+            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmarks" if (m.group("bms") or m.group("bms2")) else "bookmark"
             ok, note = wm.browser_key(k)
             self.instant_reply(line, ({"zoom in": "Made the page bigger (Ctrl+0 puts it back).", "zoom out": "Made the page smaller.",
                                        "bookmark": "The bookmark window is open in the browser: press Save.",
@@ -3176,7 +3177,7 @@ class Desk:
          "On the old computer, in Chrome: Bookmarks → Bookmark manager → ⋮ → Export bookmarks (a .html file), and Settings → Passwords → "
          "Export passwords (a .csv file). Put the files on a USB stick and plug it in here. Then in Firefox: Ctrl+Shift+O → Import and Backup → "
          "Import Bookmarks from HTML, and for the passwords about:logins → ⋯ → Import from a File. Delete the passwords file afterwards: it isn't encrypted."),
-        (r"(?:how (?:do|can) i )?(?:change|set|pick) (?:the |my )?(?:browser'?s? |firefox'?s? )?(?:home ?page|start ?page|start-up page)",
+        (r"(?:how (?:do|can) i )?(?:change|set|pick) (?:the |my )?(?:browser'?s? |firefox'?s? )?(?:home ?page|start ?page|start-up page)|(?:set|change|make) (?:my |the )?(?:home ?page|start ?page)(?: to .+)?|how do i (?:set|change) (?:my |the )?home ?page",
          "In Firefox: open the menu (☰), choose Settings, then Home, and type the page you want under “Homepage and new windows”."),
         (r"blur (?:my |the )?background(?: (?:in|on|during) (?:the |my )?(?:video )?(?:call|meeting|zoom|teams|meet))?|(?:change|hide) (?:my )?background (?:in|on|during) (?:the |my |a )?(?:video )?(?:call|meeting)|virtual background",
          "That's set in the call itself: in Google Meet, ⋮ → Apply visual effects → Blur; in Zoom, ^ next to Stop Video → Blur my background; in Teams, "
