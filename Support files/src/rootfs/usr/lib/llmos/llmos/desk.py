@@ -4045,10 +4045,16 @@ class Desk:
                 and (not config.settings.get("vault") or vault.unlocked()):
             argv = [argv[0], "--working-directory=" + config.home()] + list(argv[1:])     # a terminal starts at home, as everywhere
         argv = _root_ok(list(argv))
-        try:
-            before = set(wm.windows())          # the program windows open before this launch
-        except Exception:
-            before = set()
+        deadline = time.monotonic() + 3.0       # the whole launch, from here, takes 3 s at most
+        # wm.windows() has no timeout of its own: each window check runs in a short-lived thread and gets at most
+        # 0.3 s (never past the deadline). A check that does not return turns window detection off for this launch.
+        detect = True
+        before = set()                          # the program windows open before this launch
+        snap = self._windows_within(min(0.3, deadline - time.monotonic()))
+        if snap is None:
+            detect = False
+        else:
+            before = set(snap)
         try:
             start = log.tell()
             p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
@@ -4058,10 +4064,16 @@ class Desk:
         name = name or os.path.basename(argv[0])
         # a program that closes again at once did not open: say so instead of "opened". Its window showing up
         # (a window that was already open before the launch does not count) ends the wait early; 3 s at most.
-        for _ in range(30):
-            if p.poll() is not None or self._launch_window_up(argv, before):
+        while time.monotonic() < deadline:
+            if p.poll() is not None:
                 break
-            time.sleep(0.1)
+            if detect:
+                now = self._windows_within(min(0.3, deadline - time.monotonic()))
+                if now is None:
+                    detect = False              # no answer in time: the plain wait for the rest of the 3 s
+                elif self._launch_window_up(argv, before, now):
+                    break
+            time.sleep(max(0.0, min(0.1, deadline - time.monotonic())))
         if p.poll() not in (None, 0):
             try:
                 with open(os.path.join(config.RUN, "gui.log"), errors="replace") as f:
@@ -4075,12 +4087,30 @@ class Desk:
         threading.Thread(target=self._reap, args=(p,), daemon=True).start()
         return p.pid
 
-    def _launch_window_up(self, argv, before):
+    def _windows_within(self, limit):
+        """wm.windows() within `limit` seconds: its list ([] if it raised), or None when it did not return in time."""
+        box = {}
+
+        def work():
+            try:
+                box["w"] = list(wm.windows())
+            except Exception:
+                box["w"] = []
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        t.join(max(0.0, limit))
+        if t.is_alive():
+            return None
+        return box.get("w", [])
+
+    def _launch_window_up(self, argv, before, now=None):
         """True when a program window that is NEW since the launch belongs to the program started (wm.PROCS and
         focus_program name the same ids). No window tools, or any error: False, so the 3 s wait runs as before."""
         try:
             name = os.path.basename(str(argv[0])) if argv else ""
-            new = [a for a in wm.windows() if a not in before]
+            if now is None:
+                now = wm.windows()
+            new = [a for a in now if a not in before]
             if not new or not name:
                 return False
             want = [a for a, pr in wm.PROCS.items() if pr == name] + [name, name.lower()]

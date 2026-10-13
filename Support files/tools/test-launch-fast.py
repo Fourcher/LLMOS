@@ -124,5 +124,56 @@ check(isinstance(r, int) and 2.9 <= dt <= 3.3, f"window tool raises -> pid {r} a
 r, dt = run(["firefox", "https://example.org"], [("firefox", 0.1)])
 check(state["pop_argv"] == ["firefox", "https://example.org"], f"Popen argv unchanged: {state['pop_argv']}")
 
+# 9. wm.windows() hangs forever: the launch still returns within 3.4 s with the base result (pid, process alive)
+def hang_windows():
+    time.sleep(30)
+    return []
+
+
+fake_wm.windows = hang_windows
+r, dt = run(["firefox"], [])
+check(isinstance(r, int) and dt <= 3.4, f"windows() hangs -> pid {r} in {dt:.2f} s (need pid and <= 3.4 s)")
+
+# 10. windows() hangs and the program exits 1 at 0.3 s: the failure message still comes back quickly
+r, dt = run(["firefox"], [], exit_at=0.3, code=1)
+check(isinstance(r, str) and r.startswith("could not start firefox: it closed at once") and dt <= 0.8,
+      f"windows() hangs, exit 1 at 0.3 s -> {r!r} in {dt:.2f} s (need failure text and <= 0.8 s)")
+
+# 11. windows() takes 1 s per call: detection is switched off after the first slow call, total <= 3.4 s, pid
+calls = {"n": 0}
+
+
+def slow_windows():
+    calls["n"] += 1
+    if calls["n"] > 1:
+        time.sleep(1.0)
+    return []
+
+
+fake_wm.windows = slow_windows
+r, dt = run(["firefox"], [])
+check(isinstance(r, int) and dt <= 3.4 and calls["n"] <= 2,
+      f"windows() 1 s per call -> pid {r} in {dt:.2f} s with {calls['n']} calls (need pid, <= 3.4 s, <= 2 calls)")
+
+# 12. windows() takes 1 s on the pre-launch snapshot: no window checks after it, total <= 3.4 s, pid
+calls = {"n": 0}
+
+
+def slow_snapshot():
+    calls["n"] += 1
+    time.sleep(1.0)
+    return ["firefox"]
+
+
+fake_wm.windows = slow_snapshot
+r, dt = run(["firefox"], [])
+check(isinstance(r, int) and dt <= 3.4 and calls["n"] == 1,
+      f"slow snapshot -> pid {r} in {dt:.2f} s with {calls['n']} call (need pid, <= 3.4 s, 1 call)")
+fake_wm.windows = fake_windows
+
+# 13. windows() is fast and a new window appears: early return as before
+r, dt = run(["firefox"], [("firefox", 0.2)])
+check(isinstance(r, int) and dt <= 0.7, f"fast windows(), window at 0.2 s -> pid {r} in {dt:.2f} s")
+
 print("all good" if fails == 0 else f"{fails} FAILED")
 sys.exit(1 if fails else 0)
