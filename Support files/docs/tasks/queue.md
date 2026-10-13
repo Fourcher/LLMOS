@@ -133,7 +133,7 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 3377480 (contains ff268c2+8b3cb84: rare tools appended only when the request mentions them, warm-up primes the same list; ~420–700 fewer prompt tokens on most turns) VERIFY PASS — merge after the 1.8.1 build; then measure first-reply time on the VM (before/after).
 
 ## MERGE ORDER after the 1.8.1 build (chain heads only; older held lines they contain are superseded)
-1. c47102f intent chain (28a7f28→036f6ba→9d5c4cd→79a7311→564e581→7ccc48a→f595072→80c5a1d→57ffad3→c47102f)
+1. b7e3f80 intent chain (28a7f28→036f6ba→9d5c4cd→79a7311→564e581→7ccc48a→f595072→80c5a1d→57ffad3→c47102f→9b2d3a6→b7e3f80)
 2. de38295 internet-off phrasings (intent)
 3. e231f47 guard phrasings (intent)
 4. b399357 firewall words (contains 90be8cd, 58cb32c), then 3bbdd92 firewall undo
@@ -146,3 +146,4 @@ Each merge: git merge --no-ff; resolve trivial conflicts by FIX worker if any; t
 - [decision] (speed) tool merges shelved: the two safe merges (edit_images→edit_image, rename_series→rename_files) save only ~160 tokens; the finder merge (~550) is too risky for a 3B model and name-specific agent/desk code. Next speed step: measure first-reply time on the 1.8.1 VM with 3377480 merged (before/after).
 - [held] 522aa55 (guard question explains why + how to turn it off, 6 languages) VERIFY PASS — add to desk merge list after the 1.8.1 build. Note: Lane wrapper on instant/button path does not carry the flag (explanation missing there) — small follow-up.
 - [held] 9b2d3a6 (tonight / this evening / next monday reminders) VERIFY PASS — intent chain head becomes b7e3f80 once its VERIFY passes.
+- [held] b7e3f80 (questions are not saved as reminders) VERIFY PASS — intent chain head.
