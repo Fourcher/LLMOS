@@ -400,7 +400,7 @@ _TZ = re.compile(r"^\s*(?:please\s+)?(?:(?:set|change|switch|update|put)\s+(?:my
                  r"my\s+time\s*zone\s+is|i(?:'m|\s+am)\s+(?:now\s+)?in\s+the|use)\s+(?P<z>[a-z][a-z /_+-]{1,40}?)(?:\s+time(?:\s*zone)?)?\s*[.!]?\s*$", re.I)
 
 
-_SCREEN_OFF = re.compile(r"^\s*(?:please\s+)?(?:(?P<keep>keep|leave)\s+(?:the\s+|my\s+)?(?:screen|display|computer)\s+(?:on|awake)(?:\s+(?:all\s+the\s+time|always))?|"
+_SCREEN_OFF = re.compile(r"^\s*(?:please\s+)?(?:(?P<keep>keep|leave)\s+(?:(?:the\s+|my\s+)?(?:screen|display|computer)\s+(?:on|awake)|awake)(?:\s+(?:all\s+the\s+time|always|(?:during|while)\s+.+?))?|"
                          r"(?:never|don'?t|do\s+not|stop)\s+(?:turn(?:ing)?\s+off|blank(?:ing)?|dim(?:ming)?)\s+(?:the\s+|my\s+)?(?:screen|display)|presentation\s+mode(?:\s+on)?|"
                          r"(?:turn|switch)\s+(?:the\s+|my\s+)?(?:screen|display)\s+off\s+after\s+(?P<n>\d+)\s*(?P<u>min(?:ute)?s?|hours?)|"
                          r"(?:put\s+(?:the\s+|my\s+)?computer\s+to\s+sleep|sleep)\s+after\s+(?P<s>\d+)\s*(?P<su>min(?:ute)?s?|hours?)(?:\s+(?:of\s+)?(?:idle|inactivity|not\s+using\s+it))?|"
@@ -806,7 +806,7 @@ _NOTE_REMOVE = re.compile(r"^\s*(?:please\s+)?(?:(?:remove|delete|take)\s+(?P<it
 _TRASH = re.compile(r"^\s*(?:please\s+)?(?:(?P<empty>empty)\s+(?:my\s+|the\s+)?(?:trash|recycle\s+bin|bin)|(?:show|open|check)\s+(?:me\s+)?(?:my\s+|the\s+)?(?P<show>trash|recycle\s+bin|bin|deleted\s+(?:files|stuff|things))"
                     r"|(?P<oops>(?:oops,?\s+)?i\s+(?:accidentally\s+)?(?:deleted|removed|lost|trashed)\s+(?:something|a\s+file|my\s+\w+|the\s+wrong\s+(?:file|thing))(?:\s+by\s+(?:accident|mistake))?"
                     r"|(?:how\s+(?:do|can)\s+i\s+|can\s+(?:you|i)\s+)?(?:get\s+back|recover|restore|undelete)\s+(?:a\s+|my\s+|the\s+)?(?:deleted\s+(?:file|files|stuff|photo|photos)|(?:file|files|something)\s+i\s+deleted)"
-                    r"|where\s+(?:do|did)\s+(?:deleted\s+files|my\s+deleted\s+files|things\s+i\s+delete(?:d)?)\s+go|where(?:'s|\s+is)\s+(?:the\s+)?(?:trash|recycle\s+bin))"
+                    r"|where\s+(?:do|did)\s+(?:deleted\s+files|my\s+deleted\s+files|things\s+i\s+delete(?:d)?)\s+go|where(?:'s|\s+is)\s+(?:the\s+)?(?:trash|recycle\s+bin)|(?:restore|put\s+back|undelete)\s+from\s+(?:my\s+|the\s+)?trash)"
                     r"|(?:restore|put\s+back|undelete)\s+(?P<name>.+?)\s+from\s+(?:my\s+|the\s+)?trash|(?:restore|put\s+back|undelete)\s+(?P<file>\S+\.\w{1,5}))\s*[.!]?\s*$", re.I)
 
 
@@ -1672,7 +1672,7 @@ def _everyday2(text):
                  r"|^(?:any|is there an?)\s+(?:new\s+)?(?:e-?mail|mail|message|reply)\s+from\s+(?P<w2>[\w.@ -]+)$", low)
     if m:
         return ("mail_read", {"id": (m.group("w") or m.group("w2")).strip()})
-    m = re.match(r"^(?:please\s+)?(?:switch\s+to|use|set|turn\s+on|make\s+it|show\s+(?:the\s+)?time\s+in|change\s+to|go\s+to)\s+(?:the\s+|a\s+)?"
+    m = re.match(r"^(?:please\s+)?(?:(?:switch\s+to|use|set|turn\s+on|make\s+it|show\s+(?:the\s+)?time\s+in|change\s+to|go\s+to)\s+)?(?:the\s+|a\s+)?"
                  r"(?P<h>24|12|twenty[- ]four|twelve)[- ]?hour\s+(?:clock|time|format)(?:\s+please)?$", low)
     if m:
         return ("change_setting", {"setting": "clock", "value": "24" if m.group("h") in ("24", "twenty four", "twenty-four", "twenty") else "12"})
@@ -1694,11 +1694,13 @@ def _everyday2(text):
     if m:
         return ("schedule_task", {"when": m.group("when"), "task": m.group("what"), "kind": "reminder"})
     # alarms and the list of what's scheduled
-    m = re.match(r"^(?:please\s+)?(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)(?:\s+(?:to|and)\s+(?P<why>.+))?$"
+    m = re.match(r"^(?:please\s+)?(?:(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)"
+                 r"|(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?=(?:\d|noon\b|midnight\b|tomorrow\s+at\s+\d|in\s+\d+\s+(?:minutes?|hours?)\b))(?P<w4>.+?))"
+                 r"(?:\s+(?:to|and)\s+(?P<why>.+))?$"
                  r"|^wake\s+me\s+(?:up\s+)?(?:at|for)\s+(?P<w2>.+?)(?:\s+(?:to|and)\s+(?P<why2>.+))?$", low)
     if m:
         why = (m.group("why") or m.group("why2") or "").strip()
-        return ("schedule_task", {"when": m.group("w") or m.group("w2"), "task": "Alarm" + (f": {why}" if why else ""), "kind": "reminder"})
+        return ("schedule_task", {"when": m.group("w") or m.group("w4") or m.group("w2"), "task": "Alarm" + (f": {why}" if why else ""), "kind": "reminder"})
     if re.match(r"^(?:what|which)\s+(?:reminders|alarms|timers|tasks)\s+(?:do\s+i\s+have|are\s+(?:set|on|there))|^(?:show|list|see)\s+(?:me\s+)?(?:all\s+)?"
                 r"(?:my\s+|the\s+)?(?:reminders|alarms|timers)$|^what(?:'s|\s+is)\s+scheduled$|^my\s+(?:reminders|alarms|timers)$", low):
         return ("manage_tasks", {"action": "list"})
