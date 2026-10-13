@@ -2579,13 +2579,15 @@ class Desk:
                          r"(?P<zout>(?:make )?(?:the )?(?:text|page|words|font) smaller on (?:this|the) (?:page|website|site)|zoom out(?: on)?(?: (?:this|the) (?:page|website|site))?)|"
                          r"(?P<bm>bookmark (?:this|it|this page|the page|this site)|add (?:this|it|this page) to (?:my )?(?:bookmarks|favou?rites)|save this page)|"
                          r"(?P<bms>(?:open|show)(?: me)? (?:my |the )?(?:bookmarks|favou?rites))|"
-                         r"(?P<bms2>(?:open|show)(?: me)? (?:my |the )?(?:browser|firefox) (?:bookmarks|favou?rites)|(?:my )?bookmarks)", l2)
+                         r"(?P<bms2>(?:open|show)(?: me)? (?:my |the )?(?:browser|firefox) (?:bookmarks|favou?rites)|(?:my )?bookmarks)|"
+                         r"(?P<priv>(?:(?:open|start|new) )?(?:an? )?(?:new )?private window|(?:open|start|new) (?:an? )?(?:incognito|private)(?: (?:window|mode|browsing))?|incognito(?: window| mode)?)", l2)
         if m and shutil.which("wtype"):
-            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmarks" if (m.group("bms") or m.group("bms2")) else "bookmark"
+            k = "zoom in" if m.group("zin") else "zoom out" if m.group("zout") else "bookmarks" if (m.group("bms") or m.group("bms2")) else "private window" if m.group("priv") else "bookmark"
             ok, note = wm.browser_key(k)
             self.instant_reply(line, ({"zoom in": "Made the page bigger (Ctrl+0 puts it back).", "zoom out": "Made the page smaller.",
                                        "bookmark": "The bookmark window is open in the browser: press Save.",
-                                       "bookmarks": "Your bookmarks are open in the browser."}[k]) if ok
+                                       "bookmarks": "Your bookmarks are open in the browser.",
+                                       "private window": "A private window is open in the browser."}[k]) if ok
                                else note[:1].upper() + note[1:] + ".")
             return True
         if re.fullmatch(r"(?:this |the |a |my )?(?:website|site|web ?page|page|web ?site) (?:won'?t|wont|doesn'?t|does not|isn'?t|is not|will not|can'?t|cannot) (?:load|work|open|come up|connect)(?:ing)?|"
