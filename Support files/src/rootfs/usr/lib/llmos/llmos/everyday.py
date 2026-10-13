@@ -1148,22 +1148,22 @@ def ota_updates(desk, line, low):
         found = [s for s in [ota.hello(f"http://{m.group('addr')}:{ota.PORT}")] if s]
     else:
         if config.settings.get("internet", "yes") == "no":
-            desk.instant_reply(line, "The internet is off, so I can't look around the network. Say \\u201cget updates "
-                               "from\\u201d and your computer's address, like 192.168.1.20.")
+            desk.instant_reply(line, "The internet is off, so I can't look around the network. Say “get updates "
+                               "from” and your computer's address, like 192.168.1.20.")
             return True
         found = ota.find_servers()
     if not found:
         desk.instant_reply(line, "I didn't find an update server. On your computer, run "
-                           "\\u201ctools/ota.py serve\\u201d in the LLM OS folder, then say this again.")
+                           "“tools/ota.py serve” in the LLM OS folder, then say this again.")
         return True
     if len(found) > 1:
         desk.instant_reply(line, "I found more than one: " + "; ".join(f"{s['name']} at {s['url'].split('//')[1]} "
-                           f"(key {s['fp']})" for s in found) + ". Say \\u201cget updates from\\u201d and the address you want.")
+                           f"(key {s['fp']})" for s in found) + ". Say “get updates from” and the address you want.")
         return True
     s = ota.pair(found[0])
     desk.instant_reply(line, f"Done. Updates now come from {s['name']} ({s['url'].split('//')[1]}). Its key is "
                        f"{s['fp']}; your computer shows the same. Each one installs on its own and is undone if the desk "
-                       f"doesn't come back. Say \\u201cstop updates from my computer\\u201d to end it.")
+                       f"doesn't come back. Say “stop updates from my computer” to end it.")
     return True
 
 

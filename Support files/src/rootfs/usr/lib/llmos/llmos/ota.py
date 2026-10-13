@@ -389,8 +389,8 @@ def install(base, m, key, log=print):
             return False, f"package {p} could not be installed: {r.stderr.strip()[:200]}"
     desk_was_up = os.path.exists("/run/llmos/desk.sock")
     rec = apply_files(payload, os.path.join(STATE_DIR, f"backup-{m['id']}.tar"))
-    _stamp_release(m["version"])
     if _restart(m.get("restart", ["desk"]), desk_was_up):
+        _stamp_release(m["version"])      # only once it is kept: a rolled-back update leaves the stamp as it was
         return True, f"{len(rec['names'])} files"
     log("the desk did not come back after the update: undoing it")
     rollback(rec)
