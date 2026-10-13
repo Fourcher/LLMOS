@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Host-side test of the Desk.shortcut route that opens "While you were away" on request: "what did I miss",
-"what'd I miss", "anything new", "any notifications", "show my notifications", "show notifications",
-"what happened while I was away", "while I was away". It calls show_away(force=True) when something is unseen,
+"what'd I miss", "anything new", "any notifications", "show my notifications",
+"what happened while I was away", "while I was away". "show notifications" is not one of them: it means
+"turn notifications back on" (intent._dnd, do-not-disturb off). It calls show_away(force=True) when something is unseen,
 and replies "Nothing new since you last looked." when nothing is. Phrases that only mention missing or
 notifications in another sense (a file, a call, a bus, "notifications off") do not match.
 desk.py needs GTK, so the shortcut method is read from its source and run against stubs.
@@ -61,10 +62,10 @@ def make_desk():
 
 
 POS = ["what did i miss", "what did I miss?", "what'd i miss", "what’d I miss?", "anything new",
-       "any notifications", "show my notifications", "show notifications",
+       "any notifications", "show my notifications",
        "what happened while I was away", "while I was away"]
 NEG = ["what did i miss in the meeting notes", "did i miss a call", "i missed the bus",
-       "notifications off", "turn off notifications"]
+       "notifications off", "turn off notifications", "show notifications"]
 
 print("the card opens on request")
 for q in POS:
@@ -92,6 +93,10 @@ for q in NEG:
 
 check(intent._dnd("turn off notifications") is None and intent._dnd("notifications off") is None,
       "intent DND route unchanged for 'turn off notifications' / 'notifications off'")
+check(intent.match("show notifications") == ("change_setting", {"setting": "do_not_disturb", "value": "off"}),
+      "intent.match 'show notifications' still gives DND off (base result)")
+check(intent.match("show my notifications") is None,
+      "intent.match 'show my notifications' still gives None (base result)")
 
 print("all good" if fails == 0 else f"{fails} FAILED")
 sys.exit(1 if fails else 0)
