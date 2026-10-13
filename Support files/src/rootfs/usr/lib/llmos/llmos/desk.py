@@ -1986,7 +1986,7 @@ class Desk:
         self.open_window({"id": "away", "replace": True, "title": T("while_away"), "size": "m", "slot": "cascade",
                           "blocks": [{"type": "list", "items": items}]})
         self.away_ids = [m["id"] for m in un]          # marked seen when the owner closes the card
-        if getattr(self, "ready", False):
+        if getattr(self, "ready", False) and not config.settings.get("do_not_disturb"):     # (do not disturb: the card only, no toast, chime or speech)
             self.emit({"t": "toast", "text": ui.strip(un[-1]["text"])[:120] or un[-1]["title"], "long": True})
             devices.chime()
             if config.settings.get("speak_replies"):
