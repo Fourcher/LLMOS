@@ -90,6 +90,19 @@ _FREE_SPACE_Q = (r"(?i:how much (?:free |disk )?(?:space|storage|room)(?: is)? (
                  r"|(?:is|why is) my (?:disk|computer) full|how full is my disk"
                  r"|(?:check )?(?:disk space|storage|free space)|free up (?:disk )?space)")
 
+# simple fact questions ("how tall is mount everest"): the subject may not be about the owner, this/that, a place
+# needing a location, or a personal object (email, file, computer...), so those still go to the model
+_FACT_SUBJ = (r"(?!.*\b(?:i|me|my|mine|we|us|our|you|your|it|its|this|that|these|those|here|there|home|work|near|nearby|away|to|from|"
+              r"email|mail|message|file|folder|document|photo|video|picture|contacts?|computer|laptop|phone|screen|printer|wifi|desktop|pc|calendar|inbox)\b)"
+              r"[a-z][a-z .'-]{1,40}?")
+_FACT_PATS = (rf"how (?:tall|high|big|old|far|long|deep|heavy|fast) is (?:the )?({_FACT_SUBJ})",
+              rf"when was ({_FACT_SUBJ}) (?:born|built|founded|made)",
+              rf"what is the population of ({_FACT_SUBJ})",
+              rf"what(?:'s| is) the capital of ({_FACT_SUBJ})",
+              rf"who (?:wrote|painted|invented|founded|discovered) ({_FACT_SUBJ})")
+_LIVE_FACTS = tuple(re.compile(p) for p in _FACT_PATS)
+_FACT_MATCH = "^(?:" + "|".join(_FACT_PATS) + r")[?.!]?$"
+
 MATCH = re.compile(
     r"^" + _FREE_SPACE_Q + r"[?.!]?$|" +
     r"^how much (?:free |disk )?(?:space|storage|room)(?: is| do i have)?(?: (?:left|free|remaining))?(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?(?: (?:left|free|remaining))?$|^how much (?:disk )?space (?:is )?(?:left|free)$|"
@@ -130,7 +143,7 @@ MATCH = re.compile(
     r"internet (?:working|up|down|ok|on|connected)|am i (?:online|connected)|do i have (?:the )?internet|(?:wi-?fi|network) working|are we online|"
     r"^what day (?:of the week )?(?:is|was|will be|falls on|does)\b|"
     r"\.(?:txt|md|csv|log)$|"
-    r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)|" + _JOKE_PAT, re.I)
+    r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)|" + _FACT_MATCH + "|" + _JOKE_PAT, re.I)
 
 
 def _say(desk, line, text):
@@ -1567,6 +1580,15 @@ _LIVE_WON = re.compile(r"who won (?:the )?(?P<s>[a-z' .-]{2,40}?)(?: last night|
 _CLOCK_TIME = re.compile(r"\b\d{1,2}(?::\d{2})?\s?(?:am|pm|a\.m\.|p\.m\.)|\b\d{1,2}:\d{2}\b", re.I)
 
 
+def _first_sentences(text, n=2, cap=300):
+    """The first one or two sentences of a search snippet, at most `cap` characters."""
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"“(])", " ".join(str(text or "").split()))
+    out = " ".join(parts[:n]).strip()
+    if len(out) > cap:
+        out = out[:cap].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
+    return out
+
+
 def live_lookup(desk, line, low):
     """A question about a live service or opening hours: a search, answered from its results in one line (no model turn)."""
     m = _LIVE_STATUS.fullmatch(low)
@@ -1587,6 +1609,22 @@ def live_lookup(desk, line, low):
         top = res[0]
         return _say(desk, line, f"From search: “{top['title']}” ({top['url']}). {top['snippet'][:200]} "
                                 "Check the page for the details.")
+    fact = None if (m or h or won) else next((x for x in (p.fullmatch(low) for p in _LIVE_FACTS) if x), None)
+    if fact:
+        # a simple fact question: the top snippet, one or two sentences, with its source (same failure replies as "who won")
+        if config.settings.get("internet") == "no":
+            return _say(desk, line, "The internet is switched off in settings, so I can't look up results.")
+        from . import web
+        try:
+            res = web.search(line.strip(), n=3)
+        except Exception:
+            return _say(desk, line, "I couldn't search for the result just now. Try again in a minute.")
+        top = res[0] if res else {}
+        snippet = _first_sentences(top.get("snippet"))
+        if not snippet:
+            return _say(desk, line, "I couldn't find that result.")
+        src = urllib.parse.urlparse(str(top.get("url") or "")).netloc.lower().removeprefix("www.") or "the web"
+        return _say(desk, line, f"{snippet} (source: {src})")
     if not (m or h):
         return False
     if config.settings.get("internet") == "no":
