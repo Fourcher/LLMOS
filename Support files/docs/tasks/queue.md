@@ -214,3 +214,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [open] (speed) first-reply prefix is ~7.9k tokens at ctx>=12k (system 1375 + 80 tools 6515). Measure on the VM (curl cold POST max_tokens 1, timings.prompt_ms) before/after: (a) one fixed ~32-tool list for every context; (b) side jobs (decide, translations) evict the only slot — try --cache-ram up on small machines or -np 2 + id_slot. | role: run (measure) then fix
 - [held] a658456 (A13d drives mount/eject via rootd, system-disk guard) VERIFY PASS "TOTAL FAILS: 0" — merge after build.
 - [held] 1242e4d (supersedes 1937896/94f7c12: desk i18n + template-key test) VERIFY PASS — merge after build (merge 1242e4d only).
+- [held] 929e78f (first turn waits for warm-up, cap 60 s) VERIFY PASS — merge after build. Gap noted: overlapping warm-ups (counter instead of Event) and _replay not covered.
