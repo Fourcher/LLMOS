@@ -38,6 +38,18 @@ CASES = {
     "apt install vlc": ("install_app", {"packages": "vlc"}),
     "apt-get install git": ("install_app", {"packages": "git"}),
     "apk add curl": ("install_app", {"packages": "curl"}),
+    # new: a path with spaces (quoted or not), several packages, and the owner's typos that must stay with the model
+    "open ~/My Notes.txt": ("open_file", {"path": "~/My Notes.txt"}),
+    "open '/tmp/a b.pdf'": ("open_file", {"path": "/tmp/a b.pdf"}),
+    'open "/tmp/a b.pdf"': ("open_file", {"path": "/tmp/a b.pdf"}),
+    "open ~/a/../b": None,
+    "open /tmp/x; rm -rf /": None,
+    "apt install htop vim": ("install_app", {"packages": "htop vim"}),
+    "apt install htop vim git": ("install_app", {"packages": "htop vim git"}),
+    "apt install -y htop": None,
+    "apt install htop && reboot": None,
+    "apk add curl; rm -rf /": None,
+    "apk add a b c d e f g h i j k": None,
     # unchanged: routed before
     "open calculator": ("open_app", {"command": "calculator"}),
     "install vlc": ("install_app", {"packages": "vlc"}),

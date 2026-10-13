@@ -2123,10 +2123,11 @@ _OPEN_WORD = re.compile(r"^\s*(?:please\s+)?(?:i'?d\s+like\s+to\s+)?(?:open|laun
 _OPEN_WORD_CMD = {"file manager": "file manager", "image viewer": "image viewer", "text editor": "text editor",
                   "notes app": "notes", "word": "word processor", "excel": "spreadsheet"}
 _NOTES_APP = re.compile(r"^\s*(?:please\s+)?(?:the\s+|my\s+)?notes\s+app\s*[.!?]*\s*$", re.I)
-_OPEN_PATH = re.compile(r"^\s*(?:please\s+)?open\s+(?P<p>(?:~|/)\S*?)\s*[.!?]*\s*$", re.I)
+_OPEN_PATH = re.compile(r"^\s*(?:please\s+)?open\s+(?P<p>\"[^\"\n]+\"|'[^'\n]+'|[~/][^\n]*?)\s*[.!?]*\s*$", re.I)
 _UNINSTALL_ANY = re.compile(r"^\s*(?:please\s+)?uninstall\s+(?P<n>[a-z][a-z0-9+.-]{1,24})\s*[.!?]*\s*$", re.I)
 _REMOVE_APP_ANY = re.compile(r"^\s*(?:please\s+)?(?:remove|uninstall)\s+(?:the\s+|my\s+)?(?P<n>[a-z][a-z0-9+.-]{1,24})\s+app\s*[.!?]*\s*$", re.I)
-_APT_INSTALL = re.compile(r"^\s*(?:please\s+)?(?:apt(?:-get)?\s+install|apk\s+add)\s+(?P<n>[a-z0-9][a-z0-9+._-]{0,40})\s*[.!?]*\s*$", re.I)
+_PKG = r"[a-z0-9][a-z0-9+._-]{0,40}"
+_APT_INSTALL = re.compile(r"^\s*(?:please\s+)?(?:apt(?:-get)?\s+install|apk\s+add)\s+(?P<n>" + _PKG + r"(?:\s+" + _PKG + r"){0,9})\s*[.!?]*\s*$", re.I)
 _NOT_A_PROGRAM = frozenset({"the", "a", "an", "my", "this", "that", "it", "these", "those", "them", "all", "everything", "anything",
                             "something", "some", "any", "stuff", "one", "program", "programs", "app", "apps", "software", "update",
                             "updates", "file", "files", "photo", "photos", "picture", "background", "duplicates", "connector",
@@ -2141,14 +2142,21 @@ def _new_words(t):
         return ("open_app", {"command": "notes"})
     m = _OPEN_PATH.match(t)
     if m:
-        return ("open_file", {"path": m.group("p")})
+        p = m.group("p")
+        if len(p) >= 2 and p[0] == p[-1] and p[0] in "\"'":
+            p = p[1:-1]                                   # the owner's quotes around a path with spaces
+        if not (p.startswith("/") or p == "~" or p.startswith("~/")):
+            return None
+        if p.startswith("-") or ".." in p or re.search(r"[;&|`$<>]", p):
+            return None                                   # left to the model
+        return ("open_file", {"path": p})
     for rx in (_UNINSTALL_ANY, _REMOVE_APP_ANY):
         m = rx.match(t)
         if m and m.group("n").lower() not in _NOT_A_PROGRAM:
             return ("remove_software", {"name": m.group("n").lower()})
     m = _APT_INSTALL.match(t)
     if m:
-        return ("install_app", {"packages": m.group("n").lower()})
+        return ("install_app", {"packages": " ".join(m.group("n").lower().split())})
     return None
 
 
