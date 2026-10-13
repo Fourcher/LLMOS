@@ -95,3 +95,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [open] (reliability) realrun "approve": true task field -> while waiting, poll desk-state "dialogs" and send `llmos desk-ctl dialog yes`; set it on uc-54 "empty the trash" | role: fix | files: tools/realrun.py, tools/tasks/usecases-2.json (WAIT: realrun stuck/fresh FIX)
 - [open] (reliability) uc-42 home check on next VM RUN: `cat /etc/llmos/owner-user; getent passwd owner; id -un; echo HOME=$HOME LLMOS_HOME=$LLMOS_HOME; ls -d /root/Documents/Taxes* /home/*/Documents/Taxes*`
 - [open] (capability) uc-52 "restore from trash" -> "I couldn't finish that" (desk ran find/ls on ~/Trash, stopped) | role: probe
+- [open] (ui) internet confirm dialog body shows the raw tool name ("find_by_meaning → …", desk.py:443-448 confirm_network; console.py:63 too) — use the plain describe_tool text or a plain label map | role: fix | files: desk.py confirm_network (WAIT: desk.py busy)
