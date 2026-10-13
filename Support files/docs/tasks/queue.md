@@ -114,3 +114,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [decision] no speed test ("how fast is my internet") and no search-engine setting yet — capability gaps, later.
 - [held] 79a7311 (supersedes 9d5c4cd; polite suffix on open-app) VERIFY PASS — merge after the 1.8.1 build (or merge 564e581 which contains it, once verified).
 - [held] 0f9fb4f ("connected but no internet" help; two-window tiling _TILE2) VERIFY PASS — merge after the 1.8.1 build. Follow-up: _instant gate lacks _TILE2 and the new no-internet forms.
+- [held] 564e581 (contains 28a7f28, 036f6ba, 9d5c4cd, 79a7311 + batch 3: share over network, use my claude account, map of X via OSM, do I have new email, youtube music) VERIFY PASS — merge 564e581 (the whole intent chain) after the 1.8.1 build.
