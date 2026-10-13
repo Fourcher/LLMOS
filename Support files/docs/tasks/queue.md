@@ -225,3 +225,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 54205c6 (quick fact answers via web search) VERIFY PASS — merge after build.
 - [open] (freedom) everyday live_lookup (who-won, status, hours, and the new fact branch) only checks internet == "no"; under "ask" it goes online without asking — against the owner's setting. Find how the agent's web tools ask (confirm_network) and make everyday web lookups ask the same way under "ask". | role: probe then fix | files: everyday.py
 - [held] 546aade (supersedes eb7da9b/daf5831: bigger icons + default-app wordings) VERIFY PASS — merge after build.
+- [open] (reliability) test-desk-wait.py and test-vmctl-fast.py failed once each under host load (build running) and passed alone — timing-sensitive; widen their timing margins or use injected clocks | role: probe then fix
