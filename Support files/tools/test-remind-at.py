@@ -19,8 +19,19 @@ CASES = [
     ("please remind me at 9:15 am to ring the bank", ("schedule_task", {"when": "at 9:15 am", "task": "ring the bank", "kind": "reminder"})),
     # BEFORE: the order the route already supported (same fields)
     ("remind me in 20 minutes to check the oven", ("schedule_task", {"when": "in 20 minutes", "task": "check the oven", "kind": "reminder"})),
-    ("remind me to take my pills at 3", ("schedule_task", {"when": "at 3", "task": "remind me to take my pills"})),
-    ("remind me to call mum at 3pm", ("schedule_task", {"when": "at 3pm", "task": "remind me to call mum"})),
+    # "remind me to <task> at|in|on|tomorrow <time>": was {when, task "remind me to …"} with no kind before this change
+    ("remind me to take my pills at 3", ("schedule_task", {"when": "at 3", "task": "take my pills", "kind": "reminder"})),
+    ("remind me to call mum at 3pm", ("schedule_task", {"when": "at 3pm", "task": "call mum", "kind": "reminder"})),
+    ("remind me to stretch in 20 minutes", ("schedule_task", {"when": "in 20 minutes", "task": "stretch", "kind": "reminder"})),
+    ("remind me to pay rent tomorrow at 9", ("schedule_task", {"when": "tomorrow at 9", "task": "pay rent", "kind": "reminder"})),
+    ("remind me to take my pills at 3 please", ("schedule_task", {"when": "at 3", "task": "take my pills", "kind": "reminder"})),
+    ("remind me to meet in the park at 5", ("schedule_task", {"when": "at 5", "task": "meet in the park", "kind": "reminder"})),
+    ("remind me to pay rent on Friday", ("schedule_task", {"when": "on friday", "task": "pay rent", "kind": "reminder"})),
+    ("remind me to check the oven", None),
+    # unchanged by this change: other scheduling with "at <time>" and the non-reminder phrases
+    ("turn on dark mode at 9", ("schedule_task", {"when": "at 9", "task": "turn on dark mode"})),
+    ("lock the screen at 10", ("schedule_task", {"when": "at 10", "task": "lock the screen"})),
+    ("set an alarm for 7am", ("schedule_task", {"when": "7am", "task": "Alarm", "kind": "reminder"})),
     # trailing filler: a bare please/pls or a comma + filler is dropped; "thanks"/"now"/"for me" without a comma stay (they can be the task)
     ("remind me at 3 to take my pills please", ("schedule_task", {"when": "at 3", "task": "take my pills", "kind": "reminder"})),
     ("remind me at 3 to take my pills, please", ("schedule_task", {"when": "at 3", "task": "take my pills", "kind": "reminder"})),

@@ -885,6 +885,32 @@ _REMIND_AT_FILLER = re.compile(r"(?:,\s*(?:please|pls|thanks|thank\s+you|for\s+m
 _REMIND_AT_NO_TASK = {"please", "pls", "thanks", "thank you", "now", "right now", "for me"}
 
 
+_REMIND_TO = re.compile(r"^\s*(?:please\s+)?(?:remind|ping|tell|alert)\s+me\s+to\s+(?P<rest>.+?)\s*[.!?]*\s*$", re.I)
+_REMIND_TO_WHEN = re.compile(r"\s+(?=(?:at|in|on|tomorrow)\b)", re.I)   # where the time phrase may start
+_REMIND_TO_TIME = re.compile(rf"^(?:{_WHEN}|on\s+\w+(?:\s+at\s+\d{{1,2}}(?::\d{{2}})?\s*(?:am|pm)?)?)$", re.I)   # the whole when must be a time phrase
+
+
+def _remind_to(text):
+    """"remind me to take my pills at 3" / "… in 20 minutes" / "… tomorrow at 9": same fields as "remind me at 3 to …"."""
+    m = _REMIND_TO.match(text)
+    if not m:
+        return None
+    rest = _REMIND_AT_FILLER.sub("", m.group("rest")).strip()
+    for sp in _REMIND_TO_WHEN.finditer(rest):
+        task, when = rest[:sp.start()].strip(), rest[sp.end():].strip()
+        if not task or not when or re.sub(r"[^\w\s]", "", task).strip().lower() in _REMIND_AT_NO_TASK:
+            continue
+        if not _REMIND_TO_TIME.match(when):
+            continue                             # "in the park at 5": the time is only the last part
+        try:
+            from . import store
+            store.parse_when(when)
+        except Exception:
+            continue                             # not a time phrase: try the next split ("meet in the park at 5")
+        return ("schedule_task", {"when": when.lower(), "task": task, "kind": "reminder"})
+    return None
+
+
 def _timer(text):
     ma = _REMIND_AT.match(text)                  # "remind me at 3pm to call mum": same route as "remind me in 20 minutes to …"
     if ma:
@@ -892,6 +918,9 @@ def _timer(text):
         if not task or re.sub(r"[^\w\s]", "", task).strip().lower() in _REMIND_AT_NO_TASK:
             return None                          # the task is only a filler word ("remind me at 3 to please")
         return ("schedule_task", {"when": f"at {ma.group('t').strip().lower()}", "task": task, "kind": "reminder"})
+    rt = _remind_to(text)                        # "remind me to call mum at 3pm": the time is the when, not part of the task
+    if rt:
+        return rt
     m = _TIMER.match(text) or _REMIND.match(text)
     if not m:
         return None
