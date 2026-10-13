@@ -70,7 +70,9 @@ else:
             ("cos(90)", True, "0"), ("sin(180)", True, "0"), ("tan(90)", True, "ERR"),
             ("tan(270)", True, "ERR"), ("tan(45)", True, "1"), ("tan(pi/2)", False, "ERR"),
             ("1e3", True, "1000"), ("2.5E-4", True, "0.00025"), ("2e", True, "5.43656365692"),
-            ("e", True, "2.71828182846"), ("12 34", True, "ERR"), ("2 pi", True, "ERR"),
+            ("e", True, "2.71828182846"), ("12 34", True, "ERR"), ("1.5 2", True, "ERR"),
+            ("2 pi", True, "6.28318530718"), ("2 sin(30)", True, "1"), ("3 (4)", True, "12"),
+            ("2 e", True, "5.43656365692"),
             ("2(3)", True, "6"), ("1,5+1", True, "2.5"), ("1,5,3", True, "ERR"), ("1.5,5", True, "ERR"),
         ]
         script = parser + "\nconst cases=" + json.dumps([[e, d] for e, d, _ in cases]) + ";\n" \

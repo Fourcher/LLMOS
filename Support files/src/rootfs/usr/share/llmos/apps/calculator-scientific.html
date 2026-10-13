@@ -27,17 +27,17 @@ function sciCalc(src,deg){
   if(s.includes(",")&&!s.includes("."))s=s.replace(/(\d),(\d)/g,"$1.$2");
   const bad=()=>{throw new Error("bad")};
   const toks=[];let i=0,sp=false;
-  const pushNum=(v,spaced)=>{if(spaced&&toks.length&&toks[toks.length-1].k==="num")bad();toks.push({k:"num",v})};
+  const pushNum=(v,spaced,lit)=>{const pv=toks[toks.length-1];if(lit&&spaced&&pv&&pv.k==="num"&&pv.lit)bad();toks.push({k:"num",v,lit})};
   while(i<s.length){
     const c=s[i];
     if(/\s/.test(c)){sp=true;i++;continue}
     const spaced=sp;sp=false;
     let m=/^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/.exec(s.slice(i));
-    if(m){pushNum(parseFloat(m[0]),spaced);i+=m[0].length;continue}
+    if(m){pushNum(parseFloat(m[0]),spaced,true);i+=m[0].length;continue}
     m=/^[a-z]+/.exec(s.slice(i));
     if(m){const w=m[0];
-      if(w==="pi")pushNum(Math.PI,spaced);
-      else if(w==="e")pushNum(Math.E,spaced);
+      if(w==="pi")pushNum(Math.PI,spaced,false);
+      else if(w==="e")pushNum(Math.E,spaced,false);
       else if(Object.prototype.hasOwnProperty.call(SCI_FN,w))toks.push({k:"fn",v:w});
       else bad();
       i+=w.length;continue}
