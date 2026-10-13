@@ -67,6 +67,19 @@ _LOCK_WORDS = {"lock", "lock the screen", "lock screen", "lock the computer", "l
                "i'm stepping away", "im stepping away", "lock up", "lock it up"}
 SOCK = os.path.join(config.RUN, "desk.sock")
 DISPLAY_ENV = os.path.join(config.RUN, "display.env")
+def _lock_tip_take():
+    """True once: the 'keep the password somewhere safe' sentence is due. Taking it stores tips.lock_password_shown so it is
+    not repeated on every lock (repeating it is nagging). If the settings store cannot be written, the sentence may show
+    again next time; the lock still happens."""
+    if config.settings.get("tips.lock_password_shown"):
+        return False
+    try:
+        config.settings.set("tips.lock_password_shown", True)
+    except Exception as e:
+        sys.stderr.write(f"desk: could not save the lock tip flag: {e}\n")
+    return True
+
+
 def _wallpaper():
     """The wallpaper file: private data, so inside the vault when there is one."""
     return config.data("wallpaper.img")
@@ -1176,9 +1189,10 @@ class Desk:
                     home = config.home().rstrip("/")
                     short = lambda p: "~" + p[len(home):] if p.startswith(home) else p
                     if ok and t == "folder.lock":
+                        tip = _lock_tip_take()
                         text = (f"Locked: {os.path.basename(path.rstrip('/'))} is now {short(out)}, which opens only with that password "
                                 f"(here: say \u201cunlock {os.path.basename(path.rstrip('/'))}\u201d; on another computer: 7-Zip). "
-                                "Keep the password somewhere safe: without it the files can't be got back.")
+                                + ("Keep the password somewhere safe: without it the files can't be got back." if tip else "")).rstrip()
                     elif ok:
                         text = f"Unlocked: {short(out)} is a normal folder again."
                     else:
@@ -1616,11 +1630,12 @@ class Desk:
         if kind == "lock":
             fields.append({"name": "password2", "label": "The same password again", "kind": "password"})
         fields += [{"name": "path", "kind": "hidden", "value": path}, {"name": "nonce", "kind": "hidden", "value": self.folder_nonce}]
+        tip = _lock_tip_take() if kind == "lock" else False
         self.open_window({"id": "folder-lock", "replace": True, "title": ("Lock " if kind == "lock" else "Unlock ") + os.path.basename(path.rstrip("/")),
                           "size": "s", "slot": "cascade", "blocks": [
-            {"type": "text", "text": (f"{shown} becomes one locked file that opens only with this password, here or on any computer with 7-Zip. "
-                                      "Without the password the files can't be got back, so keep it safe." if kind == "lock" else
-                                      f"The password {shown} was locked with."), "dim": True},
+            {"type": "text", "text": (f"{shown} becomes one locked file that opens only with this password, here or on any computer with 7-Zip."
+                                      + (" Without the password the files can't be got back, so keep it safe." if tip else "")) if kind == "lock" else
+                                      f"The password {shown} was locked with.", "dim": True},
             {"type": "form", "fields": fields, "submit": {"label": "Lock" if kind == "lock" else "Unlock", "post": "folder." + kind}}]})
 
     def mail_form(self):
