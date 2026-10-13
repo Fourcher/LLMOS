@@ -219,3 +219,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [open] (ui) "the owner" in model-visible tool results is also an internal marker matched by agent.py (937 _INTERNAL, 1101, 250/1016/1018, 1194) — reword both sides in ONE commit (tools.py + agent.py) after the warm-up branch on agent.py merges. Only tools.py:995 is free-standing.
 - [held] e8166b1 (supersedes 929e78f: warm-up join + overlap counter + replay) VERIFY PASS — merge after build (merge e8166b1 only).
 - [held] 8af8485 (bookmarks/homepage wordings) VERIFY PASS — merge after build. (_instant only matters while busy; homepage covered by the _instant+_howto FIX in flight.)
+- [held] 7493a24 (how-to answers instant while busy) VERIFY PASS — merge after build.
