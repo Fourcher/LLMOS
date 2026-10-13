@@ -720,6 +720,12 @@ def _protect_layout(css):
         "should differ from the rest (e.g. 'settings in Chinese, rest in English' -> language=English, "
         "settings_language=Chinese)"}})
 def set_appearance(a, ctx):
+    corners = None
+    if a.get("corners"):
+        corners = str(a["corners"]).lower().strip()
+        corners = {"round": "rounded"}.get(corners, corners)
+        if corners not in ("rounded", "square", "double", "heavy", "none"):
+            return "error: corners must be rounded, square, double, heavy or none"
     _undo_push("settings", _settings_snapshot())
     changed = []
     if "style" in a and a.get("style") is not None:
@@ -772,9 +778,9 @@ def set_appearance(a, ctx):
             else:
                 config.settings.set(f"appearance.{key}", val)
                 changed.append(f"{key} {val}")
-    if a.get("corners"):
-        config.settings.set("appearance.corners", a["corners"])
-        changed.append(f"corners {a['corners']}")
+    if corners:
+        config.settings.set("appearance.corners", corners)
+        changed.append(f"corners {corners}")
     if a.get("scale"):
         cur = int(config.settings.get("appearance.scale") or 100)
         v = str(a["scale"]).lower().strip().rstrip("%")
@@ -2472,6 +2478,14 @@ def _files_from(a, exts=None, default_folder="~"):
        "replace": {"type": "string", "description": "text to replace in the names"}, "with": {"type": "string", "description": "what to put instead"},
        "prefix": STR, "suffix": {"type": "string", "description": "added before the extension"}}, [], risk=CHANGE)
 def rename_files(a, ctx):
+    sp = str(a.get("spaces") or "keep").lower().strip()
+    sp = {"dash": "dashes", "underscore": "underscores"}.get(sp, sp)
+    if sp not in ("dashes", "underscores", "remove", "keep"):
+        return "error: spaces must be dashes, underscores, remove or keep"
+    case = str(a.get("case") or "keep").lower().strip()
+    case = {"lowercase": "lower", "uppercase": "upper", "titlecase": "title"}.get(case, case)
+    if case not in ("lower", "upper", "title", "keep"):
+        return "error: case must be lower, upper, title or keep"
     files = _files_from(a)
     if not files:
         return "there are no files there to rename"
@@ -2481,10 +2495,8 @@ def rename_files(a, ctx):
         stem, ext = os.path.splitext(name)
         if a.get("replace"):
             stem = re.sub(re.escape(str(a["replace"])), str(a.get("with", "")), stem, flags=re.I)
-        sp = a.get("spaces") or "keep"
         if sp != "keep":
             stem = re.sub(r"\s+", {"dashes": "-", "underscores": "_", "remove": ""}[sp], stem.strip())
-        case = a.get("case") or "keep"
         if case == "lower":
             stem, ext = stem.lower(), ext.lower()
         elif case == "upper":

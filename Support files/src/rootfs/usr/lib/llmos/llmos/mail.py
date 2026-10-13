@@ -51,6 +51,11 @@ def setup(address, password, imap_host="", smtp_host="", imap_port=0, smtp_port=
     address = address.strip()
     if "@" not in address:
         raise MailError("that doesn't look like an email address")
+    sec = (smtp_security or "starttls").strip().lower()
+    sec = {"tls": "starttls"}.get(sec, sec)
+    if sec not in ("starttls", "ssl", "none"):
+        raise MailError("smtp_security must be starttls, ssl or none")   # never fall back to plaintext
+    smtp_security = sec
     gi, gs = _guess(address)
     acct = {
         "address": address, "password": password, "name": name.strip(),
