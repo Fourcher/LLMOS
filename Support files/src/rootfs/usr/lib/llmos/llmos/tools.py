@@ -1476,6 +1476,16 @@ def _guard_on(value):
     return not re.search(r"\b(off|no|disable|stop|false|0|never|don'?t)\b", str(value), re.I)
 
 
+_FIREWALL_WORDS = {"off": "off", "disable": "off", "disabled": "off", "no": "off",
+                   "on": "on", "enable": "on", "enabled": "on", "yes": "on"}
+
+
+def _firewall_norm(value):
+    """One reading of a firewall value (on/off and their aliases), shared by change_setting and _policy_risk."""
+    v = str(value or "").lower().strip()
+    return _FIREWALL_WORDS.get(v, v)
+
+
 def _policy_risk(setting, value):
     """Only LOOSENING a security policy, relative to what is set now, needs
     the owner's confirmation (more autonomy, more internet, Tor off, the web-page
@@ -1488,6 +1498,8 @@ def _policy_risk(setting, value):
     if setting == "internet":
         v = {"on": "yes", "allow": "yes", "true": "yes", "off": "no", "never": "no", "false": "no"}.get(v, v)
         return SECURITY if _INTERNET_RANK.get(v, 0) > _INTERNET_RANK.get(s.get("internet", "yes"), 2) else SAFE
+    if setting == "firewall":   # switching the firewall off lets other computers connect in: loosening, like internet yes
+        return SECURITY if _firewall_norm(v) == "off" and s.get("firewall", "on") != "off" else SAFE
     if setting == "tor":
         return SECURITY if (not _truthy(v)) and s.get("tor") else SAFE
     if setting == "brain":      # sending more to the online model is the loosening direction
@@ -1499,7 +1511,7 @@ def _policy_risk(setting, value):
 
 
 _SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission|approv|without asking|careful|cautious|balanced|mode|trust|rein|reign|control|freedom|risky",
-                  "internet": r"internet|online|offline|network|\bweb\b|wifi|wi-fi", "tor": r"\btor\b|anonym",
+                  "internet": r"internet|online|offline|network|\bweb\b|wifi|wi-fi", "firewall": r"firewall|inbound|incoming", "tor": r"\btor\b|anonym",
                   "brain": r"online model|claude|cloud|chatgpt|on this computer|locally|think only|brain|offline model",
                   "speak_replies": r"speak|read (?:aloud|out)|voice|talk|out loud", "think": r"\bthink|reason",
                   "name": r"\bname\b|call me", "focus_mode": r"focus|distract", "guidance": r"guidance|lectur|caution|careful|warn|preach|instructions|my machine",
@@ -1519,10 +1531,11 @@ _SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission
       "guard_untrusted: on/off (show me first what instructions inside web pages, files or emails would make you do). "
       "do_not_disturb: on/off (programs' notifications hidden). night_light: on/off (warmer screen in the evening). timezone: a city, country or zone name ('Paris', 'Pacific', 'Asia/Tokyo'). "
       "clock: 24 or 12 (the hours shown in the top bar and on the clock: '24-hour clock', '12-hour clock'). "
+      "firewall: on/off (off lets other computers connect to this one; on puts it back). "
       "(Language changes go through set_appearance.)",
       {"setting": {"type": "string", "enum": ["autonomy", "internet", "tor", "speak_replies", "focus_mode",
                                               "think", "name", "autolock", "guidance", "brain", "timezone",
-                                              "screen_off", "sleep_after", "lid", "do_not_disturb", "night_light", "guard_untrusted", "clock"]},
+                                              "screen_off", "sleep_after", "lid", "do_not_disturb", "night_light", "guard_untrusted", "clock", "firewall"]},
        "value": STR, "minutes": {"type": "integer"}}, ["setting", "value"],
       risk=lambda a: _policy_risk(a.get("setting"), a.get("value")))
 def change_setting(a, ctx):
@@ -1555,6 +1568,19 @@ def change_setting(a, ctx):
         ok, err = system.apply_firewall(v)
         return f"internet is now '{v}'" + ("" if ok else f" (couldn't change it: {err})") + \
             (" -- the firewall now blocks all outgoing traffic" if v == "no" else "")
+    if s == "firewall":
+        v = _firewall_norm(v)
+        if v not in ("on", "off"):
+            return "error: firewall must be on or off"
+        config.settings.set("firewall", v)
+        from . import rootd_client
+        try:
+            ok, err = json.loads(rootd_client.call("firewall_apply", internet=config.settings.get("internet", "yes"), firewall=v))
+        except rootd_client.RootdError as e:
+            ok, err = False, str(e)
+        msg = ("The firewall is off: other computers can now connect to this one. Say “turn the firewall on” to put it back."
+               if v == "off" else "The firewall is on again.")
+        return msg if ok else msg + " (couldn't change it: " + str(err) + ")"
     if s == "tor":
         ok, note = system.set_tor(_truthy(v))
         return (f"Tor routing is {'on' if _truthy(v) else 'off'}. {note}" if ok else f"Tor failed to start: {note}")

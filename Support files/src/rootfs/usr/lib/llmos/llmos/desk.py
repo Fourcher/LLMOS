@@ -3282,9 +3282,8 @@ class Desk:
         (r"give me root|(?:make me|am i|i want to be|run as) (?:an? )?(?:root|admin(?:istrator)?|superuser)|sudo|how do i get root",
          "You already have it: everything on LLM OS runs as the computer's owner account, root. In a terminal (Ctrl+Alt+T) every command "
          "works without sudo, and I can run any command for you: just say it."),
-        (r"(?:turn on|enable|is|check) (?:the |my )?firewall(?: on| working| running)?|do i have a firewall",
-         "The firewall is always on: nothing from the internet can reach this computer unless it answers something you started. "
-         "\u201cTurn the internet off\u201d blocks everything going out too."),
+        (r"(?:is|check) (?:the |my )?firewall(?: on| working| running)?|do i have a firewall",
+         "__firewall__"),
         (r"(?:check|scan) (?:for|my computer for|this computer for) (?:viruses|malware)|(?:do i have|is there) (?:a |any )?(?:virus|viruses|malware)|antivirus|virus scan",
          "Ordinary viruses are made for Windows and can't run here. To scan files you'll pass on to Windows users anyway, say "
          "\u201cinstall clamav\u201d, then \u201cscan my downloads for viruses with clamscan\u201d."),
@@ -3359,6 +3358,12 @@ class Desk:
     def _howto(self, l2):
         for rx, text in self._HOWTO:
             if re.fullmatch(rx, l2):
+                if text == "__firewall__":     # the status answer follows the firewall setting
+                    if config.settings.get("firewall") == "off":
+                        return ("The firewall is off: other computers can connect to this one. "
+                                "Say “turn the firewall on” to put it back.")
+                    return ("The firewall is always on: nothing from the internet can reach this computer unless it answers something you started. "
+                            "“Turn the internet off” blocks everything going out too.")
                 return text
         return None
 

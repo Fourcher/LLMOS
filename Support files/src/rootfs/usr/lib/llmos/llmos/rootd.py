@@ -247,8 +247,11 @@ def firewall_apply(args):
     internet = args.get("internet")
     if internet is not None and internet not in ("yes", "ask", "no"):
         raise ValueError("bad args: internet")
+    firewall = args.get("firewall")
+    if firewall is not None and firewall not in ("on", "off"):
+        raise ValueError("bad args: firewall")
     from . import system
-    ok, err = system._apply_firewall_root(internet)
+    ok, err = system._apply_firewall_root(internet, firewall=None if firewall is None else firewall != "off")
     return json.dumps([ok, err])
 
 

@@ -60,5 +60,44 @@ check("10.0.2.2" not in system.firewall_rules("yes"), "no 10.0.2.2 rule on real 
 system.launcher_says = lambda key: key == "mic"
 check("10.0.2.2 tcp dport { 8766 }" in system.firewall_rules("yes"), "the mic-bridge port opens only when the launcher provided it")
 
+def input_chain(rules):
+    m = re.search(r"chain input \{(.*?)\n  \}", rules, re.S)
+    return m.group(1) if m else ""
+
+
+print("the owner's firewall off: inbound is open, outbound is unchanged")
+for net in ("yes", "no"):
+    for tor in (False, True):
+        off = system.firewall_rules(net, tor=tor, firewall=False)
+        on = system.firewall_rules(net, tor=tor)
+        check("policy accept" in input_chain(off) and "policy drop" not in input_chain(off),
+              f"internet={net} tor={tor}: input policy is accept")
+        check(input_chain(off).strip() == "type filter hook input priority 0; policy accept;",
+              f"internet={net} tor={tor}: no inbound rules at all")
+        check(output_chain(off) == output_chain(on), f"internet={net} tor={tor}: output chain identical to firewall on")
+check("policy drop" in input_chain(system.firewall_rules("yes")), "firewall on (default): input policy is still drop")
+check(system.firewall_rules("yes", firewall=True) == system.firewall_rules("yes"), "firewall=True is the default text")
+
+print("the setting 'firewall' read by _apply_firewall_root: only 'off' turns it off")
+import types  # noqa: E402
+written = {}
+real_settings = system.config.settings
+real_nft = system.NFT_RULES
+real_sub = system.subprocess
+_nft_dir = tempfile.mkdtemp(prefix="llmos-nft-")
+system.NFT_RULES = os.path.join(_nft_dir, "nftables.nft")
+system.subprocess = types.SimpleNamespace(run=lambda *a, **k: types.SimpleNamespace(returncode=0, stderr=""))
+try:
+    for value, expect_drop in (("off", False), ("on", True), ("banana", True), (None, True)):
+        system.config.settings = {} if value is None else {"firewall": value}
+        system._apply_firewall_root(internet="yes")
+        text = open(system.NFT_RULES).read()
+        check(("policy drop" in input_chain(text)) == expect_drop,
+              f"settings firewall={value!r}: input policy {'drop' if expect_drop else 'accept'}")
+finally:
+    system.config.settings = real_settings
+    system.NFT_RULES = real_nft
+    system.subprocess = real_sub
+
 print("all good" if not fails else f"{fails} FAILED")
 sys.exit(1 if fails else 0)
