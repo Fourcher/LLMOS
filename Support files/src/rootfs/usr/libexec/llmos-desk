@@ -1,9 +1,26 @@
 #!/bin/sh
+# Owner session: when the install names an owner account (/etc/llmos/owner-user), the desk runs as that account
+# with its own home instead of root. Every check must pass; any failure keeps the root path below unchanged.
+if [ "${LLMOS_DESK_INNER:-}" != 1 ] && [ -e /etc/llmos/owner-user ]; then
+    u=$(head -n 1 /etc/llmos/owner-user 2>/dev/null | tr -d ' \t\r\n')
+    if printf '%s\n' "$u" | grep -Eq '^[a-z_][a-z0-9_-]{0,31}$' && [ "$u" != root ]; then
+        pw=$(getent passwd "$u" 2>/dev/null) || pw=""
+        uid=$(printf '%s\n' "$pw" | cut -d: -f3)
+        home=$(printf '%s\n' "$pw" | cut -d: -f6)
+        case "$home" in /*) ;; *) home="" ;; esac
+        if [ -n "$pw" ] && [ -n "$home" ] && printf '%s\n' "$uid" | grep -Eq '^[1-9][0-9]*$' \
+            && mkdir -p /run/llmos && chown -R "$u":owner /run/llmos && chmod 700 /run/llmos; then
+            LLMOS_DESK_INNER=1 LLMOS_DESK_HOME=$home USER=$u LOGNAME=$u
+            export LLMOS_DESK_INNER LLMOS_DESK_HOME USER LOGNAME
+            exec su -p -s /bin/sh "$u" -c 'exec /usr/libexec/llmos-desk'
+        fi
+    fi
+fi
 # Start the graphical desk on this screen: seat daemon -> labwc compositor
 # -> the desk application. Falls back to the text console if the graphical
 # stack is missing. Everything renders on the CPU when there is no 3D
 # acceleration (a virtual machine); on real graphics hardware Mesa is used.
-export HOME=/root LANG=C.UTF-8 PYTHONUNBUFFERED=1
+export HOME=${LLMOS_DESK_HOME:-/root} LANG=C.UTF-8 PYTHONUNBUFFERED=1
 # caches (fontconfig, Mesa's shader cache, Python) live outside the passphrase vault: a cache file
 # mapped from inside it would keep the vault from closing when the owner locks
 export XDG_CACHE_HOME=/var/cache/llmos XDG_CONFIG_HOME=/var/cache/llmos MESA_SHADER_CACHE_DIR=/var/cache/llmos/mesa
