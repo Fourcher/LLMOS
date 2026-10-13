@@ -251,3 +251,6 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 7645e2e (short phrases: font bigger, scale N%, show all apps, blue light, too dark go back) VERIFY PASS — merge after the RUN reports. Open: "private window" (no wm key).
 - [held] 2b63471 (accurate online-model disclosure: q_brain_2 in 6 languages + cloud privacy answer) VERIFY PASS — merge after the RUN reports.
 - [held] 072ef78 ("private window"/"incognito" -> Firefox Ctrl+Shift+P) VERIFY PASS — merge after the RUN reports.
+- [done] (reliability) 1.8.0 RELEASED: "FRESH: dist/ was built from the current OS source (e89fdb3, v1.8.0)"; SHA256SUMS all OK; isosmoke, x86smoke, calc-smoke, desk-smoke exit 0; manifest merged (67a5e5b).
+- [done] (speed) PROBE schema enums: trimming enums saves only ~131 chars; not worth it. Real prefix cost is parameter schemas; compact() strips property descriptions. Shelved.
+- [open] (reliability) unvalidated tool args found by the schema probe: set_appearance.corners (stored raw, desk falls back silently), mail_setup.smtp_security (unknown value -> plaintext silently!), rename_files.spaces (KeyError on unknown), rename_files.case (silently ignored) — validate each with a plain error | role: fix | files: tools.py, mail.py
