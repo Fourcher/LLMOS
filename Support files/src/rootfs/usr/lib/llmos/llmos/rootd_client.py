@@ -10,7 +10,7 @@ import socket
 
 from . import rootd
 
-SOCK = "/run/llmos/root.sock"
+SOCK = "/run/llmos-rootd/root.sock"
 TIMEOUT = 30.0
 MAX_REPLY = 1024 * 1024
 NOT_RUNNING = "the system helper is not running"

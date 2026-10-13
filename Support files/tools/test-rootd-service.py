@@ -80,9 +80,11 @@ try:
         sys.stderr = real_stderr
     m1 = oct(os.stat(sock1).st_mode & 0o777)
     assert m1 == "0o600", m1
+    d1 = oct(os.stat(os.path.dirname(sock1)).st_mode & 0o777)
+    assert d1 == "0o700", d1
     lines = err.getvalue().splitlines()
     assert lines == ["rootd: group 'no-such-group-xyz-svc' missing; socket is root-only"], lines
-    print(f"ok missing group: socket {m1}, stderr: {lines[0]}")
+    print(f"ok missing group: dir {d1}, socket {m1}, stderr: {lines[0]}")
 
     # 2. group present (patched): 0660 and chown called with the gid
     sock2 = os.path.join(tmp, "present", "root.sock")
@@ -107,9 +109,41 @@ try:
         sys.stderr = real_stderr
     m2 = oct(os.stat(sock2).st_mode & 0o777)
     assert m2 == "0o660", m2
-    assert chown_calls == [(sock2, -1, gid)], chown_calls
+    d2 = oct(os.stat(os.path.dirname(sock2)).st_mode & 0o777)
+    assert d2 == "0o750", d2
+    assert chown_calls == [(os.path.dirname(sock2), 0, gid), (sock2, -1, gid)], chown_calls
     assert err2.getvalue() == "", err2.getvalue()
-    print(f"ok group present: socket {m2}, chown {chown_calls[0][1:]} on the group, no stderr")
+    print(f"ok group present: dir {d2} owned root:owner, socket {m2}, no stderr")
+
+    # 3. the default path is the new one, and the client points at the same place
+    assert rootd.SOCK_PATH == "/run/llmos-rootd/root.sock", rootd.SOCK_PATH
+    assert rootd.serve.__defaults__[0] == rootd.SOCK_PATH, rootd.serve.__defaults__
+    spec_c = importlib.util.spec_from_file_location("rootd_client", os.path.join(
+        ROOT, "src", "rootfs", "usr", "lib", "llmos", "llmos", "rootd_client.py"))
+    client_src = open(spec_c.origin, encoding="utf-8").read()
+    assert 'SOCK = "/run/llmos-rootd/root.sock"' in client_src, "client SOCK is not the new path"
+    print("ok default path: /run/llmos-rootd/root.sock in rootd and rootd_client")
+
+    # 4. a symlinked socket directory is refused: exit with a stderr line, nothing bound behind the link
+    real_dir = os.path.join(tmp, "real-dir")
+    os.mkdir(real_dir)
+    link_dir = os.path.join(tmp, "link-dir")
+    os.symlink(real_dir, link_dir)
+    err3 = io.StringIO()
+    real_stderr = sys.stderr
+    sys.stderr = err3
+    try:
+        try:
+            rootd.serve(os.path.join(link_dir, "root.sock"), "no-such-group-xyz-svc")
+            raise AssertionError("serve did not refuse a symlinked directory")
+        except SystemExit as e:
+            code = e.code
+    finally:
+        sys.stderr = real_stderr
+    assert code != 0, code
+    assert err3.getvalue().splitlines() == [f"rootd: {link_dir} is a symlink or not a directory; refusing to start"], err3.getvalue()
+    assert os.listdir(real_dir) == [], os.listdir(real_dir)
+    print(f"ok symlinked dir refused: exit {code}, stderr: {err3.getvalue().strip()}")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
