@@ -17,6 +17,7 @@ intent._note_exists = lambda ref: True      # the host has no lists; the VM chec
 
 SHOW_TRASH = ("show_files", {"path": "~/.Trash"})
 UNDO = ("undo", {})
+UNDO_TRASH = ("undo", {"kind": "trash"})
 EMPTY = ("empty_trash", {})
 
 # (phrase, before, after). before = what match() returned before this change.
@@ -29,10 +30,10 @@ TABLE = [
     ("show the recycle bin", SHOW_TRASH, SHOW_TRASH),
     ("restore from trash", SHOW_TRASH, SHOW_TRASH),
     ("restore my deleted file", SHOW_TRASH, SHOW_TRASH),
-    ("undo delete", None, UNDO),
-    ("undo that delete", None, UNDO),
-    ("restore the last thing I deleted", None, UNDO),
-    ("bring back what I just deleted", None, UNDO),
+    ("undo delete", None, UNDO_TRASH),
+    ("undo that delete", None, UNDO_TRASH),
+    ("restore the last thing I deleted", None, UNDO_TRASH),
+    ("bring back what I just deleted", None, UNDO_TRASH),
     ("undo", UNDO, UNDO),
     ("oops", UNDO, UNDO),
     ("empty the trash", EMPTY, EMPTY),
@@ -119,6 +120,68 @@ ctx = Ctx()
 T.show_files({"path": "~/Downloads"}, ctx)
 check(T._LAST_FOLDER == os.path.join(home, "Downloads"),
       f"show_files ~/Downloads (absent, not a trash name) -> {T._LAST_FOLDER} is not remapped")
+
+# 4. undo kind=trash on a real stack (temp home, temp settings file; nothing under /etc or the real home is touched)
+from llmos import config as C  # noqa: E402
+SET_DIR = tempfile.mkdtemp(prefix="llmos-trash-words-set-")
+C.settings.path = os.path.join(SET_DIR, "settings.json")
+C._write_etc = lambda name, text: open(os.path.join(SET_DIR, name), "w", encoding="utf-8").write(text)
+T.ui.reload_theme = lambda: None
+
+
+def stack_kinds():
+    return [k for k, _d, _t in T._UNDO]
+
+
+def fresh_stack():
+    fresh_home()
+    T._UNDO[:] = []
+
+
+def make_file(home, name):
+    p = os.path.join(home, name)
+    with open(p, "w") as f:
+        f.write("x")
+    return p
+
+
+# 4a. [trash A, settings S] + "undo delete": A comes back, S stays on the stack and in force
+fresh_stack()
+home = os.environ["LLMOS_HOME"]
+a = make_file(home, "a.txt")
+T.delete_file({"path": a}, Ctx())
+T.change_setting({"setting": "autonomy", "value": "hands-on"}, Ctx())
+check(stack_kinds() == ["trash", "settings"], f"stack before undo {stack_kinds()}")
+got = T.undo(dict(intent.match("undo delete")[1]), Ctx())
+check(os.path.exists(a) and not os.path.exists(os.path.join(home, ".Trash", "a.txt")),
+      f"undo kind=trash restores a.txt -> {got!r}")
+check(stack_kinds() == ["settings"], f"settings entry left on the stack {stack_kinds()}")
+check(C.settings.get("autonomy") == "hands-on", f"setting not reverted by undo delete (autonomy {C.settings.get('autonomy')!r})")
+
+# 4b. [settings S] only + "undo delete": nothing to bring back, S untouched
+fresh_stack()
+T.change_setting({"setting": "autonomy", "value": "balanced"}, Ctx())
+before_kinds = stack_kinds()
+got = T.undo({"kind": "trash"}, Ctx())
+check(got == "Nothing deleted to bring back.", f"settings-only stack, undo trash -> {got!r}")
+check(stack_kinds() == before_kinds and C.settings.get("autonomy") == "balanced",
+      f"settings-only stack left untouched {stack_kinds()} autonomy {C.settings.get('autonomy')!r}")
+check(T.undo({"kind": "settings"}, Ctx()).startswith("undone") and C.settings.get("autonomy") != "balanced",
+      "undo kind=settings still reverts the setting")
+
+# 4c. two trashes: the newest comes back first, the older one stays in the trash
+fresh_stack()
+home = os.environ["LLMOS_HOME"]
+a = make_file(home, "a.txt")
+b = make_file(home, "b.txt")
+T.delete_file({"path": a}, Ctx())
+T.delete_file({"path": b}, Ctx())
+got = T.undo({"kind": "trash"}, Ctx())
+check(os.path.exists(b) and not os.path.exists(a) and "b.txt" in got,
+      f"two trashes: newest (b.txt) restored first -> {got!r}")
+got = T.undo({"kind": "trash"}, Ctx())
+check(os.path.exists(a) and "a.txt" in got, f"two trashes: then a.txt -> {got!r}")
+check(T.undo({"kind": "trash"}, Ctx()) == "Nothing deleted to bring back.", "empty trash stack -> plain message")
 
 print("all good" if fails == 0 else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

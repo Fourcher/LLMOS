@@ -816,7 +816,7 @@ _TRASH_UNDO = re.compile(r"^\s*(?:please\s+)?(?:undo\s+(?:that\s+|the\s+)?delete
 
 def _notes(text):
     if _TRASH_UNDO.match(text):
-        return ("undo", {})
+        return ("undo", {"kind": "trash"})
     if _TRASH_SHOW.match(text):
         return ("show_files", {"path": "~/.Trash"})
     m = _TRASH.match(text)
