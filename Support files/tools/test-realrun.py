@@ -436,9 +436,9 @@ def main():
         check("vm_text: multi-line output keeps its lines",
               realrun.vm_text("a.txt\nb.txt\n\n[vmctl: matched after 2.2s]\n") == "a.txt\nb.txt",
               repr(realrun.vm_text("a.txt\nb.txt\n\n[vmctl: matched after 2.2s]\n")))
-        check("vm_text: line merely containing vmctl is kept",
+        check("vm_text: trailer glued mid-line is removed, rest of line kept",
               realrun.vm_text("see [vmctl: matched after 1.0s] in text\n[vmctl: matched after 1.0s]\n")
-              == "see [vmctl: matched after 1.0s] in text",
+              == "see  in text",
               repr(realrun.vm_text("see [vmctl: matched after 1.0s] in text\n[vmctl: matched after 1.0s]\n")))
         check("vm_text: TIMEOUT trailer with output -> None",
               realrun.vm_text("partial\n[vmctl: TIMEOUT after 30.4s]\n") is None)
