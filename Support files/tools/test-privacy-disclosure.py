@@ -43,18 +43,28 @@ for b, sent in SENTENCES.items():
 
 # the privacy answer's brain expression, copied from desk.py and run with stubs
 src = open(DESK, encoding="utf-8").read()
-start = src.index("            prov_ = (config.cloud()")
+start = src.index("            svc_ = llm.cloud_label()")
 end = src.index("that company; everything else stays here.\")", start) + len("that company; everything else stays here.\")")
 snippet = textwrap.dedent(src[start:end])
 
 
-def answer(brain, cloud):
+def answer(brain, cloud, label="Claude"):
     cfg = types.SimpleNamespace(cloud=lambda: cloud)
-    llm = types.SimpleNamespace(CLOUD_PROVIDERS={"anthropic": {"name": "Claude"}})
+    llm = types.SimpleNamespace(cloud_label=lambda c=None: label)
     ns = {"config": cfg, "llm": llm, "s_": {"brain": brain} if brain else {}}
     exec(snippet, ns)
     return ns["brain"]
 
+
+# the phrase the answer tells the owner to say must route to brain = "ask" through the intent matcher (intent.py _BRAIN)
+intent_src = open(os.path.join(LLMOS_DIR, "intent.py"), encoding="utf-8").read()
+brain_ns = {"re": re}
+exec(intent_src[intent_src.index("_ONLINE = "):intent_src.index("_CLOUD_SETUP = re.compile")], brain_ns)
+SAY = "ask me before going online"
+m = brain_ns["_BRAIN"].match(SAY)
+check(m is not None and m.group("ask") is not None and not m.group("local") and not m.group("cloud"),
+      f"route: {SAY!r} matches _BRAIN ask group (regex {brain_ns['_BRAIN'].pattern[:60]}...)")
+check(SAY in src and "Say “" + SAY + "” to keep them here." in src, "answer: quoted phrase is the one the test routes")
 
 OLD = "Requests you send to the online model (Claude/ChatGPT) go to that company; everything else stays here."
 LOCAL = "Your requests are answered by the model on this computer."
@@ -63,8 +73,12 @@ CLOUD_ACC = {"provider": "anthropic", "model": "x", "key": "k"}
 cloud_text = answer("cloud", CLOUD_ACC)
 check(cloud_text.startswith("Requests, the recent chat, results from your files or the web, and your name and saved memory go to Claude."),
       "cloud: answer names the recent chat, file/web results, name and saved memory, and the service")
-check("Everything else stays here." in cloud_text and "Say “ask before going online” to keep them here." in cloud_text,
+check("Everything else stays here." in cloud_text and "Say “ask me before going online” to keep them here." in cloud_text,
       "cloud: answer says everything else stays here and how to keep them here")
+chatgpt_text = answer("cloud", {"provider": "openai", "model": "gpt", "key": "k"}, label="ChatGPT")
+check(chatgpt_text.startswith("Requests, the recent chat, results from your files or the web, and your name and saved memory go to ChatGPT. ")
+      and "Claude" not in chatgpt_text, "cloud with label ChatGPT: answer names ChatGPT, not Claude")
+print("  text " + chatgpt_text[:120] + "...")
 check(answer("ask", CLOUD_ACC) == OLD, "ask: answer keeps today's wording")
 check(answer("local", CLOUD_ACC) == LOCAL, "local: answer keeps today's wording")
 check(answer(None, CLOUD_ACC) == LOCAL, "no brain setting: answer keeps today's wording")
