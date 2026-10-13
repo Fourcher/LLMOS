@@ -1,4 +1,4 @@
-<!-- llmos-app: id=calculator-scientific; title=Scientific calculator; size=m; words=scientific sci scientific-calculator -->
+<!-- llmos-app: id=calculator-scientific; title=Scientific calculator; size=m; words=scientific scientific-calculator -->
 <style>
 .calc{display:flex;flex-direction:column;height:100%;gap:10px}
 .screen{background:var(--card);border-radius:var(--r);padding:14px 16px;min-height:84px;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;overflow:hidden}
@@ -21,20 +21,23 @@
 <script>
 // PARSER BEGIN
 const SCI_FN={sqrt:(a)=>Math.sqrt(a),log:(a)=>Math.log10(a),ln:(a)=>Math.log(a),
-  sin:(a,deg)=>Math.sin(deg?a*Math.PI/180:a),cos:(a,deg)=>Math.cos(deg?a*Math.PI/180:a),tan:(a,deg)=>Math.tan(deg?a*Math.PI/180:a)};
+  sin:(a,deg)=>Math.sin(deg?a*Math.PI/180:a),cos:(a,deg)=>Math.cos(deg?a*Math.PI/180:a),tan:(a,deg)=>{if(deg){if(((a%180)+180)%180===90)throw new Error("tan");return Math.tan(a*Math.PI/180)}if(Math.abs(Math.cos(a))<1e-12)throw new Error("tan");return Math.tan(a)}};
 function sciCalc(src,deg){
-  const s=String(src).replace(/×/g,"*").replace(/÷/g,"/").replace(/[−–]/g,"-").replace(/√/g,"sqrt").replace(/π/g,"pi").toLowerCase();
+  let s=String(src).replace(/×/g,"*").replace(/÷/g,"/").replace(/[−–]/g,"-").replace(/√/g,"sqrt").replace(/π/g,"pi").toLowerCase();
+  if(s.includes(",")&&!s.includes("."))s=s.replace(/(\d),(\d)/g,"$1.$2");
   const bad=()=>{throw new Error("bad")};
-  const toks=[];let i=0;
+  const toks=[];let i=0,sp=false;
+  const pushNum=(v,spaced)=>{if(spaced&&toks.length&&toks[toks.length-1].k==="num")bad();toks.push({k:"num",v})};
   while(i<s.length){
     const c=s[i];
-    if(/\s/.test(c)){i++;continue}
-    let m=/^(\d+\.?\d*|\.\d+)/.exec(s.slice(i));
-    if(m){toks.push({k:"num",v:parseFloat(m[1])});i+=m[1].length;continue}
+    if(/\s/.test(c)){sp=true;i++;continue}
+    const spaced=sp;sp=false;
+    let m=/^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/.exec(s.slice(i));
+    if(m){pushNum(parseFloat(m[0]),spaced);i+=m[0].length;continue}
     m=/^[a-z]+/.exec(s.slice(i));
     if(m){const w=m[0];
-      if(w==="pi")toks.push({k:"num",v:Math.PI});
-      else if(w==="e")toks.push({k:"num",v:Math.E});
+      if(w==="pi")pushNum(Math.PI,spaced);
+      else if(w==="e")pushNum(Math.E,spaced);
       else if(Object.prototype.hasOwnProperty.call(SCI_FN,w))toks.push({k:"fn",v:w});
       else bad();
       i+=w.length;continue}
@@ -72,7 +75,8 @@ function sciCalc(src,deg){
 function sciFormat(x){
   if(Number.isNaN(x))return"NaN";
   if(!isFinite(x))return x>0?"Infinity":"-Infinity";
-  return String(Number(x.toPrecision(12)));
+  const r=Number(x.toPrecision(12));
+  return String(Math.abs(r)<1e-12?0:r);
 }
 // PARSER END
 const SCI_KEYS=[

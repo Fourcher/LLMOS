@@ -40,6 +40,8 @@ check("scientific-calculator" in meta.get("words", ""), "header words include 's
 check(any(t["id"] == "calculator-scientific" for t in apps.templates()), "template is listed by apps.templates()")
 t = apps.match_template("scientific calculator")
 check(t is not None and t["id"] == "calculator-scientific", "match_template('scientific calculator') -> calculator-scientific")
+t = apps.match_template("sci-fi")
+check(not (t and t["id"] == "calculator-scientific"), "match_template('sci-fi') is not calculator-scientific")
 t = apps.match_template("a calculator")
 check(t is not None and t["id"] == "calculator", "match_template('a calculator') -> calculator")
 
@@ -64,7 +66,12 @@ else:
             ("1/0", True, "Infinity"), ("(1+2", True, "ERR"), ("foo", True, "ERR"),
             ("sqrt(-1)", True, "NaN"), ("2pi", True, "6.28318530718"), ("2(3)", True, "6"),
             ("sqrt 9", True, "3"), ("2×3÷4", True, "1.5"), ("√16", True, "4"),
-            ("sin(pi/2)", False, "1"), ("1+", True, "ERR"), ("2 3", True, "6"),
+            ("sin(pi/2)", False, "1"), ("1+", True, "ERR"), ("2 3", True, "ERR"),
+            ("cos(90)", True, "0"), ("sin(180)", True, "0"), ("tan(90)", True, "ERR"),
+            ("tan(270)", True, "ERR"), ("tan(45)", True, "1"), ("tan(pi/2)", False, "ERR"),
+            ("1e3", True, "1000"), ("2.5E-4", True, "0.00025"), ("2e", True, "5.43656365692"),
+            ("e", True, "2.71828182846"), ("12 34", True, "ERR"), ("2 pi", True, "ERR"),
+            ("2(3)", True, "6"), ("1,5+1", True, "2.5"), ("1,5,3", True, "ERR"), ("1.5,5", True, "ERR"),
         ]
         script = parser + "\nconst cases=" + json.dumps([[e, d] for e, d, _ in cases]) + ";\n" \
             "console.log(JSON.stringify(cases.map(([e,d])=>{try{return sciFormat(sciCalc(e,d))}catch(x){return 'ERR'}})));\n"
