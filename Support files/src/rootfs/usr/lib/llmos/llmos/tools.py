@@ -3043,6 +3043,8 @@ def check_site(a, ctx):
     import socket
     import ssl
     import urllib.parse
+    if config.settings.get("internet", "yes") == "no":
+        return "The internet is off in Settings, so I can't check that site."
     raw = str(a.get("address", "")).strip().lower()
     host = urllib.parse.urlparse(raw if "://" in raw else "https://" + raw).hostname or ""
     if not host or "." not in host:
