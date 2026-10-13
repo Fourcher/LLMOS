@@ -46,6 +46,19 @@ class Cancelled(Exception):
 
 _OPEN = set()                 # connections to the model in progress (abort() closes them)
 _OPEN_LOCK = threading.Lock()
+_INFLIGHT = 0                 # chat() requests on the on-device model right now
+_INFLIGHT_LOCK = threading.Lock()
+
+
+def _count(delta):
+    global _INFLIGHT
+    with _INFLIGHT_LOCK:
+        _INFLIGHT += delta
+
+
+def busy():
+    """True while a chat request to the on-device model is in progress (any caller)."""
+    return _INFLIGHT > 0
 
 
 def _conn(timeout=900):
@@ -195,6 +208,7 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
     c = _conn()
     with _OPEN_LOCK:
         _OPEN.add(c)
+    _count(1)
     try:
         return _chat_on(c, body, on_text)
     except (OSError, http.client.HTTPException, ValueError) as e:
@@ -204,6 +218,7 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
             raise ModelDown(str(e))
         raise ModelError(str(e)[:200])
     finally:
+        _count(-1)
         with _OPEN_LOCK:
             _OPEN.discard(c)
         c.close()                     # closing mid-stream (Ctrl+C, Stop) makes llama-server stop generating

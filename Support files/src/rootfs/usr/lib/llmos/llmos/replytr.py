@@ -16,7 +16,12 @@ TIMEOUT_S = 4.0          # the longest a reply waits for the model
 MAX_CHARS = 2000         # longer text is not translated (shown in English)
 MAX_ENTRIES = 2000       # the cache keeps this many replies; the oldest are dropped first
 _lock = threading.Lock()  # one reply file is read and written by one thread at a time
+_miss = threading.Lock()  # one model translation at a time; a second miss gets English at once
 _PH = re.compile(r"\{[^{}]*\}")
+_NUM = re.compile(r"\d+")
+_SYSTEM = ("You translate user-interface text. Keep it short and natural. Keep "
+           "placeholders like {name} unchanged. Keep these command words in English: "
+           "settings, models, tasks, memory, audit, voice, shell, clear, lock, shutdown.")  # as llm.translate_strings
 
 
 def _path(code):
@@ -55,21 +60,39 @@ def _translatable(text):
     return 0 < len(text) <= MAX_CHARS and re.search(r"[^\W\d_]", text) is not None
 
 
+def _keeps(text, got):
+    """A translation keeps every number and every {placeholder} of the English, in the same count."""
+    return (sorted(_NUM.findall(got)) == sorted(_NUM.findall(text))
+            and sorted(_PH.findall(got)) == sorted(_PH.findall(text)))
+
+
 def _ask(text, lang):
-    """The model's wording or None. Runs in a worker thread so a hung model cannot hold the reply."""
+    """The model's wording or None. Runs in a worker thread so a hung model cannot hold the reply. The caller
+    holds _miss; the worker releases it when the model call really ends, so an abandoned request still blocks
+    the next miss instead of queueing behind it."""
     out = {}
 
     def run():
         try:
-            r = llm.translate_strings([text], lang)
+            # the same prompt as llm.translate_strings, with the output bounded to the length of the text
+            user = (f"Translate every value into {lang}. Return JSON with exactly the same keys.\n\n"
+                    + json.dumps([text], ensure_ascii=False))
+            schema = {"type": "object", "properties": {text: {"type": "string"}}, "required": [text]}
+            r = llm.complete_json(_SYSTEM, user, schema, max_tokens=max(64, 3 * len(text) // 2))
             if isinstance(r, dict):
                 r = r.get(text)
             out["t"] = r
         except Exception:
             pass
+        finally:
+            _miss.release()
 
-    th = threading.Thread(target=run, daemon=True)
-    th.start()
+    try:
+        th = threading.Thread(target=run, daemon=True)
+        th.start()
+    except Exception:
+        _miss.release()
+        return None
     th.join(TIMEOUT_S)
     return None if th.is_alive() else out.get("t")
 
@@ -85,9 +108,12 @@ def translate(text, lang):
             hit = _read(path).get(text)
         if isinstance(hit, str) and hit.strip():
             return hit
-        got = _ask(text, lang)
-        if not (isinstance(got, str) and got.strip()
-                and sorted(_PH.findall(got)) == sorted(_PH.findall(text))):
+        if llm.busy():                # the owner's turn is using the model: no translation now
+            return text
+        if not _miss.acquire(blocking=False):   # another translation is in flight
+            return text
+        got = _ask(text, lang)       # releases _miss when its model call ends
+        if not (isinstance(got, str) and got.strip() and _keeps(text, got)):
             return text
         with _lock:
             cache = _read(path)
