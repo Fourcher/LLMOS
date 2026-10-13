@@ -85,3 +85,9 @@ Rule for every FIX spec that changes existing behaviour: open with a PROBE-sourc
 - 2026-10-12: zsh runs of the host loop gave false FAILs even with </dev/null; specs should use `bash -c 'for t in tools/test-*.py; do python3 "$t" >/dev/null 2>&1 </dev/null || echo "FAIL $t"; done'`.
 - 2026-10-13: macOS revoked all access to /Volumes/Files for ~minutes (EPERM even unsandboxed); the 1.8.1 build died at the x86 ISO extraction and two workers were stranded. Recovery: wait for access, re-run release.sh all, copy stranded files into a fresh worktree. If it recurs, the owner-side fix is Full Disk Access / Removable Volumes for the terminal app.
 - 2026-10-13: host suites in every spec are now `bash tools/hostloop.sh` (from "Support files/"): reruns failures once, waits out macOS lockouts, prints FAIL only for real repeats, OUTAGE for lockouts; last line "HOSTLOOP: n run, f failed, o outage". Add `--skip test-recent-files.py` only if a known flake must be ignored.
+- 2026-10-13 review (PROBE, 76 merges since 10-12 noon). Rules added:
+  * Phrase-route FIX specs carry a fixed adversarial list: base; base + " please"; base + " thanks"; leading "can you please"; a contraction; the word-order swap ("turn off the X" / "turn the X off"); one near-miss sentence that must NOT route.
+  * A FAIL that also happens on the branch's base is "base-inherited" and does not block a VERIFY PASS.
+  * VERIFY returns PASS/FAIL on the spec only; wording/style remarks become [note] lines in queue.md, not FAILs.
+  * When a held branch contains an older held branch, the older line is marked superseded in the same commit; queue.md keeps ONE merge-order list of chain heads.
+  * Host suites only via tools/hostloop.sh; a run voided by a macOS lockout is VOID (re-run), never FAIL.
