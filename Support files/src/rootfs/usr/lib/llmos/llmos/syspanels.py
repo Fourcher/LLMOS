@@ -582,7 +582,12 @@ def clear_caches():
 
 # ---- updates (Alpine's signed package repositories)
 
-def updates_check():
+def updates_check(asked=False):
+    s = config.settings.get("internet")
+    if s == "no":
+        return None, "The internet is off in Settings, so I can't check for updates."
+    if s == "ask" and not asked:
+        return None, "Say “check for updates” to look online."
     rc, out, err = system.apk_update()
     if rc:
         return None, (err.strip() or "could not reach the update server (is the internet on?)")[:200]
@@ -591,8 +596,8 @@ def updates_check():
     return pk, ""
 
 
-def updates_panel():
-    pk, err = updates_check()
+def updates_panel(*, asked=False):
+    pk, err = updates_check(asked=asked)
     if pk is None:
         blocks = [{"type": "text", "text": err}]
     elif not pk:

@@ -3423,7 +3423,7 @@ class Desk:
             if rx.fullmatch(low):
                 fn = {"processes": syspanels.processes, "drives": syspanels.drives, "displays": syspanels.displays,
                       "bluetooth": syspanels.bluetooth, "printers": syspanels.printers, "about": syspanels.about,
-                      "input": syspanels.input_panel, "storage": syspanels.storage, "updates": syspanels.updates_panel}[which]
+                      "input": syspanels.input_panel, "storage": syspanels.storage, "updates": lambda: syspanels.updates_panel(asked=True)}[which]
                 threading.Thread(target=lambda: self.open_window(fn()), daemon=True).start()
                 self.last_reply = self._said = {"processes": "Here's what is running.", "drives": "Here are the drives.", "displays": "Here are the screens.",
                                                 "bluetooth": "Here's Bluetooth.", "printers": "Here are the printers.", "about": "Here's this computer.",
