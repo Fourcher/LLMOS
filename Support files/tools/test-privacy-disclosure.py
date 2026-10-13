@@ -64,19 +64,23 @@ SAY = "ask me before going online"
 m = brain_ns["_BRAIN"].match(SAY)
 check(m is not None and m.group("ask") is not None and not m.group("local") and not m.group("cloud"),
       f"route: {SAY!r} matches _BRAIN ask group (regex {brain_ns['_BRAIN'].pattern[:60]}...)")
-check(SAY in src and "Say “" + SAY + "” to keep them here." in src, "answer: quoted phrase is the one the test routes")
+check(SAY in src and "Say “" + SAY + "” to keep things here unless you agree." in src, "answer: quoted phrase is the one the test routes")
 
 OLD = "Requests you send to the online model (Claude/ChatGPT) go to that company; everything else stays here."
 LOCAL = "Your requests are answered by the model on this computer."
 CLOUD_ACC = {"provider": "anthropic", "model": "x", "key": "k"}
 
 cloud_text = answer("cloud", CLOUD_ACC)
-check(cloud_text.startswith("Requests, the recent chat, results from your files or the web, and your name and saved memory go to Claude."),
-      "cloud: answer names the recent chat, file/web results, name and saved memory, and the service")
-check("Everything else stays here." in cloud_text and "Say “ask me before going online” to keep them here." in cloud_text,
-      "cloud: answer says everything else stays here and how to keep them here")
+CLOUD_HEAD = ("With the online assistant on, each request goes to Claude with the recent chat, anything I look at to answer it "
+              "(files, mail, web pages, the screen), and your name and saved memory. What I don't look at stays here. ")
+check(cloud_text.startswith(CLOUD_HEAD), "cloud: answer names the recent chat, anything looked at (files, mail, web, screen), name and saved memory, and the service")
+check("mail" in cloud_text and "your name and saved memory" in cloud_text, "cloud: answer says mail goes and name and memory go")
+check("Everything else stays here" not in cloud_text and "Requests, the recent chat" not in cloud_text,
+      "cloud: old 'Everything else stays here' and 'results from your files or the web' wording is gone")
+check("Say “ask me before going online” to keep things here unless you agree." in cloud_text,
+      "cloud: answer tells the owner how to keep things here")
 chatgpt_text = answer("cloud", {"provider": "openai", "model": "gpt", "key": "k"}, label="ChatGPT")
-check(chatgpt_text.startswith("Requests, the recent chat, results from your files or the web, and your name and saved memory go to ChatGPT. ")
+check(chatgpt_text.startswith("With the online assistant on, each request goes to ChatGPT with the recent chat, ")
       and "Claude" not in chatgpt_text, "cloud with label ChatGPT: answer names ChatGPT, not Claude")
 print("  text " + chatgpt_text[:120] + "...")
 check(answer("ask", CLOUD_ACC) == OLD, "ask: answer keeps today's wording")
