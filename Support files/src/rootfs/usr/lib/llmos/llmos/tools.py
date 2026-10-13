@@ -2712,8 +2712,15 @@ def find_by_meaning(a, ctx):
     vision = kind in ("photos", "any") and any(True for _ in meaning._candidates(("image",)))
     try:
         if not meaning.ready(vision=vision):
+            ask = config.settings.get("internet") == "ask"
+            if ask and (getattr(ctx, "headless", False) or not hasattr(ctx, "confirm_network")):
+                meaning.fetch(vision=vision)   # refuses under "ask" without the owner: nothing is downloaded unattended
+            if ask:
+                size = "865 MB" if vision else "310 MB"
+                if not ctx.confirm_network("find_by_meaning", {"url": f"search model download, {size}"}):
+                    return "you declined internet access for this. Continue without it."
             ctx.status("getting the search model once (310 MB" + (" + 555 MB for pictures" if vision else "") + "), checked before use…")
-            meaning.fetch(vision=vision, progress=lambda d, t: ctx.status(f"search model: {d * 100 // max(1, t)}%"))
+            meaning.fetch(vision=vision, progress=lambda d, t: ctx.status(f"search model: {d * 100 // max(1, t)}%"), allowed=ask)
         ctx.status("looking through your files…")
         meaning.index(("doc", "other"), limit=400)
         if vision and kind in ("photos", "any"):

@@ -59,10 +59,13 @@ def ready(vision=False):
     return ok and (not vision or os.path.exists(_file(VISION)))
 
 
-def fetch(vision=False, progress=None):
-    """Download the model (and the picture part when asked), verified before use. Raises with the reason."""
+def fetch(vision=False, progress=None, allowed=False):
+    """Download the model (and the picture part when asked), verified before use. Raises with the reason.
+    Under internet "ask" it downloads only when the owner has asked for it (allowed=True)."""
     if config.settings.get("internet") == "no":
         raise RuntimeError("the internet is switched off, so the search model can't be downloaded")
+    if config.settings.get("internet") == "ask" and not allowed:
+        raise RuntimeError("Searching by meaning needs a one-time download of 310 MB. Say “download the search model” to get it.")
     os.makedirs(_dir(), exist_ok=True)
     for m in [TEXT] + ([VISION] if vision else []):
         dest = _file(m)
