@@ -249,3 +249,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 200a0a0 (keyboard: clock, Enter confirms non-danger dialogs, radio arrows, textarea focus ring) VERIFY PASS — merge after the RUN reports. Minor: Space on the clock also moves focus to the chat input.
 - [held] 006e4ef (clear routines/activity log; log capped at 2 MB; never follows a symlink) VERIFY PASS — merge after the RUN reports.
 - [held] 7645e2e (short phrases: font bigger, scale N%, show all apps, blue light, too dark go back) VERIFY PASS — merge after the RUN reports. Open: "private window" (no wm key).
+- [held] 2b63471 (accurate online-model disclosure: q_brain_2 in 6 languages + cloud privacy answer) VERIFY PASS — merge after the RUN reports.
