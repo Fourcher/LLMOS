@@ -9,7 +9,10 @@ cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 FW=/opt/homebrew/share/qemu
 ISO=build/cache/alpine-virt-3.24.2-aarch64.iso
 DISK=build/work/build-disk.qcow2
-LOG=build/work/build-serial.log
+LOGDIR=${LLMOS_LOGDIR:-${TMPDIR:-/tmp}/llmos-build}
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/build-serial.log"
+trap 'cp "$LOG" build/work/ 2>/dev/null || true' EXIT
 V="python3 tools/vmctl.py"
 
 echo "==> payload"
@@ -30,7 +33,7 @@ qemu-img create -f qcow2 "$DISK" 16G >/dev/null
 qemu-system-aarch64 -machine virt -accel hvf -cpu host -smp 4 -m 4096 \
   -bios $FW/edk2-aarch64-code.fd \
   -display none -monitor unix:run/bmon.sock,server=on,wait=off \
-  -chardev socket,id=ser0,path=run/bser.sock,server=on,wait=off,logfile="$PWD/$LOG",logappend=on -serial chardev:ser0 \
+  -chardev socket,id=ser0,path=run/bser.sock,server=on,wait=off,logfile="$LOG",logappend=on -serial chardev:ser0 \
   -nic user,model=virtio-net-pci \
   -drive file="$DISK",format=qcow2,if=virtio,discard=unmap \
   -device virtio-scsi-pci -drive if=none,id=cd,file=$ISO,format=raw,media=cdrom,readonly=on -device scsi-cd,drive=cd \

@@ -9,7 +9,10 @@ ISO=build/cache/alpine-virt-3.24.2-x86_64.iso
 KERNEL=build/cache/x86iso/boot/vmlinuz-virt
 INITRD=build/cache/x86iso/boot/initramfs-virt
 DISK=build/work/build-x86.qcow2
-LOG=build/work/build-x86-serial.log
+LOGDIR=${LLMOS_LOGDIR:-${TMPDIR:-/tmp}/llmos-build}
+mkdir -p "$LOGDIR"
+LOG="$LOGDIR/build-x86-serial.log"
+trap 'cp "$LOG" build/work/ 2>/dev/null || true' EXIT
 V="python3 tools/vmctl.py"
 
 echo "==> Secure Boot boot chain (Debian's signed shim, GRUB, kernel; verified)"
@@ -35,7 +38,7 @@ qemu-system-x86_64 -machine q35 -accel tcg,thread=multi -cpu max -smp 4 -m 3072 
   -append "modules=loop,squashfs,sd-mod,usb-storage,sr-mod quiet console=ttyS0,115200" \
   -cdrom "$ISO" \
   -display none -monitor unix:run/xmon.sock,server=on,wait=off \
-  -chardev socket,id=ser0,path=run/xser.sock,server=on,wait=off,logfile="$PWD/$LOG",logappend=on -serial chardev:ser0 \
+  -chardev socket,id=ser0,path=run/xser.sock,server=on,wait=off,logfile="$LOG",logappend=on -serial chardev:ser0 \
   -nic user,model=virtio-net-pci \
   -drive file="$DISK",format=qcow2,if=virtio,discard=unmap \
   -daemonize -pidfile run/xbuild.pid
