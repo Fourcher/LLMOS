@@ -68,8 +68,8 @@ def run_case(label, patch_name, exc, args, expect_title, failures):
             failures.append(f"{label}: body contains {bad!r}: {texts!r}")
     if not texts or not all(t.strip() for t in texts):
         failures.append(f"{label}: empty body")
-    if "Tell the owner exactly this" in str(ret):
-        failures.append(f"{label}: model return still says 'exactly this'")
+    if "Reply: " not in str(ret) or not str(ret).split("Reply: ", 1)[1].strip():
+        failures.append(f"{label}: model return has no 'Reply: <sentence>': {str(ret)!r}")
     print(f"ok {label}: {spec.get('title')!r} -> {texts[0]!r}")
 
 

@@ -3,6 +3,7 @@ user's chosen autonomy level."""
 import json
 import os
 import re
+import threading
 import time
 
 from . import ui, config, i18n, intent, llm, mail, store, tools
@@ -247,7 +248,7 @@ _PLAIN_REPLY = {"show_panel", "system_panel", "show_files", "set_appearance", "c
 
 
 def _failed(out):
-    return str(out).lower().startswith(("error", "not done", "blocked", "the owner declined", "skipped", "no such tool"))
+    return str(out).lower().startswith(("error", "not done", "blocked", "you declined", "skipped", "no such tool"))
 
 
 def _maybe_save_routine(user_text, calls):
@@ -318,6 +319,8 @@ def _replay(ctx, user_text, rt):
     if online:
         _going_online(ctx, True)
     chat = llm.cloud_chat if online else llm.chat
+    if not online:
+        _wait_warm()             # the local model slot: let a warm-up in progress finish first
     stream = ctx.new_stream()
     try:
         text = chat(msgs, on_text=None, max_tokens=400).get("content", "").strip()
@@ -370,7 +373,39 @@ def build_messages(ctx, user_text, history, private=False):
     return msgs
 
 
+_warm_done = threading.Event()   # set when the warm-up has finished (success, failure or exception)
+_warm_started = False            # a warm-up has begun in this process
+_warm_running = 0                # warm-ups in progress right now (overlapping calls are counted, not overwritten)
+_warm_lock = threading.Lock()
+WARM_WAIT = 60                   # seconds a model turn waits for a warm-up still in progress
+
+
 def warm_up():
+    """Run the warm-up (see _warm_prefix) and mark it done for turns waiting on it, whatever happens.
+    Overlapping warm-ups count: the event is cleared when the first starts and set only when the last ends."""
+    global _warm_started, _warm_running
+    with _warm_lock:
+        _warm_running += 1
+        _warm_started = True
+        _warm_done.clear()
+    try:
+        _warm_prefix()
+    finally:
+        with _warm_lock:
+            _warm_running -= 1
+            if _warm_running == 0:
+                _warm_done.set()
+
+
+def _wait_warm():
+    """A turn sent while the warm-up is still prefilling would queue behind it on the one model slot and
+    prefill the prefix a second time, so the model call waits for it (at most WARM_WAIT). No warm-up
+    started, or it is done: no wait."""
+    if _warm_started and not _warm_done.is_set():
+        _warm_done.wait(WARM_WAIT)
+
+
+def _warm_prefix():
     """Process the static prefix (system prompt + tools) once so the first
     real request doesn't pay for it. Called in the background at startup.
     The prefix must match the first real turn exactly: the context size (which picks the tool list) is waited for
@@ -560,7 +595,7 @@ def _screen_steps(ctx, text):
         time.sleep(1)
         try:
             from . import control
-            model_notes.append("(For you, the model, not the owner: the screen now shows " + control.describe(limit=50) + ")")
+            model_notes.append("(For you, the model, not for reading out: the screen now shows " + control.describe(limit=50) + ")")
         except Exception:
             pass
     return ", ".join(left), notes + model_notes, page_text, result_value
@@ -798,6 +833,8 @@ def run(ctx, user_text, history):
         for step in range(MAX_STEPS):
             if getattr(ctx, "cancel", None) is not None and ctx.cancel.is_set():
                 raise Cancelled()
+            if where != "cloud":
+                _wait_warm()          # the local model slot: let a warm-up in progress finish first
             stream = ctx.new_stream()
             est = expect_seconds(where, fresh)
             if est:
@@ -931,17 +968,17 @@ def _cap(s):
 # a tool's result ends with a note for the model ("Say one sentence at most.", "do not repeat them, ..."); when the
 # OS answers a shortcut itself, that note must not reach the owner
 _MODEL_NOTE = re.compile(r"(?:[.;]\s*|\s+)(?:(?:do not (?:repeat|describe)[^.;]*[.;,]\s*)?say one sentence at most(?:[;,][^.]*)?|"
-                         r"done: tell the owner[^.]*(?:\.[^.]*call no other tool)?|done: if the request asked for more[^.]*|tell the owner exactly this[^.]*)\.?\s*$", re.I)
+                         r"done: reply[^.]*(?:\.[^.]*call no other tool)?|done: if the request asked for more[^.]*|reply with exactly this[^.]*)\.?\s*$", re.I)
 # words meant for the model that must never reach the owner's screen, wherever they come from
 _PATH_NOTE = re.compile(r"\s*\[path for a next step: [^\]]*\]")
-_INTERNAL = re.compile(r"[^.!?\n]*(?:tell the owner exactly this|the owner did not ask for|do only what was asked|call no other tool|"
+_INTERNAL = re.compile(r"[^.!?\n]*(?:reply with exactly this|you did not ask for '|do only what was asked|call no other tool|"
                        r"say one sentence at most|do not repeat (?:them|it|its contents)|if the request asked for more|if the request has more steps|"
                        r"use that for any next step)[^.!?\n]*[.!?]?\s*", re.I)
 
 
 def scrub(text):
     """The final words, without notes addressed to the model ('Tell the owner exactly this:' keeps what follows it)."""
-    t = re.sub(r"(?i)\s*tell the owner exactly this:?\s*(\w)?", lambda m: " " + (m.group(1) or "").upper(), str(text or ""))
+    t = re.sub(r"(?i)\s*reply with exactly this:?\s*(\w)?", lambda m: " " + (m.group(1) or "").upper(), str(text or ""))
     t = _INTERNAL.sub("", _PATH_NOTE.sub("", t))
     t = re.sub(r"\s*\(\s*#[0-9a-fA-F]{3,8}(?:\s*(?:and|,)\s*#[0-9a-fA-F]{3,8})*\s*\)|\s*#[0-9a-fA-F]{6}\b", "", t).strip()
     if not t and str(text or "").strip():
@@ -1013,9 +1050,9 @@ def _shortcut_words(name, args, out):
         return f"No email from {who} that I can find." if who else "I couldn't find that email."
     if low.startswith("error: "):
         return _cap(_plain_error(str(out)[7:]).rstrip(".")) + "."
-    if low.startswith("the owner declined this"):
+    if low.startswith("you declined this"):
         return "Okay, I left it alone."
-    if low.startswith("the owner declined internet"):
+    if low.startswith("you declined internet"):
         return "Okay, no internet for that."
     if low.startswith("blocked: internet use is turned off"):
         return "Internet use is turned off in settings, so I can't do that."
@@ -1098,7 +1135,7 @@ def _shortcut_words(name, args, out):
             return f"Saved in Pictures as {m.group(1)}" + (" and copied: paste it anywhere with Ctrl+V." if m.group(2) else ".")
         return out
     if name == "open_file":
-        if " is shown on the owner's screen" in out:
+        if " is shown on screen" in out:
             return "Here it is."
         return _cap(out.split(". Say")[0]) + "." if low.startswith(("now playing", "opened ")) else out
     if name == "delete_file":
@@ -1163,7 +1200,7 @@ def _shortcut_words(name, args, out):
             return out[0].upper() + out[1:].split(" (sha256")[0] + "."
         return out
     if name == "install_to_disk":
-        return out.split(". The owner sees")[0].split(". Do not call")[0].rstrip(".") + "."
+        return out.split(". You see this on screen")[0].split(". Do not call")[0].rstrip(".") + "."
     if name in ("show_image", "set_wallpaper"):
         m = re.match(r"(shown|wallpaper set): (.+?) \((.*?)\)\. Source: (\S+)", out)
         if m:
@@ -1191,7 +1228,7 @@ def _shortcut_words(name, args, out):
         if low.startswith("email set up"):
             return "E" + out[1:] + "."
         if low.startswith("error: "):        # the tool's text is written for the model; give the owner the cause
-            return ("Email setup failed: " + out[len("error: "):].split(". Tell the owner", 1)[0] +
+            return ("Email setup failed: " + out[len("error: "):].split(". Reply with exactly this", 1)[0] +
                     ". Check the address, the password (Gmail, Outlook, Yahoo and iCloud need an app password) "
                     "and the server names, then try again.")
         return out
@@ -1313,8 +1350,8 @@ def execute(ctx, name, arguments):
     current = getattr(ctx, "current_request", "") or ""
     if need and current and not (need(current) if callable(need) else re.search(need, current, re.I)):
         store.audit(name, arguments, "blocked: not asked for in this request", allowed=False)
-        return (f"not done: the owner did not ask for '{name}' in this request. Do only what was asked; "
-                f"if this seems needed, say so and let the owner decide.")
+        return (f"not done: you did not ask for '{name}' in this request. Do only what was asked; "
+                f"if this seems needed, say so and ask them to decide.")
     try:
         args = json.loads(arguments) if isinstance(arguments, str) and arguments.strip() else (arguments or {})
         if not isinstance(args, dict):
@@ -1331,11 +1368,11 @@ def execute(ctx, name, arguments):
         pol = config.settings.get("internet", "yes")
         if pol == "no":
             store.audit(name, shown, "blocked: internet off", allowed=False)
-            return ("blocked: internet use is turned off in settings. Tell the owner that; do not retry, and do not "
+            return ("blocked: internet use is turned off in settings. Reply that; do not retry, and do not "
                     "answer from memory anything that changes (news, prices, scores, quotes, live numbers); a settled fact (a capital, a height, a date) you may give from memory, saying you couldn't check it.")
         if pol == "ask" and not ctx.confirm_network(name, shown):
             store.audit(name, shown, "denied network", allowed=False)
-            return "the owner declined internet access for this. Continue without it."
+            return "you declined internet access for this. Continue without it."
 
     # unattended runs (the scheduler) go through ctx.confirm_action for anything irreversible: it follows the owner's
     # autonomy level (hands-off runs what was scheduled; balanced/hands-on leave it undone), and never a security change
@@ -1360,7 +1397,7 @@ def execute(ctx, name, arguments):
     if always or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
         if not ctx.confirm_action(tool, shown, risk):
             store.audit(name, shown, "denied", allowed=False)
-            return f"the owner declined this ({name}). Do not retry it; continue or stop."
+            return f"you declined this ({name}). Do not retry it; continue or stop."
 
     ctx.begin_tool(tool, shown, risk)
     try:
