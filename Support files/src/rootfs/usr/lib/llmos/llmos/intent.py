@@ -840,7 +840,15 @@ _TRASH = re.compile(r"^\s*(?:please\s+)?(?:(?P<empty>empty)\s+(?:my\s+|the\s+)?(
                     r"|(?:restore|put\s+back|undelete)\s+(?P<name>.+?)\s+from\s+(?:my\s+|the\s+)?trash|(?:restore|put\s+back|undelete)\s+(?P<file>\S+\.\w{1,5}))\s*[.!]?\s*$", re.I)
 
 
+_TRASH_SHOW = re.compile(r"^\s*(?:please\s+)?(?:get\s+(?:my\s+)?(?:file|files|stuff|things)\s+back|put\s+back\s+what\s+i\s+deleted|open\s+the\s+recycle\s+bin|show\s+the\s+recycle\s+bin)\s*[.!?]?\s*$", re.I)
+_TRASH_UNDO = re.compile(r"^\s*(?:please\s+)?(?:undo\s+(?:that\s+|the\s+)?delete|restore\s+the\s+last\s+thing\s+i\s+deleted|bring\s+back\s+what\s+i\s+just\s+deleted)\s*[.!?]?\s*$", re.I)
+
+
 def _notes(text):
+    if _TRASH_UNDO.match(text):
+        return ("undo", {"kind": "trash"})
+    if _TRASH_SHOW.match(text):
+        return ("show_files", {"path": "~/.Trash"})
     m = _TRASH.match(text)
     if m:
         if m.group("empty"):

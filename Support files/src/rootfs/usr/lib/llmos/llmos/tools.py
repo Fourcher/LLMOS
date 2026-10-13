@@ -2176,6 +2176,9 @@ def show_files(a, ctx):
     if a.get("view"):
         config.settings.set("files_view", view)
     path = _path(a.get("path") or (_LAST_FOLDER if (a.get("sort") or a.get("hidden") is not None) and _LAST_FOLDER else "~"))
+    # the model says "~/Trash" or "~/Recycle Bin" for the trash; when no such folder exists, show the real trash (~/.Trash)
+    if not os.path.exists(path) and path.rstrip("/") in {os.path.join(config.home().rstrip("/"), n) for n in ("Trash", "trash", "Recycle Bin", "bin")}:
+        path = _trash()
     _LAST_FOLDER = path
     if path.rstrip("/") == _trash():
         os.makedirs(path, exist_ok=True)       # nothing deleted yet: an empty trash, not an error
@@ -3864,11 +3867,21 @@ def focus_window(a, ctx):
     return f"{name} is in front. Now on screen:\n" + _screen_after(ctx=ctx, before=before)
 
 
-@tool("undo", "Take back the last change the owner made: a look or setting change, or a file moved to the trash.", {}, [], risk=CHANGE)
+@tool("undo", "Take back the last change the owner made: a look or setting change, or a file moved to the trash. "
+      "kind (optional): trash = bring back the most recent file deleted, even if a setting changed since; "
+      "settings, move or made = the most recent change of that kind. Left out, it takes back the last change of any kind.",
+      {"kind": STR}, [], risk=CHANGE)
 def undo(a, ctx):
-    if not _UNDO:
-        return "there is nothing to undo"
-    kind, data, _ = _UNDO.pop()
+    want = str(a.get("kind") or "").strip().lower()
+    if want:
+        idx = next((i for i in range(len(_UNDO) - 1, -1, -1) if _UNDO[i][0] == want), None)
+        if idx is None:
+            return "Nothing deleted to bring back." if want == "trash" else "Nothing to undo."
+        kind, data, _ = _UNDO.pop(idx)
+    else:
+        if not _UNDO:
+            return "there is nothing to undo"
+        kind, data, _ = _UNDO.pop()
     if kind == "settings":
         before = config.settings.get("internet")
         before_fw = config.settings.get("firewall", "on")
