@@ -73,7 +73,7 @@
   // ---------------------------------------------------------------- theme / strings
   function applyTheme(m) {
     const root = document.documentElement.style;
-    for (const k of ["--bg", "--fg", "--accent"]) root.removeProperty(k);
+    for (const k of ["--bg", "--fg", "--accent", "--on-accent", "--on-danger"]) root.removeProperty(k);
     for (const [k, v] of Object.entries(m.css || {})) root.setProperty(k, v);
     document.body.className = m.mode === "light" ? "light" : "dark";
     let st = $("owner-style");
@@ -189,7 +189,7 @@
     const dot = m.model_ok ? (busy ? "busy" : "ok") : "";
     box.append(chip(`<i class="dot ${dot}"></i>${esc(m.model || t("loading_model"))}`, "models", (m.host_gpu ? t("d_host_gpu") + " · " : "") + t("models")));
     fullTrust = m.autonomy === "hands-off";
-    box.append(chip(esc({ "hands-off": "Full trust", "balanced": "Asks if risky", "hands-on": "Asks first" }[m.autonomy] || m.autonomy), "settings", t("settings")));
+    box.append(chip(esc({ "hands-off": t("q_autonomy_0_s"), "balanced": t("q_autonomy_1_s"), "hands-on": t("q_autonomy_2_s") }[m.autonomy] || m.autonomy), "settings", t("settings")));
     if (m.internet !== "yes") box.append(chip(esc(m.internet === "no" ? "offline" : "internet: ask"), "settings"));
     if (m.brain && m.brain !== "local") { const c = chip(`<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M6.5 20a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 17.7 9.1 4 4 0 0 1 18 17h-.5v3h-11z"/></svg> ${esc(m.brain === "cloud" ? (m.cloud || t("v_not_set_up")) : t("d_brain_chip_ask"))}`, "settings", t("s_brain")); c.classList.add("online"); box.append(c); }
     if (m.tor) box.append(chip("Tor", "settings"));
@@ -245,10 +245,12 @@
   $("lock-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") $("lock-go").click(); });
 
   // ---------------------------------------------------------------- first-run set-up
+  // a trailing note reads as its own sentence: capital first letter, full stop at the end (display only, not in i18n)
+  const slowNote = s => { s = String(s); s = s.charAt(0).toUpperCase() + s.slice(1); return /[.!?。！？]$/.test(s) ? s : s + "."; };
   const wizard = {
     active: false, i: 0, data: {}, answers: {}, tz: null, wifiSel: null, nets: null, wifiNeeded: false, cloudNeeded: false, summary: null,
     steps: ["welcome", "language", "name", "timezone", "profile", "passphrase", "wifi", "cloud", "done"],
-    start(data) { this.active = true; this.i = 0; this.data = data; this.answers = {}; this.capTier = null; this.tz = data.tz_label || null; this.wifiNeeded = false; this.cloudNeeded = false; this.summary = null; this.nets = null; this.answers.language = data.lang_hint || "en"; this.render(); },
+    start(data) { this.active = true; this.i = 0; this.data = data; this.answers = {}; this.capTier = null; this.modelPick = ""; this.tz = data.tz_label || null; this.wifiNeeded = false; this.cloudNeeded = false; this.summary = null; this.nets = null; this.answers.language = data.lang_hint || "en"; this.render(); },
     step() { return this.steps[this.i]; },
     hidden(s) { return (s === "wifi" && !this.wifiNeeded) || (s === "cloud" && !this.cloudNeeded); },
     visible() { return this.steps.filter(s => s !== "welcome" && s !== "done" && !this.hidden(s)); },
@@ -349,11 +351,11 @@
             opts = ts.map(x => ({ label: t(`q_capability_${TIER.indexOf(x.tier)}_s`), on: x === st && sel === st,
                                   pick: () => { this.capTier = x.tier; this.modelPick = ""; fill(q); } }));
             desc = fmt("w_model_need", { model: sel.name, need: sel.need_gb, ram: sys.ram_gb || "?" }) + " " +
-                   (sel.installed ? t("w_model_ready") : fmt("w_model_dl", { size: sel.size_gb })) + (sel.bigger ? " " + t("w_model_slow") : "");
+                   (sel.installed ? t("w_model_ready") : fmt("w_model_dl", { size: sel.size_gb })) + (sel.bigger ? " " + slowNote(t("w_model_slow")) : "");
             const r = ts.find(x => x.tier === rec().capability);
             if (r && ts.length > 1) recNote(qx, r === sel, t(`q_capability_${TIER.indexOf(r.tier)}_s`));
             // "More models": a plain link that opens a list of every model; a row picks that model id into P.model
-            const more = el("button", "btn", esc(t("w_more_models")));
+            const more = el("button", "btn morem", esc(t("w_more_models")));
             more.type = "button"; more.setAttribute("aria-expanded", String(!!this.modelsOpen));
             more.onclick = () => { this.modelsOpen = !this.modelsOpen; fill(q); };
             mm.appendChild(more);
@@ -533,7 +535,7 @@
     const win = el("div", "win kind-" + (spec.kind || "panel") + " " + (spec.size || (spec.kind === "image" ? "l" : spec.kind === "media" ? "s" : "m")));
     win.dataset.id = id;
     const head = el("div", "head", `<i class="dot"></i><span class="title">${esc(spec.title || "")}</span>
-      <button class="min" title="${esc(t("d_minimize"))}">–</button><button class="max" title="max">▢</button><button class="x" title="${esc(t("d_close"))}">✕</button>`);
+      <button class="min" title="${esc(t("d_minimize"))}">–</button><button class="max" title="${esc(t("d_maximize"))}">▢</button><button class="x" title="${esc(t("d_close"))}">✕</button>`);
     const body = el("div", "body");
     const grip = el("div", "grip");
     win.append(head, body, grip);
@@ -646,11 +648,11 @@
   function dock() {
     const d = $("dock"); d.innerHTML = "";
     const layout = document.documentElement.dataset.layout || "clean";
-    if (layout === "windows") for (const [, w] of wins) { if (w.min) continue; const c = el("button", "chip open", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || "window")); c.onclick = () => raise(w.el); d.appendChild(c); }
+    if (layout === "windows") for (const [, w] of wins) { if (w.min) continue; const c = el("button", "chip open", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || t("d_window"))); c.onclick = () => raise(w.el); d.appendChild(c); }
     if (layout === "mac") for (const [k, s] of [["settings", "open the settings"], ["d_start_files", "show my files"], ["d_lists", "show my lists"]]) { const c = el("button", "chip launch", esc(t(k))); c.type = "button"; c.onclick = () => act(s); d.appendChild(c); }
     for (const [id, w] of wins) {
       if (!w.min) continue;
-      const c = el("button", "chip", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || "window"));
+      const c = el("button", "chip", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || t("d_window")));
       c.onclick = () => { w.min = false; w.el.classList.remove("hidden"); w.el.style.animation = "none"; void w.el.offsetWidth; w.el.style.animation = ""; raise(w.el); dock(); idle(); overlaps(); };
       d.appendChild(c);
     }

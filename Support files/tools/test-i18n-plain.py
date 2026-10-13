@@ -53,15 +53,15 @@ check(old_src.returncode == 0, f"reference {REF}:i18n.py readable")
 old = blocks_from_source(old_src.stdout) if old_src.returncode == 0 else {}
 
 check(sorted(new) == sorted(BLOCKS), "all six language blocks present")
-NEW_KEYS = {"no_model"}  # the one key added to every block (no assistant set up yet)
+NEW_KEYS = {"no_model", "d_maximize", "d_window", "d_sure", "d_slow_turn"}  # keys added to every block (no assistant set up yet; window controls; sure-press and slow-turn notices)
 # the model-size words for the set-up's "More models" list (every block has them; the old values are unchanged)
 ADDED_KEYS = {"w_model_slow", "w_more_models"}
 for b in BLOCKS:
     if b in old:
         check(set(new[b]) == set(old[b]) | NEW_KEYS | ADDED_KEYS,
-              f"{b}: key set = {REF} + no_model + model-size words ({len(new[b])} keys)")
+              f"{b}: key set = {REF} + new keys + model-size words ({len(new[b])} keys)")
         check(all(isinstance(new[b].get(k), str) and "{" not in new[b][k] for k in NEW_KEYS | ADDED_KEYS),
-              f"{b}: no_model and the model-size words present, no placeholder braces")
+              f"{b}: new keys and model-size words present, no placeholder braces")
         if b != "EN":
             check({k: v for k, v in new[b].items() if k not in NEW_KEYS | ADDED_KEYS}
                   == {k: v for k, v in old[b].items() if k not in NEW_KEYS | ADDED_KEYS},
@@ -79,6 +79,55 @@ for key, text in NEW.items():
             ph_en = sorted(PLACEHOLDER.findall(en.get(key, "")))
             ph_b = sorted(PLACEHOLDER.findall(new[b][key]))
             check(ph_en == ph_b, f"{b} {key}: placeholders match English {ph_en}")
+
+# every t("...") key desk.js uses must be in desk.py _PAGE_KEYS and present in the EN block, or the page shows the raw key
+DESK_JS = os.path.join(HERE, "..", "src/rootfs/usr/share/llmos/desk/desk.js")
+desk_js = open(DESK_JS, encoding="utf-8").read()
+desk_py = ast.parse(open(os.path.join(LLMOS_DIR, "desk.py"), encoding="utf-8").read())
+page_keys = set()
+for node in desk_py.body:
+    if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_PAGE_KEYS" for t in node.targets):
+        page_keys = set(ast.literal_eval(node.value))
+PAGE_USED = sorted(set(re.findall(r'(?<![\w.])t\("([a-z][\w-]*)"\s*[,)]', desk_js)))
+check(len(PAGE_USED) > 50, f"desk.js t() keys found ({len(PAGE_USED)})")
+for k in PAGE_USED:
+    check(k in page_keys, f"desk.py _PAGE_KEYS contains {k}")
+    check(k in en, f"i18n EN contains {k}")
+
+# desk.js also builds keys from template literals (the wizard quiz), which the regex above cannot see. The
+# expansions are hard-coded here from the source named in each comment; each anchor must still appear verbatim in
+# desk.js, and each array the expansion depends on must still read the same, so the list cannot drift silently.
+QN = {"autonomy": 3, "internet": 3, "brain": 3, "guidance": 2, "motion": 3}   # desk.js line 314: const Q = [...] (k, n)
+DESK_JS_ANCHORS = [
+    'const Q = [{ k: "autonomy", n: 3 }, { k: "internet", n: 3 }, { k: "brain", n: 3 }, { k: "capability", n: 3 }, { k: "guidance", n: 2 }, { k: "motion", n: 3 }];',
+    'const TIER = ["fast", "balanced", "capable"];',                                  # desk.js line 315
+    '["hands-off", "balanced", "hands-on"]', '["yes", "ask", "no"]', '["local", "ask", "cloud"]',
+    '["owner", "standard"]', '["off", "reduced", "full"]',                             # desk.js line 450-454 pick orders
+    "t(`q_capability_${TIER.indexOf(x.tier)}_s`)",                                    # desk.js line 346
+    "t(`q_capability_${TIER.indexOf(r.tier)}_s`)",                                    # desk.js line 350
+    "t(`q_${q.k}_${i}_s`)",                                                           # desk.js line 353
+    "t(`q_${q.k}_${cur}`)",                                                           # desk.js line 355
+    "t(`q_motion_${rec().motion}_s`)",                                                # desk.js line 356
+    "t(`q_${k}_${i}_s`)",                                                             # desk.js line 450
+]
+for anchor in DESK_JS_ANCHORS:
+    check(anchor in desk_js, f"desk.js still contains {anchor[:60]}")
+TEMPLATE_KEYS = sorted(set(
+    [f"q_capability_{i}_s" for i in range(3)]                                         # line 346, 350: TIER.indexOf -> 0..2
+    + [f"q_{k}_{i}_s" for k, n in QN.items() for i in range(n)]                        # line 353, 450: q_${k}_${i}_s over Q / pick orders
+    + [f"q_{k}_{i}" for k, n in QN.items() for i in range(n)]                          # line 355: q_${q.k}_${cur} (no _s) over Q
+    + ["q_motion_1_s", "q_motion_2_s"]                                                # line 356: desk.py _recommend motion is 2 or 1
+))
+# keys the expansion produces that desk.py _PAGE_KEYS or the EN block lack; they are shown as gaps, not hidden.
+# A key listed here must still be missing (the check below fails when a gap is fixed, so the entry gets removed).
+KNOWN_MISSING = set()
+check(len(TEMPLATE_KEYS) == 31, f"desk.js template-literal keys expanded ({len(TEMPLATE_KEYS)})")
+for k in TEMPLATE_KEYS:
+    if k in KNOWN_MISSING:
+        check(k not in page_keys or k not in en, f"KNOWN_MISSING {k} is still missing (remove it from KNOWN_MISSING)")
+    else:
+        check(k in page_keys, f"desk.py _PAGE_KEYS contains template key {k}")
+        check(k in en, f"i18n EN contains template key {k}")
 
 # the importable module still loads and gives the new text
 sys.path.insert(0, ROOTFS)

@@ -134,8 +134,9 @@ def download(mid, progress=None):
     if _read_only(config.MODELS):
         raise ValueError("this is the live USB/DVD, whose models can't be changed; say \"install LLM OS\" first, "
                          "then models can be added and switched")
-    if free_disk_gb() < need:
-        raise ValueError(f"not enough disk space: {m['name']} needs {need:.1f} GB free")
+    free = free_disk_gb()
+    if free < need:
+        raise ValueError(f"not enough free disk: need {need:.1f} GB, have {free:.1f} GB")
     os.makedirs(config.MODELS, exist_ok=True)
     part = path_of(m) + ".part"
     url = f"https://huggingface.co/{m['repo']}/resolve/main/{m['file']}"
@@ -236,6 +237,15 @@ def remove(mid):
     return m
 
 
+def _bigger_than_ram(m, mem):
+    """A model that needs more memory than the machine has. Unknown memory (0) is never 'bigger'."""
+    return mem > 0 and m.get("ram_gb", 0) > mem + 0.5
+
+
+UNKNOWN_RAM_NOTE = ("I couldn't read how much memory this computer has, so I can't tell if it fits. "
+                    "If it's too big it will run from disk, slower.")
+
+
 def use(mid):
     if host_mode():
         raise ValueError(HOST_MODE_MSG)
@@ -244,8 +254,14 @@ def use(mid):
         raise ValueError(f"unknown model '{mid}'")
     if not os.path.exists(path_of(m)):
         raise ValueError(f"{m['name']} is not downloaded yet")
-    if m.get("ram_gb", 0) > ram_gb() + 0.5:
-        raise ValueError(f"{m['name']} needs about {m['ram_gb']} GB of memory; this machine has {ram_gb():.1f} GB")
+    mem = ram_gb()
+    if not mem:
+        # memory size unknown: allowed, disclosed (we cannot tell whether it fits)
+        m = dict(m, bigger_than_ram_note=UNKNOWN_RAM_NOTE)
+    elif m.get("ram_gb", 0) > mem + 0.5:
+        # bigger than memory: allowed, disclosed. llama-server maps the file from disk, so it runs, much slower.
+        m = dict(m, bigger_than_ram_note=f"This model is bigger than memory ({m['ram_gb']} GB vs {mem:.1f} GB). "
+                                         "It will run from disk, much slower.")
     config.settings.set("model", m["id"])
     system.service("llmos-model", "restart", timeout=60)
     return m
@@ -259,13 +275,14 @@ def serve_argv():
         return None
     threads = os.cpu_count() or 2
     spare = ram_gb() - m["size"] / 1024 ** 3 - 1.0
+    big = _bigger_than_ram(m, ram_gb())   # runs from disk: smallest context, and no pinning or no-mmap flags, ever
     # Context size from the RAM left after the weights (f16 KV cache: about
     # 110 KB per token for a 3B model, so 8k ~ 0.9 GB, 16k ~ 1.8 GB). A
     # quantized KV cache would fit more but makes CPU prompt processing
     # several times slower, which matters more than the extra room.
     # 6k is the floor that still fits a research request (prompt + tools
     # ~3.2k, search results + a page excerpt ~1k, answer) on a 4 GB machine.
-    ctx = 16384 if spare > 2.5 else 8192 if spare > 1.6 else 6144 if spare > 0.5 else 4096
+    ctx = 4096 if big and spare <= 0 else 16384 if spare > 2.5 else 8192 if spare > 1.6 else 6144 if spare > 0.5 else 4096
     argv = ["llama-server", "-m", path_of(m), "--host", "127.0.0.1", "--port", "8080",
             "--jinja", "-c", str(ctx), "-t", str(threads), "-np", "1",
             "--no-webui", "--no-slots", "--cache-reuse", "256",

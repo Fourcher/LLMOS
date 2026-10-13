@@ -90,6 +90,19 @@ _FREE_SPACE_Q = (r"(?i:how much (?:free |disk )?(?:space|storage|room)(?: is)? (
                  r"|(?:is|why is) my (?:disk|computer) full|how full is my disk"
                  r"|(?:check )?(?:disk space|storage|free space)|free up (?:disk )?space)")
 
+# simple fact questions ("how tall is mount everest"): the subject may not be about the owner, this/that, a place
+# needing a location, or a personal object (email, file, computer...), so those still go to the model
+_FACT_SUBJ = (r"(?!.*\b(?:i|me|my|mine|we|us|our|you|your|it|its|this|that|these|those|here|there|home|work|near|nearby|away|to|from|"
+              r"email|mail|message|file|folder|document|photo|video|picture|contacts?|computer|laptop|phone|screen|printer|wifi|desktop|pc|calendar|inbox)\b)"
+              r"[a-z][a-z .'-]{1,40}?")
+_FACT_PATS = (rf"how (?:tall|high|big|old|far|long|deep|heavy|fast) is (?:the )?({_FACT_SUBJ})",
+              rf"when was ({_FACT_SUBJ}) (?:born|built|founded|made)",
+              rf"what is the population of ({_FACT_SUBJ})",
+              rf"what(?:'s| is) the capital of ({_FACT_SUBJ})",
+              rf"who (?:wrote|painted|invented|founded|discovered) ({_FACT_SUBJ})")
+_LIVE_FACTS = tuple(re.compile(p) for p in _FACT_PATS)
+_FACT_MATCH = "^(?:" + "|".join(_FACT_PATS) + r")[?.!]?$"
+
 MATCH = re.compile(
     r"^" + _FREE_SPACE_Q + r"[?.!]?$|" +
     r"^how much (?:free |disk )?(?:space|storage|room)(?: is| do i have)?(?: (?:left|free|remaining))?(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?(?: (?:left|free|remaining))?$|^how much (?:disk )?space (?:is )?(?:left|free)$|"
@@ -130,7 +143,7 @@ MATCH = re.compile(
     r"internet (?:working|up|down|ok|on|connected)|am i (?:online|connected)|do i have (?:the )?internet|(?:wi-?fi|network) working|are we online|"
     r"^what day (?:of the week )?(?:is|was|will be|falls on|does)\b|"
     r"\.(?:txt|md|csv|log)$|"
-    r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)|" + _JOKE_PAT, re.I)
+    r"^(?:please )?(?:block|unblock|ban)\b|^(?:please )?allow (?:all|every)|(?:remove|clear) (?:all )?(?:the )?(?:website )?blocks?)|" + _FACT_MATCH + "|" + _JOKE_PAT, re.I)
 
 
 def _say(desk, line, text):
@@ -141,6 +154,27 @@ def _say(desk, line, text):
 def _open(desk, url):
     from . import agent
     agent.execute(desk.ctx, "browse", {"site": url})
+
+
+# the internet, by the owner's setting: "yes" always, "no" never, "ask" asks the desk (once per kind of request, as the agent does)
+_OFF_WEATHER = "The internet is switched off in settings, so I can't get the forecast."
+_NET_DECLINED = "Okay, no internet for that."
+
+
+def _net_ok(desk, what, args):
+    """May this request go out on the internet? Under "ask" the desk's own question decides (no desk to ask, as in tests, counts as yes)."""
+    s = config.settings.get("internet")
+    if s == "no":
+        return False
+    if s != "ask":
+        return True
+    ask = getattr(getattr(desk, "ctx", None), "confirm_network", None)
+    return True if ask is None else bool(ask(what, args))
+
+
+def _net_no(off):
+    """The reply when _net_ok said no: the function's switched-off words under "no", the decline under "ask"."""
+    return off if config.settings.get("internet") == "no" else _NET_DECLINED
 
 
 # ------------------------------------------------------------------ days until
@@ -1289,8 +1323,11 @@ def quick(desk, line, low):
     if m and (m.group("w") or m.group("w2")) and (q.startswith(("define", "definition", "meaning", "what does", "what's the meaning", "what is the meaning"))):
         w = m.group("w2") or m.group("w")
         from . import web
+        wikt = f"https://en.wiktionary.org/api/rest_v1/page/definition/{urllib.parse.quote(w)}"
+        if not _net_ok(desk, "read_webpage", {"url": wikt}):
+            return _say(desk, line, _net_no("The internet is switched off, so I can't look that up."))
         try:      # Wiktionary's own API (free, no key)
-            raw = web.fetch(f"https://en.wiktionary.org/api/rest_v1/page/definition/{urllib.parse.quote(w)}", max_bytes=400000, timeout=8)[3]
+            raw = web.fetch(wikt, max_bytes=400000, timeout=8)[3]
             for e in json.loads(raw).get("en", []):
                 for dd in e.get("definitions", []):
                     d = re.sub(r"<[^>]+>", "", dd.get("definition", "")).strip()
@@ -1298,8 +1335,11 @@ def quick(desk, line, low):
                         return _say(desk, line, f"{w} ({e.get('partOfSpeech', '').lower()}): {d}")
         except Exception:
             pass
+        free = f"https://api.dictionaryapi.dev/api/v2/entries/en/{urllib.parse.quote(w)}"
+        if not _net_ok(desk, "read_webpage", {"url": free}):
+            return _say(desk, line, _net_no("The internet is switched off, so I can't look that up."))
         try:      # the Free Dictionary API (built on Wiktionary too)
-            raw = web.fetch(f"https://api.dictionaryapi.dev/api/v2/entries/en/{urllib.parse.quote(w)}", max_bytes=200000, timeout=8)[3]
+            raw = web.fetch(free, max_bytes=200000, timeout=8)[3]
             mean = json.loads(raw)[0]["meanings"][0]
             return _say(desk, line, f"{w} ({mean.get('partOfSpeech', '')}): {mean['definitions'][0]['definition']}")
         except Exception:
@@ -1307,9 +1347,12 @@ def quick(desk, line, low):
     m = re.fullmatch(r"(?:another|other|a different) words? for (?P<w>[a-z'-]+)|synonyms? (?:of|for) (?P<w2>[a-z'-]+)|what(?:'s| is) a synonym (?:of|for) (?P<w3>[a-z'-]+)", q)
     if m:
         w = m.group("w") or m.group("w2") or m.group("w3")
+        syn = f"https://api.datamuse.com/words?rel_syn={urllib.parse.quote(w)}&max=8"
+        if not _net_ok(desk, "read_webpage", {"url": syn}):
+            return _say(desk, line, _net_no("The internet is switched off, so I can't look that up."))
         try:
             from . import web
-            raw = web.fetch(f"https://api.datamuse.com/words?rel_syn={urllib.parse.quote(w)}&max=8", max_bytes=50000, timeout=8)[3]
+            raw = web.fetch(syn, max_bytes=50000, timeout=8)[3]
             words = [x["word"] for x in json.loads(raw)][:8]
             if words:
                 return _say(desk, line, f"Other words for {w}: {', '.join(words)}.")
@@ -1444,8 +1487,11 @@ def weather(desk, line, low):
     if not place:
         return _say(desk, line, "Where are you? Say “the weather in Denver” (I'll remember it if you say “I live in Denver”).")
     from . import web
+    geo_url = "https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + urllib.parse.quote(place)
+    if not _net_ok(desk, "read_webpage", {"url": geo_url}):
+        return _say(desk, line, _net_no(_OFF_WEATHER))
     try:
-        geo = json.loads(web.fetch("https://geocoding-api.open-meteo.com/v1/search?count=1&name=" + urllib.parse.quote(place), max_bytes=100000, timeout=8)[3])
+        geo = json.loads(web.fetch(geo_url, max_bytes=100000, timeout=8)[3])
         g = (geo.get("results") or [None])[0]
         if not g:
             return _say(desk, line, f"I couldn't find a place called {place}.")
@@ -1453,6 +1499,8 @@ def weather(desk, line, low):
         url = (f"https://api.open-meteo.com/v1/forecast?latitude={g['latitude']}&longitude={g['longitude']}&timezone=auto&forecast_days=7"
                "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
                + ("&temperature_unit=fahrenheit" if us else ""))
+        if not _net_ok(desk, "read_webpage", {"url": url}):
+            return _say(desk, line, _net_no(_OFF_WEATHER))
         f = json.loads(web.fetch(url, max_bytes=200000, timeout=8)[3])
     except Exception as e:
         return _say(desk, line, f"I couldn't get the forecast just now: {_plain_err(e)}.")
@@ -1488,8 +1536,8 @@ def weather(desk, line, low):
 def net_and_dates(desk, line, low):
     q = low.strip().rstrip("?.!")
     if re.fullmatch(r"(?:is (?:the |my )?internet (?:working|up|down|ok|on|connected)|am i (?:online|connected(?: to the internet)?)|do i have (?:the )?internet|is (?:the )?(?:wi-?fi|network) working|is (?:the )?(?:wi-?fi|network|connection) down|are we online)", q):
-        if config.settings.get("internet") == "no":
-            return _say(desk, line, "The internet is switched off in settings (say “turn the internet on”).")
+        if not _net_ok(desk, "read_webpage", {"url": "https://www.google.com/generate_204"}):
+            return _say(desk, line, _net_no("The internet is switched off in settings (say “turn the internet on”)."))
         t0 = time.time()
         try:
             from . import web
@@ -1550,6 +1598,8 @@ def service_status(desk, line, low):
     if not page:
         return False                       # an unknown service: the model looks it up on the web
     from . import web
+    if not _net_ok(desk, "read_webpage", {"url": f"https://{page}/api/v2/status.json"}):
+        return _say(desk, line, _net_no("The internet is switched off, so I can't look that up."))
     try:
         st = json.loads(web.fetch(f"https://{page}/api/v2/status.json", max_bytes=100000, timeout=8)[3])["status"]
     except Exception:
@@ -1567,19 +1617,29 @@ _LIVE_WON = re.compile(r"who won (?:the )?(?P<s>[a-z' .-]{2,40}?)(?: last night|
 _CLOCK_TIME = re.compile(r"\b\d{1,2}(?::\d{2})?\s?(?:am|pm|a\.m\.|p\.m\.)|\b\d{1,2}:\d{2}\b", re.I)
 
 
+def _first_sentences(text, n=2, cap=300):
+    """The first one or two sentences of a search snippet, at most `cap` characters."""
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"“(])", " ".join(str(text or "").split()))
+    out = " ".join(parts[:n]).strip()
+    if len(out) > cap:
+        out = out[:cap].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."
+    return out
+
+
 def live_lookup(desk, line, low):
     """A question about a live service or opening hours: a search, answered from its results in one line (no model turn)."""
     m = _LIVE_STATUS.fullmatch(low)
     h = None if m else _LIVE_HOURS.fullmatch(low)
     won = None if (m or h) else _LIVE_WON.fullmatch(low)
     if won:
-        if config.settings.get("internet") == "no":
-            return _say(desk, line, "The internet is switched off in settings, so I can't look up results.")
         from . import web
+        what = won.group("s").strip(" ")
+        sport = re.search(r"\b(game|match|final|cup|series|race|fight|bout|season|league|team)\b", what)
+        q = f"{what} result" + (" last night" if sport else "")
+        if not _net_ok(desk, "web_search", {"query": q}):
+            return _say(desk, line, _net_no("The internet is switched off in settings, so I can't look up results."))
         try:
-            what = won.group("s").strip(" ")
-            sport = re.search(r"\b(game|match|final|cup|series|race|fight|bout|season|league|team)\b", what)
-            res = web.search(f"{what} result" + (" last night" if sport else ""), n=3)
+            res = web.search(q, n=3)
         except Exception:
             return _say(desk, line, "I couldn't search for the result just now. Try again in a minute.")
         if not res:
@@ -1587,6 +1647,22 @@ def live_lookup(desk, line, low):
         top = res[0]
         return _say(desk, line, f"From search: “{top['title']}” ({top['url']}). {top['snippet'][:200]} "
                                 "Check the page for the details.")
+    fact = None if (m or h or won) else next((x for x in (p.fullmatch(low) for p in _LIVE_FACTS) if x), None)
+    if fact:
+        # a simple fact question: the top snippet, one or two sentences, with its source (same failure replies as "who won")
+        from . import web
+        if not _net_ok(desk, "web_search", {"query": line.strip()}):
+            return _say(desk, line, _net_no("The internet is switched off in settings, so I can't look up results."))
+        try:
+            res = web.search(line.strip(), n=3)
+        except Exception:
+            return _say(desk, line, "I couldn't search for the result just now. Try again in a minute.")
+        top = res[0] if res else {}
+        snippet = _first_sentences(top.get("snippet"))
+        if not snippet:
+            return _say(desk, line, "I couldn't find that result.")
+        src = urllib.parse.urlparse(str(top.get("url") or "")).netloc.lower().removeprefix("www.") or "the web"
+        return _say(desk, line, f"{snippet} (source: {src})")
     if not (m or h):
         return False
     if config.settings.get("internet") == "no":
@@ -1595,8 +1671,11 @@ def live_lookup(desk, line, low):
     name = (m or h).group("s").strip(" '")
     if m and name in _STATUS_PAGES:
         return False                  # a known status page: service_status answers it
+    q = f"{name} {'status outage today' if m else 'opening hours'}"
+    if not _net_ok(desk, "web_search", {"query": q}):
+        return _say(desk, line, _net_no("The internet is switched off in settings, so I can't check that."))
     try:
-        res = web.search(f"{name} {'status outage today' if m else 'opening hours'}", n=3)
+        res = web.search(q, n=3)
     except Exception:
         return _say(desk, line, f"I couldn't search for {name} just now. Try again in a minute.")
     if not res:
@@ -1619,10 +1698,10 @@ def news(desk, line, low):
     if not re.fullmatch(r"(?:what(?:'s| is| are) (?:the |in the |the latest |today's )?(?:news|headlines)(?: today| right now| now)?|"
                         r"(?:show|give) me (?:the |today's |the latest )?(?:news|headlines)|(?:top |latest )?headlines|the news)", low):
         return False
-    if config.settings.get("internet") == "no":
-        return _say(desk, line, "The internet is switched off in settings, so I can't get the news.")
     import xml.etree.ElementTree as ET
     from . import web
+    if not _net_ok(desk, "read_webpage", {"url": "https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en"}):
+        return _say(desk, line, _net_no("The internet is switched off in settings, so I can't get the news."))
     try:
         root = ET.fromstring(web.fetch("https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en", max_bytes=400000, timeout=10)[3])
     except Exception:
