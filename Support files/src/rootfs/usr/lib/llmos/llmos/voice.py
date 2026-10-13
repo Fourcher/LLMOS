@@ -215,8 +215,9 @@ def download_voice(vid, progress=None):
     need = m["size"] / 1024 ** 3 + 0.3
     os.makedirs(VOICE_DIR_DL, exist_ok=True)
     st = os.statvfs(VOICE_DIR_DL)
-    if st.f_bavail * st.f_frsize / 1024 ** 3 < need:
-        raise ValueError(f"not enough disk space: {m['name']} needs {need:.1f} GB free")
+    free = st.f_bavail * st.f_frsize / 1024 ** 3
+    if free < need:
+        raise ValueError(f"not enough free disk: need {need:.1f} GB, have {free:.1f} GB")
     dest = os.path.join(VOICE_DIR_DL, m["file"])
     part = dest + ".part"
     url = f"https://huggingface.co/{m['repo']}/resolve/main/{m['file']}"
