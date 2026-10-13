@@ -176,10 +176,21 @@
   }
 
   // ---------------------------------------------------------------- status bar
+  // an icon opens its window; clicking the same icon again closes it (the window it opened is remembered by its words)
+  const launched = new Map(); let pendingLaunch = null;
+  function launch(sayText) {
+    const id = launched.get(sayText), w = id && wins.get(id);
+    if (w && !w.min) { launched.delete(sayText); closeWindow(id, true); return; }
+    pendingLaunch = { say: sayText, at: performance.now() };
+    act(sayText);
+  }
+  function noteLaunch(id) {
+    if (pendingLaunch && performance.now() - pendingLaunch.at < 15000) { launched.set(pendingLaunch.say, id); pendingLaunch = null; }
+  }
   function chip(html, sayText, title) {
     const c = el("button", "chip", html);
     c.type = "button";
-    if (sayText) { c.onclick = () => act(sayText); c.title = title || sayText; c.setAttribute("aria-label", title || sayText); }
+    if (sayText) { c.onclick = () => launch(sayText); c.title = title || sayText; c.setAttribute("aria-label", title || sayText); }
     else { c.disabled = true; }
     return c;
   }
@@ -534,6 +545,7 @@
   function openWindow(m) {
     const spec = m.spec, id = m.id;
     let w = wins.get(id);
+    noteLaunch(id);
     if (w) { w.el.querySelector(".title").textContent = spec.title || ""; renderBody(w.el.querySelector(".body"), spec); w.min = false; w.el.classList.remove("hidden"); raise(w.el); dock(); overlaps(); if (cur) cur.opened = true; return; }
     const win = el("div", "win kind-" + (spec.kind || "panel") + " " + (spec.size || (spec.kind === "image" ? "l" : spec.kind === "media" ? "s" : "m")));
     win.dataset.id = id;
@@ -651,8 +663,8 @@
   function dock() {
     const d = $("dock"); d.innerHTML = "";
     const layout = document.documentElement.dataset.layout || "clean";
-    if (layout === "windows") for (const [, w] of wins) { if (w.min) continue; const c = el("button", "chip open", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || t("d_window"))); c.onclick = () => raise(w.el); d.appendChild(c); }
-    if (layout === "mac") for (const [k, s] of [["settings", "open the settings"], ["d_start_files", "show my files"], ["d_lists", "show my lists"]]) { const c = el("button", "chip launch", esc(t(k))); c.type = "button"; c.onclick = () => act(s); d.appendChild(c); }
+    if (layout === "windows") for (const [wid, w] of wins) { if (w.min) continue; const c = el("button", "chip open", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || t("d_window"))); c.onclick = () => (focused === w.el ? minimize(wid) : raise(w.el)); d.appendChild(c); }
+    if (layout === "mac") for (const [k, s] of [["settings", "open the settings"], ["d_start_files", "show my files"], ["d_lists", "show my lists"]]) { const c = el("button", "chip launch", esc(t(k))); c.type = "button"; c.onclick = () => launch(s); d.appendChild(c); }
     for (const [id, w] of wins) {
       if (!w.min) continue;
       const c = el("button", "chip", esc(w.spec.title || "…")); c.type = "button"; c.setAttribute("aria-label", (w.spec.title || t("d_window")));

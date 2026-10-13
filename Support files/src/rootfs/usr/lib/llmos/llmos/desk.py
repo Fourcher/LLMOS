@@ -2309,6 +2309,11 @@ class Desk:
         if not text:
             return False
         self.last_active = time.time()
+        mm = re.fullmatch(r"(download|use|remove) the model ([\w.+-]+)", text, re.I)
+        if mm:                                  # the models page's own buttons: on their own thread, at once, never
+            threading.Thread(target=self._model_button, args=(text, mm.group(1).lower(), mm.group(2)),  # behind the model
+                             daemon=True).start()
+            return False
         if not self._instant(text):
             self._enqueue(intent.fix_typos(text), done, "main")
             return True
@@ -2328,7 +2333,10 @@ class Desk:
 
                 def __getattr__(lane, k):
                     return getattr(lane._ctx, k)
-            out = agent.execute(Lane(self.ctx), name, args)
+            lane = Lane(self.ctx)
+            out = agent.execute(lane, name, args)
+            if lane.__dict__.get("after_turn"):    # system_power sets it on the lane object, not on the desk's context
+                self.ctx.after_turn = lane.__dict__["after_turn"]
             if str(out).startswith(agent._NOT_AN_APP):
                 self._enqueue(intent.fix_typos(text), done, "main")   # words, not an app: the model writes them
                 return True
@@ -2338,7 +2346,35 @@ class Desk:
                 self.emit({"t": "toast", "text": reply[:240]})
         except Exception as e:
             self.emit({"t": "toast", "text": agent._plain_error(str(e))})
+        how = self.ctx.after_turn               # a button that restarts or shuts down (system_power): do it now, as
+        if how:                                 # a typed request does after its reply; before this, nothing happened
+            self.ctx.after_turn = None
+            self.shutdown(how)
         return False
+
+    def _model_button(self, text, action, mid):
+        """Download / use / remove a model from its button: feedback at once, the result as a toast, the page refreshed."""
+        self.emit({"t": "toast", "text": {"download": f"Downloading {mid}… (progress shows below)",
+                                          "use": f"Switching to {mid}…", "remove": f"Removing {mid}…"}[action]})
+
+        class Lane:                             # the desk's context, with this button's words as "the request"
+            def __init__(lane, ctx):
+                lane._ctx, lane.current_request = ctx, text
+
+            def __getattr__(lane, k):
+                return getattr(lane._ctx, k)
+        args = {"action": action, "model": mid}
+        try:
+            out = agent.execute(Lane(self.ctx), "manage_models", args)
+            reply = agent._cap(agent._shortcut_reply("manage_models", args, out))
+        except Exception as e:
+            reply = agent._plain_error(str(e))
+        self.emit({"t": "toast", "text": (reply or "Done.")[:240]})
+        if "panel-models" in self.windows:
+            try:
+                self.open_panel("models")       # the page shows the new state (downloaded, in use, removed)
+            except Exception:
+                pass
 
     def _worker(self):
         while True:
