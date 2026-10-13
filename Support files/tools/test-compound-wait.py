@@ -113,23 +113,39 @@ if abs(waited - 2.0) > 0.05:
     _fail(f"case B: waited {waited:.2f}s, wanted 2.0s")
 print(f"ok case B: never ready, waited {waited:.2f}s, second step ran")
 
-# Case C: the first step is not an app open -> the old fixed 2 s sleep, no polling, and the second step runs
+# Case C: the first step is not an app open -> polls the page (0.1 s steps, 2 s at most), and the second step runs
 clock = Clock()
-ctx = Ctx(clock, old=None, new=PAGE_CALC, new_from=1)
+ctx = Ctx(clock, old=None, new=None)
 waited, ran = run_case("make a folder called Test, then open it", ctx, clock)
 if not ran:
     _fail("case C: second step did not run")
-if clock.sleeps.count(2) != 1 or ctx.reads != 0:
-    _fail(f"case C: sleeps {clock.sleeps}, app_read calls {ctx.reads}; wanted one 2 s sleep and no polling")
-print(f"ok case C: non-open first step, sleeps {clock.sleeps}, no polling")
+if abs(waited - 2.0) > 0.05:
+    _fail(f"case C: page never changed, waited {waited:.2f}s, wanted 2.0s")
+if clock.sleeps.count(2) != 0 or set(clock.sleeps) != {0.1} or ctx.reads < 2:
+    _fail(f"case C: sleeps {clock.sleeps}, app_read calls {ctx.reads}; wanted 0.1 s polls, no 2 s sleep")
+print(f"ok case C: non-open first step, page never changed, waited {waited:.2f}s, {ctx.reads} page reads, second step ran")
 
-# Case D: an open step with no read bridge at all -> the old fixed 2 s sleep
+# Case C2: the first step is not an app open, and the page changes at 0.3 s -> the wait ends at 0.5 s at the latest
+clock = Clock()
+ctx = Ctx(clock, old=None, new=PAGE_CALC, new_from=4)      # read 1 = snapshot, reads 2-4 = polls 1-3
+waited, ran = run_case("make a folder called Test, then open it", ctx, clock)
+if not ran:
+    _fail("case C2: second step did not run")
+if waited > 0.5 + 1e-9:
+    _fail(f"case C2: page changed at 0.3s, waited {waited:.2f}s, wanted at most 0.5s")
+print(f"ok case C2: non-open first step, page changed at 0.3s, waited {waited:.2f}s, second step ran")
+
+# Case D: an open step with no read bridge at all -> waits 0.1 s steps, 2 s in total, then the second step runs
 clock = Clock()
 ctx = Ctx(clock, has_bridge=False)
 waited, ran = run_case("open the calculator, then press 7", ctx, clock)
-if not ran or clock.sleeps.count(2) != 1:
-    _fail(f"case D: ran={ran}, sleeps {clock.sleeps}; wanted one 2 s sleep")
-print(f"ok case D: no read bridge, sleeps {clock.sleeps}")
+if not ran:
+    _fail("case D: second step did not run")
+if abs(waited - 2.0) > 0.05:
+    _fail(f"case D: no read bridge, waited {waited:.2f}s, wanted 2.0s")
+if clock.sleeps.count(2) != 0 or set(clock.sleeps) != {0.1}:
+    _fail(f"case D: sleeps {clock.sleeps}; wanted 0.1 s steps, no 2 s sleep")
+print(f"ok case D: no read bridge, waited {waited:.2f}s in 0.1 s steps, second step ran")
 
 # Case E: _wait_ready directly. An exception counts as not ready; the limit is never passed by more than one step.
 clock = Clock()
