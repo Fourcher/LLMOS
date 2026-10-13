@@ -802,7 +802,7 @@ class Desk:
         if not shutil.which("mako"):
             return
         a = config.settings.get("appearance", {}) or {}
-        bg, fg, acc = (a.get("background") or "#14161f"), (a.get("color") or "#e8e9ef"), (a.get("accent") or "#7c5cff")
+        bg, fg, acc = (a.get("background") or "#14161f"), (a.get("color") or "#e8e9ef"), (a.get("accent") or "#7a52ff")
         d = os.path.join(config.home(), ".config", "mako")
         try:
             os.makedirs(d, exist_ok=True)

@@ -26,7 +26,7 @@ PALETTES = [
     (("light", "bright", "day", "daytime"), "#f6f6f8", "#16171d", "#5b5bd6", ""),
     (("dark", "night", "black", "midnight", "dim"), "#0b0d14", "#e8e9ef", "#7c5cff", ""),
 ]
-DEFAULT = ("#0b0d14", "#e8e9ef", "#7c5cff")
+DEFAULT = ("#0b0d14", "#e8e9ef", "#7a52ff")
 FONTS = {
     "sans": 'Inter, "Noto Sans", system-ui, sans-serif',
     "serif": '"Noto Serif", Georgia, serif',
@@ -136,7 +136,7 @@ def apply_programs(home, mode, font="sans", bg="", fg="", acc="", scale=100):
             pass
     b = (bg or ("#0b0d14" if dark else "#f6f6f8")).lstrip("#")
     t = (fg or ("#e8e9ef" if dark else "#16171d")).lstrip("#")
-    a = (acc or "#7c5cff").lstrip("#")
+    a = (acc or "#7a52ff").lstrip("#")
     try:
         d = os.path.join(home, ".config", "foot")
         os.makedirs(d, exist_ok=True)

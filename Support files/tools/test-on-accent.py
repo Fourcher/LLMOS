@@ -92,7 +92,7 @@ if below:
 else:
     print("every accent reaches 4.5:1 with the chosen text colour")
 
-check(best_text("#7c5cff") == "#ffffff", "ok default accent #7c5cff keeps white (4.35 vs 4.34)")
+check(best_text("#7a52ff") == "#ffffff" and ratio("#7a52ff", "#ffffff") >= 4.5, "ok default accent #7a52ff keeps white at %.2f:1 (needs 4.5)" % ratio("#7a52ff", "#ffffff"))
 
 # ---- desk.css: no white left on the accent or danger fills; the variables exist with their white fallback
 css = read(DESK_CSS)
