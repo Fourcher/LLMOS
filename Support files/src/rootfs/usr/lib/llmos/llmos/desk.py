@@ -2286,7 +2286,7 @@ class Desk:
                                                                             r"(?:natural scrolling|tap to click|left handed mouse) (?:on|off)|mouse (?:faster|slower|normal speed)|"
                                                                             r"key repeat (?:faster|slower|normal)|set resolution \S+ \d+x\d+|"
                                                                             r"(?:sleep|suspend|go to sleep|put (?:it|the computer) to sleep|hibernate)[.!]?|clear (?:the )?caches?[.!]?|install (?:the |all (?:the )?)?updates[.!]?|"
-                                                                            r"(?:keyboard layout|use an? |switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )[a-z ()-]+)", low):
+                                                                            r"add (?:the |an? )?[a-z]+ layout|(?:this |my |the )?(?:app|program)(?: is frozen| froze| stopped responding)|(?:keyboard layout|use an? |switch (?:the )?keyboard to|change (?:the )?keyboard (?:layout )?to )[a-z ()-]+)", low):
             return True
         if self._howto(low.rstrip("?.!")) is not None:
             return True                   # a how-to the desk answers from its own table: no model needed
@@ -2686,7 +2686,7 @@ class Desk:
             self.last_reply = self._said = "Type your email address and password in the window."
             return True
         m = re.fullmatch(r"(?:please )?(?:start )?(?:record|recording|capture) (?:my |the |a )?(?P<k>screen|desktop|video of (?:my |the )?screen|voice|audio|microphone|mic|sound|voice (?:memo|note)|memo|me talking)(?: recording)?|"
-                         r"(?:start )?(?:a )?(?P<k2>screen|voice|audio) recording|(?:make|start) a (?P<k3>voice memo|voice note)", l2)
+                         r"(?:start )?(?:a )?(?P<k2>screen|voice|audio) recording|(?:(?:make|start) a )?(?P<k3>voice memo|voice note)", l2)
         if m:
             k = (m.group("k") or m.group("k2") or m.group("k3") or "")
             kind = "screen" if re.search(r"screen|desktop", k) else "voice"
@@ -3172,6 +3172,8 @@ class Desk:
                       r"gnumeric|word processor|spreadsheet|photos|image viewer|player|video|mousepad|thunar)(?: window| app| program)?|"
                       r"(?:force quit|kill(?= \w))(?: (?:the )?(?P<killw>\w[\w ]*))?|"
                       r"(?P<reopen>reopen (?:what i closed|the tab i closed|(?:the |my )?(?:last )?closed (?:tab|one)|the last closed tab)|undo (?:the )?close tab)|"
+                      r"(?P<stopf>(?:this|the|my) (?:app|program) (?:is|has|seems) frozen|(?:this|the|my) (?:app|program) froze|"
+                      r"(?:this|the|my) (?:app|program) stopped responding)|"
                       r"(?:the )?(?P<frozen>\w[\w ]*?) (?:is|has|seems) (?:frozen|stuck|not responding|hung)")
 
     def _window_shortcut(self, low):
@@ -3491,7 +3493,7 @@ class Desk:
                 self.open_window(syspanels.bluetooth())
             threading.Thread(target=bt, daemon=True).start()
             return True
-        m = re.fullmatch(r"(?:keyboard layout|use an? |switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )(?P<k>[a-z ()-]+?)(?: keyboard)?(?: layout)?", low)
+        m = re.fullmatch(r"(?:keyboard layout|use an? |add (?:an? |the )?(?=.*\b(?:keyboard|layout)\b)|switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )(?P<k>[a-z ()-]+?)(?: keyboard)?(?: layout)?", low)
         if m and syspanels.layout_code(m.group("k")):
             code = syspanels.layout_code(m.group("k"))
             config.settings.set("input.layout", code)
