@@ -61,6 +61,10 @@ if note:
 if any(alive(t) for t in launched - finished):
     sys.exit(0)
 
+# Wind-down: the owner is decommissioning the orchestrator; it may stop once its final batch is done.
+if os.path.exists(os.path.join(os.path.dirname(inbox), "orchestrator-wind-down")):
+    sys.exit(0)
+
 print(json.dumps({"decision": "block", "reason": (
     "Never stop (owner's rule). No worker is running. Re-read BRIEF.md and queue.md, then dispatch the next round now: "
     "fill every front (speed, capability, UI, owner freedom, reliability, process) with PROBE/FIX/VERIFY/RUN workers, "
