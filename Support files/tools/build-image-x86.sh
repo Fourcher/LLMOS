@@ -50,7 +50,7 @@ $V run run/xser.sock "$LOG" "setup-interfaces -a -r >/dev/null 2>&1; udhcpc -i e
 echo "==> installing (slow under emulation)"
 M=$($V mark "$LOG")
 $V send run/xser.sock "PAYLOAD=http://10.0.2.2:8765 sh /tmp/install.sh 2>&1 | tee /tmp/install.log"
-$V wait "$LOG" 'LLMOS_INSTALL_OK|HASH MISMATCH|not enough disk|ERROR|fatal:|INSTALL FAILED|GRUB config has no' 9000 --from "$M" | grep -E '^==>|LLMOS_INSTALL_OK|MISMATCH|ERROR|not enough|GRUB|/dev/vda3|TIMEOUT'
+$V wait "$LOG" 'LLMOS_INSTALL_OK|HASH MISMATCH|not enough (free )?disk|ERROR|fatal:|INSTALL FAILED|GRUB config has no' 9000 --from "$M" | grep -E '^==>|LLMOS_INSTALL_OK|MISMATCH|ERROR|not enough|GRUB|/dev/vda3|TIMEOUT'
 grep -q LLMOS_INSTALL_OK <(tail -c 4000 "$LOG") || $V wait "$LOG" 'LLMOS_INSTALL_OK' 300 --from "$M" >/dev/null || true
 grep -q LLMOS_INSTALL_OK <(tail -c 4000 "$LOG") || { echo "INSTALL FAILED"; exit 1; }
 
