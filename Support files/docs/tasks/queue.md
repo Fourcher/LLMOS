@@ -101,3 +101,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [open] (reliability) realrun approve loop: a 5 s slice can end with busy=false before the typed line reaches the desk (done not > after) — loop must continue until done>after or the deadline, not treat that as finished | role: fix | files: tools/realrun.py _wait_approving
 - [running] (reliability) RUN 1.8.1 build #1 from 8532de3 — NO src merges until it reports (tool-only merges OK unless the RUN uses them: release.sh, check-fresh, *smoke*).
 - [held] 7715c48 (decline_dialogs emits dialog.close; post-install updates refresh asked=True) VERIFY PASS — src, merge after the 1.8.1 build reports.
+- [done] (speed) PROBE per-turn host cost: full pre-chat work ≈1.44 ms/turn on this Mac (tool_schemas 1.24 ms/step dominates; disk reads conduct/memory/profile/routines each turn are tiny). <0.1% of a turn — no caching added. Speed work stays on the model side (prefill, waits).
