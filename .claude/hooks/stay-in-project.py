@@ -19,6 +19,11 @@ elif tool in ("Read", "Write", "Edit", "Glob", "Grep", "NotebookEdit"):
 else:
     sys.exit(0)
 
+# the owner's one standing exception (2026-10-13): a finished release zip may be copied into their Downloads folder
+if tool == "Bash" and re.fullmatch(r"cp \"/Volumes/Files/Claude Work Area/LLMOS/packages/LLM OS [0-9.]+\.zip\" "
+                                   r"\"?/Users/[^/\s\"']+/Downloads/\"?", text.strip()):
+    sys.exit(0)
+
 home = r"(?:/Users/[^/\s\"']+|~|\$HOME|\$\{HOME\})"
 bad = [
     home + r"(?:/(?!\.claude(?:/|\b))[^\s\"']*)?(?=[\s\"';)|&]|$)",      # the home folder or anything in it except ~/.claude
