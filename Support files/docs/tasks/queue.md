@@ -235,3 +235,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 71f691a (find_by_meaning falls back to find_files when meaning search is unavailable) VERIFY PASS — merge after build. Minor: "pdf" kind is dropped (broader search) and a code comment says otherwise — fix the comment/extension filter later.
 - [held] f178d4b (voice download refusal "not enough free disk: need X GB, have Y GB") VERIFY PASS — merge after build.
 - [open] (reliability) build-image*.sh wait patterns still look for "not enough disk"; the new wording is "not enough free disk" — add it to the early-exit pattern so a disk-full install fails fast | role: fix after build | files: tools/build-image.sh, tools/build-image-x86.sh
+- [held] 5f2c13b (find fallback keeps the named file type, falls back to unfiltered) VERIFY PASS — merge after build.
