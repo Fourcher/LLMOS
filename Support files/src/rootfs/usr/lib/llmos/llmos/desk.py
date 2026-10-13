@@ -175,6 +175,20 @@ def _hex(rgb):
     return "#%02x%02x%02x" % tuple(int(c) for c in rgb)
 
 
+def _best_text(hexcol):
+    """#111111 or #ffffff, whichever has the higher WCAG contrast ratio against hexcol (text on an accent or danger fill)."""
+    def lum(c):
+        c /= 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    h = hexcol.lstrip("#")
+    l = 0.2126 * lum(int(h[0:2], 16)) + 0.7152 * lum(int(h[2:4], 16)) + 0.0722 * lum(int(h[4:6], 16))
+
+    def ratio(other):
+        hi, lo = max(l, other), min(l, other)
+        return (hi + 0.05) / (lo + 0.05)
+    return "#111111" if ratio(lum(0x11)) > ratio(1.0) else "#ffffff"
+
+
 def _software_gpu():
     """True when there is no hardware 3D (a VM): render everything on the CPU."""
     try:
@@ -1396,6 +1410,8 @@ class Desk:
             css["--fg"] = _hex(th.fg)
         if th.acc:
             css["--accent"] = _hex(th.acc)
+            css["--on-accent"] = _best_text(css["--accent"])
+        css["--on-danger"] = _best_text("#ef5a6f")
         corners = th.corners if th.corners in ("rounded", "square", "double", "heavy", "none") else "rounded"
         css["--radius"] = {"rounded": "14px", "square": "0px", "none": "24px", "double": "6px", "heavy": "8px"}[corners]
         css["--radius-sm"] = {"rounded": "9px", "square": "0px", "none": "16px", "double": "4px", "heavy": "5px"}[corners]

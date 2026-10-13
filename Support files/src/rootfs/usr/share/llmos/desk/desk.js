@@ -73,7 +73,7 @@
   // ---------------------------------------------------------------- theme / strings
   function applyTheme(m) {
     const root = document.documentElement.style;
-    for (const k of ["--bg", "--fg", "--accent"]) root.removeProperty(k);
+    for (const k of ["--bg", "--fg", "--accent", "--on-accent", "--on-danger"]) root.removeProperty(k);
     for (const [k, v] of Object.entries(m.css || {})) root.setProperty(k, v);
     document.body.className = m.mode === "light" ? "light" : "dark";
     let st = $("owner-style");
