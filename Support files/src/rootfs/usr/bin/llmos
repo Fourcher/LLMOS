@@ -32,6 +32,23 @@ if __name__ == "__main__":
             desk.control(["state"])
         else:
             desk.control(words)
+    elif arg == "ota-client":                 # the llmos-ota service: updates from the owner's own computer
+        from llmos import ota
+        ota.client()
+    elif arg == "ota":                        # llmos ota [status|find|pair <url>|unpair]
+        from llmos import ota
+        sub = sys.argv[2] if len(sys.argv) > 2 else "status"
+        if sub == "find":
+            for s in ota.find_servers():
+                print(s["url"], s["fp"], s["name"])
+        elif sub == "pair" and len(sys.argv) > 3:
+            s = ota.hello(sys.argv[3])
+            print(f"paired: {s['name']} {s['url']} key {s['fp']}" if s and ota.pair(s) else "no update server there")
+        elif sub == "unpair":
+            ota.unpair()
+            print("updates from your computer are off")
+        else:
+            print(ota.status_text())
     elif arg == "scheduler":
         from llmos import scheduler
         scheduler.main()
