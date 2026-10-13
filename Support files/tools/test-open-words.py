@@ -58,6 +58,13 @@ CASES = {
     "apt install htop vim please": ("install_app", {"packages": "htop vim"}),
     "apt install please": None,
     "apt install htop for me": ("install_app", {"packages": "htop"}),
+    # new: a trailing polite or filler word on a program named by its kind
+    "open the file manager please": ("open_app", {"command": "file manager"}),
+    "open word, please": ("open_app", {"command": "word processor"}),
+    "open the notes app thanks": ("open_app", {"command": "notes"}),
+    "open the door please": None,
+    "open excel now": ("open_app", {"command": "spreadsheet"}),
+    "open the text editor for me": ("open_app", {"command": "text editor"}),
     # unchanged: routed before
     "open calculator": ("open_app", {"command": "calculator"}),
     "install vlc": ("install_app", {"packages": "vlc"}),

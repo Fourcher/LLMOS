@@ -1474,7 +1474,12 @@ def _apps(text):
             return ("open_app", {"command": cmd})
     m = _OPEN_APP.match(text)
     if m:
-        n = m.group("n").strip()
+        raw = m.group("n").strip()
+        n = _TRAIL_FILLER.sub("", raw).strip()          # a trailing please/thanks/now is not part of the name
+        if n != raw:
+            n = re.sub(r"\s+(?:app|application|program)$", "", n, flags=re.I).strip()   # "notes app thanks" -> "notes"
+        if not n:
+            return None
         if re.search(r"\blists?$", n, re.I) and re.match(r"^\s*(?:please\s+)?(?:show|see|open|read)\s+(?:my|the)\s+", text, re.I):
             return None              # "show my to do list": a list of notes, the notes route takes it, not a program
         from . import tools as _T
@@ -2140,10 +2145,11 @@ _TRAIL_FILLER = re.compile(r",?\s+(?:please|pls|thanks|thank\s+you|for\s+me|righ
 
 
 def _new_words(t):
-    m = _OPEN_WORD.match(t)
+    u = _TRAIL_FILLER.sub("", t)                          # the open-app shapes take a trailing filler word too
+    m = _OPEN_WORD.match(u)
     if m:
         return ("open_app", {"command": _OPEN_WORD_CMD[" ".join(m.group("n").lower().split())]})
-    if _NOTES_APP.match(t):
+    if _NOTES_APP.match(u):
         return ("open_app", {"command": "notes"})
     m = _OPEN_PATH.match(_TRAIL_FILLER.sub("", t))
     if m:
