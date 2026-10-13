@@ -434,12 +434,23 @@ _GUARD = re.compile(r"^\s*(?:please\s+)?(?:(?P<off>follow|obey|do\s+what)\s+(?:t
                     r"(?:show|ask)\s+me\s+(?:first\s+)?(?:before\s+(?:you\s+)?(?:follow|do)\s+)?(?:what\s+)?(?:instructions\s+in\s+)?(?:web\s*pages|websites|emails?|files?)\s+(?:tell\s+you\s+to\s+do|say|want)(?:\s+first)?)\s*[.!]?\s*$", re.I)
 
 
+_GUARD_OFF_WORDS = re.compile(r"^\s*(?:please\s+)?(?:(?:turn|switch)\s+off\s+(?:the\s+)?guard|"
+                              r"(?:stop|don'?t|do\s+not)\s+(?:asking\s+me\s+before\s+(?:acting|you\s+act)\s+on|checking|check|warn(?:ing)?\s+me\s+about|asking\s+me\s+about)\s+"
+                              r"(?:what\s+)?(?:the\s+)?(?:web\s*pages?|websites?|e-?mails?|files?|instructions?)(?:\s+(?:tell\s+you|say|want))?(?:\s+(?:to\s+do|first|before\s+(?:acting|you\s+act)))?)\s*[.!]?\s*$", re.I)
+_GUARD_ON_WORDS = re.compile(r"^\s*(?:please\s+)?(?:turn\s+on\s+the\s+guard|turn\s+the\s+guard(?:\s+back)?\s+on|"
+                             r"(?:check|warn\s+me\s+about|ask\s+me\s+about)\s+(?:web\s*pages?|websites?|e-?mails?|files?)\s+again)\s*[.!]?\s*$", re.I)
+
+
 def _guard(text):
     m = _GUARD.match(text)
-    if not m:
-        return None
-    off = bool(m.group("off") or m.group("off2") or (m.group("onoff") or "").lower() == "off")
-    return ("change_setting", {"setting": "guard_untrusted", "value": "off" if off else "on"})
+    if m:
+        off = bool(m.group("off") or m.group("off2") or (m.group("onoff") or "").lower() == "off")
+        return ("change_setting", {"setting": "guard_untrusted", "value": "off" if off else "on"})
+    if _GUARD_OFF_WORDS.match(text):
+        return ("change_setting", {"setting": "guard_untrusted", "value": "off"})
+    if _GUARD_ON_WORDS.match(text):
+        return ("change_setting", {"setting": "guard_untrusted", "value": "on"})
+    return None
 
 
 _LANG_SET = re.compile(r"^\s*(?:please\s+)?(?:change|set|switch|put)\s+(?:the\s+|my\s+)?(?:system\s+|os\s+|computer'?s?\s+)?language\s+(?:to|into)\s+(?P<l>[a-zA-Z\u00c0-\u024f\u4e00-\u9fff\u3040-\u30ff]+)\s*[.!]?\s*$", re.I)
@@ -712,6 +723,8 @@ def _policy(text):
         if re.search(r"internet|web|online|network", what):
             return ("change_setting", {"setting": "internet", "value": "ask"})
         return None
+    if re.match(r"^\s*(?:please\s+)?(?:trust\s+everything|trust\s+me\s+(?:completely|fully|totally)|(?:stop|don'?t)\s+asking\s+me\s+(?:things|questions))\s*[.!]?\s*$", text, re.I):
+        return ("change_setting", {"setting": "autonomy", "value": "hands-off"})
     if _NEVER_ASK.match(text) or re.match(r"^\s*(?:please\s+)?(?:(?:turn\s+on|switch\s+to|use|give\s+(?:it|yourself|you)|i\s+give\s+you|go)\s+)?"
                                           r"(?:full|total|complete)\s+(?:trust|control|rein|reign|freedom|access)(?:\s+mode)?(?:\s+on)?\s*[.!]?\s*$", text, re.I):
         return ("change_setting", {"setting": "autonomy", "value": "hands-off"})
