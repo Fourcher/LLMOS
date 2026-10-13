@@ -1186,10 +1186,11 @@ _PANEL_WORDS = {"disk", "storage", "space", "memory", "ram", "cpu", "processor",
                 "network", "wifi", "internet", "ip", "tasks", "schedule", "scheduled", "reminders"}
 
 
-_PANEL_OPEN = re.compile(r"^\s*(?:please\s+)?(?:open|show|go\s+to|bring\s+up|display)\s+(?:me\s+)?(?:the\s+|my\s+)?(?P<p>settings|preferences|models|model\s+list|"
+_PANEL_OPEN = re.compile(r"^\s*(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?P<v>(?:i\s+(?:want|need)\s+(?:to\s+(?:see|open)\s+)?)|(?:(?:open(?:\s+up)?|show|go\s+to|bring\s+up|pull\s+up|take\s+me\s+to|launch|get|display)\s+(?:me\s+)?))?"
+                         r"(?:the\s+|my\s+|a\s+|an\s+|up\s+)?(?:system\s+)?(?P<p>settings|preferences|control\s+panel|models|model\s+list|"
                          r"connectors|apps|plugins|integrations|scheduled\s+tasks|schedule|tasks|memory|what\s+you\s+remember|audit|recent\s+actions|activity\s+log|help)"
-                         r"(?:\s+(?:panel|window|screen|page|list))?(?:\s+please)?\s*[.!]?\s*$", re.I)
-_PANEL_NAMES = {"settings": "settings", "preferences": "settings", "models": "models", "model list": "models", "scheduled tasks": "tasks",
+                         r"(?:\s+(?:panel|window|screen|page|list|menu|app|options))?(?:\s+for\s+me)?(?:\s+please)?\s*[.!?]?\s*$", re.I)
+_PANEL_NAMES = {"settings": "settings", "preferences": "settings", "control panel": "settings", "models": "models", "model list": "models", "scheduled tasks": "tasks",
                 "connectors": "connectors", "apps": "connectors", "plugins": "connectors", "integrations": "connectors",
                 "schedule": "tasks", "tasks": "tasks", "memory": "memory", "what you remember": "memory", "audit": "audit",
                 "recent actions": "audit", "activity log": "audit", "help": "help"}
@@ -1197,6 +1198,8 @@ _PANEL_NAMES = {"settings": "settings", "preferences": "settings", "models": "mo
 
 def _panel(text):
     m = _PANEL_OPEN.match(text)
+    if m and not m.group("v") and _PANEL_NAMES[re.sub(r"\s+", " ", m.group("p").lower())] != "settings":
+        m = None                          # a bare word ("apps", "schedule") is not a request to open a panel; "settings" is
     if m:
         return ("show_panel", {"panel": _PANEL_NAMES[re.sub(r"\s+", " ", m.group("p").lower())]})
     m = _PANEL.match(text)
