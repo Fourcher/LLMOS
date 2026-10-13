@@ -2819,7 +2819,7 @@ class Desk:
                         r"is (?:this|it|llm os|my data) private|privacy|(?:what about|tell me about) (?:my )?privacy|where does my data go|who can see my (?:data|files|chats)", l2):
             s_ = config.settings
             net = {"no": "The internet is off: nothing leaves this computer.", "ask": "The internet is set to ask: nothing goes online without your OK each time."}.get(
-                s_.get("internet", "yes"), "Something goes online only when a request needs it: a web search, a page or a video you asked for, a download, a model or app you asked to install, and to keep the clock right.")
+                s_.get("internet", "yes"), "Something goes online only when a request needs it: a web search, a page or a video you asked for, a download, a model or app you asked to install. It also sets the clock each time the computer starts.")
             svc_ = llm.cloud_label()
             brain = ("Your requests are answered by the model on this computer." if s_.get("brain", "local") == "local" or not config.cloud()
                      else f"With the online assistant on, each request goes to {svc_} with the recent chat, anything I look at to answer it (files, mail, web pages, the screen), and your name and saved memory. "

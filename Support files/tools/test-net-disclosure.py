@@ -37,13 +37,40 @@ CLOCK_WORDS = {
     "DE": "Uhr",
     "JA": "時計",
 }
+# the request wording of each language's "yes" line (the clock must not sit in the same sentence as this)
+REQUEST_WORDS = {
+    "EN": "only when a request",
+    "ZH": "仅在请求需要时",
+    "ES": "solo cuando una petición",
+    "FR": "seulement quand une demande",
+    "DE": "nur wenn eine anfrage",
+    "JA": "必要な依頼のとき",
+}
+
+
+def sentences(text):
+    # sentence ends: . 。 and the em dash
+    return [s.strip() for s in re.split(r"[.。—]", text) if s.strip()]
+
+
+def clock_sentence_ok(text, clock, request):
+    """True when some sentence names the clock and that sentence has no request wording."""
+    sents = sentences(text)
+    clock_sents = [s for s in sents if clock.lower() in s.lower()]
+    return bool(clock_sents) and all(request.lower() not in s.lower() for s in clock_sents) and any(request.lower() in s.lower() for s in sents)
+
+
 for b, word in CLOCK_WORDS.items():
     text = getattr(i18n, b).get("w_net_yes_d", "")
     check(word in text, f"{b}: w_net_yes_d mentions the clock ({word!r}): {text}")
+    check(clock_sentence_ok(text, word, REQUEST_WORDS[b]),
+          f"{b}: the clock is its own sentence, apart from the request wording ({REQUEST_WORDS[b]!r})")
 
 src = open(DESK, encoding="utf-8").read()
 m = re.search(r'"Something goes online only when a request needs it:[^"]*"', src)
 check(m is not None and "clock" in m.group(0), "desk.py: the 'yes' privacy answer mentions the clock")
+check(m is not None and clock_sentence_ok(m.group(0), "clock", "only when a request"),
+      "desk.py: the clock is its own sentence, apart from 'only when a request'")
 
 # system.sync_time(automatic=True): settings, subprocess and the root call are stubbed, so nothing touches ntpd
 import llmos.config as config  # noqa: E402
