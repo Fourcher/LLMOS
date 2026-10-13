@@ -2150,6 +2150,9 @@ def show_files(a, ctx):
     if a.get("view"):
         config.settings.set("files_view", view)
     path = _path(a.get("path") or (_LAST_FOLDER if (a.get("sort") or a.get("hidden") is not None) and _LAST_FOLDER else "~"))
+    # the model says "~/Trash" or "~/Recycle Bin" for the trash; when no such folder exists, show the real trash (~/.Trash)
+    if not os.path.exists(path) and path.rstrip("/") in {os.path.join(config.home().rstrip("/"), n) for n in ("Trash", "trash", "Recycle Bin", "bin")}:
+        path = _trash()
     _LAST_FOLDER = path
     if path.rstrip("/") == _trash():
         os.makedirs(path, exist_ok=True)       # nothing deleted yet: an empty trash, not an error
