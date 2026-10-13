@@ -2371,6 +2371,12 @@ class Desk:
                 self.close_window(wid)
             self.emit({"t": "clear"})
             return True
+        if re.fullmatch(r"what(?: did|'d|’d) i miss|anything new|any notifications|show (?:my )?notifications|what happened while i was away|while i was away", low.rstrip("?.! ")):
+            if not store.unseen():      # the same test show_away makes: nothing unseen, nothing to show
+                self.instant_reply(line, "Nothing new since you last looked.")
+            else:
+                self.show_away(force=True)      # an explicit owner request: the card opens even under do-not-disturb
+            return True
         hit = self._app_question(low)
         if hit:
             kind, a, wid = hit
