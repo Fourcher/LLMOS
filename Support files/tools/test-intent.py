@@ -431,6 +431,12 @@ CASES = {
     "use evince for pdfs": ("set_default_app", {"kind": "pdfs", "app": "evince"}),
     "open pdfs": None,
     "open firefox by default": None,
+    # the app word must be a real program: no pronoun/determiner, 1-3 words
+    "use my phone for music": None,
+    "make me a playlist for videos": None,
+    "use the default for pdfs": None,
+    "use a different app for pdfs": None,
+    "make it the default for videos": None,
     "make icons": None,
     "big icons are ugly": None,
 }

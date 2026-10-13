@@ -1154,8 +1154,27 @@ _DEFAULT_APP_OPEN_BY = re.compile(r"^(?:please\s+)?open\s+(?:my\s+)?(?P<k>[\w\s]
 _DEFAULT_APP_USE_FOR = re.compile(r"^(?:please\s+)?(?:use|make)\s+(?P<a>[\w .-]+?)\s+(?:the\s+default\s+)?(?:for|to\s+open)\s+(?P<k>[\w\s]+?)\s*[.!]?$", re.I)
 
 
+_NOT_AN_APP_START = {"my", "me", "the", "a", "an", "this", "that", "your", "our", "his", "her", "their", "it"}
+
+
+def _is_app_name(app):
+    """The app word is a real program: 1-3 words, not starting with a pronoun/determiner, and (where this machine has a
+    program menu) installed -- the same lookup set_default_app uses (tools._find_desktop). Without a program menu
+    (the host test box) only the word shape is checked."""
+    words = app.lower().split()
+    if not 1 <= len(words) <= 3 or words[0] in _NOT_AN_APP_START:
+        return False
+    import os
+    from . import tools
+    if not any(os.path.isdir(d) for d in tools.APP_DIRS):
+        return True
+    desktop, _name = tools._find_desktop(app)
+    return desktop is not None
+
+
 def _default_app(text):
-    """'always open pdfs in firefox' / 'make vlc my default for videos' -> set_default_app; only for kinds of file the tool knows."""
+    """'always open pdfs in firefox' / 'make vlc my default for videos' -> set_default_app; only for kinds of file the tool knows,
+    and only when the app word is a real program (see _is_app_name)."""
     m = (_DEFAULT_APP_OPEN.match(text) or _DEFAULT_APP_SET.match(text)
          or _DEFAULT_APP_OPEN_BY.match(text) or _DEFAULT_APP_USE_FOR.match(text))
     if not m:
@@ -1164,7 +1183,10 @@ def _default_app(text):
     k = m.group("k").strip().lower()
     if k not in tools.DEFAULT_KINDS:
         return None
-    return ("set_default_app", {"kind": k, "app": m.group("a").strip()})
+    app = m.group("a").strip()
+    if not _is_app_name(app):
+        return None
+    return ("set_default_app", {"kind": k, "app": app})
 
 
 def _open_url(text):
