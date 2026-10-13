@@ -11,6 +11,7 @@ import os
 import re
 import socket
 import stat
+import sys
 import tempfile
 import threading
 from datetime import datetime
@@ -761,9 +762,15 @@ def serve(path="/run/llmos/root.sock", group="owner"):
     os.chmod(path, 0o660)
     try:
         gid = grp.getgrnam(group).gr_gid
-        os.chown(path, -1, gid)
-    except (KeyError, OSError):
-        pass
+    except KeyError:
+        # no owner group yet: keep the socket root-only rather than world-writable-by-group
+        os.chmod(path, 0o600)
+        print(f"rootd: group '{group}' missing; socket is root-only", file=sys.stderr)
+    else:
+        try:
+            os.chown(path, -1, gid)
+        except OSError:
+            pass
     srv.listen(MAX_CONN)
     slots = threading.BoundedSemaphore(MAX_CONN)
     while True:

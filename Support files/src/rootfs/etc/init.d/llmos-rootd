@@ -1,0 +1,22 @@
+#!/sbin/openrc-run
+# The root service: performs the privileged actions the unprivileged desk asks for,
+# over a Unix socket (see rootd.serve: root:owner 0660, or root-only 0600 without the group).
+#
+# supervised: if rootd dies it is started again after a moment; the socket is
+# recreated on every start.
+
+name="llmos-rootd"
+description="LLM OS root service for the desk's privileged actions"
+command="/usr/bin/python3"
+command_args="/usr/lib/llmos/llmos/rootd.py"
+supervisor=supervise-daemon
+respawn_delay=2
+respawn_max=0
+pidfile="/run/llmos-rootd.pid"
+output_log="/var/log/llmos-rootd.log"
+error_log="/var/log/llmos-rootd.log"
+
+depend() {
+    need localmount
+    after bootmisc
+}
