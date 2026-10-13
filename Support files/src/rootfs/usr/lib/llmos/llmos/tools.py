@@ -2652,6 +2652,17 @@ def make_spreadsheet(a, ctx):
     return f"made {('~' + out[len(home):]) if out.startswith(home) else out} with {len(rows)} row(s){' and opened it' if opened else ''}. Done: reply in one sentence."
 
 
+# the kinds of file a request can name ('the pdf about taxes'), first match wins: (pattern on the lowercased request, extensions)
+_NAMED_FILE_TYPES = (
+    (r"\bpdfs?\b", (".pdf",)),
+    (r"\b(?:docx?|word)\b", (".doc", ".docx")),
+    (r"\b(?:photos?|pictures?|pics?|images?|jpe?g|png)\b", _IMAGE_EXT),
+    (r"\bvideos?\b", (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v")),
+    (r"\b(?:songs?|music|mp3s?)\b", (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac")),
+    (r"\b(?:spreadsheets?|xlsx)\b", (".xlsx", ".xls", ".ods", ".csv")),
+)
+
+
 @tool("find_by_meaning", "Find the owner's own files, notes or photos by what they are about, not their names: 'the photo of the "
       "dog on the beach', 'my letter about the car insurance'. Searches this computer only.",
       {"query": {"type": "string", "description": "what it is about, in the owner's words"},
@@ -2662,9 +2673,23 @@ def find_by_meaning(a, ctx):
     q = str(a.get("query", "")).strip()
     kind = a.get("kind") or "any"
     if not meaning.available():
-        # no meaning search here: search by name with the same code find_files uses. The query text already
-        # carries 'pdf' when the owner said it, and find_files has no kind filter, so kind is not added.
-        return find_files({"query": q}, ctx)
+        # no meaning search here: search by name. intent passes only the topic and a broad kind, so a file type the
+        # owner named ('the pdf about taxes') is read from the raw request (ctx.current_request). With a type, the
+        # names are kept to that type; if none of that type match, the unfiltered names are listed (never fewer).
+        req = str(getattr(ctx, "current_request", "") or "").lower()
+        exts = next((e for pat, e in _NAMED_FILE_TYPES if re.search(pat, req)), None)
+        if exts is None:
+            return find_files({"query": q}, ctx)
+        hits = find_paths(q)
+        if not hits:
+            return f"no file in the home folder matches '{q}'"
+        hits = [p for p in hits if p.lower().endswith(exts)] or hits
+        home = config.home()
+        show(ctx, {"id": "find", "replace": True, "title": f"Found: {q}", "size": "m", "blocks": [{"type": "list", "items": [
+            {"title": os.path.basename(p), "subtitle": os.path.dirname(p).replace(home, "~") + " · " + time.strftime("%b %d", time.localtime(os.path.getmtime(p))),
+             "actions": [{"label": "Open", "say": f"open the file {p}", "primary": True}, {"label": "Show folder", "say": f"show the folder {os.path.dirname(p)}"}]}
+            for p in hits[:20]]}]})
+        return f"{len(hits)} file(s) are listed on screen; do not repeat them, say one sentence at most."
     if not q:
         return "error: what should I look for?"
     vision = kind in ("photos", "any") and any(True for _ in meaning._candidates(("image",)))
