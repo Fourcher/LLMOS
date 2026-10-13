@@ -79,7 +79,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "ask_passphrase", "ask_passphrase_again", "passphrase_mismatch", "creating_vault", "onboard_done",
               "v_hands-off", "v_balanced", "v_hands-on", "v_yes", "v_no", "v_ask", "listening", "heard",
               "no_mic", "stopped", "error", "model_down", "loading_model", "shutting_down", "restarting",
-              "allow", "d_stop", "d_history", "d_close", "d_minimize", "d_next", "d_back", "d_skip", "d_done",
+              "allow", "d_stop", "d_history", "d_close", "d_minimize", "d_maximize", "d_window", "d_next", "d_back", "d_skip", "d_done",
               "d_unlock", "d_working", "d_apps", "d_close_app", "d_conversation", "d_you", "d_dont",
               "d_other_language", "d_open", "d_pause", "d_resume", "d_volume", "d_now_playing", "d_yes_start",
               "d_no_thanks", "d_type_language", "d_keep", "d_send", "d_clear", "d_shortcuts", "d_empty",
@@ -105,7 +105,7 @@ _PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking
               "w_cloud_check", "w_cloud_checking", "w_cloud_key", "w_cloud_model", "w_cloud_url", "w_cloud_key_where", "w_cloud_none_note",
               "w_done_choices", "v_brain_local", "v_brain_ask", "v_brain_cloud", "v_guidance_owner", "v_guidance_standard", "v_not_set_up",
               "d_brain_chip_ask", "d_online_tag", "v_yes", "v_ask", "v_no", "v_hands-off", "v_balanced", "v_hands-on",
-              "d_usually", "d_left", "d_start_files", "d_shutdown_item", "models", "memory", "tasks", "d_history", "d_lists", "d_clock_title")
+              "d_usually", "d_left", "d_start_files", "d_shutdown_item", "models", "memory", "tasks", "d_history", "d_lists", "d_clock_title", "d_sure", "s_brain", "d_slow_turn")
 
 FWCFG = "/sys/firmware/qemu_fw_cfg/by_name/opt/llmos"
 
