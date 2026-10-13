@@ -4046,17 +4046,22 @@ class Desk:
             argv = [argv[0], "--working-directory=" + config.home()] + list(argv[1:])     # a terminal starts at home, as everywhere
         argv = _root_ok(list(argv))
         try:
+            before = set(wm.windows())          # the program windows open before this launch
+        except Exception:
+            before = set()
+        try:
             start = log.tell()
             p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                                  start_new_session=True, env=self._child_env(), cwd="/")   # never inside the vault
         except OSError as e:
             return f"could not start {argv[0]}: {e}"
         name = name or os.path.basename(argv[0])
-        # a program that closes again at once did not open: say so instead of "opened"
-        for _ in range(12):
-            if p.poll() is not None:
+        # a program that closes again at once did not open: say so instead of "opened". Its window showing up
+        # (a window that was already open before the launch does not count) ends the wait early; 3 s at most.
+        for _ in range(30):
+            if p.poll() is not None or self._launch_window_up(argv, before):
                 break
-            time.sleep(0.25)
+            time.sleep(0.1)
         if p.poll() not in (None, 0):
             try:
                 with open(os.path.join(config.RUN, "gui.log"), errors="replace") as f:
@@ -4069,6 +4074,19 @@ class Desk:
         self._push_apps()
         threading.Thread(target=self._reap, args=(p,), daemon=True).start()
         return p.pid
+
+    def _launch_window_up(self, argv, before):
+        """True when a program window that is NEW since the launch belongs to the program started (wm.PROCS and
+        focus_program name the same ids). No window tools, or any error: False, so the 3 s wait runs as before."""
+        try:
+            name = os.path.basename(str(argv[0])) if argv else ""
+            new = [a for a in wm.windows() if a not in before]
+            if not new or not name:
+                return False
+            want = [a for a, pr in wm.PROCS.items() if pr == name] + [name, name.lower()]
+            return any(a in new for a in want)
+        except Exception:
+            return False
 
     def _reap(self, p):
         p.wait()
