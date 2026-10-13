@@ -9,7 +9,7 @@ cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 FW=/opt/homebrew/share/qemu
 ISO=build/cache/alpine-virt-3.24.2-aarch64.iso
 DISK=build/work/build-disk.qcow2
-LOGDIR=${LLMOS_LOGDIR:-${TMPDIR:-/tmp}/llmos-build}
+LOGDIR=${LLMOS_LOGDIR:-"/Volumes/Files/Claude Work Area/LLMOS/Support files/run/build-logs"}   # never the Mac's own disk
 mkdir -p "$LOGDIR"
 LOG="$LOGDIR/build-serial.log"
 trap 'cp "$LOG" build/work/ 2>/dev/null || true' EXIT

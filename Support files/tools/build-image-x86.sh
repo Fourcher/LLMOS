@@ -9,7 +9,7 @@ ISO=build/cache/alpine-virt-3.24.2-x86_64.iso
 KERNEL=build/cache/x86iso/boot/vmlinuz-virt
 INITRD=build/cache/x86iso/boot/initramfs-virt
 DISK=build/work/build-x86.qcow2
-LOGDIR=${LLMOS_LOGDIR:-${TMPDIR:-/tmp}/llmos-build}
+LOGDIR=${LLMOS_LOGDIR:-"/Volumes/Files/Claude Work Area/LLMOS/Support files/run/build-logs"}   # never the Mac's own disk
 mkdir -p "$LOGDIR"
 LOG="$LOGDIR/build-x86-serial.log"
 trap 'cp "$LOG" build/work/ 2>/dev/null || true' EXIT
