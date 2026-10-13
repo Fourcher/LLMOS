@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Host-side test of the wait between the first and the second step of a compound request ("X, then Y").
 After an app opens, run() takes a snapshot of the read bridge before the open, then polls it every 0.1 s and goes on
-as soon as it shows a page different from that snapshot (2 s at most). Other first steps keep the fixed 2 s sleep.
+as soon as it shows a page different from that snapshot (2 s at most). Screen-acting first steps (_FIRST_SCREEN_TOOLS) keep that wait; other first steps (make_folder, remember, ...) continue at once.
 time.sleep and time.monotonic are replaced by a fake clock.
 Run: python3 tools/test-compound-wait.py  (no VM needed). Exit status 0 = pass."""
 import os
@@ -113,27 +113,35 @@ if abs(waited - 2.0) > 0.05:
     _fail(f"case B: waited {waited:.2f}s, wanted 2.0s")
 print(f"ok case B: never ready, waited {waited:.2f}s, second step ran")
 
-# Case C: the first step is not an app open -> polls the page (0.1 s steps, 2 s at most), and the second step runs
+# Case C: the first step is a non-screen tool (make_folder) -> no wait at all, the second step runs at once
 clock = Clock()
 ctx = Ctx(clock, old=None, new=None)
 waited, ran = run_case("make a folder called Test, then open it", ctx, clock)
 if not ran:
     _fail("case C: second step did not run")
-if abs(waited - 2.0) > 0.05:
-    _fail(f"case C: page never changed, waited {waited:.2f}s, wanted 2.0s")
-if clock.sleeps.count(2) != 0 or set(clock.sleeps) != {0.1} or ctx.reads < 2:
-    _fail(f"case C: sleeps {clock.sleeps}, app_read calls {ctx.reads}; wanted 0.1 s polls, no 2 s sleep")
-print(f"ok case C: non-open first step, page never changed, waited {waited:.2f}s, {ctx.reads} page reads, second step ran")
+if waited > 1e-9 or clock.sleeps or ctx.reads > 1:   # read 1 is the snapshot run() always takes
+    _fail(f"case C: waited {waited:.2f}s, sleeps {clock.sleeps}, page reads {ctx.reads}; wanted no wait")
+print(f"ok case C: non-screen first step (make_folder), waited {waited:.2f}s, {ctx.reads} page read (snapshot), second step ran")
 
-# Case C2: the first step is not an app open, and the page changes at 0.3 s -> the wait ends at 0.5 s at the latest
+# Case C2: the first step is a non-screen tool and the page would change at 0.3 s -> still no wait
 clock = Clock()
-ctx = Ctx(clock, old=None, new=PAGE_CALC, new_from=4)      # read 1 = snapshot, reads 2-4 = polls 1-3
+ctx = Ctx(clock, old=None, new=PAGE_CALC, new_from=4)
 waited, ran = run_case("make a folder called Test, then open it", ctx, clock)
 if not ran:
     _fail("case C2: second step did not run")
-if waited > 0.5 + 1e-9:
-    _fail(f"case C2: page changed at 0.3s, waited {waited:.2f}s, wanted at most 0.5s")
-print(f"ok case C2: non-open first step, page changed at 0.3s, waited {waited:.2f}s, second step ran")
+if waited > 1e-9 or clock.sleeps:
+    _fail(f"case C2: waited {waited:.2f}s, sleeps {clock.sleeps}; wanted no wait")
+print(f"ok case C2: non-screen first step, page would change, waited {waited:.2f}s, second step ran")
+
+# Case C3: remember (non-screen) as the first step -> no wait, the second step runs
+clock = Clock()
+ctx = Ctx(clock, old=None, new=None)
+waited, ran = run_case("remember my dog is Rex, then open the calculator", ctx, clock)
+if not ran:
+    _fail("case C3: second step did not run")
+if waited > 1e-9 or clock.sleeps:
+    _fail(f"case C3: waited {waited:.2f}s, sleeps {clock.sleeps}; wanted no wait")
+print(f"ok case C3: remember first step, waited {waited:.2f}s, second step ran")
 
 # Case D: an open step with no read bridge at all -> waits 0.1 s steps, 2 s in total, then the second step runs
 clock = Clock()
