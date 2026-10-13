@@ -138,9 +138,10 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 3. e231f47 guard phrasings (intent)
 4. b399357 firewall words (contains 90be8cd, 58cb32c), then 3bbdd92 firewall undo
 5. 3377480 rare tools + warm-up (agent; contains ff268c2, 8b3cb84)
-6. desk: bb62538 (a7eb1b8, 604507d), dd71cba (0f9fb4f), 3d2252f (270169b), 9abccc8, 9fb9041 (e491709), 7715c48, c5fb41c, 091a5b6 (aa331f5), 15e7549
+6. desk: 522aa55 (agent+desk+console+i18n), bb62538 (a7eb1b8, 604507d), dd71cba (0f9fb4f), 3d2252f (270169b), 9abccc8, 9fb9041 (e491709), 7715c48, c5fb41c, 091a5b6 (aa331f5), 15e7549
 Superseded/obsolete held lines: 28a7f28, 036f6ba, 9d5c4cd, 79a7311, 564e581, 7ccc48a, f595072, a7eb1b8, 604507d, 0f9fb4f, 270169b, e491709, aa331f5, 90be8cd, 58cb32c, ff268c2, 8b3cb84; 9fe97bc and 0cdf401 already merged via ecb5ab7 / d50b01a.
 Each merge: git merge --no-ff; resolve trivial conflicts by FIX worker if any; then hostloop once at the end.
 - [note] "remind me to look at the stars tonight" keeps the "remind me to" prefix ("tonight" not in the at|in|on|tomorrow split) — small follow-up.
 - [decision] (speed) system-prompt dedupe dropped: only ~108 tokens (1.3% of the first-turn prompt) without removing distinct instructions; not worth the behaviour risk to a prompt that just scored 0 refusals / 0 lectures. Bigger wins remain: merge near-duplicate tools (~900 tok).
 - [decision] (speed) tool merges shelved: the two safe merges (edit_images→edit_image, rename_series→rename_files) save only ~160 tokens; the finder merge (~550) is too risky for a 3B model and name-specific agent/desk code. Next speed step: measure first-reply time on the 1.8.1 VM with 3377480 merged (before/after).
+- [held] 522aa55 (guard question explains why + how to turn it off, 6 languages) VERIFY PASS — add to desk merge list after the 1.8.1 build. Note: Lane wrapper on instant/button path does not carry the flag (explanation missing there) — small follow-up.
