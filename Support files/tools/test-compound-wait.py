@@ -192,4 +192,42 @@ if abs(waited - 0.4) > 0.05:
     _fail(f"case G: waited {waited:.2f}s, wanted about 0.4s")
 print(f"ok case G: old page before, different page on poll 4, waited {waited:.2f}s, second step ran")
 
+# Case H: a window-opening first step (make_document, in _FIRST_SCREEN_TOOLS) then a typing step -> waits for the page
+# change (the word processor page shows on the 3rd poll check, about 0.3 s), then the typing step runs
+real_match = agent.intent.match
+
+def match_make_document(text):
+    if text.strip().lower() == "make a document":
+        return ("make_document", {"name": "Letter"})
+    return real_match(text)
+
+clock = Clock()
+ctx = Ctx(clock, old=None, new=PAGE_NOTES, new_from=4)      # read 1 = snapshot, reads 2-4 = polls 1-3
+with patch.object(agent.intent, "match", match_make_document):
+    waited, ran = run_case("make a document, then type hello", ctx, clock)
+if not ran:
+    _fail("case H: typing step did not run")
+if abs(waited - 0.3) > 0.05:
+    _fail(f"case H: waited {waited:.2f}s, wanted about 0.3s (page change on poll 3)")
+print(f"ok case H: make_document then type, page changes on poll 3, waited {waited:.2f}s, typing step ran")
+
+# Case I: open_app first step with the read bridge raising on every call -> the full 2.0 s wait, no exception,
+# and the second step still runs. Real run() and _wait_ready (only time is faked).
+class RaisingCtx(Ctx):
+    def _app_read(self):
+        self.reads += 1
+        raise RuntimeError("bridge down")
+
+clock = Clock()
+ctx = RaisingCtx(clock)
+try:
+    waited, ran = run_case("open the calculator, then press 7", ctx, clock)
+except Exception as e:
+    _fail(f"case I: run() raised {type(e).__name__}: {e}")
+if not ran:
+    _fail("case I: second step did not run")
+if abs(waited - 2.0) > 0.05:
+    _fail(f"case I: bridge raising, waited {waited:.2f}s, wanted 2.0s")
+print(f"ok case I: open_app with raising bridge, waited {waited:.2f}s, no exception, second step ran")
+
 print("all good")
