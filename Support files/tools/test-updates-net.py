@@ -72,5 +72,24 @@ check(upd.called and upg.called and res[1] == "" and res[0] == [("musl", "1.2.4-
 res, upd, upg = run("ask", asked=False)
 check(not upd.called and res == (None, ASK), f"ask with asked=False explicit: no apk call: {res!r}")
 
+# updates_panel: asked=True under "ask" runs apk and returns the normal panel; default under "ask" returns the look-online text
+def panel_run(internet, **kw):
+    with mock.patch.object(config, "settings", Settings(internet)), \
+            mock.patch.object(system, "apk_update", return_value=(0, "", "")) as upd, \
+            mock.patch.object(system, "apk_upgrade", return_value=(0, UPG, "")) as upg:
+        p = syspanels.updates_panel(**kw)
+    return p, upd, upg
+
+
+p, upd, upg = panel_run("ask", asked=True)
+texts = [b.get("text", "") for b in p["blocks"] if b.get("type") == "text"]
+check(upd.called and upg.called and p["id"] == "panel-updates" and "1 update(s) available." in texts,
+      f"ask with updates_panel(asked=True): apk runs and the normal panel: {texts!r}")
+
+p, upd, upg = panel_run("ask")
+texts = [b.get("text", "") for b in p["blocks"] if b.get("type") == "text"]
+check(not upd.called and not upg.called and texts == [ASK],
+      f"ask with updates_panel(): no apk call and the look-online text: {texts!r}")
+
 print("all good" if fails == 0 else f"{fails} FAILED")
 sys.exit(1 if fails else 0)

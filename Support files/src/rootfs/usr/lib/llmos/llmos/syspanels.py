@@ -596,8 +596,8 @@ def updates_check(asked=False):
     return pk, ""
 
 
-def updates_panel():
-    pk, err = updates_check()
+def updates_panel(*, asked=False):
+    pk, err = updates_check(asked=asked)
     if pk is None:
         blocks = [{"type": "text", "text": err}]
     elif not pk:
