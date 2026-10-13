@@ -65,3 +65,23 @@ words, and the no-raw-output replay path. Hermes offers no net gain over Ministr
 This matches the Granite 4.2 comparison (`run/bake-granite/NOTES.md`): no small candidate beats Ministral as
 the default. Revisit only if a 3B-class model appears that is both low-refusal and low-confabulation on these
 fifteen requests.
+
+## Bigger than memory (4 GB arm64 VM, LLM OS 1.8.0, 2026-10-12)
+
+- Idea credit: AirLLM (github.com/lyogavin/airllm, Apache-2.0) runs models bigger than memory. LLM OS gets the same effect with llama-server's default mmap (no `--mlock`, no `--no-mmap`), so the model streams from disk.
+- Model: Gemma 4 E4B (`gemma-4-E4B-it-Q4_0.gguf`, 4.59 GB, catalog ram_gb 6, sha256 a555b900…97f2 verified). VM: 3.9 GB RAM, 1.9 GB swap.
+- Install message: "This model is bigger than memory (6 GB vs 3.8 GB). It will run from disk, much slower."
+- Server argv had no `--mlock` / `--no-mmap`. RSS 2.3–2.8 GB; swap used 0.5–1.0 GB.
+- Chat endpoint, "Write three sentences about the sea.", max_tokens 96:
+
+| model | run | wall s | prompt ms | tokens | tok/s | finish |
+|---|---|---|---|---|---|---|
+| Gemma 4 E4B | cold | 87.4 | 7164 | 96 | 1.20 | length |
+| Gemma 4 E4B | warm | 56.5 | 3867 | 52 | 0.99 | stop |
+| Gemma 4 E4B | warm | 59.9 | 4246 | 96 | 1.73 | length |
+| Ministral 3 3B (default) | cold | 13.6 | 8898 | 95 | 20.3 | stop |
+| Ministral 3 3B (default) | warm | 4.5 | 57 | 85 | 19.0 | stop |
+| Ministral 3 3B (default) | warm | 5.0 | 46 | 96 | 19.5 | length |
+
+- Verdict: it works and finishes, at about 1–2 tokens/s (roughly 15× slower than the default on this machine); a 3-sentence answer takes about a minute. Two of three Gemma runs returned empty `content` with finish "length" — likely spent on thinking output in another field (being checked).
+- Raw logs: `run/bench-gemma.log`, `run/bench-ministral.log`.
