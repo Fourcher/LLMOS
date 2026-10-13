@@ -138,6 +138,9 @@ apk add --root $TARGET --no-cache -q $PKGS
 log "LLM OS files"
 wget -qO- "$PAYLOAD/build/work/payload.tar" | tar -x -o -C $TARGET     # -o: owned by root here, whoever made the archive
 chmod 0755 $TARGET/usr/bin/llmos $TARGET/usr/bin/llmos-model-run $TARGET/usr/libexec/llmos-login $TARGET/usr/libexec/llmos-desk $TARGET/etc/init.d/llmos-*
+# byte-compile the package with the target's own python: the build strips __pycache__, and /usr/lib/llmos is root-owned,
+# so a desk running as the owner could not write it and would recompile the source on every start. Never fails the install.
+chroot $TARGET python3 -m compileall -q -j 0 /usr/lib/llmos/llmos >/dev/null 2>&1 || chroot $TARGET python3 -m compileall -q /usr/lib/llmos/llmos >/dev/null 2>&1 || echo "note: could not precompile (it still works, starts a little slower)"
 # the build stamp (`llmos version`, Settings); the version is the payload's own. The ISO build rewrites it with MEDIUM=live.
 VER=$(sed -n 's/^VERSION = "\(.*\)"$/\1/p' $TARGET/usr/lib/llmos/llmos/__init__.py)
 printf 'VERSION=%s\nBUILD=%s\nARCH=%s\nMEDIUM=disk\n' "$VER" "$(date +%Y-%m-%d)" "$ARCH" > $TARGET/etc/llmos-release
