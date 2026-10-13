@@ -1341,17 +1341,25 @@ def execute(ctx, name, arguments):
                     pass
             return "Email isn't set up yet. Type your address and password in the Set up email window."
         return f"error: no such tool '{name}'"
+    # A gate miss ("the keywords did not match this request") is not a refusal of the owner: with someone to ask,
+    # the call goes through the same confirmation as DESTRUCTIVE under balanced (see `unasked` below). Without
+    # someone to ask (a scheduled task: headless, or no confirm callback) the miss is refused as before.
+    unasked = None
+    audit_why = "blocked: not asked for in this request"
     if name == "make_app" and not _APP_WORDS.search(str(getattr(ctx, "current_request", "") or "")):
         # "write a birthday message" is words, not an app: the reply itself is the answer
-        store.audit(name, arguments, "blocked: not an app request", allowed=False)
-        return (_NOT_AN_APP + " Write what was asked as the reply itself, in words; "
-                "do not make an app.")
+        unasked, audit_why = (_NOT_AN_APP + " Write what was asked as the reply itself, in words; "
+                              "do not make an app."), "blocked: not an app request"
     need = _ONLY_IF_ASKED.get(name)
     current = getattr(ctx, "current_request", "") or ""
-    if need and current and not (need(current) if callable(need) else re.search(need, current, re.I)):
-        store.audit(name, arguments, "blocked: not asked for in this request", allowed=False)
-        return (f"not done: you did not ask for '{name}' in this request. Do only what was asked; "
-                f"if this seems needed, say so and ask them to decide.")
+    if unasked is None and need and current and not (need(current) if callable(need) else re.search(need, current, re.I)):
+        unasked = (f"not done: you did not ask for '{name}' in this request. Do only what was asked; "
+                   f"if this seems needed, say so and ask them to decide.")
+    if unasked is not None:
+        can_ask = not getattr(ctx, "headless", False) and callable(getattr(ctx, "confirm_action", None))
+        if not can_ask:
+            store.audit(name, arguments, audit_why, allowed=False)
+            return unasked
     try:
         args = json.loads(arguments) if isinstance(arguments, str) and arguments.strip() else (arguments or {})
         if not isinstance(args, dict):
@@ -1394,7 +1402,9 @@ def execute(ctx, name, arguments):
             gone = False
         if gone:
             return f"error: there's nothing called {p} to delete"   # nothing to ask about
-    if always or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
+    # an unasked call (a gate miss, see above) is shown first like ALWAYS_CONFIRM, and runs without asking under full trust
+    held = unasked is not None and not full_trust
+    if always or held or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
         if not ctx.confirm_action(tool, shown, risk):
             store.audit(name, shown, "denied", allowed=False)
             return f"you declined this ({name}). Do not retry it; continue or stop."
