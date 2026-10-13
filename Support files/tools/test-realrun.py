@@ -959,7 +959,40 @@ def main():
               tf_calls == ["fresh"] and tf2["fresh_before"] == "previous task error: type" and tf2["verdict"] == "PASS",
               repr((tf_calls, tf2["fresh_before"], tf2["verdict"])))
         shutil.rmtree(tf_dir, ignore_errors=True)
-        print("ok approve: one/none/two asks, timeout reboots; type error reboots next task")
+        # 11g. approve task whose typed line reaches the desk only after 7 s: for the first 7 s done stays at
+        # done0 and busy is false. The slices must keep waiting (no early "finished" with an empty reply); the
+        # turn then runs, done increments and the reply comes back.
+        class LateDesk:
+            def __init__(self):
+                self.t = 0.0
+                self.done = 0
+                self.reply = ""
+                self.cmds = []
+
+            def clock(self):
+                return self.t
+
+            def vm(self, cmd):
+                self.cmds.append(cmd)
+                if cmd == "llmos desk-state":
+                    return json.dumps({"screen": "desk", "busy": False, "reply": self.reply, "queued": 0,
+                                       "done": self.done, "dialogs": [], "windows": [], "apps": []})
+                if cmd.startswith("llmos desk-ctl wait"):
+                    self.t += int(cmd.split()[3])
+                    if self.t >= 7 and self.done == 0:
+                        self.done, self.reply = 1, "Canberra"
+                    return json.dumps({"busy": False, "reply": self.reply, "screen": "desk", "done": self.done})
+                return "ok"
+
+        late = LateDesk()
+        rec = realrun.run_task(dict(reply_task("ap-late"), approve=True), FakeUser(), late.vm,
+                               clock=late.clock, outdir=outroot, sleep=no_sleep)
+        late_waits = [c for c in late.cmds if c.startswith("llmos desk-ctl wait")]
+        check("approve, line reaches desk after 7 s -> keeps waiting, PASS with the reply",
+              rec["verdict"] == "PASS" and len(late_waits) == 2 and late.done == 1,
+              json.dumps({k: rec[k] for k in ("verdict", "reason")}) + repr(late_waits))
+
+        print("ok approve: one/none/two asks, timeout reboots; type error reboots next task; late line keeps waiting")
     finally:
         shutil.rmtree(outroot, ignore_errors=True)
 
