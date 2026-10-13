@@ -227,3 +227,5 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 546aade (supersedes eb7da9b/daf5831: bigger icons + default-app wordings) VERIFY PASS — merge after build.
 - [open] (reliability) test-desk-wait.py and test-vmctl-fast.py failed once each under host load (build running) and passed alone — timing-sensitive; widen their timing margins or use injected clocks | role: probe then fix
 - [held] c955850 (supersedes 54205c6: quick facts + every everyday web lookup obeys internet yes/ask/no) VERIFY PASS — merge after build (merge c955850 instead of 54205c6).
+- [held] 8858eda (on-accent/on-danger text colour by WCAG) VERIFY PASS — merge after build.
+- [open] (ui) default accent #7c5cff gives 4.35:1 with either text colour (below 4.5). Option: nudge the default accent slightly darker (e.g. #7350ff ~4.8 with white) — check how it looks on the VM screenshot before changing | role: fix after a screenshot
