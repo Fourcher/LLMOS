@@ -10,6 +10,7 @@ owner, the root path runs.
 Bad markers and the inner re-exec (LLMOS_DESK_INNER=1): the root path, no su.
 """
 import os
+import re
 import pathlib
 import shutil
 import subprocess
@@ -75,6 +76,12 @@ if [ -f "$XDG_RUNTIME_DIR/a11y.env" ]; then sed 's/^/a11y: /' "$XDG_RUNTIME_DIR/
 }
 
 
+def _t(text, root):
+    """The temporary root, absolute or as the script's relative ./ paths, shown as @T@."""
+    text = text.replace(root, "@T@")
+    return re.sub(r"(?<![\w./])\./(etc|libexec|run|cache|bin)\b", r"@T@/\1", text)
+
+
 def relocate(text, root):
     pairs = [
         ("/etc/llmos/owner-user", f"{root}/etc/owner-user"),
@@ -116,7 +123,7 @@ def run(text, marker=None, inner=False, drop=(), seatd_up=False, sock_up=False, 
                 f.write(marker)
         script = os.path.join(root, "libexec", "llmos-desk")
         with open(script, "w") as f:
-            f.write(relocate(text, root))
+            f.write(relocate(text, "."))     # relative to cwd=root: the project folder's path has spaces, which the script's unquoted tests would split
         os.chmod(script, 0o755)
         seatd_flag = os.path.join(root, "seatd.up")
         if seatd_up:
@@ -140,8 +147,8 @@ def run(text, marker=None, inner=False, drop=(), seatd_up=False, sock_up=False, 
         p = subprocess.run(["/bin/sh", script], env=env, cwd=root,
                            capture_output=True, text=True, timeout=60)
         with open(log) as f:
-            logtext = f.read().replace(root, "@T@")
-        return p.returncode, logtext, (p.stdout + p.stderr).replace(root, "@T@")
+            logtext = _t(f.read(), root)
+        return p.returncode, logtext, _t(p.stdout + p.stderr, root)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

@@ -46,7 +46,8 @@ def abs_values(m):
 
 def main():
     tmp = tempfile.mkdtemp(prefix="qmpt")
-    path = os.path.join(tmp, "q.sock")
+    os.chdir(tmp)                      # a relative socket name: the project folder's path is longer than a socket path may be
+    path = "q.sock"
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(path)
     srv.listen(1)

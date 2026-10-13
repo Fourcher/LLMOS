@@ -32,7 +32,7 @@ def run_vmctl(sock_path, log, extra):
     args = [sys.executable, "-I", VMCTL, "run", sock_path, log,
             "echo hi; echo DONE_\"\"7", "^DONE_7", "10", "--quiet", "1"] + extra
     t0 = time.time()
-    p = subprocess.run(args, capture_output=True, text=True)
+    p = subprocess.run(args, capture_output=True, text=True, cwd=os.path.dirname(os.path.abspath(log)))
     dt = time.time() - t0
     assert p.returncode == 0, (extra, p.returncode, p.stdout, p.stderr)
     body = p.stdout.split("\n[vmctl:")[0]
@@ -41,7 +41,8 @@ def run_vmctl(sock_path, log, extra):
 
 def main():
     tmp = tempfile.mkdtemp(prefix="vmctlfast")
-    sock_path = os.path.join(tmp, "s.sock")
+    os.chdir(tmp)                      # a relative socket name: the project folder's path is longer than a socket path may be
+    sock_path = "s.sock"
     ready = threading.Event()
     state = {"log": None}
     th = threading.Thread(target=serve, args=(sock_path, state, ready), daemon=True)
