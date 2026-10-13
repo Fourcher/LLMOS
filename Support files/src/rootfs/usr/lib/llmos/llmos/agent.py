@@ -119,15 +119,43 @@ ROUTE_QUESTION = ("[Routing question, answer with one letter: is this request (A
                   "stronger online model would do much better?]")
 
 
-def tool_schemas():
+# the "rare" tools (about 700 tokens of schema): offered only when the request is about them
+RARE_TOOLS = {"web_security_scan", "scan_network", "capture_traffic", "security_check", "install_to_disk",
+              "analyze_program", "set_passphrase", "format_drive"}
+_RARE_RE = re.compile(r"security|secure|hack|scan|\bports?\b|network|traffic|packet|sniff|wifi|wi-fi|wireless|"
+                      r"password for wifi|install (?:llm os|this system|to disk|to the drive)|"
+                      r"format (?:the |my |this )?(?:drive|disk|usb|stick|card|sd)|wipe|"
+                      r"erase (?:the )?(?:drive|disk|usb)|passphrase|vault|encrypt|reverse|binary|disassembl|"
+                      r"malware|virus|analy[sz]e (?:this )?(?:program|file|binary)|firewall|"
+                      r"\bsafe(?:ty)?\b|\bsecure\b|\bprotected\b|\bhotspot\b|\btether|\bhack(?:ed|er|ing)?\b|"
+                      r"\bspy(?:ware)?\b|\btrojan\b|what does (?:this|that|the) (?:program|app|file|binary|script) do\b|"
+                      r"\berase\b|\bwipe\b|\bdevices? on (?:my|the) network\b|who(?:'s| is) on (?:my|the) (?:wifi|network)\b|"
+                      r"\bopen ports?\b|install (?:it |llm os |this )?(?:to|on) (?:the |this |my )?(?:disk|drive|laptop|computer|pc)\b")
+
+
+def _is_rare(name):
+    return name in RARE_TOOLS or name.startswith("wifi_")
+
+
+def tool_schemas(request_text=None, sticky=False):
     """The tools offered to the on-device model. With a context under 12k tokens (4 and 8 GB machines) the list
     is compact and cut to what leaves room for the system prompt, the recent conversation, the request and the
-    answer; the same list every time, so the prompt cache holds."""
+    answer; the same list every time, so the prompt cache holds.
+    With request_text (this turn's request) the rare tools are left out unless the request is about them
+    (_RARE_RE) or one was already used this turn (sticky); they are then appended at the END, so the rest of
+    the list keeps its order. request_text None (warm-up, decide, probes) gives the full list, as before."""
     n = llm.context_size()
     # compact on every machine: the full list grew past 8k tokens, which a CPU reads for minutes whenever the cache misses
     if not n or n >= 12000:
-        return tools.schemas(compact=True)
-    return tools.schemas(compact=True, budget=max(1500, n - 3400))
+        full = tools.schemas(compact=True)
+    else:
+        full = tools.schemas(compact=True, budget=max(1500, n - 3400))
+    if request_text is None:
+        return full
+    norm = [s for s in full if not _is_rare(s["function"]["name"])]
+    if sticky or _RARE_RE.search(request_text.lower()):
+        norm += [s for s in full if _is_rare(s["function"]["name"])]
+    return norm
 
 
 def route_score(msgs):
@@ -423,7 +451,7 @@ def _warm_prefix():
             time.sleep(1)
     try:
         try:
-            tl = tool_schemas()
+            tl = tool_schemas("")     # the list a normal (non-rare) turn sends, so the cached prefix matches it
         except Exception:             # a context size that cannot be read counts as None (the full list)
             tl = tools.schemas(compact=True)
         llm.chat([{"role": "system", "content": system_prompt()},
@@ -831,6 +859,7 @@ def run(ctx, user_text, history):
     first_calls = []           # the step-0 tool calls, kept as a routine when the turn goes well
     tool_steps = 0
     blocked, no_tools = set(), False             # calls a guard refused; once one comes back, the model answers in words
+    rare_on = False                              # a rare tool was called this turn: keep offering the rare group
     fresh = len(msgs[-1].get("content") or "")   # characters the model has not seen yet (its cache holds the rest)
     while True:
         chat = llm.cloud_chat if where == "cloud" else llm.chat
@@ -845,7 +874,7 @@ def run(ctx, user_text, history):
                 _ctx(ctx, "expect", est, step)
             t0 = time.time()
             try:
-                result = chat(msgs, tools=None if no_tools else (tools.schemas() if where == "cloud" else tool_schemas()),
+                result = chat(msgs, tools=None if no_tools else (tools.schemas() if where == "cloud" else tool_schemas(user_text, sticky=rare_on)),
                               on_text=lambda t: ctx.on_text(stream, t))
             except llm.CloudError as e:
                 # the online model did not answer: say so and carry on here with the same messages
@@ -873,6 +902,8 @@ def run(ctx, user_text, history):
             _learn_speed(result.get("timings") or {}, time.time() - t0, where)
             content = result["content"].strip()
             calls = result["tool_calls"]
+            if any(_is_rare(c["name"]) for c in calls):
+                rare_on = True
             if content:
                 final = content
             if not calls:
