@@ -1970,13 +1970,19 @@ class Desk:
                 {"type": "text", "text": T("d_shortcuts"), "dim": True}]}
         return None
 
-    def show_away(self):
+    def show_away(self, force=False):
+        """Show the unseen items as the card. Do not disturb holds the card back too: nothing is opened or
+        recorded, so the first call after do-not-disturb is off shows it. force=True (an explicit owner
+        request) shows the card anyway; the toast, chime and speech are still silenced under do-not-disturb."""
+        dnd = bool(config.settings.get("do_not_disturb")) and not force
         try:
             st = os.stat(config.data("inbox.json"))
             key = (st.st_mtime_ns, st.st_size)
         except OSError:
             key = None
-        if key == getattr(self, "_inbox_key", "unset"):
+        if key == getattr(self, "_inbox_key", "unset") and not force:
+            return
+        if dnd:
             return
         self._inbox_key = key
         un = store.unseen()
