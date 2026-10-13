@@ -248,3 +248,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [note] (capability) fast-route coverage 2026-10-12: 447/624 (71.6%) by desk._instant over tasks/*.json phrases (was 403/577, 70%). The everyday/intent/_HOWTO-only count (315) misses desk shortcuts; next probe should run desk.shortcut() with stubs to find the true model-only list (rows in /tmp/probe-phrases/rows.json).
 - [held] 200a0a0 (keyboard: clock, Enter confirms non-danger dialogs, radio arrows, textarea focus ring) VERIFY PASS — merge after the RUN reports. Minor: Space on the clock also moves focus to the chat input.
 - [held] 006e4ef (clear routines/activity log; log capped at 2 MB; never follows a symlink) VERIFY PASS — merge after the RUN reports.
+- [held] 7645e2e (short phrases: font bigger, scale N%, show all apps, blue light, too dark go back) VERIFY PASS — merge after the RUN reports. Open: "private window" (no wm key).
