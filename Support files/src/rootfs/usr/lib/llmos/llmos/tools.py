@@ -2661,11 +2661,12 @@ def find_by_meaning(a, ctx):
     from . import meaning
     q = str(a.get("query", "")).strip()
     kind = a.get("kind") or "any"
+    if not meaning.available():
+        # no meaning search here: search by name with the same code find_files uses. The query text already
+        # carries 'pdf' when the owner said it, and find_files has no kind filter, so kind is not added.
+        return find_files({"query": q}, ctx)
     if not q:
         return "error: what should I look for?"
-    if not meaning.available():
-        return ("searching by meaning needs a newer model runtime than this system has; it comes with the next LLM OS update. "
-                "Until then I can search by name: say 'find my files called …'")
     vision = kind in ("photos", "any") and any(True for _ in meaning._candidates(("image",)))
     try:
         if not meaning.ready(vision=vision):
