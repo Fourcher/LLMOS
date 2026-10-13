@@ -64,7 +64,12 @@ class ConsoleCtx:
         host = args.get("url", "") or args.get("query", "")
         if name in self._net_ok:
             return True
-        ok = self.c.ask_yes_no(f"{T('s_internet')}: {name} → {str(host)[:60]}?")
+        label = {"read_webpage": "open a web page", "web_search": "search the web", "find_by_meaning": "get the search model",
+                 "check_site": "check a website", "add_model": "download a model", "download_model": "download a model"}.get(name)
+        if label is None:
+            label = "use your mail" if name.startswith("mail_") else name.replace("_", " ")
+        text = label[:1].upper() + label[1:] + (f" — {str(host)[:60]}" if host else "")
+        ok = self.c.ask_yes_no(f"{T('s_internet')}: {text}?")
         if ok:
             self._net_ok.add(name)
         return ok

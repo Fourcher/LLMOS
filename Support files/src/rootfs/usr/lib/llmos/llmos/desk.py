@@ -446,7 +446,12 @@ class DeskCtx:
         if name in self._net_ok:
             return True
         host = str(args.get("url", "") or args.get("query", ""))[:80]
-        ok = self.d.ask({"title": T("s_internet", area="settings"), "text": f"{name} → {host}", "danger": False}, consent=True)
+        label = {"read_webpage": "open a web page", "web_search": "search the web", "find_by_meaning": "get the search model",
+                 "check_site": "check a website", "add_model": "download a model", "download_model": "download a model"}.get(name)
+        if label is None:
+            label = "use your mail" if name.startswith("mail_") else name.replace("_", " ")
+        text = label[:1].upper() + label[1:] + (f" — {host}" if host else "")
+        ok = self.d.ask({"title": T("s_internet", area="settings"), "text": text, "danger": False}, consent=True)
         if ok:
             self._net_ok.add(name)
         return ok
