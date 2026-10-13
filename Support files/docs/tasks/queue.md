@@ -133,7 +133,7 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 3377480 (contains ff268c2+8b3cb84: rare tools appended only when the request mentions them, warm-up primes the same list; ~420–700 fewer prompt tokens on most turns) VERIFY PASS — merge after the 1.8.1 build; then measure first-reply time on the VM (before/after).
 
 ## MERGE ORDER after the 1.8.1 build (chain heads only; older held lines they contain are superseded)
-1. 57ffad3 intent chain (28a7f28→036f6ba→9d5c4cd→79a7311→564e581→7ccc48a→f595072→80c5a1d→57ffad3)
+1. c47102f intent chain (28a7f28→036f6ba→9d5c4cd→79a7311→564e581→7ccc48a→f595072→80c5a1d→57ffad3→c47102f)
 2. de38295 internet-off phrasings (intent)
 3. e231f47 guard phrasings (intent)
 4. b399357 firewall words (contains 90be8cd, 58cb32c), then 3bbdd92 firewall undo
@@ -141,3 +141,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 6. desk: bb62538 (a7eb1b8, 604507d), dd71cba (0f9fb4f), 3d2252f (270169b), 9abccc8, 9fb9041 (e491709), 7715c48, c5fb41c, 091a5b6 (aa331f5), 15e7549
 Superseded/obsolete held lines: 28a7f28, 036f6ba, 9d5c4cd, 79a7311, 564e581, 7ccc48a, f595072, a7eb1b8, 604507d, 0f9fb4f, 270169b, e491709, aa331f5, 90be8cd, 58cb32c, ff268c2, 8b3cb84; 9fe97bc and 0cdf401 already merged via ecb5ab7 / d50b01a.
 Each merge: git merge --no-ff; resolve trivial conflicts by FIX worker if any; then hostloop once at the end.
+- [note] "remind me to look at the stars tonight" keeps the "remind me to" prefix ("tonight" not in the at|in|on|tomorrow split) — small follow-up.
