@@ -153,3 +153,4 @@ Each merge: git merge --no-ff; resolve trivial conflicts by FIX worker if any; t
 - [left for later] 5c05f50 (guard explanation on the button/instant path) — its VERIFY did not finish.
 - [left for later] open items above in this file (vault via rootd, owner-account VM install test A14, usecases-2 re-run on the new build, "Largest (slow, runs from disk)" model option, first-reply timing on VM, tool merges, "next week"/"later today" reminders, remaining model-only phrases).
 - [left for later] tools/hostloop.sh does not set HOME/LLMOS_HOME/TMPDIR like run-host-tests.sh — make it call run-host-tests.sh per test (or retire it).
+- [done] FINAL: 1.8.2 released — "FRESH: dist/ was built from the current OS source (49985f9, v1.8.2)"; SHA256SUMS OK; isosmoke/x86smoke/calc-smoke/desk-smoke exit 0; packages/LLM OS 1.8.2.zip (7.2 GB); docs/HANDOFF.md written. Orchestrator decommissioned.
