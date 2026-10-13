@@ -230,4 +230,21 @@ if abs(waited - 2.0) > 0.05:
     _fail(f"case I: bridge raising, waited {waited:.2f}s, wanted 2.0s")
 print(f"ok case I: open_app with raising bridge, waited {waited:.2f}s, no exception, second step ran")
 
+# Case J: show_files as the first step (it opens a desk-drawn window, not an app, so the read bridge never changes)
+# -> no wait at all, the second step runs at once
+def match_show_files(text):
+    if text.strip().lower() == "show my files":
+        return ("show_files", {"folder": "Downloads"})
+    return real_match(text)
+
+clock = Clock()
+ctx = Ctx(clock, old=None, new=None)
+with patch.object(agent.intent, "match", match_show_files):
+    waited, ran = run_case("show my files, then type hello", ctx, clock)
+if not ran:
+    _fail("case J: second step did not run")
+if waited > 1e-9 or clock.sleeps:
+    _fail(f"case J: waited {waited:.2f}s, sleeps {clock.sleeps}; wanted no wait")
+print(f"ok case J: show_files first step, waited {waited:.2f}s, second step ran")
+
 print("all good")

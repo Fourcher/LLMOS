@@ -721,8 +721,7 @@ def run(ctx, user_text, history):
     # (explicit "remember X"). Runs the same tool through the same policy path.
     # first steps that can change the screen (so run() waits for the page to change); every other tool continues at once
     _FIRST_SCREEN_TOOLS = ("open_app", "open_file", "open_latest", "browse", "click", "type_text", "fill_in",
-                           "press_keys", "scroll", "focus_window", "make_document", "mail_read", "play_media",
-                           "show_files", "make_app", "show_panel", "system_panel")
+                           "press_keys", "scroll", "focus_window", "make_document", "play_media", "make_app")
     # "open <page>, then click Download": the first step is one the OS knows, so it is done here and the model is
     # given only the rest (a small model otherwise loses the first step and works on whatever is on the screen)
     # Also handle "open the calculator, then press 7 then + then 2 then = and tell me the result" completely
