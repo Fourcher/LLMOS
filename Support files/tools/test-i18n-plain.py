@@ -56,6 +56,8 @@ check(sorted(new) == sorted(BLOCKS), "all six language blocks present")
 NEW_KEYS = {"no_model", "d_maximize", "d_window", "d_sure", "d_slow_turn"}  # keys added to every block (no assistant set up yet; window controls; sure-press and slow-turn notices)
 # the model-size words for the set-up's "More models" list (every block has them; the old values are unchanged)
 ADDED_KEYS = {"w_model_slow", "w_more_models"}
+# the "online for everything" description gained the sentence "Your name and saved memory go with each request." (test-privacy-disclosure.py)
+ALLOWED_EDITS = {"q_brain_2"}
 for b in BLOCKS:
     if b in old:
         check(set(new[b]) == set(old[b]) | NEW_KEYS | ADDED_KEYS,
@@ -63,9 +65,10 @@ for b in BLOCKS:
         check(all(isinstance(new[b].get(k), str) and "{" not in new[b][k] for k in NEW_KEYS | ADDED_KEYS),
               f"{b}: new keys and model-size words present, no placeholder braces")
         if b != "EN":
-            check({k: v for k, v in new[b].items() if k not in NEW_KEYS | ADDED_KEYS}
-                  == {k: v for k, v in old[b].items() if k not in NEW_KEYS | ADDED_KEYS},
-                  f"{b}: values unchanged apart from no_model and the model-size words (non-English not edited)")
+            skip = NEW_KEYS | ADDED_KEYS | ALLOWED_EDITS
+            check({k: v for k, v in new[b].items() if k not in skip}
+                  == {k: v for k, v in old[b].items() if k not in skip},
+                  f"{b}: values unchanged apart from no_model, the model-size words and q_brain_2 (non-English not edited)")
 
 en = new.get("EN", {})
 check(en.get("no_model") == "No assistant is set up yet.", "EN no_model == 'No assistant is set up yet.'")

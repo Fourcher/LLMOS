@@ -2781,7 +2781,11 @@ class Desk:
             s_ = config.settings
             net = {"no": "The internet is off: nothing leaves this computer.", "ask": "The internet is set to ask: nothing goes online without your OK each time."}.get(
                 s_.get("internet", "yes"), "Something goes online only when a request needs it: a web search, a page or a video you asked for, a download, a model or app you asked to install.")
+            prov_ = (config.cloud() or {}).get("provider") or "anthropic"
+            svc_ = llm.CLOUD_PROVIDERS.get(prov_, {}).get("name", prov_)
             brain = ("Your requests are answered by the model on this computer." if s_.get("brain", "local") == "local" or not config.cloud()
+                     else f"Requests, the recent chat, results from your files or the web, and your name and saved memory go to {svc_}. "
+                          "Everything else stays here. Say “ask before going online” to keep them here." if s_.get("brain") == "cloud"
                      else "Requests you send to the online model (Claude/ChatGPT) go to that company; everything else stays here.")
             self.instant_reply(line, f"{net} {brain} There is no tracking, no telemetry and no account. The microphone is only on while you talk to me. "
                                "Your files and chats stay on this computer" + (", locked with your passphrase." if s_.get("vault") else
