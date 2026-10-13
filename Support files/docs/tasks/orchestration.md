@@ -79,3 +79,4 @@ Rule for every FIX spec that changes existing behaviour: open with a PROBE-sourc
   * Reject a test that fakes the function under change; the test must exercise the real code path (fake only its outside edges: subprocess, network, VM).
   * A grader or harness timeout is not a FAIL until the task is re-run once alone.
   * Branches built on an old base: VERIFY also runs the host suites on a trial merge into the current integration head (`git merge --no-commit --no-ff <branch>` in its worktree after resetting to llmos-1.5.0), so an inherited FAIL is told apart from a new one.
+- 2026-10-12: the worktree guard refuses commands containing `$(...)` (e.g. `git diff $(git log …)`). In VERIFY/FIX specs give explicit hashes (parent from `git log -2 --format=%H <hash>` run as its own command), never a substitution.
