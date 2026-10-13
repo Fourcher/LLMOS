@@ -420,6 +420,19 @@ CASES = {
     # "no corners and everything to be rounded" (the brief): no corners means rounded
     "no corners": ("set_appearance", {"corners": "rounded"}),
     "make everything purple with no corners": ("set_appearance", {"theme": "purple", "corners": "rounded"}),
+    # view wordings: bigger icons is icons; smaller icons has no safe mapping (leave it to the model)
+    "bigger icons": ("show_files", {"path": "~", "view": "icons"}),
+    "show them as icons": ("show_files", {"path": "~", "view": "icons"}),
+    "show as a grid": ("show_files", {"path": "~", "view": "icons"}),
+    "details view": ("show_files", {"path": "~", "view": "list"}),
+    "smaller icons": None,
+    # default app wordings with "by default" or "use X for Y"; a kind is required
+    "open pdfs with evince by default": ("set_default_app", {"kind": "pdfs", "app": "evince"}),
+    "use evince for pdfs": ("set_default_app", {"kind": "pdfs", "app": "evince"}),
+    "open pdfs": None,
+    "open firefox by default": None,
+    "make icons": None,
+    "big icons are ugly": None,
 }
 
 bad = 0

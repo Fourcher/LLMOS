@@ -957,14 +957,14 @@ def _convert_file(f, fmt):
 def _files(text):
     # "show as list" / "switch to big icons": the view of the folder on screen (the last one shown, else home)
     m = re.match(r"^\s*(?:please\s+)?(?:show|view|display|see|put|switch|change)\s+(?:(?:my|the|these|those)\s+)?(?:(?:files?|them|it|everything|folders?)\s+)?"
-                 r"(?:as|in|to)\s+(?:a\s+)?(?P<v>list|big\s+icons|icons|large\s+icons|a\s+grid|grid|thumbnails|details)(?:\s+view)?\s*[.!]?$", text, re.I)
+                 r"(?:as|in|to)\s+(?:a\s+)?(?P<v>list|big\s+icons|bigger\s+icons|icons|large\s+icons|a\s+grid|grid|thumbnails|details)(?:\s+view)?\s*[.!]?$", text, re.I)
     if m:
         from . import tools as T
         v = re.sub(r"\s+", " ", m.group("v").lower()).replace("a grid", "grid")
-        view = "icons" if v in ("icons", "big icons", "large icons", "grid", "thumbnails") else "list"
+        view = "icons" if v in ("icons", "big icons", "bigger icons", "large icons", "grid", "thumbnails") else "list"
         return ("show_files", {"path": T._LAST_FOLDER or "~", "view": view})
     # bare view phrases: "show big icons", "list view", "show icons"
-    m = re.match(r"^\s*(?:please\s+)?(?:show\s+|use\s+|switch\s+to\s+)?(?P<v>big\s+icons|large\s+icons|icons|icon\s+view|grid\s+view|list\s+view|details\s+view)\s*[.!]?$", text, re.I)
+    m = re.match(r"^\s*(?:please\s+)?(?:show\s+|use\s+|switch\s+to\s+)?(?P<v>big\s+icons|bigger\s+icons|large\s+icons|icons|icon\s+view|grid\s+view|list\s+view|details\s+view)\s*[.!]?$", text, re.I)
     if m:
         from . import tools as T
         v = re.sub(r"\s+", " ", m.group("v").lower())
@@ -1149,11 +1149,15 @@ _OPEN_URL = re.compile(r"^\s*(?:please\s+)?(?:(?:open|go to|visit|browse|show me
 
 _DEFAULT_APP_OPEN = re.compile(r"^(?:please\s+)?(?:always\s+open|open\s+all)\s+(?:my\s+)?(?P<k>[\w\s]+?)\s+(?:in|with|using)\s+(?P<a>[\w .-]+?)\s*[.!]?$", re.I)
 _DEFAULT_APP_SET = re.compile(r"^(?:please\s+)?(?:make|set)\s+(?P<a>[\w .-]+?)\s+(?:as\s+)?(?:my\s+|the\s+)?default\s+(?:app\s+|program\s+)?for\s+(?P<k>[\w\s]+?)\s*[.!]?$", re.I)
+# "open pdfs with evince by default" (no "always" needed when "by default" says it) and "use evince for pdfs"
+_DEFAULT_APP_OPEN_BY = re.compile(r"^(?:please\s+)?open\s+(?:my\s+)?(?P<k>[\w\s]+?)\s+(?:in|with|using)\s+(?P<a>[\w .-]+?)\s+by\s+default\s*[.!]?$", re.I)
+_DEFAULT_APP_USE_FOR = re.compile(r"^(?:please\s+)?(?:use|make)\s+(?P<a>[\w .-]+?)\s+(?:the\s+default\s+)?(?:for|to\s+open)\s+(?P<k>[\w\s]+?)\s*[.!]?$", re.I)
 
 
 def _default_app(text):
     """'always open pdfs in firefox' / 'make vlc my default for videos' -> set_default_app; only for kinds of file the tool knows."""
-    m = _DEFAULT_APP_OPEN.match(text) or _DEFAULT_APP_SET.match(text)
+    m = (_DEFAULT_APP_OPEN.match(text) or _DEFAULT_APP_SET.match(text)
+         or _DEFAULT_APP_OPEN_BY.match(text) or _DEFAULT_APP_USE_FOR.match(text))
     if not m:
         return None
     from . import tools
