@@ -360,7 +360,7 @@
             if (this.modelsOpen) {
               const list = el("div", "modelist");
               for (const m of all) {
-                const row = el("button", "btn", esc(`${m.name} — ${m.need_gb} GB` + (m.bigger ? ` — ${t("w_model_slow")}` : "")));
+                const row = el("button", "btn", esc(`${m.name} — ${Number(m.size_gb).toFixed(1)} GB` +(m.bigger ? ` — ${t("w_model_slow")}` : "")));
                 row.type = "button"; row.setAttribute("aria-pressed", String(sel.id === m.id));
                 row.onclick = () => { this.modelPick = m.id; fill(q); };
                 list.appendChild(row);

@@ -69,6 +69,16 @@ for ram, (want_on, want_off) in EXPECT.items():
               f"all_models {label}: need and installed are right")
         keys = [(m["bigger"], CAT[m["id"]]["size"]) for m in allm]
         check(keys == sorted(keys), f"all_models {label}: fitting models first, then by size")
+        check(all(m["size_gb"] == round(CAT[m["id"]]["size"] / 1e9, 1) for m in allm),
+              f"all_models {label}: every entry carries its download size_gb")
+
+# the models panel (desk.py builds it inside a method, so this is a source check): language-model rows keep the
+# "runs from disk, slow" label; voice-model rows do not carry it
+src = open(os.path.join(_ROOT, "usr/lib/llmos/llmos/desk.py"), encoding="utf-8").read()
+lang = src[src.index("local = []"):src.index("blocks = [{\"type\": \"text\", \"text\": L(\"d_models_intro\")")]
+voice = src[src.index("vrows = []"):src.index("blocks.append({\"type\": \"list\", \"items\": vrows})")]
+check('T("w_model_slow")' in lang, "models panel: language-model rows keep the 'runs from disk, slow' label")
+check('w_model_slow' not in voice, "models panel: voice-model rows have no 'runs from disk, slow' label")
 
 # the chat pick: the set-up's profile step with a named model
 print("the chat pick takes any allowed model")

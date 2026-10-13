@@ -1770,8 +1770,6 @@ class Desk:
             sub = " · ".join(x for x in [L("d_voice_accuracy", a=m.get("accuracy", "")), m.get("speed", ""),
                                          f"{m['size'] / 1e6:.0f} MB", f"{m['ram_gb']} GB RAM",
                                          f"{m.get('langs', '')} {L('d_languages')}"] if x.strip())
-            if m["ram_gb"] > models.ram_gb() - 1:
-                sub += " · " + T("w_model_slow")
             vrows.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
                           "meta": L("d_in_use") if on else (T("installed") if have else ""), "actions": acts})
         blocks.append({"type": "list", "items": vrows})
