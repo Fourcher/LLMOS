@@ -1440,7 +1440,23 @@ def execute(ctx, name, arguments):
     # an unasked call (a gate miss, see above) is shown first like ALWAYS_CONFIRM, and runs without asking under full trust
     held = unasked is not None and not full_trust
     if always or held or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
-        if not ctx.confirm_action(tool, shown, risk):
+        # the desk/console confirm reads this flag to say why it asked (the web-page check); no signature change,
+        # so a ctx with the old confirm_action(tool, shown, risk) keeps working
+        flag = bool(tainted)
+        if flag:
+            try:
+                ctx.confirm_tainted = True
+            except AttributeError:
+                flag = False
+        try:
+            confirmed = ctx.confirm_action(tool, shown, risk)
+        finally:
+            if flag:
+                try:
+                    ctx.confirm_tainted = False
+                except AttributeError:
+                    pass
+        if not confirmed:
             store.audit(name, shown, "denied", allowed=False)
             return f"you declined this ({name}). Do not retry it; continue or stop."
 
