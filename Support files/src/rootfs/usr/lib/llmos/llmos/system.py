@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import unicodedata
 
 from . import config, rootd, rootd_client
 from .rootd import HOSTS_NAME_RE, PRINTER_NAME_RE, PRINTER_URI_RE
@@ -730,6 +731,15 @@ def apply_timezone_env():
     time.tzset()
 
 
+def _zone_key(s):
+    """Match key for a place name or zone name: lowercase ASCII letters only.
+    Accents are folded (NFKD, combining marks dropped), so 'zürich' -> 'zurich',
+    'são paulo' -> 'saopaulo', and 'ß' -> 'ss'. Other non-ASCII is dropped."""
+    s = unicodedata.normalize("NFKD", str(s).lower()).replace("ß", "ss")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z]", "", s)
+
+
 def find_timezone(name):
     """Resolve what the user said ('Tokyo', 'arizona', 'Europe/Paris') to a zone."""
     q = str(name).strip()
@@ -737,7 +747,7 @@ def find_timezone(name):
         return None
     if os.path.exists(os.path.join(ZONEINFO, q)) and "/" in q or q in ("UTC", "GMT"):
         return q
-    key = re.sub(r"[^a-z]", "", q.lower())
+    key = _zone_key(q)
     aliases = {"arizona": "America/Phoenix", "phoenix": "America/Phoenix", "pacific": "America/Los_Angeles",
                "eastern": "America/New_York", "central": "America/Chicago", "mountain": "America/Denver",
                "uk": "Europe/London", "britain": "Europe/London", "cet": "Europe/Berlin", "india": "Asia/Kolkata",
@@ -752,9 +762,9 @@ def find_timezone(name):
         for root, _, files in os.walk(d):
             for f in files:
                 zone = os.path.relpath(os.path.join(root, f), ZONEINFO)
-                if re.sub(r"[^a-z]", "", f.lower()) == key:
+                if _zone_key(f) == key:
                     return zone
-                if key and key in re.sub(r"[^a-z]", "", zone.lower()) and best is None:
+                if key and key in _zone_key(zone) and best is None:
                     best = zone
     return best
 
