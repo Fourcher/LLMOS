@@ -145,13 +145,95 @@ out_done = wait_fn(done_stub, "10 after 3")
 el_done = time.time() - t
 check(el_done < 0.5 and out_done == {"done": 5}, "wait N after M with done > M returns at once (%.2f s)" % el_done)
 
-# (i) wait "N after M" with nothing new started or finished still waits the 3 s grace
+# (i) wait "N after M" with nothing new: the grace lasts to the timeout (here 3 s), not a fixed 3 s
 none_stub = DoneStub()
 none_stub._req_done = 2
 t = time.time()
-wait_fn(none_stub, "10 after 2")
+wait_fn(none_stub, "3 after 2")
 el_none = time.time() - t
-check(2.8 <= el_none <= 5.0,"wait N after M with nothing new: 3 s grace (%.2f s)" % el_none)
+check(2.7 <= el_none <= 3.3, "wait N after M with nothing new: returns at the timeout (%.2f s)" % el_none)
+
+
+# (j) the real _control_conn, driven through a fake socket that captures the written response
+import io  # noqa: E402
+import json  # noqa: E402
+
+_ROOT = os.path.join(HERE, "..", "src", "rootfs")
+sys.path.insert(0, os.path.join(_ROOT, "usr/lib/llmos"))
+os.environ.setdefault("LLMOS_SHARE", os.path.join(_ROOT, "usr/share/llmos"))
+from llmos import desk  # noqa: E402
+
+
+class FakeConn:
+    def __init__(self, line):
+        self._in = io.StringIO(line + "\n")
+        self.sent = []
+
+    def settimeout(self, s):
+        pass
+
+    def makefile(self, mode, encoding=None):
+        return self._in
+
+    def sendall(self, data):
+        self.sent.append(data)
+
+    def close(self):
+        pass
+
+
+def ctl_case(line, schedule, done0=0):
+    """Run desk._control_conn("wait ...") on a Desk.__new__ stub. schedule: (delay_s, pending, done) applied by a
+    helper thread. Returns (elapsed, parsed response)."""
+    d = desk.Desk.__new__(desk.Desk)
+    d.busy = False
+    d.last_reply = ""
+    d.requests = queue.Queue()
+    d._pending_lock = threading.Lock()
+    d._req_pending = 0
+    d._req_done = done0
+    d._state = lambda: {"done": d._req_done, "busy": d.busy}
+    conn = FakeConn(line)
+
+    def driver():
+        t0 = time.time()
+        for delay, pending, done in schedule:
+            time.sleep(max(0.0, t0 + delay - time.time()))
+            with d._pending_lock:
+                d._req_pending = pending
+                d._req_done = done
+
+    th = threading.Thread(target=driver, daemon=True)
+    th.start()
+    t = time.time()
+    d._control_conn(conn)
+    elapsed = time.time() - t
+    th.join()
+    resp = json.loads(conn.sent[-1].decode()) if conn.sent else None
+    return elapsed, resp
+
+
+# j1: the typed line reaches say() late (4 s), runs 0.5 s: wait returns when its turn is done, not at 3 s
+el, resp = ctl_case("wait 10 after 3", [(4.0, 1, 3), (4.5, 0, 4)], done0=3)
+check(4.2 <= el <= 4.8 and resp == {"done": 4, "busy": False}, "line arrives at 4 s: returns after its turn (%.2f s)" % el)
+
+# j2: the line never arrives: returns at the timeout (3 s), neither earlier nor later
+el, resp = ctl_case("wait 3 after 3", [], done0=3)
+check(2.7 <= el <= 3.3 and resp["done"] == 3, "line never arrives: returns at the 3 s timeout (%.2f s)" % el)
+
+# j3: timeout 0 and negative: returns at once
+el0, resp0 = ctl_case("wait 0 after 3", [], done0=3)
+eln, respn = ctl_case("wait -2 after 3", [], done0=3)
+check(el0 < 0.3 and eln < 0.3 and resp0 is not None and respn is not None,
+      "timeout 0 / negative: returns at once (%.2f s, %.2f s)" % (el0, eln))
+
+# j4: already advanced (done 5 > after 3): returns at once
+el, resp = ctl_case("wait 10 after 3", [], done0=5)
+check(el < 0.3 and resp["done"] == 5, "done already past after: returns at once (%.2f s)" % el)
+
+# j5: no "after": the fixed 3 s grace is unchanged (nothing started: returns after about 3 s)
+el, resp = ctl_case("wait 10", [], done0=0)
+check(2.7 <= el <= 3.5 and resp is not None, "no after: 3 s grace unchanged (%.2f s)" % el)
 
 print("all good" if not fails else "FAILED: %d" % len(fails))
 sys.exit(1 if fails else 0)

@@ -4187,21 +4187,28 @@ class Desk:
                 if len(words) == 3 and words[1] == "after" and words[2].isdigit():
                     arg, after = words[0], int(words[2])
                 start_reply = self.last_reply
-                # grace: up to 3 s for a request to start (a shortcut can finish before busy is ever set)
                 if after is None:
+                    # grace: up to 3 s for a request to start (a shortcut can finish before busy is ever set)
                     for _ in range(30):
                         if self._req_pending > 0 or self.busy or self.last_reply != start_reply:
                             break
                         time.sleep(0.1)
+                    for _ in range(int(arg or 600) * 4):
+                        if self._req_pending == 0 and not self.busy and self.requests.empty():
+                            break
+                        time.sleep(0.25)
                 else:
-                    for _ in range(30):
+                    # with "after": the grace lasts until the line sent after M starts or finishes, bounded only by the
+                    # timeout (the typed line can reach say() late); the idle wait is bounded by the same deadline
+                    deadline = time.monotonic() + int(arg or 600)
+                    while time.monotonic() < deadline:
                         if self._req_done > after or self._req_pending > 0 or self.busy:
                             break
-                        time.sleep(0.1)
-                for _ in range(int(arg or 600) * 4):
-                    if self._req_pending == 0 and not self.busy and self.requests.empty():
-                        break
-                    time.sleep(0.25)
+                        time.sleep(max(0.0, min(0.1, deadline - time.monotonic())))
+                    while time.monotonic() < deadline:
+                        if self._req_pending == 0 and not self.busy and self.requests.empty():
+                            break
+                        time.sleep(max(0.0, min(0.25, deadline - time.monotonic())))
                 out = self._state()
             elif cmd == "dialog":          # answer every pending confirmation (tests)
                 for did, d in list(self.dialogs.items()):
