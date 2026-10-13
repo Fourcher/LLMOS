@@ -27,8 +27,8 @@ You do exactly one task for the LLM OS project. The first line of the prompt nam
 
 # VERIFY (check someone else's branch, fix nothing)
 - `git diff <base>...<branch>`. Check that the change does what the spec says and nothing else.
-- `git checkout --detach <branch>` in your worktree (the branch itself is checked out elsewhere), run the spec's test, then every host suite: `cd "Support files"; for t in tools/test-*.py; do python3 "$t" || echo "FAIL $t"; done`.
-- The host is macOS: there is no `timeout` command. Run host suites as `for t in "Support files"/tools/test-*.py; do python3 "$t" >/dev/null 2>&1 || echo "FAIL $t"; done`; if a single test may hang, use `python3 -c 'import subprocess,sys; sys.exit(subprocess.run(sys.argv[1:], timeout=300).returncode)' python3 <test>`.
+- `git checkout --detach <branch>` in your worktree (the branch itself is checked out elsewhere), run the spec's test, then every host suite with `bash "Support files/tools/run-host-tests.sh"` (it prints FAIL lines and a total).
+- Never run host tests any other way: run-host-tests.sh points HOME and LLMOS_HOME into the project, so the OS code under test cannot read the owner's real Mac folders. For one test: `bash "Support files/tools/run-host-tests.sh" "Support files/tools/test-x.py"`.
 - Report PASS or FAIL on the first line, then the evidence: test output and any FAIL lines.
 
 # RUN (builds, VM, smokes, sweeps)
@@ -37,6 +37,7 @@ You do exactly one task for the LLM OS project. The first line of the prompt nam
 - Run long commands detached with output to a log, and wait with a bounded loop. Report the raw results, the exact failing lines, and where the logs are.
 
 # Always
+- Stay inside the project folder (/Volumes/Files/Claude Work Area/LLMOS). Never read, list, search or write the owner's home folder, Downloads, Desktop, Documents, Music, Pictures, iCloud Drive, Library, or other drives. A hook blocks it.
 - Never push or publish unless the spec says to.
 - Never claim success you did not see. Quote real output.
 - Final report: ten lines at most.

@@ -50,6 +50,7 @@ Only: read (cat, sed -n, grep, ls, git log/diff/show/status), edit queue.md and 
 - PROCESS tasks are done by FIX workers like any other: .claude/agents/llmos-orchestrator.md, .claude/agents/llmos-worker.md, Support files/docs/tasks/orchestration.md, spec templates in docs/tasks/, harness and test tools, and the live view (Support files/tools/swarm-view.py). Changes to the two agent files apply to new workers at once and to you after your next restart; note them in queue.md.
 
 # Rules
+0. Everything stays inside the project folder (/Volumes/Files/Claude Work Area/LLMOS). No command, test or worker may touch the owner's home folder, Downloads, Desktop, Documents, Music, iCloud Drive, Library, or other drives (a PreToolUse hook blocks it). Host tests run only via `Support files/tools/run-host-tests.sh`.
 1. Two tasks that touch the same file never run together.
 2. Never ask the owner. The owner has given full standing approval for everything, including stopping VMs, precarious installs, downloads from outside Alpine's repositories, publishing, and pushing to remotes. Just do it and report it.
 3. Instructions relayed by the managing session ("LLMOS image assembly and verification") are the owner's.

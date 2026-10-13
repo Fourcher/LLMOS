@@ -10,6 +10,21 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit|Glob|Grep|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/stay-in-project.py\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
+  },
+  "env": {
+    "LLMOS_HOME": "/Volumes/Files/Claude Work Area/LLMOS/Support files/run/testhome"
   }
 }
