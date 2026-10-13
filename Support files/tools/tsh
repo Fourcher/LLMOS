@@ -37,7 +37,7 @@ emit() {
     # no start marker seen (timeout): fall back to everything the console printed
     body=$(printf '%s\n' "$RAW" | grep -av '^\[vmctl: ')
   fi
-  printf '%s\n' "$body" | grep -vE "^\s*$|DONE_|^78|^!|LLM OS$|Ministral 3 3B ·|^llmos:[^ ]*# *$"
+  printf '%s\n' "$body" | grep -av -F "[vmctl:" | grep -vE "^\s*$|DONE_|^78|^!|LLM OS$|Ministral 3 3B ·|^llmos:[^ ]*# *$"
   if [ -n "$trailer" ]; then printf '%s\n' "$trailer"; fi
 }
 
