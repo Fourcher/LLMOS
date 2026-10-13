@@ -15,6 +15,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -128,9 +129,10 @@ def wait_ready(timeout=600, tick=None):
     return False
 
 
-def _read_stream(lines, on_text):
+def _read_stream(lines, on_text, reasoning=None):
     """Accumulate an OpenAI-style chat-completions SSE stream (llama-server and every OpenAI-compatible
-    service speak it). Returns (content, tool_calls, timings, non_sse_text)."""
+    service speak it). Returns (content, tool_calls, timings, non_sse_text). Thinking text (reasoning_content)
+    is never content; when a list is passed as reasoning, it is appended there."""
     content, calls, timings, other = "", {}, {}, []
     for raw in lines:
         line = (raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw).strip()
@@ -154,6 +156,8 @@ def _read_stream(lines, on_text):
             raise ModelError(str(e.get("message", e) if isinstance(e, dict) else e)[:200])
         for ch in chunk.get("choices") or []:
             d = ch.get("delta") or {}
+            if d.get("reasoning_content") and reasoning is not None:
+                reasoning.append(str(d["reasoning_content"]))
             if d.get("content"):
                 content += d["content"]
                 if on_text:
@@ -238,7 +242,12 @@ def _chat_on(c, body, on_text):
         if "context" in detail.lower() or "exceed" in detail.lower() or "too long" in detail.lower():
             detail = "the request was too long for the model's memory; try a shorter one"
         raise ModelError(str(detail)[:200])
-    content, calls, timings, _ = _read_stream(r, on_text)
+    reasoning = []
+    content, calls, timings, _ = _read_stream(r, on_text, reasoning)
+    if not content and not calls and reasoning and not (body.get("chat_template_kwargs") or {}).get("enable_thinking"):
+        # the model spent its whole turn thinking: its thinking is not the answer, so the empty content goes to the
+        # caller's existing empty-reply path (agent.py: "I couldn't finish that")
+        print("llmos: model spent its turn thinking", file=sys.stderr, flush=True)
     return {"content": content, "tool_calls": calls, "timings": timings}
 
 
