@@ -336,18 +336,18 @@ class FakeNoReadCtx(FakePageCtx):
     app_read = None      # shadows the method; agent._page_key sees no reader
 
 
-def run_first_step(ctx_factory, changes_in):
-    """Run 'turn on do not disturb, then press 7' through the real run(); returns (elapsed virtual seconds, reply)."""
+def run_first_step(ctx_factory, changes_in, text="turn on do not disturb, then press 7"):
+    """Run `text` through the real run(); returns (elapsed virtual seconds after the first step, reply)."""
     clock = FakeTime()
     ctx = ctx_factory(clock)
     marks = {}
 
     def fake_exec(ctx_, name, arguments):
-        if name == "change_setting":
+        if name in ("change_setting", "open_app"):
             marks["action"] = clock.now
             if changes_in is not None:
                 ctx.changes_at = clock.now + changes_in
-            return "Do not disturb is on."
+            return "Do not disturb is on." if name == "change_setting" else "Opened the calculator."
         if name == "click":
             return "pressed '7' in the app. It now shows: Display: 7"
         return "error: no such tool"
@@ -356,33 +356,33 @@ def run_first_step(ctx_factory, changes_in):
         with patch.object(agent, "tools") as mock_tools:
             mock_tools.REGISTRY = MockRegistry()
             with patch.object(agent, "time", clock):
-                reply = agent.run(ctx, "turn on do not disturb, then press 7", [])
+                reply = agent.run(ctx, text, [])
     return clock.now - marks["action"], reply
 
 
-# the page changes 0.3 s after the first step: continues in at most 0.5 s (was a fixed 2 s)
-elapsed, reply = run_first_step(lambda c: FakePageCtx(c), changes_in=0.3)
-print(f"Test 5a: page changes at 0.3 s -> waited {elapsed:.2f} s; reply {reply!r}")
-assert elapsed <= 0.5, elapsed
+# screen-first step (open_app): the page changes 0.3 s after the step; run() polls and continues at about 0.3 s
+elapsed, reply = run_first_step(lambda c: FakePageCtx(c), changes_in=0.3, text="open the calculator, then press 7")
+print(f"Test 5a: open_app first, page changes at 0.3 s -> waited {elapsed:.2f} s; reply {reply!r}")
+assert 0.2 <= elapsed <= 0.5, elapsed
 assert "pressed 7" in reply, reply
 print("  ✓ Test 5a passed\n")
 
-# the page never changes: waits the full 2.0 s, as before
+# change_setting first (not a screen step): continues at once, no page wait
 elapsed, reply = run_first_step(lambda c: FakePageCtx(c), changes_in=None)
-print(f"Test 5b: page never changes -> waited {elapsed:.2f} s")
-assert 1.9 <= elapsed <= 2.1, elapsed
+print(f"Test 5b: change_setting first, page never changes -> waited {elapsed:.2f} s")
+assert elapsed <= 0.2, elapsed
 print("  ✓ Test 5b passed\n")
 
-# the read bridge raises: treated as unchanged, no exception, full wait
+# change_setting first, read bridge raises: no wait, no exception
 elapsed, reply = run_first_step(lambda c: FakePageCtx(c, raise_read=True), changes_in=0.3)
-print(f"Test 5c: read bridge raises -> waited {elapsed:.2f} s, no exception")
-assert 1.9 <= elapsed <= 2.1, elapsed
+print(f"Test 5c: change_setting first, read bridge raises -> waited {elapsed:.2f} s, no exception")
+assert elapsed <= 0.2, elapsed
 print("  ✓ Test 5c passed\n")
 
-# ctx without app_read: same as today, the full 2.0 s wait
+# change_setting first, ctx without app_read: no wait
 elapsed, reply = run_first_step(lambda c: FakeNoReadCtx(c), changes_in=0.3)
-print(f"Test 5d: no app_read -> waited {elapsed:.2f} s")
-assert 1.9 <= elapsed <= 2.1, elapsed
+print(f"Test 5d: change_setting first, no app_read -> waited {elapsed:.2f} s")
+assert elapsed <= 0.2, elapsed
 print("  ✓ Test 5d passed\n")
 
 print("All core tests passed!")

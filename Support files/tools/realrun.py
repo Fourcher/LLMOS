@@ -76,7 +76,8 @@ def expand_task_home(task, home):
 PATHS = ("page", "say")
 
 
-def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="page", sleep=time.sleep):
+def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="page", sleep=time.sleep,
+             fresh_before=None):
     if path not in PATHS:
         raise ValueError("path must be one of %s, got %r" % (PATHS, path))
     # QMP resolves the screendump filename in QEMU's own working directory, so the shot path must be absolute
@@ -196,6 +197,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
         "cancelled": cancelled,
         "drain_seconds": drain_seconds,
         "stuck": stuck,
+        "fresh_before": fresh_before,  # why run_suite rebooted onto a fresh overlay just before this task
     }
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "%s.json" % tid), "w", encoding="utf-8") as f:
@@ -214,7 +216,9 @@ def _label(passes, repeat):
 def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", repeat=1, fresh=None,
               sleep=time.sleep, clock=time.monotonic):
     """Run every task `repeat` times. Before repeat r > 1, fresh() is called (a fresh overlay).
-    A task that left the desk stuck (record "stuck") is followed by fresh() before the next task.
+    A task that left the desk stuck (record "stuck") or was cancelled (record "cancelled", e.g. an open
+    dialog that the cancel drained) is followed by fresh() before the next task; that task's record gets
+    "fresh_before" naming the reason. No fresh() after the last task.
     repeat == 1 writes {outdir}/<id>.json; otherwise {outdir}/r{r}/<id>.json."""
     if repeat < 1:
         raise ValueError("repeat must be >= 1, got %r" % repeat)
@@ -228,6 +232,7 @@ def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", r
     t0 = time.monotonic()
     per = {t["id"]: {"passes": 0, "seconds": 0.0} for t in tasks}
     stuck_prev = False
+    prev_why = None
     for r in range(1, repeat + 1):
         if fresh is not None and r > 1:
             fresh()
@@ -235,11 +240,15 @@ def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", r
         rdir = outdir if repeat == 1 else os.path.join(outdir, "r%d" % r)
         os.makedirs(rdir, exist_ok=True)
         for task in tasks:
+            fresh_before = None
             if fresh is not None and stuck_prev:
-                fresh()
+                fresh()  # an exception here propagates out of run_suite (main's finally closes the QMP socket)
+                fresh_before = prev_why
             stuck_prev = False
-            rec = run_task(task, user, run_in_vm, clock=clock, outdir=rdir, path=run_path, sleep=sleep)
-            stuck_prev = rec["stuck"]
+            rec = run_task(task, user, run_in_vm, clock=clock, outdir=rdir, path=run_path, sleep=sleep,
+                           fresh_before=fresh_before)
+            stuck_prev = bool(rec["stuck"] or rec["cancelled"])
+            prev_why = "previous task stuck" if rec["stuck"] else "previous task cancelled"
             per[rec["id"]]["seconds"] += rec["seconds"]
             if rec["verdict"] == "PASS":
                 per[rec["id"]]["passes"] += 1

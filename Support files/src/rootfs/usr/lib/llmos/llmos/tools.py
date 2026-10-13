@@ -1410,7 +1410,7 @@ def add_model(a, ctx):
     if want:
         pick = next((f for f in ggufs if f["path"].lower() == want.lower() or f["path"].lower().endswith("/" + want.lower())), None)
         if not pick:
-            return f"error: '{want}' is not in {repo}; its GGUF files are: " + ", ".join(f["path"] for f in ggufs[:12])
+            return f"error: '{want}' is not in {repo}; its model files are: " + ", ".join(f["path"] for f in ggufs[:12])
     if not pick:
         pick = next((f for f in ggufs if "q4_k_m" in f["path"].lower()), None) or min(ggufs, key=lambda f: _fsize(f))
     sha = ((pick.get("lfs") or {}).get("oid") or "").replace("sha256:", "").strip().lower()
@@ -1553,7 +1553,7 @@ def change_setting(a, ctx):
                     "(if they have no network, offer to show the Wi-Fi networks)")
         config.settings.set("internet", v)
         ok, err = system.apply_firewall(v)
-        return f"internet is now '{v}'" + ("" if ok else f" (firewall error: {err})") + \
+        return f"internet is now '{v}'" + ("" if ok else f" (couldn't change it: {err})") + \
             (" -- the firewall now blocks all outgoing traffic" if v == "no" else "")
     if s == "tor":
         ok, note = system.set_tor(_truthy(v))
@@ -1576,9 +1576,9 @@ def change_setting(a, ctx):
         v = str(v).lower().strip()
         v = "standard" if v in ("standard", "cautious", "careful", "safe", "default assistant", "guardrails") else "owner" if v in ("owner", "mine", "obey", "follow", "me", "my instructions", "full") else v
         if v not in ("owner", "standard"):
-            return "error: guidance must be 'owner' (does what you ask on your machine) or 'standard' (the model's own caution)"
+            return "error: guidance must be 'owner' (does what you ask on your machine) or 'standard' (the assistant's own caution)"
         config.settings.set("guidance", v)
-        return "guidance is now 'owner': it does what you ask on your own machine, no lectures" if v == "owner" else "guidance is now 'standard': the model keeps its own caution"
+        return "guidance is now 'owner': it does what you ask on your own machine, no lectures" if v == "owner" else "guidance is now 'standard': the assistant keeps its own caution"
     if s == "brain":
         n = _norm_brain(v)
         if not n:
@@ -2712,8 +2712,15 @@ def find_by_meaning(a, ctx):
     vision = kind in ("photos", "any") and any(True for _ in meaning._candidates(("image",)))
     try:
         if not meaning.ready(vision=vision):
+            ask = config.settings.get("internet") == "ask"
+            if ask and (getattr(ctx, "headless", False) or not hasattr(ctx, "confirm_network")):
+                meaning.fetch(vision=vision)   # refuses under "ask" without the owner: nothing is downloaded unattended
+            if ask:
+                size = "865 MB" if vision else "310 MB"
+                if not ctx.confirm_network("find_by_meaning", {"url": f"search model download, {size}"}):
+                    return "you declined internet access for this. Continue without it."
             ctx.status("getting the search model once (310 MB" + (" + 555 MB for pictures" if vision else "") + "), checked before use…")
-            meaning.fetch(vision=vision, progress=lambda d, t: ctx.status(f"search model: {d * 100 // max(1, t)}%"))
+            meaning.fetch(vision=vision, progress=lambda d, t: ctx.status(f"search model: {d * 100 // max(1, t)}%"), allowed=ask)
         ctx.status("looking through your files…")
         meaning.index(("doc", "other"), limit=400)
         if vision and kind in ("photos", "any"):

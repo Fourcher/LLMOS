@@ -47,9 +47,14 @@ def blocks_from_source(src):
 
 src = open(os.path.join(LLMOS_DIR, "i18n.py"), encoding="utf-8").read()
 new = blocks_from_source(src)
-old_src = subprocess.run(["git", "show", REF + ":./i18n.py"], cwd=LLMOS_DIR,
+# the reference is the merge-base of HEAD and REF, so a branch cut from an older commit is compared with its own
+# base rather than the moving integration tip; if there is no merge-base, REF is used as before
+mb = subprocess.run(["git", "merge-base", "HEAD", REF], cwd=LLMOS_DIR,
+                    capture_output=True, text=True, check=False)
+REF_USED = mb.stdout.strip() if mb.returncode == 0 and mb.stdout.strip() else REF
+old_src = subprocess.run(["git", "show", REF_USED + ":./i18n.py"], cwd=LLMOS_DIR,
                          capture_output=True, text=True, check=False)
-check(old_src.returncode == 0, f"reference {REF}:i18n.py readable")
+check(old_src.returncode == 0, f"reference {REF_USED} ({'merge-base with ' + REF if REF_USED != REF else REF}):i18n.py readable")
 old = blocks_from_source(old_src.stdout) if old_src.returncode == 0 else {}
 
 check(sorted(new) == sorted(BLOCKS), "all six language blocks present")
@@ -57,8 +62,12 @@ NEW_KEYS = {"no_model", "d_maximize", "d_window", "d_sure", "d_slow_turn"}  # ke
 # the model-size words for the set-up's "More models" list (every block has them; the old values are unchanged)
 ADDED_KEYS = {"w_model_slow", "w_more_models"}
 # the "online for everything" description gained the sentence "Your name and saved memory go with each request." (test-privacy-disclosure.py)
-ALLOWED_EDITS = {"q_brain_2", "d_conduct_hint", "d_connectors_intro", "d_conn_tools", "d_connector_form_intro",
-                 "d_connector_form_hint", "w_cloud_text"}  # plain-words rewording of the connector and cloud texts (test-plain-connectors.py)
+ALLOWED_EDITS = {"q_brain_2",
+                 # the "yes" internet choice says it also keeps the clock right (the boot timer syncs it; test-net-disclosure.py)
+                 "w_net_yes_d",
+                 # plain-words rewording of the connector and cloud texts (test-plain-connectors.py)
+                 "d_conduct_hint", "d_connectors_intro", "d_conn_tools", "d_connector_form_intro",
+                 "d_connector_form_hint", "w_cloud_text"}
 for b in BLOCKS:
     if b in old:
         check(set(new[b]) == set(old[b]) | NEW_KEYS | ADDED_KEYS,
