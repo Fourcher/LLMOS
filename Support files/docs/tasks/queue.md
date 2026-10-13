@@ -262,3 +262,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [open] (freedom) PROBE false refusals from agent._ONLY_IF_ASKED keyword gate ("not done: you did not ask for …") and _APP_WORDS gate
 - [decision] (freedom) Kept agent.py conduct line refusing step-by-step drug/weapon making and harm to third parties: BRIEF "The one boundary kept throughout: no harm to other people." Offline "say you couldn't check it" kept (honesty, not a nag).
 - [open] (freedom) folder-lock "Keep the password somewhere safe…" shown on every lock — show once only | role: fix | files: desk.py ~1181, ~1622
+- [open] (reliability) S32 race: desk-ctl "wait … after N" grace loop gives up after 3 s if the typed line has not reached say() yet; keep waiting (to the timeout) for _req_done>after or _req_pending>0 | role: fix | files: desk.py _control_conn wait branch (~4171-4196), tools/test-desk-wait.py | WAIT: desk.py busy with ac00893 (ping-pong fix)
