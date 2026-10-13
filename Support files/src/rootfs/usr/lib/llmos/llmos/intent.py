@@ -2134,13 +2134,18 @@ _NOT_A_PROGRAM = frozenset({"the", "a", "an", "my", "this", "that", "it", "these
                             "connection", "plugin", "model", "voice", "account", "driver", "service", "extension", "list", "note"})
 
 
+# A polite or filler word at the very end ("open /etc/hosts please", "apt install htop for me"), set apart by a space
+# (or a comma and a space), so "/tmp/please.txt" keeps its name. Only the open-path and apt/apk routes use it.
+_TRAIL_FILLER = re.compile(r",?\s+(?:please|pls|thanks|thank\s+you|for\s+me|right\s+now|now)\s*[.!?]*\s*$", re.I)
+
+
 def _new_words(t):
     m = _OPEN_WORD.match(t)
     if m:
         return ("open_app", {"command": _OPEN_WORD_CMD[" ".join(m.group("n").lower().split())]})
     if _NOTES_APP.match(t):
         return ("open_app", {"command": "notes"})
-    m = _OPEN_PATH.match(t)
+    m = _OPEN_PATH.match(_TRAIL_FILLER.sub("", t))
     if m:
         p = m.group("p")
         if len(p) >= 2 and p[0] == p[-1] and p[0] in "\"'":
@@ -2154,7 +2159,7 @@ def _new_words(t):
         m = rx.match(t)
         if m and m.group("n").lower() not in _NOT_A_PROGRAM:
             return ("remove_software", {"name": m.group("n").lower()})
-    m = _APT_INSTALL.match(t)
+    m = _APT_INSTALL.match(_TRAIL_FILLER.sub("", t))
     if m:
         return ("install_app", {"packages": " ".join(m.group("n").lower().split())})
     return None

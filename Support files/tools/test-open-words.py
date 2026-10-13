@@ -50,6 +50,14 @@ CASES = {
     "apt install htop && reboot": None,
     "apk add curl; rm -rf /": None,
     "apk add a b c d e f g h i j k": None,
+    # new: a trailing polite or filler word is not part of the path or the package list
+    "open /etc/hosts please": ("open_file", {"path": "/etc/hosts"}),
+    "open ~/My Notes.txt, please": ("open_file", {"path": "~/My Notes.txt"}),
+    "open /tmp/please.txt": ("open_file", {"path": "/tmp/please.txt"}),
+    "open ~/Notes for me.txt": ("open_file", {"path": "~/Notes for me.txt"}),
+    "apt install htop vim please": ("install_app", {"packages": "htop vim"}),
+    "apt install please": None,
+    "apt install htop for me": ("install_app", {"packages": "htop"}),
     # unchanged: routed before
     "open calculator": ("open_app", {"command": "calculator"}),
     "install vlc": ("install_app", {"packages": "vlc"}),
