@@ -297,6 +297,7 @@
       "weak": false,
       "reachable_by_agent": true,
       "timeout_s": 120,
+      "approve": true,
       "setup": [
         "mkdir -p {home}/.Trash",
         "touch {home}/.Trash/llmos-test-junk"

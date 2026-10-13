@@ -96,7 +96,7 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
     cancelled = False
     stuck = False
     drain_seconds = None
-    ctx = {"before_reply": "", "stale": False}
+    ctx = {"before_reply": "", "stale": False, "approved": 0}
     start = clock()
 
     def timed(name, fn):
@@ -145,11 +145,10 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
             typed_ok = timed("type", lambda: user.type_into(INPUT, task["instruction"]))
             timed("press", lambda: user.press("ret"))
         timeout_s = task.get("timeout_s", 120)
-        if isinstance(done0, int) and not isinstance(done0, bool):
-            wait_cmd = "llmos desk-ctl wait %s after %d" % (timeout_s, done0)
+        if task.get("approve"):
+            waited = timed("wait", lambda: _wait_approving(run_in_vm, clock, timeout_s, done0, ctx))
         else:
-            wait_cmd = "llmos desk-ctl wait %s" % timeout_s
-        waited = timed("wait", lambda: run_in_vm(wait_cmd))
+            waited = timed("wait", lambda: run_in_vm(_wait_cmd(timeout_s, done0)))
         wait_state = vm_json(waited)
         busy = isinstance(wait_state, dict) and bool(wait_state.get("busy"))
         queued = _queued(wait_state)
@@ -198,11 +197,39 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
         "drain_seconds": drain_seconds,
         "stuck": stuck,
         "fresh_before": fresh_before,  # why run_suite rebooted onto a fresh overlay just before this task
+        "approved": ctx["approved"],  # open asks answered with "dialog yes" (approve tasks only)
     }
     os.makedirs(outdir, exist_ok=True)
     with open(os.path.join(outdir, "%s.json" % tid), "w", encoding="utf-8") as f:
         json.dump(record, f, ensure_ascii=False, indent=2)
     return record
+
+
+APPROVE_SLICE_S = 5  # approve tasks: each wait is at most this long before the desk is checked for an open ask
+
+
+def _wait_cmd(seconds, done0):
+    """The desk-ctl wait command; `after <done0>` when the desk reported its finished count."""
+    if isinstance(done0, int) and not isinstance(done0, bool):
+        return "llmos desk-ctl wait %s after %d" % (seconds, done0)
+    return "llmos desk-ctl wait %s" % seconds
+
+
+def _wait_approving(run_in_vm, clock, timeout_s, done0, ctx):
+    """approve tasks: wait in short slices until the task's timeout_s total. After each slice that is still
+    busy, if desk-state lists an open ask in "dialogs", answer it with `llmos desk-ctl dialog yes` and count
+    it in ctx["approved"]. Returns the last wait output; still busy at the total is the caller's timeout."""
+    deadline = clock() + timeout_s
+    while True:
+        slice_s = int(min(APPROVE_SLICE_S, max(1, deadline - clock())))
+        out = run_in_vm(_wait_cmd(slice_s, done0))
+        st = vm_json(out)
+        if not (isinstance(st, dict) and st.get("busy")) or clock() >= deadline:
+            return out
+        desk = vm_json(run_in_vm("llmos desk-state"))
+        if isinstance(desk, dict) and desk.get("dialogs"):
+            run_in_vm("llmos desk-ctl dialog yes")
+            ctx["approved"] += 1
 
 
 def _label(passes, repeat):
@@ -216,9 +243,10 @@ def _label(passes, repeat):
 def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", repeat=1, fresh=None,
               sleep=time.sleep, clock=time.monotonic):
     """Run every task `repeat` times. Before repeat r > 1, fresh() is called (a fresh overlay).
-    A task that left the desk stuck (record "stuck") or was cancelled (record "cancelled", e.g. an open
-    dialog that the cancel drained) is followed by fresh() before the next task; that task's record gets
-    "fresh_before" naming the reason. No fresh() after the last task.
+    A task that left the desk stuck (record "stuck"), was cancelled (record "cancelled", e.g. an open
+    dialog that the cancel drained) or raised (record "error" / "step_failed") is followed by fresh() before
+    the next task; that task's record gets "fresh_before" naming the reason ("previous task error: <step>"
+    for a raised task). No fresh() after the last task.
     repeat == 1 writes {outdir}/<id>.json; otherwise {outdir}/r{r}/<id>.json."""
     if repeat < 1:
         raise ValueError("repeat must be >= 1, got %r" % repeat)
@@ -247,8 +275,13 @@ def run_suite(path, user, run_in_vm, ids=None, outdir=OUTDIR, run_path="page", r
             stuck_prev = False
             rec = run_task(task, user, run_in_vm, clock=clock, outdir=rdir, path=run_path, sleep=sleep,
                            fresh_before=fresh_before)
-            stuck_prev = bool(rec["stuck"] or rec["cancelled"])
-            prev_why = "previous task stuck" if rec["stuck"] else "previous task cancelled"
+            stuck_prev = bool(rec["stuck"] or rec["cancelled"] or rec["error"] or rec["step_failed"])
+            if rec["stuck"]:
+                prev_why = "previous task stuck"
+            elif rec["cancelled"]:
+                prev_why = "previous task cancelled"
+            else:
+                prev_why = "previous task error: %s" % rec["step_failed"]
             per[rec["id"]]["seconds"] += rec["seconds"]
             if rec["verdict"] == "PASS":
                 per[rec["id"]]["passes"] += 1

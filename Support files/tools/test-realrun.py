@@ -835,6 +835,131 @@ def main():
         check("older desk without done -> old wait command", waits == ["llmos desk-ctl wait 120"], repr(waits))
         if waits == ["llmos desk-ctl wait 120"]:
             print("ok older desk without done uses the old wait command")
+
+        # 11. approve tasks: a desk that asks (desk-state "dialogs") and blocks until "dialog yes".
+        # wait slices advance the turn unless an ask is open; "dialog yes" clears the open ask; cancel stops it.
+        def make_approve_vm(ask_at=(), done_at=1):
+            st = {"slices": 0, "progress": 0, "dialogs": [], "done_at": done_at, "stopped": False,
+                  "reply": "", "cmds": []}
+
+            def vm(cmd):
+                st["cmds"].append(cmd)
+                if cmd == "llmos desk-ctl testreset":
+                    st.update(slices=0, progress=0, dialogs=[], stopped=False, reply="")
+                    return "ok"
+                if cmd == "llmos desk-ctl cancel":
+                    st.update(stopped=True, dialogs=[])
+                    return "ok"
+                if cmd == "llmos desk-ctl dialog yes":
+                    st["dialogs"] = []
+                    return "ok"
+                if cmd.startswith("llmos desk-ctl wait"):
+                    st["slices"] += 1
+                    if st["slices"] in ask_at and not st["stopped"]:
+                        st["dialogs"].append({"id": "d%d" % st["slices"], "title": "Empty the trash?", "text": ""})
+                    if not st["dialogs"] and not st["stopped"]:
+                        st["progress"] += 1
+                    done = (st["progress"] >= st["done_at"] and not st["dialogs"]) or st["stopped"]
+                    if done and not st["stopped"]:
+                        st["reply"] = "Canberra"
+                    return json.dumps({"busy": not done, "reply": st["reply"], "screen": "desk"})
+                if cmd == "llmos desk-state":
+                    busy = not st["stopped"] and (st["progress"] < st["done_at"] or bool(st["dialogs"]))
+                    return json.dumps({"screen": "desk", "busy": busy, "reply": st["reply"], "queued": 0,
+                                       "dialogs": list(st["dialogs"]), "windows": [], "apps": []})
+                if "ls " in cmd:
+                    return "/root/Desktop/Test"
+                return "ok"
+            return vm, st
+
+        def yes_count(cmds):
+            return len([c for c in cmds if c == "llmos desk-ctl dialog yes"])
+
+        # 11a. approve + one ask -> one "dialog yes", PASS, approved 1
+        vm, st = make_approve_vm(ask_at=(1,), done_at=2)
+        rec = realrun.run_task(dict(reply_task("ap-one"), approve=True), FakeUser(), vm,
+                               clock=FakeClock(), outdir=outroot, sleep=no_sleep)
+        check("approve + one dialog -> one dialog yes sent", yes_count(st["cmds"]) == 1, repr(st["cmds"]))
+        check("approve + one dialog -> PASS, approved 1", rec["verdict"] == "PASS" and rec["approved"] == 1,
+              json.dumps({k: rec[k] for k in ("verdict", "approved", "reason")}))
+
+        # 11b. approve + no ask -> finishes normally, approved 0
+        vm, st = make_approve_vm(ask_at=(), done_at=1)
+        rec = realrun.run_task(dict(reply_task("ap-none"), approve=True), FakeUser(), vm,
+                               clock=FakeClock(), outdir=outroot, sleep=no_sleep)
+        check("approve + no dialog -> PASS, approved 0, no dialog yes",
+              rec["verdict"] == "PASS" and rec["approved"] == 0 and yes_count(st["cmds"]) == 0,
+              json.dumps({k: rec[k] for k in ("verdict", "approved")}))
+
+        # 11c. approve + two asks -> answered twice
+        vm, st = make_approve_vm(ask_at=(1, 3), done_at=3)
+        rec = realrun.run_task(dict(reply_task("ap-two"), approve=True), FakeUser(), vm,
+                               clock=FakeClock(), outdir=outroot, sleep=no_sleep)
+        check("approve + two dialogs -> two dialog yes, PASS",
+              yes_count(st["cmds"]) == 2 and rec["approved"] == 2 and rec["verdict"] == "PASS",
+              json.dumps({k: rec[k] for k in ("verdict", "approved")}) + repr(yes_count(st["cmds"])))
+
+        # 11d. non-approve task with an ask -> no dialog yes sent (unchanged: the wait is one call, the task fails
+        # and is cancelled)
+        vm, st = make_approve_vm(ask_at=(1,), done_at=2)
+        rec = realrun.run_task(reply_task("noap-dialog"), FakeUser(), vm,
+                               clock=FakeClock(), outdir=outroot, sleep=no_sleep)
+        check("non-approve task with a dialog -> no dialog yes sent", yes_count(st["cmds"]) == 0 and
+              rec["approved"] == 0, repr(st["cmds"]))
+
+        # 11e. approve task that never finishes within timeout_s -> FAIL, cancelled, next task gets a reboot
+        vm, st = make_approve_vm(ask_at=(), done_at=10 ** 6)
+        ap_dir = tempfile.mkdtemp(prefix="realrun-approve-")
+        ap_suite = os.path.join(ap_dir, "suite.json")
+        with open(ap_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [dict(reply_task("ap-timeout"), approve=True, timeout_s=3),
+                                 reply_task("ap-after")]}, f)
+        ap_calls = []
+
+        def ap_fresh():
+            ap_calls.append("fresh")
+            st.update(done_at=1, stopped=False, dialogs=[], progress=0)
+        ap_sum = realrun.run_suite(ap_suite, FakeUser(), vm, outdir=os.path.join(outroot, "approve-timeout"),
+                                   fresh=ap_fresh, sleep=no_sleep, clock=FakeClock())
+        ap1 = json.load(open(os.path.join(outroot, "approve-timeout", "ap-timeout.json"), encoding="utf-8"))
+        ap2 = json.load(open(os.path.join(outroot, "approve-timeout", "ap-after.json"), encoding="utf-8"))
+        check("approve timeout -> FAIL, cancelled, reason kept",
+              ap1["verdict"] == "FAIL" and ap1["cancelled"] is True and ap1["reason"] == "still busy after 3s",
+              json.dumps({k: ap1[k] for k in ("verdict", "cancelled", "reason")}))
+        check("approve timeout -> next task gets fresh before it and PASSes",
+              ap_calls == ["fresh"] and ap2["fresh_before"] == "previous task cancelled" and ap2["verdict"] == "PASS",
+              repr((ap_calls, ap2["fresh_before"], ap2["verdict"])))
+        shutil.rmtree(ap_dir, ignore_errors=True)
+
+        # 11f. a task whose type step raises -> the next task starts on a fresh overlay ("previous task error")
+        class TypeFailUser(FakeUser):
+            def __init__(self):
+                super().__init__()
+                self.fails = 1
+
+            def type_into(self, sel, text, secret=False):
+                if self.fails > 0:
+                    self.fails -= 1
+                    raise RuntimeError("typing failed")
+                return super().type_into(sel, text, secret)
+
+        tf_dir = tempfile.mkdtemp(prefix="realrun-typefail-")
+        tf_suite = os.path.join(tf_dir, "suite.json")
+        with open(tf_suite, "w", encoding="utf-8") as f:
+            json.dump({"tasks": [reply_task("tf-1"), reply_task("tf-2")]}, f)
+        tf_calls = []
+        tf_out = os.path.join(outroot, "type-fail")
+        realrun.run_suite(tf_suite, TypeFailUser(), make_vm(), outdir=tf_out,
+                          fresh=lambda: tf_calls.append("fresh"), sleep=no_sleep, clock=FakeClock())
+        tf1 = json.load(open(os.path.join(tf_out, "tf-1.json"), encoding="utf-8"))
+        tf2 = json.load(open(os.path.join(tf_out, "tf-2.json"), encoding="utf-8"))
+        check("type step raises -> step_failed type, FAIL", tf1["step_failed"] == "type" and tf1["verdict"] == "FAIL",
+              json.dumps({k: tf1[k] for k in ("step_failed", "verdict")}))
+        check("step_failed type -> next task gets fresh(), fresh_before names it, PASS",
+              tf_calls == ["fresh"] and tf2["fresh_before"] == "previous task error: type" and tf2["verdict"] == "PASS",
+              repr((tf_calls, tf2["fresh_before"], tf2["verdict"])))
+        shutil.rmtree(tf_dir, ignore_errors=True)
+        print("ok approve: one/none/two asks, timeout reboots; type error reboots next task")
     finally:
         shutil.rmtree(outroot, ignore_errors=True)
 
