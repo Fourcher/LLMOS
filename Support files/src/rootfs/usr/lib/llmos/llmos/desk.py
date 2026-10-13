@@ -64,7 +64,9 @@ _DEV_Q = re.compile(r"(?P<cam>(?:is |test |check |try |show )?(?:my |the )?(?:we
                     r"(?P<mic>(?:test|check|try) (?:my |the )?(?:mic|microphone)|(?:is |does )?(?:my |the )?(?:mic|microphone)(?: working| work| test| check)?|"
                     r"can you hear me|they can'?t hear me|my (?:mic|microphone) (?:is ?n[o']?t|isnt|doesn'?t) work(?:ing)?)[?.!]*")
 _LOCK_WORDS = {"lock", "lock the screen", "lock screen", "lock the computer", "lock my computer", "lock it", "lock the pc",
-               "i'm stepping away", "im stepping away", "lock up", "lock it up"}
+               "i'm stepping away", "im stepping away", "lock up", "lock it up"} | \
+              {p + w + s for w in ("sign out", "log out", "sign me out", "log me out", "sign off") for p in ("", "please ")
+               for s in ("", " please", " now", " please now")}
 SOCK = os.path.join(config.RUN, "desk.sock")
 DISPLAY_ENV = os.path.join(config.RUN, "display.env")
 def _lock_tip_take():
@@ -3084,6 +3086,8 @@ class Desk:
             else:                               # no passphrase: the screen still locks (and says how to protect it)
                 self._keybinds(False)
                 self.set_screen("lock", {"note": T("d_lock_open"), "open": True})
+            if re.search(r"\b(?:sign|log) (?:me )?(?:out|off)\b", low):
+                self.instant_reply(low, "Locked. Signing out here just locks the screen.")
             return True
         if low in ("voice", "listen"):
             self.voice_turn()
