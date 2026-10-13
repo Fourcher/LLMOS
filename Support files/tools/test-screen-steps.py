@@ -280,4 +280,110 @@ with patch.object(apps, "installed", return_value=[]):
     assert d._app_question("close the calculator") is None     # no installed app of that name
 print("  ✓ Test 4 passed\n")
 
+# ---- Test 5: run() after a first step that does not open an app waits for the page to change, not a fixed 2 s.
+# Only the outer edges are faked (time, the read bridge, the tool executor). _wait_ready and _page_changed run for real.
+import time as _real_time
+
+
+class FakeTime:
+    """A virtual clock for agent.time: sleep() advances it, monotonic() reads it, everything else is the real module."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def sleep(self, s):
+        self.now += s
+
+    def monotonic(self):
+        return self.now
+
+    def __getattr__(self, name):
+        return getattr(_real_time, name)
+
+
+class FakePageCtx:
+    """A ctx whose read bridge shows page A until `changes_at` (virtual time), then page B. raise_read: the bridge raises."""
+
+    def __init__(self, clock, changes_in=None, raise_read=False, has_read=True):
+        self.clock, self.changes_at, self.raise_read = clock, None, raise_read
+        self.changes_in = changes_in
+        self.cancel, self.current_request, self.text_calls = None, "", []
+        self.new_stream_count = 0
+
+    def app_read(self):
+        if self.raise_read:
+            raise RuntimeError("no app open")
+        if self.changes_at is not None and self.clock.now >= self.changes_at:
+            return {"text": "Page B text", "controls": ["b"]}
+        return {"text": "Page A text", "controls": ["a"]}
+
+    def new_stream(self):
+        self.new_stream_count += 1
+        return f"stream_{self.new_stream_count}"
+
+    def on_text(self, stream, text):
+        self.text_calls.append((stream, text))
+
+    def end_stream(self, stream):
+        pass
+
+    def status(self, msg):
+        pass
+
+
+class FakeNoReadCtx(FakePageCtx):
+    """A ctx with no read bridge at all (no app_read attribute)."""
+    app_read = None      # shadows the method; agent._page_key sees no reader
+
+
+def run_first_step(ctx_factory, changes_in):
+    """Run 'turn on do not disturb, then press 7' through the real run(); returns (elapsed virtual seconds, reply)."""
+    clock = FakeTime()
+    ctx = ctx_factory(clock)
+    marks = {}
+
+    def fake_exec(ctx_, name, arguments):
+        if name == "change_setting":
+            marks["action"] = clock.now
+            if changes_in is not None:
+                ctx.changes_at = clock.now + changes_in
+            return "Do not disturb is on."
+        if name == "click":
+            return "pressed '7' in the app. It now shows: Display: 7"
+        return "error: no such tool"
+
+    with patch.object(agent, "execute", side_effect=fake_exec):
+        with patch.object(agent, "tools") as mock_tools:
+            mock_tools.REGISTRY = MockRegistry()
+            with patch.object(agent, "time", clock):
+                reply = agent.run(ctx, "turn on do not disturb, then press 7", [])
+    return clock.now - marks["action"], reply
+
+
+# the page changes 0.3 s after the first step: continues in at most 0.5 s (was a fixed 2 s)
+elapsed, reply = run_first_step(lambda c: FakePageCtx(c), changes_in=0.3)
+print(f"Test 5a: page changes at 0.3 s -> waited {elapsed:.2f} s; reply {reply!r}")
+assert elapsed <= 0.5, elapsed
+assert "pressed 7" in reply, reply
+print("  ✓ Test 5a passed\n")
+
+# the page never changes: waits the full 2.0 s, as before
+elapsed, reply = run_first_step(lambda c: FakePageCtx(c), changes_in=None)
+print(f"Test 5b: page never changes -> waited {elapsed:.2f} s")
+assert 1.9 <= elapsed <= 2.1, elapsed
+print("  ✓ Test 5b passed\n")
+
+# the read bridge raises: treated as unchanged, no exception, full wait
+elapsed, reply = run_first_step(lambda c: FakePageCtx(c, raise_read=True), changes_in=0.3)
+print(f"Test 5c: read bridge raises -> waited {elapsed:.2f} s, no exception")
+assert 1.9 <= elapsed <= 2.1, elapsed
+print("  ✓ Test 5c passed\n")
+
+# ctx without app_read: same as today, the full 2.0 s wait
+elapsed, reply = run_first_step(lambda c: FakeNoReadCtx(c), changes_in=0.3)
+print(f"Test 5d: no app_read -> waited {elapsed:.2f} s")
+assert 1.9 <= elapsed <= 2.1, elapsed
+print("  ✓ Test 5d passed\n")
+
 print("All core tests passed!")
+print("all good")
