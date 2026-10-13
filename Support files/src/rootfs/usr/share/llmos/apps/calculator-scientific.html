@@ -1,0 +1,119 @@
+<!-- llmos-app: id=calculator-scientific; title=Scientific calculator; size=m; words=scientific scientific-calculator -->
+<style>
+.calc{display:flex;flex-direction:column;height:100%;gap:10px}
+.screen{background:var(--card);border-radius:var(--r);padding:14px 16px;min-height:84px;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;overflow:hidden}
+.screen input{background:transparent;border:0;outline:none;color:var(--fg);font:inherit;font-size:22px;text-align:right;width:100%;padding:0}
+.screen .res{font-size:34px;font-weight:600;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:42px}
+.screen .res.err{font-size:17px;font-weight:500;color:var(--dim)}
+.keys{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;flex:1}
+.keys button{font-size:17px;min-height:38px}
+.keys .fn{font-size:15px}
+.keys .op{background:color-mix(in srgb,var(--accent) 22%,var(--card));color:var(--fg)}
+.keys .eq{background:var(--accent);color:var(--on-accent)}
+</style>
+<div class="calc">
+  <div class="screen">
+    <input id="expr" type="text" aria-label="Expression" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. sqrt(16) + sin(30)">
+    <div class="res" id="res" aria-live="polite" data-key="display"></div>
+  </div>
+  <div class="keys" id="keys"></div>
+</div>
+<script>
+// PARSER BEGIN
+const SCI_FN={sqrt:(a)=>Math.sqrt(a),log:(a)=>Math.log10(a),ln:(a)=>Math.log(a),
+  sin:(a,deg)=>Math.sin(deg?a*Math.PI/180:a),cos:(a,deg)=>Math.cos(deg?a*Math.PI/180:a),tan:(a,deg)=>{if(deg){if(((a%180)+180)%180===90)throw new Error("tan");return Math.tan(a*Math.PI/180)}if(Math.abs(Math.cos(a))<1e-12)throw new Error("tan");return Math.tan(a)}};
+function sciCalc(src,deg){
+  let s=String(src).replace(/×/g,"*").replace(/÷/g,"/").replace(/[−–]/g,"-").replace(/√/g,"sqrt").replace(/π/g,"pi").toLowerCase();
+  if(s.includes(",")&&!s.includes("."))s=s.replace(/(\d),(\d)/g,"$1.$2");
+  const bad=()=>{throw new Error("bad")};
+  const toks=[];let i=0,sp=false;
+  const pushNum=(v,spaced,lit)=>{const pv=toks[toks.length-1];if(lit&&spaced&&pv&&pv.k==="num"&&pv.lit)bad();toks.push({k:"num",v,lit})};
+  while(i<s.length){
+    const c=s[i];
+    if(/\s/.test(c)){sp=true;i++;continue}
+    const spaced=sp;sp=false;
+    let m=/^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?/.exec(s.slice(i));
+    if(m){pushNum(parseFloat(m[0]),spaced,true);i+=m[0].length;continue}
+    m=/^[a-z]+/.exec(s.slice(i));
+    if(m){const w=m[0];
+      if(w==="pi")pushNum(Math.PI,spaced,false);
+      else if(w==="e")pushNum(Math.E,spaced,false);
+      else if(Object.prototype.hasOwnProperty.call(SCI_FN,w))toks.push({k:"fn",v:w});
+      else bad();
+      i+=w.length;continue}
+    if("+-*/^()".includes(c)){toks.push({k:"op",v:c});i++;continue}
+    bad();
+  }
+  // implicit multiplication: 2pi, 2(3), 2sin(30), (1)(2)
+  const out=[];
+  const endsValue=x=>x.k==="num"||(x.k==="op"&&x.v===")");
+  const startsValue=x=>x.k==="num"||x.k==="fn"||(x.k==="op"&&x.v==="(");
+  for(const x of toks){if(out.length&&endsValue(out[out.length-1])&&startsValue(x))out.push({k:"op",v:"*"});out.push(x)}
+  if(!out.length)bad();
+  let p=0;
+  const isOp=v=>p<out.length&&out[p].k==="op"&&out[p].v===v;
+  const need=v=>{if(!isOp(v))bad();p++};
+  function expr(){let v=term();while(isOp("+")||isOp("-")){const o=out[p++].v;const r=term();v=o==="+"?v+r:v-r}return v}
+  function term(){let v=unary();while(isOp("*")||isOp("/")){const o=out[p++].v;const r=unary();v=o==="*"?v*r:v/r}return v}
+  function unary(){if(isOp("-")){p++;return -unary()}if(isOp("+")){p++;return unary()}return power()}
+  function power(){const b=primary();if(isOp("^")){p++;return Math.pow(b,unary())}return b}
+  function primary(){
+    const x=out[p];
+    if(!x)bad();
+    if(x.k==="num"){p++;return x.v}
+    if(x.k==="fn"){p++;
+      let a;
+      if(isOp("(")){p++;a=expr();need(")")}else a=unary();
+      return SCI_FN[x.v](a,deg)}
+    if(isOp("(")){p++;const v=expr();need(")");return v}
+    bad();
+  }
+  const v=expr();
+  if(p!==out.length)bad();
+  return v;
+}
+function sciFormat(x){
+  if(Number.isNaN(x))return"NaN";
+  if(!isFinite(x))return x>0?"Infinity":"-Infinity";
+  const r=Number(x.toPrecision(12));
+  return String(Math.abs(r)<1e-12?0:r);
+}
+// PARSER END
+const SCI_KEYS=[
+  ["sqrt","fn","sqrt("],["sin","fn","sin("],["cos","fn","cos("],["tan","fn","tan("],["log","fn","log("],
+  ["ln","fn","ln("],["pi","fn","pi"],["e","fn","e"],["(","op"],[")","op"],
+  ["^","op"],["7"],["8"],["9"],["/","op"],
+  ["*","op"],["4"],["5"],["6"],["-","op"],
+  ["+","op"],["1"],["2"],["3"],["deg","op","angle"],
+  ["C","op","clear"],["0"],["."],["Del","op","del"],["=","eq","eval"]
+];
+let deg=true;
+const $=id=>document.getElementById(id);
+function ins(t){const i=$("expr");const a=i.selectionStart??i.value.length,b=i.selectionEnd??a;i.value=i.value.slice(0,a)+t+i.value.slice(b);const c=a+t.length;i.focus();i.setSelectionRange(c,c);$("res").textContent="";$("res").className="res"}
+function del(){const i=$("expr");let a=i.selectionStart??i.value.length,b=i.selectionEnd??a;if(a===b&&a>0)a--;i.value=i.value.slice(0,a)+i.value.slice(b);i.focus();i.setSelectionRange(a,a);$("res").textContent="";$("res").className="res"}
+function clearAll(){$("expr").value="";$("res").textContent="";$("res").className="res";$("expr").focus()}
+function evaluate(){
+  const src=$("expr").value;
+  const r=$("res");
+  if(!src.trim()){r.textContent="";r.className="res";return}
+  try{r.textContent=sciFormat(sciCalc(src,deg));r.className="res"}
+  catch(e){r.textContent="Can't work that out";r.className="res err"}
+}
+for(const [label,cls,arg] of SCI_KEYS){
+  const b=document.createElement("button");
+  b.textContent=label==="deg"?(deg?"deg":"rad"):label;
+  if(cls)b.className=cls;
+  if(label==="deg"){b.setAttribute("aria-label","angle units: "+(deg?"degrees":"radians"));b.onclick=()=>{deg=!deg;b.textContent=deg?"deg":"rad";b.setAttribute("aria-label","angle units: "+(deg?"degrees":"radians"));$("expr").focus()};}
+  else if(label==="C")b.onclick=clearAll;
+  else if(label==="Del")b.onclick=del;
+  else if(label==="=")b.onclick=evaluate;
+  else b.onclick=()=>ins(arg||label);
+  $("keys").append(b);
+}
+$("expr").addEventListener("keydown",e=>{
+  if(e.key==="Enter"){e.preventDefault();evaluate()}
+  else if(e.key==="Escape"){e.preventDefault();clearAll()}
+});
+$("expr").addEventListener("input",()=>{$("res").textContent="";$("res").className="res"});
+$("expr").focus();
+</script>
