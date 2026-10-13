@@ -105,3 +105,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] c5fb41c (internet question in plain words, desk + console) VERIFY PASS — src, merge after the 1.8.1 build reports.
 - [held] 091a5b6 (trash phrases; "undo delete" restores only deletions; absent ~/Trash -> real trash) VERIFY PASS — src, merge after the 1.8.1 build reports.
 - [held] 28a7f28 (open file manager/word/excel, open /path, remove the X app, apt install X) VERIFY PASS — src, merge after the 1.8.1 build. Follow-up: "open ~/My Notes.txt" (paths with spaces) and "apt install htop vim" (several packages) still unrouted.
+- [held] 604507d (this app is frozen -> stop asks; bare voice memo; add X keyboard/layout; it's frozen unchanged) VERIFY PASS — src, merge after the 1.8.1 build.
