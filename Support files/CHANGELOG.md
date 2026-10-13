@@ -5,24 +5,24 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `dist/RELEASE.json` lists what a release contains with checksums.
 
 ## 1.8.1
-- The desk runs under your own account when the owner account is on. If that cannot start, it falls back safely.
+- The desk runs under your own account when you have one. If that can't start, it falls back safely.
 - Replies come back in your language at once.
 - "Private window", "reopen what I closed", bare "force quit" (asks first), "font bigger", "scale 150%", "show all apps", "less blue light at night" and "too dark, go back" all work.
 - "Alarm for 7am", "24 hour clock", "restore from trash", "keep awake", "world clock tokyo", city names with accents, "discord" and a scientific calculator.
 - Apps open as soon as their window appears. Clicks, typing and compound steps are faster.
-- Python files are precompiled at install.
-- A keyword-gate miss asks the owner instead of refusing.
+- The system starts a little faster: its code is prepared once at install.
+- When I'm unsure you asked for something, I ask you first instead of refusing.
 - Do-not-disturb silences the away card's alert and holds it until it is off.
 - "What did I miss" opens the away card.
 - The folder-lock password tip is shown once.
 - "Forget my routines" and "clear the activity log" work. The activity log is trimmed past 2 MB.
 - The online-assistant privacy disclosure now says exactly what goes with a request.
-- Updates and the search-model download honour the internet "ask" setting.
+- Updates and the search-model download follow the setting that asks before going online.
 - The clock-sync disclosure is its own sentence.
 - Accent colour contrast is 4.69:1, and the keyboard focus is visible.
 - Wording fixes in plain language.
-- Gemma models answer instead of only thinking.
-- Tool arguments are checked. Mail security can no longer silently fall back to plaintext.
+- The Gemma AI models give an answer instead of only thinking.
+- Settings are checked. A typo in mail security can no longer send mail unencrypted.
 
 ## 1.8.0
 - Clean jokes come back at once, without waiting for the model. Jokes about today's news still go to the model.
