@@ -3641,9 +3641,34 @@ def _control_ok():
     return control.available()
 
 
-def _screen_after(limit=40):
+def _page_key(ctx):
+    """A comparable value for what the read bridge shows now (its text and controls); None when there is no bridge,
+    no page, or the bridge raised. Mirrors agent._page_key (tools cannot import agent: agent imports tools)."""
+    reader = getattr(ctx, "app_read", None)
+    if not reader:
+        return None
+    try:
+        r = reader() or {}
+        text, controls = r.get("text"), r.get("controls")
+    except Exception:
+        return None
+    if not (text or controls):
+        return None
+    return (text, repr(controls))
+
+
+def _screen_after(limit=40, ctx=None, before=None):
+    """Describe the screen after an action. With `before` (the page key taken just before the action), poll every
+    0.1 s for up to 0.8 s and stop as soon as the page key differs; otherwise (or with no ctx) wait the full 0.8 s."""
     from . import control
-    time.sleep(0.8)
+    if before is None or ctx is None:
+        time.sleep(0.8)
+    else:
+        for _ in range(8):
+            time.sleep(0.1)
+            k = _page_key(ctx)
+            if k is not None and k != before:
+                break
     try:
         return control.describe(limit=limit)
     except RuntimeError as e:
@@ -3702,24 +3727,26 @@ def click(a, ctx):
     else:
         return "error: say what to click (its words) or where (x and y from look_at_screen)"
     button = "right" if str(a.get("button", "")).lower().startswith("r") else "left"
+    before = _page_key(ctx)
     if not control.click(x, y, button, bool(a.get("double"))):
         return "error: the click did not go through (the pointer could not be moved)"
     if by_atspi:
         # handled through the accessibility tree: no screen read here (call look_at_screen to see the result)
         return f"clicked {label!r} (through the program's accessible controls; the screen was not read)."
-    return f"clicked {repr(label) if label else ''} at [{x},{y}]. Now on screen:\n" + _screen_after()
+    return f"clicked {repr(label) if label else ''} at [{x},{y}]. Now on screen:\n" + _screen_after(ctx=ctx, before=before)
 
 
 @tool("type_text", "Type text into whatever has the keyboard (click the field first). enter=true presses Enter after.",
       {"text": STR, "enter": {"type": "boolean"}}, ["text"], risk=CHANGE, available=_control_ok)
 def type_text(a, ctx):
     from . import control
+    before = _page_key(ctx)
     ok, err = control.type_text(a.get("text", ""))
     if not ok:
         return f"error: typing failed: {err}"
     if a.get("enter"):
         control.press("enter")
-    return "typed. Now on screen:\n" + _screen_after()
+    return "typed. Now on screen:\n" + _screen_after(ctx=ctx, before=before)
 
 
 @tool("fill_in", "Write in a box on the screen in one step: field = the box's words (its label or the grey hint "
@@ -3747,6 +3774,7 @@ def fill_in(a, ctx):
             return f"error: no box with '{field}' is on the screen now. The screen shows:\n" + _screen_after(60)
         control.click(d["x"], d["y"])
         time.sleep(0.3)
+    before = _page_key(ctx)
     ok, err = control.type_text(a.get("text", ""))
     if not ok:
         return f"error: typing failed: {err}"
@@ -3755,26 +3783,28 @@ def fill_in(a, ctx):
     if by_atspi:
         # handled through the accessibility tree: no screen read here (call look_at_screen to see the result)
         return "wrote it" + (" and sent it" if a.get("submit") else "") + " (through the program's accessible controls; the screen was not read)."
-    return ("wrote it" + (" and sent it" if a.get("submit") else "") + ". Now on screen:\n") + _screen_after()
+    return ("wrote it" + (" and sent it" if a.get("submit") else "") + ". Now on screen:\n") + _screen_after(ctx=ctx, before=before)
 
 
 @tool("press_keys", "Press keys or shortcuts in the front window: 'enter', 'ctrl+s', 'alt+f4', 'ctrl+shift+t', 'tab tab enter'.",
       {"keys": STR}, ["keys"], risk=CHANGE, available=_control_ok)
 def press_keys(a, ctx):
     from . import control
+    before = _page_key(ctx)
     ok, err = control.press(a.get("keys", ""))
     if not ok:
         return f"error: those keys could not be pressed: {err}"
-    return f"pressed {a.get('keys')}. Now on screen:\n" + _screen_after()
+    return f"pressed {a.get('keys')}. Now on screen:\n" + _screen_after(ctx=ctx, before=before)
 
 
 @tool("scroll", "Scroll the window under the pointer up or down (amount: how far, default 3).",
       {"direction": STR, "amount": {"type": "integer"}}, [], risk=SAFE, available=_control_ok)
 def scroll(a, ctx):
     from . import control
+    before = _page_key(ctx)
     if not control.scroll(a.get("direction", "down"), a.get("amount") or 3):
         return "error: could not scroll"
-    return "scrolled. Now on screen:\n" + _screen_after()
+    return "scrolled. Now on screen:\n" + _screen_after(ctx=ctx, before=before)
 
 
 @tool("focus_window", "Bring a program's window to the front by its name (from look_at_screen's 'windows open').",
@@ -3783,10 +3813,11 @@ def focus_window(a, ctx):
     from . import wm
     name = str(a.get("name", "")).strip()
     target = wm.app_id(name) or name.lower()
+    before = _page_key(ctx)
     ok, note = wm.act("focus", target)
     if not ok:
         return f"error: no window called '{name}' is open ({note})"
-    return f"{name} is in front. Now on screen:\n" + _screen_after()
+    return f"{name} is in front. Now on screen:\n" + _screen_after(ctx=ctx, before=before)
 
 
 @tool("undo", "Take back the last change the owner made: a look or setting change, or a file moved to the trash.", {}, [], risk=CHANGE)
