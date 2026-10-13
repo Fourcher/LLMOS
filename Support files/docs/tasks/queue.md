@@ -104,3 +104,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [done] (speed) PROBE per-turn host cost: full pre-chat work ≈1.44 ms/turn on this Mac (tool_schemas 1.24 ms/step dominates; disk reads conduct/memory/profile/routines each turn are tiny). <0.1% of a turn — no caching added. Speed work stays on the model side (prefill, waits).
 - [held] c5fb41c (internet question in plain words, desk + console) VERIFY PASS — src, merge after the 1.8.1 build reports.
 - [held] 091a5b6 (trash phrases; "undo delete" restores only deletions; absent ~/Trash -> real trash) VERIFY PASS — src, merge after the 1.8.1 build reports.
+- [held] 28a7f28 (open file manager/word/excel, open /path, remove the X app, apt install X) VERIFY PASS — src, merge after the 1.8.1 build. Follow-up: "open ~/My Notes.txt" (paths with spaces) and "apt install htop vim" (several packages) still unrouted.
