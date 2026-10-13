@@ -256,3 +256,9 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [open] (reliability) unvalidated tool args found by the schema probe: set_appearance.corners (stored raw, desk falls back silently), mail_setup.smtp_security (unknown value -> plaintext silently!), rename_files.spaces (KeyError on unknown), rename_files.case (silently ignored) — validate each with a plain error | role: fix | files: tools.py, mail.py
 - [done] (reliability) Phase 3 failure->fix cycle CLOSED on 1.8.0: "usecases-1: 39/40 PASS"; uc-29 "PASS, include/exclude rules satisfied" (4.0 s); "basic: 49/50". New fails: uc-37 "find my resume" (grader wanted "id": "find"), S32 "pause the music" (empty output) -> PROBE.
 - [done] Merged 8df2e66 (tool arg validation), b4e79fd (A14c+A14d owner session, trial merge 149 suites clean).
+- [done] Merged 8d9edbc (instant replies translated for non-English owners; busy guard; VERIFY PASS + trial merge) and e7e8292 (world clock).
+- [open] (speed) replytr busy guard only covers in-flight chat() requests, not the gaps between tool steps of a turn; also skip translation while desk.busy | role: fix | files: desk.py instant_reply
+- [open] (reliability) desk say<->act thread ping-pong while busy for instant-looking phrases that fall through (pre-existing; "news", "logs", "screen time"…) | role: fix | files: desk.py act/say
+- [open] (freedom) PROBE false refusals from agent._ONLY_IF_ASKED keyword gate ("not done: you did not ask for …") and _APP_WORDS gate
+- [decision] (freedom) Kept agent.py conduct line refusing step-by-step drug/weapon making and harm to third parties: BRIEF "The one boundary kept throughout: no harm to other people." Offline "say you couldn't check it" kept (honesty, not a nag).
+- [open] (freedom) folder-lock "Keep the password somewhere safe…" shown on every lock — show once only | role: fix | files: desk.py ~1181, ~1622
