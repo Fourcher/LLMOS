@@ -117,3 +117,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 564e581 (contains 28a7f28, 036f6ba, 9d5c4cd, 79a7311 + batch 3: share over network, use my claude account, map of X via OSM, do I have new email, youtube music) VERIFY PASS — merge 564e581 (the whole intent chain) after the 1.8.1 build.
 - [held] 270169b ("sign out"/"log out" lock the screen, instant) VERIFY PASS — merge after the 1.8.1 build. Wording follow-up: with the vault on, lock shows a passphrase screen, so "no separate sign-in" is slightly off — reply could say "Locked. Signing out here just locks the screen."
 - [open] (capability) "turn off the internet" (word order "off the") is not routed (only "turn the internet off"?) — PROBE intent _INTERNET forms | role: probe
+- [held] dd71cba (contains 0f9fb4f; instant gate for tiling + no-internet forms) VERIFY PASS — merge dd71cba (not 0f9fb4f) after the 1.8.1 build.
