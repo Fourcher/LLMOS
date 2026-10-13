@@ -25,6 +25,10 @@ CASES = [
     ("remind me at 3 to take my pills please", ("schedule_task", {"when": "at 3", "task": "take my pills", "kind": "reminder"})),
     ("remind me at 3 to take my pills, please", ("schedule_task", {"when": "at 3", "task": "take my pills", "kind": "reminder"})),
     ("remind me at 3 to call mum, thanks.", ("schedule_task", {"when": "at 3", "task": "call mum", "kind": "reminder"})),
+    # a task that is only filler is no task: None (the model decides)
+    ("remind me at 3 to please", None),
+    ("remind me at 3 to thanks", None),
+    ("remind me at 3 to now.", None),
     ("remind me at 3 to say thanks", ("schedule_task", {"when": "at 3", "task": "say thanks", "kind": "reminder"})),
     ("remind me at 7 to call now", ("schedule_task", {"when": "at 7", "task": "call now", "kind": "reminder"})),
     ("remind me at 7 to call mum for me", ("schedule_task", {"when": "at 7", "task": "call mum for me", "kind": "reminder"})),
