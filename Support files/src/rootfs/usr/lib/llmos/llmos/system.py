@@ -506,6 +506,55 @@ def umount_mp(mountpoint):
         return 1, "", str(e)
 
 
+FORMAT_PARTITION_SCRIPT = "label: dos\n,,7\n"
+
+
+def _run_step(argv, timeout, input_text=None):
+    """One step of a drive format, as a plain argv list (never a shell). Returns (returncode, stdout, stderr)."""
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, input=input_text)
+    except subprocess.TimeoutExpired:
+        return 124, "", f"timed out after {timeout} s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def _format_root(disk, label):
+    """Erase a whole USB disk and make one exFAT partition on it, as root. The steps run in order and stop at the
+    first failure. Returns (returncode, stdout, stderr), or (0, "", "") when the drive is ready."""
+    mkfs = shutil.which("mkfs.exfat") or shutil.which("mkexfatfs")
+    if not mkfs:
+        return 127, "", "the formatting program is missing"
+    for src, mp in rootd._mounts():
+        if mp != "/" and rootd._whole_disk(src) == disk:
+            rc, out, err = _run_step(["umount", mp], 60)
+            if rc:
+                return rc, out, err
+    rc, out, err = _run_step(["wipefs", "-a", disk], 60)
+    if rc:
+        return rc, out, err
+    rc, out, err = _run_step(["sfdisk", "-q", disk], 60, input_text=FORMAT_PARTITION_SCRIPT)
+    if rc:
+        return rc, out, err
+    part = disk + ("p1" if re.search(r"\d$", disk) else "1")
+    time.sleep(1.5)
+    rc, out, err = _run_step([mkfs, "-L" if "mkfs" in mkfs else "-n", label, part], 600)
+    if rc:
+        return rc, out, err
+    return 0, "", ""
+
+
+def format_drive(disk, label):
+    """Erase a USB drive through rootd's format_drive verb (root runs the same checks in-process).
+    Returns (rc, out, err). A refused request gives (1, "", message)."""
+    try:
+        rc, out, err = json.loads(rootd_client.call("format_drive", disk=disk, label=label, _timeout=900))
+        return rc, out, err
+    except rootd_client.RootdError as e:
+        return 1, "", str(e)
+
+
 def _printer_name_ok(name):
     return isinstance(name, str) and PRINTER_NAME_RE.fullmatch(name) is not None
 

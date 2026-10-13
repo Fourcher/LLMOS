@@ -439,6 +439,55 @@ def umount_mp(args):
     return json.dumps([rc, out[-20000:], err[-20000:]])
 
 
+# Erasing a drive: a WHOLE disk only (sdb, nvme0n1, mmcblk0), never a partition, and only media that sysfs calls
+# removable or that sits on USB. The label is what mkfs.exfat gets, so it is limited to the same plain characters.
+SYS_BLOCK = "/sys/block"
+FORMAT_DISK_RE = re.compile(r"/dev/(?:sd[a-z]{1,2}|nvme[0-9]n[0-9]|mmcblk[0-9])")
+FORMAT_LABEL_RE = re.compile(r"[A-Za-z0-9 _-]{1,11}")
+
+
+def _is_system_disk(mounts, disk):
+    """True when the root filesystem ("/") is on this whole disk, or on one of its partitions."""
+    return any(m == "/" and (s == disk or _whole_disk(s) == disk) for s, m in mounts)
+
+
+def _removable_disk(disk):
+    """True when sysfs marks the whole disk removable, or its device path runs through USB."""
+    base = os.path.join(SYS_BLOCK, os.path.basename(disk))
+    try:
+        with open(os.path.join(base, "removable"), encoding="utf-8") as f:
+            if f.read().strip() == "1":
+                return True
+    except OSError:
+        pass
+    return "/usb" in os.path.realpath(base)
+
+
+def format_drive(args):
+    args = _args_dict(args)
+    if set(args) != {"disk", "label"}:
+        raise ValueError("bad args: disk and label only")
+    disk = args.get("disk")
+    label = args.get("label")
+    if not isinstance(disk, str) or FORMAT_DISK_RE.fullmatch(disk) is None:
+        raise ValueError("bad args: disk")
+    if not isinstance(label, str) or FORMAT_LABEL_RE.fullmatch(label) is None:
+        raise ValueError("bad args: label")
+    try:
+        mode = os.stat(disk).st_mode
+    except OSError:
+        raise ValueError("bad args: disk is not a block device")
+    if not stat.S_ISBLK(mode):
+        raise ValueError("bad args: disk is not a block device")
+    if _is_system_disk(_mounts(), disk):
+        raise ValueError("bad args: disk is the system disk")
+    if not _removable_disk(disk):
+        raise ValueError("bad args: disk is not a USB stick or drive")
+    from . import system
+    rc, out, err = system._format_root(disk, label)
+    return json.dumps([rc, out[-20000:], err[-20000:]])
+
+
 # Printer queue names (lpadmin's -p NAME) and CUPS device addresses. A name never starts with "-" (lpadmin would
 # read it as an option), and a URI must start with a CUPS scheme and contain no whitespace.
 PRINTER_NAME_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_-]{0,63}")
@@ -599,6 +648,7 @@ VERBS = {
     "radio": radio,
     "mount_dev": mount_dev,
     "umount_mp": umount_mp,
+    "format_drive": format_drive,
     "printer_add": printer_add,
     "printer_default": printer_default,
     "service": service,
