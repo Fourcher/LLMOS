@@ -3014,8 +3014,9 @@ class Desk:
         if re.fullmatch(r"(?:what can you do|what can i (?:do|say|ask)(?: here| with (?:this|it|you))?|how do i use (?:this|you|it)|what do i do|help me|show me what you can do|"
                         r"what are you|what is this|get started|getting started|\?+)[?.!]*", low):
             self.open_panel("help")
-            self.last_reply = self._said = ("Here's what I can do: find files, send and read email, play music and videos, "
-                                            "change the screen and sound, set reminders and timers, print, install programs, and answer questions.")
+            self.last_reply = self._said = ("Here's what I can do: find and open files, read and send email, play music and videos, "
+                                            "set reminders and timers, change how the screen looks and sounds, install programs, and answer questions. "
+                                            "You can also say things like “take a screenshot”, “world clock Tokyo” or “lock the screen”.")
             return True
         if re.fullmatch(r"(?:stop|cancel|never ?mind|forget it|abort|halt that|stop that|stop it|cancel that|no stop)[.!]*", low):
             if self.busy:
