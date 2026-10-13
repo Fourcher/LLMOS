@@ -2216,13 +2216,17 @@ class Desk:
         self.last_active = time.time()
         if chat == "main" and self.busy and self._instant(text):
             def now():
+                queued = False
                 try:
-                    self.act(text)
+                    queued = self.act(text, done)
                 finally:
-                    if done:
+                    if done and not queued:       # act queued it: the worker sets done when that turn ends
                         done.set()
             threading.Thread(target=now, daemon=True).start()
             return
+        self._enqueue(text, done, chat)
+
+    def _enqueue(self, text, done, chat):
         with self._pending_lock:
             self._req_pending += 1
         self.requests.put((text, done, chat))
@@ -2265,23 +2269,25 @@ class Desk:
         m = intent.match(text)
         return bool(m) and m[0] not in self._SLOW and not m[0].startswith("mail_")
 
-    def act(self, text):
+    def act(self, text, done=None):
         """A button on the desk (a status chip, the dock, the start menu, a window's button): done straight away on
         its own thread, never queued behind a request the model is still thinking about. What the OS cannot do by
-        itself goes to the model like anything typed."""
+        itself goes to the model like anything typed. Returns True when it queued the text (the worker sets `done`)."""
         text = str(text or "").strip()
         if not text:
-            return
+            return False
         self.last_active = time.time()
         if not self._instant(text):
-            return self.say(text)
+            self._enqueue(intent.fix_typos(text), done, "main")
+            return True
         try:
             if self.shortcut(text):
                 self.last_reply = self.__dict__.pop("_said", None) or "Done."
-                return
+                return False
             m = intent.match(text)
             if not m:
-                return self.say(text)          # looked instant, but needs the model after all
+                self._enqueue(intent.fix_typos(text), done, "main")   # looked instant, but needs the model after all
+                return True
             name, args = m
 
             class Lane:                     # the desk's context, with this button's words as "the request"
@@ -2292,13 +2298,15 @@ class Desk:
                     return getattr(lane._ctx, k)
             out = agent.execute(Lane(self.ctx), name, args)
             if str(out).startswith(agent._NOT_AN_APP):
-                return self.say(text)       # words, not an app: the model writes them
+                self._enqueue(intent.fix_typos(text), done, "main")   # words, not an app: the model writes them
+                return True
             reply = agent._cap(agent._shortcut_reply(name, args, out))
             self.last_reply = reply
             if reply and reply not in ("Here it is.", "(done)"):
                 self.emit({"t": "toast", "text": reply[:240]})
         except Exception as e:
             self.emit({"t": "toast", "text": agent._plain_error(str(e))})
+        return False
 
     def _worker(self):
         while True:
@@ -3516,7 +3524,7 @@ class Desk:
 
     def instant_reply(self, request, text):
         """An answer the OS knows itself, shown like any reply (no model involved)."""
-        text = replytr.translate(text, config.llm_language())
+        text = text if self.busy else replytr.translate(text, config.llm_language())
         self.emit({"t": "reply.start", "request": request})
         self.emit({"t": "reply.end", "text": text})
         self.last_reply = self._said = text
