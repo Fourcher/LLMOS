@@ -22,7 +22,7 @@ CASES = {
     # kept: matched before this change, same result
     "open firefox": ("browse", {}),
     "open my documents": ("show_files", {"path": "~/Documents"}),
-    "open the file manager": None,
+    "open the file manager": ("open_app", {"command": "file manager"}),
     "open calculator": ("open_app", {"command": "calculator"}),
     "open the calculator": ("open_app", {"command": "calculator"}),
     "stopwatch": ("open_app", {"command": "stopwatch"}),

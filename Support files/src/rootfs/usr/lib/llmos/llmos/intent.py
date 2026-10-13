@@ -2109,7 +2109,47 @@ def _match(text):
         if len(fact) < 3 or _NOT_MEMORY.search(t):
             return None
         return ("remember", {"fact": _first_person(fact)})
+    nw = _new_words(t)
+    if nw:
+        return nw
     return _restyle(t)
+
+
+# Phrases that had no route: a program named by its kind ("open the file manager", "open word"), a file by its path
+# ("open /etc/hosts", "open ~/notes.txt"), an uninstall by one word ("uninstall foo", "remove the foo app"), and apt/apk
+# installs of one name. Only these exact shapes; they run after every route above, so nothing that matched before changes.
+_OPEN_WORD = re.compile(r"^\s*(?:please\s+)?(?:i'?d\s+like\s+to\s+)?(?:open|launch|start)\s+(?:the\s+|a\s+|an\s+|my\s+)?"
+                        r"(?P<n>file\s+manager|image\s+viewer|text\s+editor|notes\s+app|word|excel)\s*[.!?]*\s*$", re.I)
+_OPEN_WORD_CMD = {"file manager": "file manager", "image viewer": "image viewer", "text editor": "text editor",
+                  "notes app": "notes", "word": "word processor", "excel": "spreadsheet"}
+_NOTES_APP = re.compile(r"^\s*(?:please\s+)?(?:the\s+|my\s+)?notes\s+app\s*[.!?]*\s*$", re.I)
+_OPEN_PATH = re.compile(r"^\s*(?:please\s+)?open\s+(?P<p>(?:~|/)\S*?)\s*[.!?]*\s*$", re.I)
+_UNINSTALL_ANY = re.compile(r"^\s*(?:please\s+)?uninstall\s+(?P<n>[a-z][a-z0-9+.-]{1,24})\s*[.!?]*\s*$", re.I)
+_REMOVE_APP_ANY = re.compile(r"^\s*(?:please\s+)?(?:remove|uninstall)\s+(?:the\s+|my\s+)?(?P<n>[a-z][a-z0-9+.-]{1,24})\s+app\s*[.!?]*\s*$", re.I)
+_APT_INSTALL = re.compile(r"^\s*(?:please\s+)?(?:apt(?:-get)?\s+install|apk\s+add)\s+(?P<n>[a-z0-9][a-z0-9+._-]{0,40})\s*[.!?]*\s*$", re.I)
+_NOT_A_PROGRAM = frozenset({"the", "a", "an", "my", "this", "that", "it", "these", "those", "them", "all", "everything", "anything",
+                            "something", "some", "any", "stuff", "one", "program", "programs", "app", "apps", "software", "update",
+                            "updates", "file", "files", "photo", "photos", "picture", "background", "duplicates", "connector",
+                            "connection", "plugin", "model", "voice", "account", "driver", "service", "extension", "list", "note"})
+
+
+def _new_words(t):
+    m = _OPEN_WORD.match(t)
+    if m:
+        return ("open_app", {"command": _OPEN_WORD_CMD[" ".join(m.group("n").lower().split())]})
+    if _NOTES_APP.match(t):
+        return ("open_app", {"command": "notes"})
+    m = _OPEN_PATH.match(t)
+    if m:
+        return ("open_file", {"path": m.group("p")})
+    for rx in (_UNINSTALL_ANY, _REMOVE_APP_ANY):
+        m = rx.match(t)
+        if m and m.group("n").lower() not in _NOT_A_PROGRAM:
+            return ("remove_software", {"name": m.group("n").lower()})
+    m = _APT_INSTALL.match(t)
+    if m:
+        return ("install_app", {"packages": m.group("n").lower()})
+    return None
 
 
 # A whole-look change the fixed look options can't express ("make the windows look like ...", "turn the interface into ...")
