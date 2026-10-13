@@ -28,6 +28,8 @@ HOWTO_NOW_INSTANT = [
     "import my bookmarks from chrome",
     "add a user account",
     "virtual background",
+    "what is the capital of france",
+    "how tall is mount everest",
 ]
 
 PREVIOUSLY_ACCEPTED = [
@@ -48,12 +50,12 @@ MODEL_ONLY = [
     "what's a good name for a cat",
     "tell me a joke about cats",
     "explain quantum physics simply",
-    "what is the capital of france",
     "write a haiku about rain",
     "give me a recipe for pancakes",
     "what should i name my dog",
-    "how tall is mount everest",
     "compose a limerick about a banana",
+    "write a short story about a robot",
+    "summarise the plot of hamlet in three paragraphs",
 ]
 
 failures = []
