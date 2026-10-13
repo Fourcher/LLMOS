@@ -30,6 +30,49 @@ def _add(steps, name, seconds):
     steps[name] = steps.get(name, 0.0) + seconds
 
 
+HOME_TOKEN = "{home}"
+OWNER_USER_FILE = "/etc/llmos/owner-user"
+_HOME_CMD = ('u=$(cat %s 2>/dev/null); if [ -n "$u" ]; then getent passwd "$u" | cut -d: -f6; else echo /root; fi'
+             % OWNER_USER_FILE)
+_home_cache = {"value": None}  # the desk's home, resolved once per VM boot (reset by fresh_overlay)
+
+
+def owner_home(run_in_vm):
+    """The owner account's home (the desk runs as the owner), from the test shell. Cached until the next
+    reboot. Any failure or empty output gives "/root"."""
+    if _home_cache["value"] is None:
+        try:
+            home = (run_in_vm(_HOME_CMD) or "").strip()
+        except Exception:  # noqa: BLE001 - default below
+            home = ""
+        _home_cache["value"] = home or "/root"
+    return _home_cache["value"]
+
+
+def reset_home_cache():
+    _home_cache["value"] = None
+
+
+def _expand_home(obj, home):
+    """Replace {home} in every string of a task's setup/evaluator value. Other braces are untouched."""
+    if isinstance(obj, str):
+        return obj.replace(HOME_TOKEN, home)
+    if isinstance(obj, list):
+        return [_expand_home(x, home) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _expand_home(v, home) for k, v in obj.items()}
+    return obj
+
+
+def expand_task_home(task, home):
+    """A copy of task with {home} replaced in its setup and evaluator. The instruction is left as it is."""
+    out = dict(task)
+    for key in ("setup", "evaluator"):
+        if key in task:
+            out[key] = _expand_home(task[key], home)
+    return out
+
+
 PATHS = ("page", "say")
 
 
@@ -82,8 +125,13 @@ def run_task(task, user, run_in_vm, clock=time.monotonic, outdir=OUTDIR, path="p
 
     try:
         timed("reset", lambda: run_in_vm("llmos desk-ctl testreset"))
+        home = owner_home(run_in_vm)
+        task = expand_task_home(task, home)
         for cmd in task.get("setup", []):
             timed("setup", lambda c=cmd: run_in_vm(c))
+        if task.get("setup") and home != "/root":
+            # setup runs as root: hand the seeded files to the owner so the desk can see them
+            timed("setup", lambda: run_in_vm('chown -R "$(cat %s)" %s' % (OWNER_USER_FILE, shlex.quote(home))))
         before = timed("state", lambda: vm_json(run_in_vm("llmos desk-state")))
         if before is None:
             raise ValueError("desk-state is not JSON")
@@ -312,6 +360,7 @@ def fresh_overlay(run_in_vm, boot=_fresh_overlay, clock=time.monotonic, sleep=ti
     and wait until the desk is past the first-run wizard. Raises RuntimeError if either wait times out."""
     slow = _slow()
     boot()
+    reset_home_cache()
     if not _poll(lambda: "up" in run_in_vm("echo up"), 300 * slow, clock, sleep):
         raise RuntimeError("fresh: VM not ready")
     run_in_vm(ONBOARD_CMD)
