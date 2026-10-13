@@ -3,7 +3,7 @@
 <div class="st"><span id="sc">Score 0</span><span id="hi"></span></div><canvas id="cv" width="400" height="400"></canvas><p class="st" style="justify-content:center">Arrow keys or WASD · Space to pause · Enter to restart</p>
 <script>
 const cv=document.getElementById("cv"),cx=cv.getContext("2d"),N=20,S=20;let sn,dir,nd,food,score,hi=0,dead,pause,tick;
-const cs=getComputedStyle(document.documentElement),AC=cs.getPropertyValue("--accent").trim()||"#7c5cff",FG=cs.getPropertyValue("--fg").trim()||"#fff";
+const cs=getComputedStyle(document.documentElement),AC=cs.getPropertyValue("--accent").trim()||"#7a52ff",FG=cs.getPropertyValue("--fg").trim()||"#fff";
 function place(){do food=[Math.floor(Math.random()*N),Math.floor(Math.random()*N)];while(sn.some(p=>p[0]===food[0]&&p[1]===food[1]))}
 function reset(){sn=[[10,10],[9,10],[8,10]];dir=nd=[1,0];score=0;dead=false;pause=false;place();clearInterval(tick);tick=setInterval(step,110);draw()}
 function step(){if(dead||pause)return;dir=nd;const h=[sn[0][0]+dir[0],sn[0][1]+dir[1]];if(h[0]<0||h[1]<0||h[0]>=N||h[1]>=N||sn.some(p=>p[0]===h[0]&&p[1]===h[1])){dead=true;if(score>hi){hi=score;LLMOS.save({hi})}draw();return}

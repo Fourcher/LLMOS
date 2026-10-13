@@ -135,7 +135,7 @@ def look(words="", desk_theme=None):
     th = desk_theme or ui.Theme()
     hx = lambda c: "#%02x%02x%02x" % tuple(int(x) for x in c)
     sysfont = (config.settings.get("appearance", {}) or {}).get("font") or "sans"
-    bg, fg, acc, font = (hx(th.bg) if th.bg else "#0e1016"), (hx(th.fg) if th.fg else "#e8e9ef"), (hx(th.acc) if th.acc else "#7c5cff"), \
+    bg, fg, acc, font = (hx(th.bg) if th.bg else "#0e1016"), (hx(th.fg) if th.fg else "#e8e9ef"), (hx(th.acc) if th.acc else "#7a52ff"), \
         (sysfont if sysfont in FONTS else "sans")
     for names, b, f, a, fo in PALETTES:
         if any(f" {n} " in w or f" {n}-" in w for n in names):
