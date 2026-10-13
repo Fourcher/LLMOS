@@ -215,3 +215,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] a658456 (A13d drives mount/eject via rootd, system-disk guard) VERIFY PASS "TOTAL FAILS: 0" — merge after build.
 - [held] 1242e4d (supersedes 1937896/94f7c12: desk i18n + template-key test) VERIFY PASS — merge after build (merge 1242e4d only).
 - [held] 929e78f (first turn waits for warm-up, cap 60 s) VERIFY PASS — merge after build. Gap noted: overlapping warm-ups (counter instead of Event) and _replay not covered.
+- [held] 4a39e00 (A13f USB format via rootd; supersedes a658456) VERIFY PASS — merge after build (merge 4a39e00 instead of a658456).
