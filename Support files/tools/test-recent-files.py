@@ -89,6 +89,17 @@ newest_yest = "recent30.txt" if yest_recent else "yesterday15.txt"
 check("yesterday", names(run(home, {"since": "yesterday"})),
       ["recent30.txt", "yesterday15.txt"] if yest_recent else ["yesterday15.txt"])
 
+# yesterday, early in the day: a file saved yesterday at 00:01 is yesterday's (a 24 h window drops it once the clock passes 00:01);
+# a file saved today at 00:01 is not yesterday's (a 24 h window keeps it). Own home, so the checks above are unchanged.
+YEST_MIDNIGHT = dt.datetime.combine(dt.date.today() - dt.timedelta(days=1), dt.time()).timestamp()
+early = {"yesterday_early.txt": (YEST_MIDNIGHT + 60, "Documents")}
+if NOW >= MIDNIGHT + 120:
+    early["today_early.txt"] = (MIDNIGHT + 60, "Documents")
+else:
+    print("skip A (too close to midnight)")
+home5 = make_home(early)
+check("yesterday early", names(run(home5, {"since": "yesterday"})), ["yesterday_early.txt"])
+
 # week: the last 7 days, newest first (3 days ago is in, 10 days ago is out)
 check("week order", names(run(home, {"since": "week"})), ["recent30.txt", "yesterday15.txt", "threedays.txt"])
 
