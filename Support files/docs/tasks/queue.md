@@ -233,3 +233,5 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 71b389a (supersedes e2f8bb0: big models allowed + disk-only refusal + slow notes) VERIFY PASS — merge after build (merge 71b389a instead of e2f8bb0).
 - [open] (freedom) voice.py:219 voice-model download refusal wording -> "not enough free disk: need X GB, have Y GB" (same rule) | role: fix | files: voice.py
 - [held] 71f691a (find_by_meaning falls back to find_files when meaning search is unavailable) VERIFY PASS — merge after build. Minor: "pdf" kind is dropped (broader search) and a code comment says otherwise — fix the comment/extension filter later.
+- [held] f178d4b (voice download refusal "not enough free disk: need X GB, have Y GB") VERIFY PASS — merge after build.
+- [open] (reliability) build-image*.sh wait patterns still look for "not enough disk"; the new wording is "not enough free disk" — add it to the early-exit pattern so a disk-full install fails fast | role: fix after build | files: tools/build-image.sh, tools/build-image-x86.sh
