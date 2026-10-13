@@ -2230,6 +2230,8 @@ class Desk:
                                                                             r"(?:sleep|suspend|go to sleep|put (?:it|the computer) to sleep|hibernate)[.!]?|clear (?:the )?caches?[.!]?|install (?:the |all (?:the )?)?updates[.!]?|"
                                                                             r"(?:keyboard layout|use an? |switch (?:the )?keyboard to |change (?:the )?keyboard (?:layout )?to )[a-z ()-]+)", low):
             return True
+        if self._howto(low.rstrip("?.!")) is not None:
+            return True                   # a how-to the desk answers from its own table: no model needed
         m = intent.match(text)
         return bool(m) and m[0] not in self._SLOW and not m[0].startswith("mail_")
 
