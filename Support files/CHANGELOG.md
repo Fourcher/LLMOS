@@ -4,6 +4,26 @@ Versions are in `VERSION`; every image and ISO carries its version in
 `/etc/llmos-release` (`llmos version` prints it, Settings shows it) and
 `dist/RELEASE.json` lists what a release contains with checksums.
 
+## 1.8.2
+- The firewall can be turned off and on by asking, for example "turn off the firewall". On the balanced setting it asks first. "Undo" puts it back, and the status answer tells the truth.
+- "Turn off the guard", "stop asking me before acting on emails" and "trust everything" are understood.
+- The question before acting on web, email or file instructions now says why it asked and how to stop it.
+- Reminders: "remind me at 3 to ...", "remind me to ... at 3 / tonight / this evening / next monday" all work. A trailing "please" is ignored. "Remind me what's on tonight" is a question, not a reminder.
+- Trailing "please" or "thanks" no longer breaks quick commands.
+- "Open the file manager / word / excel", "open /path with spaces", "apt install a b" (several packages) and "uninstall X" work.
+- "Share over the network", "map of Paris" (OpenStreetMap), "do I have new email", "youtube music" and "use my claude account" work.
+- More ways to turn the internet off: "turn off the internet", "work offline".
+- "Sign out" and "log out" lock the screen and say so.
+- "Connected but no internet" gets plain help. "Browser left, notes right" tiles two windows.
+- "This app is frozen", "voice memo" and "add french keyboard" work.
+- "What is my IP" asks before going online when the internet setting is "ask".
+- The website check honours internet off.
+- "Undo delete" restores only deletions. "Get my file back" and "open the bin" show the trash.
+- Declined dialogs close when you stop a request.
+- Internet questions use plain wording.
+- "What can you do" mentions the new things.
+- Faster first replies. Rarely used tools are only offered when you ask about them.
+
 ## 1.8.1
 - The desk runs under your own account when you have one. If that can't start, it falls back safely.
 - Replies come back in your language at once.
