@@ -5,6 +5,8 @@ import functools
 import json
 import os
 import re
+import stat
+import tempfile
 import time
 import uuid
 
@@ -83,17 +85,81 @@ def forget(query):
 
 # ------------------------------------------------------------------ audit
 
+AUDIT_MAX = 2 * 1024 * 1024    # the log is kept under this size
+AUDIT_KEEP = 1024 * 1024       # when it is trimmed, the newest this many bytes stay
+
+
+def _replace_file(path, data, mode=0o600):
+    """Write bytes to a temporary file beside path, then rename it over path (as config.save_json does)."""
+    d = os.path.dirname(path)
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".tmp-")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _audit_trim(path, incoming):
+    """Before an append of `incoming` bytes: if the log would pass AUDIT_MAX, keep only its newest AUDIT_KEEP bytes
+    (whole lines). A symlink is never followed or rewritten: the trim is skipped."""
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return
+    if not stat.S_ISREG(st.st_mode) or st.st_size + incoming <= AUDIT_MAX:
+        return
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as f:
+            f.seek(max(0, st.st_size - AUDIT_KEEP))
+            data = f.read()
+        if st.st_size > AUDIT_KEEP:  # the first bytes read may be the end of a line: drop them
+            nl = data.find(b"\n")
+            data = data[nl + 1:] if nl >= 0 else b""
+        _replace_file(path, data)
+    except OSError:
+        pass
+
+
 def audit(tool, args, result, allowed=True, who="agent"):
     rec = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "who": who, "tool": tool,
            "args": args, "allowed": allowed, "result": str(result)[:300]}
     path = config.data("audit.log")
     try:
         config.guard_write(path)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        with os.fdopen(fd, "a", encoding="utf-8") as f:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        line = json.dumps(rec, ensure_ascii=False) + "\n"
+        with config.data_lock():
+            _audit_trim(path, len(line.encode("utf-8")))
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+            with os.fdopen(fd, "a", encoding="utf-8") as f:
+                f.write(line)
     except OSError:
         pass
+
+
+def clear_audit():
+    """Empty the activity log ("clear the activity log"). False if it could not be cleared (a link, a locked vault)."""
+    path = config.data("audit.log")
+    try:
+        with config.data_lock():
+            try:
+                st = os.lstat(path)
+            except FileNotFoundError:
+                return True
+            if not stat.S_ISREG(st.st_mode):
+                return False
+            _replace_file(path, b"")
+            return True
+    except OSError:
+        return False
 
 
 def audit_tail(n=15):
@@ -120,6 +186,21 @@ def routines():
 
 def routine(text):
     return routines().get(_routine_key(text))
+
+
+def clear_routines():
+    """Forget every routine ("forget my routines"). A missing file is already cleared. False if it could not be."""
+    path = config.data("routines.json")
+    try:
+        with config.data_lock():
+            try:
+                config.guard_write(path)
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+        return True
+    except OSError:
+        return False
 
 
 @_locked

@@ -2759,6 +2759,14 @@ class Desk:
             self.emit({"t": "clear"})
             self.instant_reply(line, "Done: every conversation with me is deleted from this computer." if n else "There was no conversation history to delete.")
             return True
+        if re.fullmatch(r"(?:forget|clear|delete) (?:my |the )?routines", l2):
+            ok = store.clear_routines()
+            self.instant_reply(line, "Done. I've forgotten the routines I learned." if ok else "I couldn't clear the routines just now.")
+            return True
+        if re.fullmatch(r"(?:clear|delete) (?:my |the )?(?:activity|audit) log|forget what you did", l2):
+            ok = store.clear_audit()
+            self.instant_reply(line, "Done. The activity log is empty." if ok else "I couldn't clear the activity log just now.")
+            return True
         if re.fullmatch(r"what did you (?:just )?do|what have you (?:just )?done|why did that happen|what happened just now|show me what you did", l2):
             rows = [r for r in store.audit_tail(12) if r.get("tool") not in ("routine",)][-6:]
             if not rows:
