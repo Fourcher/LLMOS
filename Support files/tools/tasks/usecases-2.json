@@ -29,7 +29,7 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "test -d \"/root/Documents/Taxes 2026\" && echo yes || echo no"
+          "command": "test -d \"{home}/Documents/Taxes 2026\" && echo yes || echo no"
         },
         "expected": {
           "include": [
@@ -44,7 +44,7 @@
       "reachable_by_agent": true,
       "timeout_s": 120,
       "setup": [
-        "rm -rf '/root/Documents/Taxes 2026'"
+        "rm -rf '{home}/Documents/Taxes 2026'"
       ]
     },
     {
@@ -117,7 +117,7 @@
         "func": "include_exclude",
         "result": {
           "type": "vm_command_line",
-          "command": "ls /root/Pictures | grep -c llmos-test-1.jpg"
+          "command": "ls {home}/Pictures | grep -c llmos-test-1.jpg"
         },
         "expected": {
           "include": [
@@ -129,9 +129,9 @@
       "reachable_by_agent": true,
       "timeout_s": 120,
       "setup": [
-        "rm -f /root/Pictures/llmos-test-1.jpg",
-        "mkdir -p /root/Downloads /root/Pictures",
-        "touch /root/Downloads/llmos-test-1.jpg"
+        "rm -f {home}/Pictures/llmos-test-1.jpg",
+        "mkdir -p {home}/Downloads {home}/Pictures",
+        "touch {home}/Downloads/llmos-test-1.jpg"
       ]
     },
     {
@@ -288,7 +288,7 @@
         "func": "equals",
         "result": {
           "type": "vm_command_line",
-          "command": "ls -A /root/.Trash | wc -l"
+          "command": "ls -A {home}/.Trash | wc -l"
         },
         "expected": {
           "equals": "0"
@@ -298,8 +298,8 @@
       "reachable_by_agent": true,
       "timeout_s": 120,
       "setup": [
-        "mkdir -p /root/.Trash",
-        "touch /root/.Trash/llmos-test-junk"
+        "mkdir -p {home}/.Trash",
+        "touch {home}/.Trash/llmos-test-junk"
       ]
     },
     {

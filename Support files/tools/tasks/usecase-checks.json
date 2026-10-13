@@ -38,7 +38,7 @@
       "expected": {"include": ["\"id\": \"find\""]}
     },
     "weak": false,
-    "setup": ["mkdir -p '/root/Documents' && printf 'resume\\n' > '/root/Documents/My Resume 2026.pdf'"]
+    "setup": ["mkdir -p '{home}/Documents' && printf 'resume\\n' > '{home}/Documents/My Resume 2026.pdf'"]
   },
   "find duplicates": {
     "evaluator": {
@@ -57,28 +57,28 @@
     "weak": false
   },
   "make a folder called Taxes 2026": {
-    "setup": ["rm -rf '/root/Documents/Taxes 2026'"],
+    "setup": ["rm -rf '{home}/Documents/Taxes 2026'"],
     "evaluator": {
       "func": "include_exclude",
-      "result": {"type": "vm_command_line", "command": "test -d \"/root/Documents/Taxes 2026\" && echo yes || echo no"},
+      "result": {"type": "vm_command_line", "command": "test -d \"{home}/Documents/Taxes 2026\" && echo yes || echo no"},
       "expected": {"include": ["yes"], "exclude": ["no"]}
     },
     "weak": false
   },
   "move all the photos from downloads to pictures": {
-    "setup": ["rm -f /root/Pictures/llmos-test-1.jpg", "mkdir -p /root/Downloads /root/Pictures", "touch /root/Downloads/llmos-test-1.jpg"],
+    "setup": ["rm -f {home}/Pictures/llmos-test-1.jpg", "mkdir -p {home}/Downloads {home}/Pictures", "touch {home}/Downloads/llmos-test-1.jpg"],
     "evaluator": {
       "func": "include_exclude",
-      "result": {"type": "vm_command_line", "command": "ls /root/Pictures | grep -c llmos-test-1.jpg"},
+      "result": {"type": "vm_command_line", "command": "ls {home}/Pictures | grep -c llmos-test-1.jpg"},
       "expected": {"include": ["1"]}
     },
     "weak": false
   },
   "empty the trash": {
-    "setup": ["mkdir -p /root/.Trash", "touch /root/.Trash/llmos-test-junk"],
+    "setup": ["mkdir -p {home}/.Trash", "touch {home}/.Trash/llmos-test-junk"],
     "evaluator": {
       "func": "equals",
-      "result": {"type": "vm_command_line", "command": "ls -A /root/.Trash | wc -l"},
+      "result": {"type": "vm_command_line", "command": "ls -A {home}/.Trash | wc -l"},
       "expected": {"equals": "0"}
     },
     "weak": false
