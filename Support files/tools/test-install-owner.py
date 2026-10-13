@@ -14,7 +14,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 INSTALL = os.path.join(HERE, "..", "src", "install.sh")
 START = 'if [ "${LLMOS_OWNER:-0}" = 1 ]; then'
-WATCH = ("addgroup", "adduser", "rc-update add llmos-rootd", "owner-user")
+WATCH = ("addgroup", "adduser", "rc-update add llmos-rootd", "rc-update add seatd", "chown -R owner", "owner-user")
 GROUPS = ["video", "input", "audio", "seat", "netdev", "plugdev"]
 
 STUBS = {
@@ -54,7 +54,7 @@ echo "$out"; exit 0
 ''',
     "rc-update": '''#!/bin/sh
 if [ "$1" = show ]; then
-  [ -e "$STATE/rc.llmos-rootd" ] && echo "llmos-rootd | $2"
+  for s in llmos-rootd seatd; do [ -e "$STATE/rc.$s" ] && echo "$s | $2"; done
   exit 0
 fi
 echo "rc-update $*" >> "$LOG"
@@ -64,11 +64,15 @@ if [ "$1" = add ]; then
 fi
 exit 0
 ''',
-    # chroot stub: rewrites /etc/ to the test target, then runs the command (stdin passes through)
+    # chown is logged, never run on the host (the target's /var/cache is rewritten below)
+    "chown": '''#!/bin/sh
+echo "chown $*" >> "$LOG"
+''',
+    # chroot stub: rewrites /etc/ and /var/cache/ to the test target, then runs the command (stdin passes through)
     "chroot": '''#!/bin/sh
 echo "chroot $*" >> "$LOG"
 root=$1; shift
-sed "s#/etc/#$root/etc/#g" | "$@"
+sed "s#/etc/#$root/etc/#g; s#/var/cache/#$root/var/cache/#g" | "$@"
 ''',
 }
 
@@ -166,8 +170,11 @@ def main():
                   "getent passwd owner", "adduser -D -h /home/owner -s /bin/sh -G owner owner"]
         for g in GROUPS:
             expect += ["getent group %s" % g, "addgroup -S %s" % g, "addgroup owner %s" % g]
-        expect += ["rc-update add llmos-rootd default"]
+        expect += ["rc-update add llmos-rootd default", "rc-update add seatd default"]
+        expect += ["chown -R owner:owner %s/var/cache/llmos" % tg]
         check(read_log(log) == expect, "on: calls are exactly the expected sequence (%d calls)" % len(expect))
+        check(read_log(log).count("rc-update add seatd default") == 1, "on: seatd added to default exactly once")
+        check(os.path.isdir(os.path.join(tg, "var", "cache", "llmos")), "on: target /var/cache/llmos created")
         marker = os.path.join(tg, "etc", "llmos", "owner-user")
         check(os.path.exists(marker) and open(marker).read() == "owner\n", "on: marker /etc/llmos/owner-user = owner")
 
@@ -181,6 +188,8 @@ def main():
         check(not any(c.startswith("addgroup owner ") for c in calls), "on-again: no addgroup owner <g> (already members)")
         check(not any(c.startswith("rc-update add") for c in calls), "on-again: no rc-update add (already added)")
         check(os.path.exists(os.path.join(st, "rc.llmos-rootd")), "on-again: llmos-rootd still in default")
+        check(os.path.exists(os.path.join(st, "rc.seatd")), "on-again: seatd still in default")
+        check(os.path.isdir(os.path.join(tg, "var", "cache", "llmos")), "on-again: target /var/cache/llmos still present")
         check(open(marker).read() == "owner\n", "on-again: marker still owner")
 
         # C, D, E: off (0, empty, unset) on fresh hosts
@@ -191,6 +200,7 @@ def main():
             check(r.returncode == 0, "off (%s): block skipped OK" % label)
             check(read_log(log) == [] and not os.listdir(st), "off (%s): no account, group or service calls" % label)
             check(not os.path.exists(os.path.join(tg, "etc")), "off (%s): no marker written" % label)
+            check(not os.path.exists(os.path.join(tg, "var")), "off (%s): no cache dir created" % label)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     print("all good")

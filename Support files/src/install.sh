@@ -249,6 +249,9 @@ for g in video input audio seat netdev plugdev; do
   id -nG owner | tr ' ' '\n' | grep -qx "$g" || addgroup owner "$g"
 done
 rc-update show default 2>/dev/null | grep -qw llmos-rootd || rc-update add llmos-rootd default
+rc-update show default 2>/dev/null | grep -qw seatd || rc-update add seatd default
+mkdir -p /var/cache/llmos
+chown -R owner:owner /var/cache/llmos
 mkdir -p /etc/llmos
 echo owner > /etc/llmos/owner-user
 EOF
