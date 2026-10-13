@@ -96,6 +96,20 @@ try:
                   lambda: rootd.firewall_apply({"internet": "maybe"}), "bad args: internet")
     expect_raises("set_tor rejects on=yes",
                   lambda: rootd.set_tor({"on": "yes"}), "bad args: on")
+    # (e) firewall_apply's optional "firewall" field: on/off/absent pass firewall=True/False/None; garbage is rejected
+    fw_calls = []
+    system._apply_firewall_root = lambda internet=None, firewall=None: (fw_calls.append((internet, firewall)) or (True, ""))
+    for args, expect in (({"firewall": "on"}, True), ({"firewall": "off"}, False), ({}, None),
+                         ({"internet": "no", "firewall": "off"}, False)):
+        fw_calls.clear()
+        out = json.loads(rootd.firewall_apply(args))
+        assert out == [True, ""], out
+        assert fw_calls[0][1] is expect, (args, fw_calls)
+        print(f"ok firewall_apply {args} -> firewall={expect!r}")
+    assert fw_calls[-1][0] == "no", fw_calls
+    for bad in ("banana", "", "ON", True, 0):
+        expect_raises(f"firewall_apply rejects firewall={bad!r}",
+                      lambda bad=bad: rootd.firewall_apply({"firewall": bad}), "bad args: firewall")
     assert "firewall_apply" in rootd.VERBS and "set_tor" in rootd.VERBS
     print("ok rootd VERBS has firewall_apply and set_tor")
 
