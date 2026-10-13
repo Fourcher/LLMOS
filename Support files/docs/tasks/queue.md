@@ -107,3 +107,4 @@ Facts (PROBE 10:05): no init/session file names a user; config.home() = $LLMOS_H
 - [held] 28a7f28 (open file manager/word/excel, open /path, remove the X app, apt install X) VERIFY PASS — src, merge after the 1.8.1 build. Follow-up: "open ~/My Notes.txt" (paths with spaces) and "apt install htop vim" (several packages) still unrouted.
 - [held] 604507d (this app is frozen -> stop asks; bare voice memo; add X keyboard/layout; it's frozen unchanged) VERIFY PASS — src, merge after the 1.8.1 build.
 - [held] 15e7549 (check_site: plain message when internet is off; "ask" already gated via agent.execute) VERIFY PASS — src, merge after the 1.8.1 build. Remaining internet=ask gap: desk.py:2707 api.ipify.org in the network panel.
+- [held] bb62538 (includes a7eb1b8+604507d; _instant gate knows add-layout / app frozen) VERIFY PASS — merge bb62538 instead of 604507d after the 1.8.1 build.
