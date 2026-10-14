@@ -556,4 +556,4 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 #reply.collapsed .text p::after { content: " "; }       /* paragraphs on one line keep a space between them */
 .media .ctl .btn { white-space: nowrap; }
 .list .item .t.opens { cursor: pointer; } .list .item .t.opens:hover { color: var(--accent); }
-.list .item.gone { opacity: .35; pointer-events: none; transition: opacity .15s; }
+.list .item.gone { animation: none !important; opacity: .35 !important; pointer-events: none; transition: opacity .15s; }

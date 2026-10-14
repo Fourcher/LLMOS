@@ -747,7 +747,7 @@
   }
   let fullTrust = false;   // the owner chose full trust: a delete button deletes, no "Sure?" first
   // a row whose delete/cancel was pressed greys out at once and can't be pressed again while the window refreshes
-  function fade(b) { const row = b.closest(".item"); if (row) { row.classList.add("gone"); setTimeout(() => row.classList.remove("gone"), 8000); } }   // back if nothing changed
+  function fade(b) { const row = b.closest(".item"); if (row) { const was = b.innerHTML; row.classList.add("gone"); b.innerHTML = "…"; setTimeout(() => { row.classList.remove("gone"); b.innerHTML = was; }, 8000); } }   // back if nothing changed
   function actionBtn(a) {
     const b = el("button", "btn small" + (a.primary ? " primary" : "") + (a.danger ? " danger" : ""), esc(a.label));
     if (!a.danger || fullTrust) {

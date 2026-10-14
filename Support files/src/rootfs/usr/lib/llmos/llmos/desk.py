@@ -4111,6 +4111,10 @@ class Desk:
         self.set_screen("lock", {"note": ""})   # the lock screen at once; the closing below takes a few seconds
         self.stop_all()                     # a turn in progress stops; nothing queued runs behind the lock
         self._keybinds(False)
+        # the rest closes programs and the vault: off the page's thread, so the lock screen shows meanwhile
+        threading.Thread(target=self._lock_rest, daemon=True).start()
+
+    def _lock_rest(self):
         # locking closes every program of this session (a browser with its profile in the vault, a terminal
         # sitting in the home folder, a player on a file in it would otherwise keep the vault open)
         for pid in list(self.apps):

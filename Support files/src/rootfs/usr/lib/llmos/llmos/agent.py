@@ -1183,6 +1183,14 @@ def _shortcut_words(name, args, out):
         return _cap(out.split(". Say")[0]) + "." if low.startswith(("now playing", "opened ")) else out
     if name == "delete_file":
         return _cap(out.split(" (")[0]) + "." if low.startswith(("moved ", "deleted ")) else out
+    if name == "manage_tasks" and args.get("action", "list") == "list":
+        # the ids are for the model (to cancel one); a person reads what and when
+        rows = [re.sub(r"^\[\w+\]\s*", "", ln) for ln in str(out).splitlines() if ln.startswith("[")]
+        if not rows:
+            return "Nothing is scheduled."
+        return "Scheduled: " + "; ".join(r.split(": ", 1)[1] + " (" + r.split(": ", 1)[0] + ")" if ": " in r else r for r in rows) + "."
+    if name == "manage_tasks" and str(out).startswith("cancelled: "):
+        return "Cancelled: " + "; ".join(re.sub(r"^\[\w+\]\s*", "", x) for x in str(out)[11:].split("; ")) + "."
     if name in ("restore_file", "empty_trash"):
         return _cap(out.split(". Say")[0]) + "." if not low.startswith("error") else owner_text(out)
     if name == "note_add":
