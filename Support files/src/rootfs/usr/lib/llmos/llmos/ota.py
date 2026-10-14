@@ -21,7 +21,6 @@ import socket
 import subprocess
 import tarfile
 import tempfile
-import threading
 import time
 import urllib.request
 
@@ -437,7 +436,64 @@ def _restart(services, desk_was_up):
     return True
 
 
+def _diag():
+    """What the update report carries besides the result, so a problem on this machine can be looked into from the
+    computer that sends the updates: the chip, the graphics driver, and the last lines programs printed on start."""
+    d = {"arch": os.uname().machine}
+    try:
+        drv = []
+        for card in sorted(os.listdir("/sys/class/drm")):
+            p = f"/sys/class/drm/{card}/device/driver"
+            if re.fullmatch(r"card\d+", card) and os.path.islink(p):
+                drv.append(os.path.basename(os.readlink(p)))
+        d["gpu"] = ",".join(drv)
+    except OSError:
+        pass
+    try:
+        with open("/run/llmos/gui.log", errors="replace") as f:
+            lines = f.read().splitlines()[-400:]
+        keep = [ln for ln in lines if re.search(r"firefox|chromium|browser|error|fail|crash|segfault|abort|cannot|denied", ln, re.I)]
+        d["gui_log"] = "\n".join(keep[-40:])[-5000:]
+    except OSError:
+        pass
+    return d
+
+
+def _browser_probe():
+    """Can this machine reach a web page, and can its browser open one? A hidden run of the browser on a fresh profile
+    (nothing of the owner's is touched), once after each update, sent with the update report."""
+    out = {}
+    t0 = time.time()
+    try:
+        urllib.request.urlopen("https://example.com", timeout=15).read(200)
+        out["net"] = f"ok {time.time() - t0:.1f}s"
+    except Exception as e:
+        out["net"] = f"error: {e}"[:300]
+    ff = shutil.which("firefox") or shutil.which("firefox-esr")
+    if not ff:
+        out["browser"] = "not installed"
+        return out
+    tmp = tempfile.mkdtemp(prefix="llmos-probe-")
+    shot = os.path.join(tmp, "page.png")
+    t0 = time.time()
+    try:
+        p = subprocess.run([ff, "--headless", "--no-remote", "--profile", tmp, "--screenshot", shot, "https://example.com"],
+                           capture_output=True, text=True, timeout=90, env=dict(os.environ, HOME=tmp, MOZ_HEADLESS="1"))
+        err = (p.stderr or "") + (p.stdout or "")
+        out["browser"] = f"exit {p.returncode} in {time.time() - t0:.0f}s, page picture " + \
+            (f"{os.path.getsize(shot)} bytes" if os.path.exists(shot) else "missing")
+        out["browser_log"] = err[-2500:]
+    except subprocess.TimeoutExpired:
+        out["browser"] = "no answer in 90 s"
+    except OSError as e:
+        out["browser"] = f"could not start: {e}"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return out
+
+
 def _report(base, body):
+    body = dict(body, diag=_diag())
     try:
         req = urllib.request.Request(base + "/ota/report", data=json.dumps(body).encode(),
                                      headers={"Content-Type": "application/json"})
@@ -591,6 +647,9 @@ def client():
         print(f"ota: {'installed' if ok else 'not installed'}: {detail}", flush=True)
         _report(base, {"host": socket.gethostname(), "id": m["id"], "version": m["version"], "ok": ok,
                        "detail": detail, "now": current_version(), "live": live})
+        if ok:      # before a restart of this program below, so it is not cut short (at most ~2 min, once per update)
+            _report(base, {"host": socket.gethostname(), "kind": "probe", "version": m["version"], "ok": True,
+                           "detail": "browser check", **_browser_probe()})
         if ok:
             _notify("Updated", f"LLM OS {m['version']} from {o['name']} is installed."
                     + (" This is the live USB, so it lasts until restart." if live else ""))
