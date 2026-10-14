@@ -462,10 +462,15 @@ class DeskCtx:
     def begin_tool(self, tool, args, risk):
         self._watch_last = None
         self._tool_open = True
+        self._cur_tool = (getattr(tool, "name", ""), dict(args) if isinstance(args, dict) else {}, risk)
         self.d.emit({"t": "activity", "text": self.d.describe_tool(tool, args), "chat": getattr(self, "chat_id", "main")})
 
     def end_tool(self, tool, result):
         self._tool_open = False
+        cur, self._cur_tool = getattr(self, "_cur_tool", None), None
+        # something changed: the windows that show it (files, models, inbox, sound...) show it at once
+        if cur and cur[2] in (tools.CHANGE, tools.DESTRUCTIVE, tools.SECURITY) and not str(result).startswith("error"):
+            self.d.refresh_windows()
 
     def progress(self, phase, done, total):
         self.d.emit({"t": "progress", "label": {"download": "downloading", "verify": "verifying"}.get(phase, phase),
@@ -659,6 +664,9 @@ class DeskCtx:
                 "Tell them that in one sentence; do not say it is set.")
 
     def show_ui(self, spec):
+        cur = getattr(self, "_cur_tool", None)
+        if cur and cur[2] in (tools.READ, tools.SAFE) and isinstance(spec, dict) and spec.get("id") and cur[0]:
+            self.d.note_window_source(spec["id"], cur[0], cur[1])    # rebuilt by re-running this tool when things change
         return self.d.open_window(spec)
 
     def close_ui(self, wid):
@@ -1749,7 +1757,39 @@ class Desk:
                    {"type": "buttons", "items": [{"label": T("d_apps_connectors"), "say": "connectors"}]}]
         self.open_window({"id": "apps", "replace": True, "title": T("d_myapps"), "size": "m", "slot": "side", "blocks": blocks})
 
+    def note_window_source(self, wid, tool, args):
+        self.__dict__.setdefault("_win_src", {})[wid] = (tool, args)
+
+    def refresh_windows(self):
+        """Rebuild the open windows that show something an action may have changed (a folder, the models, the inbox,
+        a settings panel), in the background, without a reply or activity line. A window only refreshes from the
+        read-only tool or the panel that made it."""
+        src = dict(self.__dict__.get("_win_src", {}))
+        if not src or getattr(self, "_refreshing", False):
+            return
+
+        def run():
+            self._refreshing = True
+            try:
+                quiet = _QuietCtx(self)
+                for wid, (tool, args) in src.items():
+                    if wid not in self.windows:
+                        self._win_src.pop(wid, None)
+                        continue
+                    try:
+                        if tool == "panel":
+                            self.open_panel(args)
+                        elif tool in tools.REGISTRY:
+                            quiet._cur_tool = (tool, args, tools.READ)
+                            tools.REGISTRY[tool].fn(dict(args), quiet)
+                    except Exception as e:
+                        sys.stderr.write(f"desk: refreshing {wid} failed: {e}\n")
+            finally:
+                self._refreshing = False
+        threading.Thread(target=run, daemon=True).start()
+
     def open_panel(self, which):
+        self.note_window_source("panel-" + which, "panel", which)
         spec = self.panel_spec(which)
         if spec:
             spec["id"] = "panel-" + which
@@ -2376,6 +2416,7 @@ class Desk:
         try:
             if self.shortcut(text):
                 self.last_reply = self.__dict__.pop("_said", None) or "Done."
+                getattr(self, "refresh_windows", lambda: None)()
                 return False
             m = intent.match(text)
             if not m:
@@ -3730,6 +3771,7 @@ class Desk:
         # first pass handled nothing (short-circuit: no second run of a path that already acted)
         if chat == "main" and (self.shortcut(text) or (fixed != text and self.shortcut(fixed))):
             self.last_reply = self.__dict__.pop("_said", None) or "Done."
+            getattr(self, "refresh_windows", lambda: None)()
             return
         c = self.chat(chat)
         cont = c.continues(text)
@@ -4633,3 +4675,22 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+class _QuietCtx(DeskCtx):
+    """Re-runs a read-only tool to rebuild its window: everything but the window is silent."""
+
+    def status(self, text):
+        pass
+
+    def begin_tool(self, *a, **k):
+        pass
+
+    def end_tool(self, *a, **k):
+        pass
+
+    def on_text(self, *a, **k):
+        pass
+
+    def show_ui(self, spec):
+        return self.d.open_window(spec)

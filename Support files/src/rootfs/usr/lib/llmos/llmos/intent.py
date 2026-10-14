@@ -1712,16 +1712,30 @@ def _everyday2(text):
             u = "minutes" if u == "hours" else u
         length = f"{n} {u}"
         return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
-    # a new text file: "make a text file called todo on my desktop"
+    # a new text file: "make a text file called todo on my desktop", "... called notes.txt in Sweep Test"
     m = re.match(r"^(?:please\s+)?(?:make|create|start|new)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?(?:empty\s+|blank\s+)?(?:text\s+|txt\s+|plain\s+text\s+)?file\s+"
-                 r"(?:called|named)\s+(?P<n>[\w .,'-]+?)(?:\s+(?:on|in)\s+(?:my\s+|the\s+)?(?P<w>desktop|documents|downloads|home(?:\s+folder)?))?$", low)
+                 r"(?:called|named)\s+(?P<n>[\w .,'-]+?)(?:\s+(?:on|in|inside)\s+(?:my\s+|the\s+)?(?:(?P<w>desktop|documents|downloads|home(?:\s+folder)?)|(?P<f>[\w .'-]+?))(?:\s+folder)?)?$", low)
     if m:
         name = t[m.start("n"):m.end("n")].strip().strip("'\"")
         if not re.search(r"\.\w{1,5}$", name):
             name += ".txt"
-        where = (m.group("w") or "documents").split()[0]
-        folder = "~" if where == "home" else "~/" + where.capitalize()
+        if m.group("f"):
+            fname = t[m.start("f"):m.end("f")].strip()
+            folder = owner_folder(fname) or "~/Documents/" + fname       # (made by write_file if it is not there)
+        else:
+            where = (m.group("w") or "documents").split()[0]
+            folder = "~" if where == "home" else "~/" + where.capitalize()
         return ("write_file", {"path": f"{folder}/{name}", "content": "", "append": True})   # (an existing file is kept as it is)
+    # move a file into a folder: "move notes.txt into the Sweep Test folder", "put my-notes.txt inside Sweep Test"
+    m = re.match(r"^(?:please\s+)?(?P<v>move|put|drag|copy)\s+(?:the\s+file\s+|my\s+|the\s+)?(?P<x>[\w .,'()-]+?\.\w{1,5})\s+"
+                 r"(?:into|inside|in|to)\s+(?:my\s+|the\s+)?(?P<y>[\w .'-]+?)(?:\s+folder)?\s*[.!?]?$", low)
+    if m:
+        x = t[m.start("x"):m.end("x")].strip()
+        y = t[m.start("y"):m.end("y")].strip()
+        std = y.lower() in ("documents", "downloads", "desktop", "pictures", "music", "videos", "home", "photos", "usb", "usb stick")
+        dest = y.lower() if std else owner_folder(y)
+        if dest:
+            return ("move_files", {"what": x, "from": "home", "to": dest, "copy": m.group("v") == "copy"})
     # sort a folder: "sort my downloads by newest"
     m = re.match(r"^(?:please\s+)?(?:sort|order|arrange|show)\s+(?:my\s+|the\s+)?(?P<f>desktop|documents|downloads|pictures|photos|music|videos|files|home folder)"
                  r"(?:\s+folder)?\s+(?:by\s+|with\s+(?:the\s+)?)?(?P<o>newest|latest|most recent|date|oldest|name|alphabetical(?:ly)?|a-z|size|biggest|largest)(?:\s+first)?$", low)
@@ -1775,6 +1789,20 @@ def _everyday2(text):
         return ("mail_inbox", {})
     if re.match(r"^(?:read|open|show)\s+(?:me\s+)?(?:my\s+|the\s+)?(?:latest|newest|last|most recent|new)\s+(?:e-?mail|mail|message)$", low):
         return ("mail_read", {"id": "latest"})
+    # the inbox window's own buttons ("read email 6", "delete email 6") and the same in plain words: the mail tools,
+    # never a terminal mail program or a search of the disk
+    m = re.match(r"^(?:please\s+)?(?P<v>read|open|show|delete|trash|remove|archive)\s+(?:the\s+)?(?:e-?mail|mail|message)\s+(?:#|number\s+|no\.?\s*)?(?P<id>\d+)$", low)
+    if m:
+        v = m.group("v")
+        if v in ("read", "open", "show"):
+            return ("mail_read", {"id": m.group("id")})
+        return ("mail_archive" if v == "archive" else "mail_delete", {"ids": m.group("id")})
+    if re.match(r"^(?:please\s+)?(?:summari[sz]e|sum up|go through|what are)\s+(?:my\s+|the\s+)?(?:unread\s+|new\s+)?(?:e-?mails?|mail|inbox|messages)"
+                r"(?:\s+in\s+my\s+inbox)?(?:\s+about)?$", low):
+        return ("mail_inbox", {})
+    m = re.match(r"^(?:please\s+)?(?:read|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:latest\s+|last\s+|newest\s+)?(?:e-?mail|mail|message)\s+from\s+(?P<w>[\w.@ -]+)$", low)
+    if m:
+        return ("mail_read", {"id": m.group("w").strip()})
     m = re.match(r"^(?:did|has)\s+(?P<w>[a-z][\w.@ -]*?)\s+(?:reply|replied|answer(?:ed)?|write back|written back|e-?mail(?:ed)?(?:\s+me)?|get back to me|respond(?:ed)?)$"
                  r"|^(?:any|is there an?)\s+(?:new\s+)?(?:e-?mail|mail|message|reply)\s+from\s+(?P<w2>[\w.@ -]+)$", low)
     if m:
@@ -2317,3 +2345,26 @@ def ui_color(words):
     from . import ui
     w = re.sub(r"^(?:all\s+|completely\s+|totally\s+)", "", str(words).lower()).strip()
     return ui.parse_color(w) is not None
+
+
+def owner_folder(name):
+    """'~/Documents/Sweep Test' for a folder the owner made, found by its name (any case) in the home folder,
+    nearest first; None when there is none."""
+    import os
+    from . import config
+    want = name.strip().strip("'\"").lower().removesuffix(" folder").strip()
+    if not want:
+        return None
+    home = config.home().rstrip("/")
+    best = None
+    for d, dirs, _ in os.walk(home):
+        if d[len(home):].count("/") >= 3:
+            dirs[:] = []
+            continue
+        dirs[:] = sorted(x for x in dirs if not x.startswith("."))
+        for x in dirs:
+            if x.lower() == want:
+                p = os.path.join(d, x)
+                if best is None or p.count("/") < best.count("/"):
+                    best = p
+    return ("~" + best[len(home):]) if best else None

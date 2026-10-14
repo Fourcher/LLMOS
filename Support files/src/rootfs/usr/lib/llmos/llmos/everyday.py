@@ -1634,6 +1634,8 @@ def net_and_dates(desk, line, low):
             return _say(desk, line, f"{d.strftime('%d %B %Y').lstrip('0')} is a {d.strftime('%A')}.")
     # "add call the bank to todo.txt": a line at the end of that file, wherever it is
     m = re.fullmatch(r"(?:add|append|write|put)\s+(?P<t>.+?)\s+(?:to|in|into|at the end of)\s+(?:my\s+|the\s+)?(?P<f>[\w .-]+\.(?:txt|md|csv|log))", q)
+    if m and re.search(r"\b(?:and|save|saved|as|then|called|named)\b", m.group("f")):
+        m = None        # "write a note to my neighbour and save it as thanks.txt": compose, not "append to a file"
     if m:
         from . import tools
         name = line.strip().rstrip("?.!")[m.start("f"):m.end("f")]

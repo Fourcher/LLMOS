@@ -1437,7 +1437,7 @@ def execute(ctx, name, arguments):
     tainted = getattr(ctx, "tainted", False) and risk in (tools.CHANGE, tools.DESTRUCTIVE, tools.SECURITY) and name not in TAINT_EXEMPT \
         and config.settings.get("guard_untrusted", True)
     if name == "delete_file":
-        p = str((arguments or {}).get("path") or "")
+        p = str(args.get("path") or "")          # the parsed arguments: the model sends them as JSON text
         try:
             gone = not os.path.lexists(os.path.abspath(tools._path(p)))
         except Exception:
