@@ -1197,6 +1197,8 @@ def _shortcut_words(name, args, out):
             shown = ("~" + p[len(home):]) if p.startswith(home) else p
             return f"Made {shown}." if mm.group(1) == "0" else f"Saved {shown}."
         return out
+    if name == "web_answer":
+        return out.strip()                       # the sourced answer, as written
     if name == "mail_inbox":
         if low.startswith("no unread"):
             return "No unread email."

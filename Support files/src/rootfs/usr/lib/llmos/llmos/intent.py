@@ -1522,6 +1522,10 @@ def _everyday(text):
         if str(args.get("what", "")).lower().strip() in ("this", "that", "it", "these", "those", "them"):
             return ("which_file", {"request": text.strip()})
         return ("move_files", args)
+    # a plain factual question about the world ("who is the current president of France", "how tall is the Eiffel
+    # Tower"): one search, one page, a sourced answer (the full assistant loop took about a minute on a CPU)
+    if _FACT_Q.match(text) and not re.search(r"\b(?:you|your|yours|me|my|mine|i|i'm|we|our|us|this computer|this pc|llm ?os|the computer|my computer)\b", text, re.I):
+        return ("web_answer", {"query": text.strip().rstrip("?.! ")})
     m = _WEB_SEARCH.match(text)
     if m and not _FILEISH.search(m.group("q")):
         # a question ("the population of Tokyo", "who won the game") wants the answer: the assistant searches and
@@ -1529,7 +1533,7 @@ def _everyday(text):
         if re.match(r"(?:the\s+|a\s+|an\s+)?(?:population|weather|forecast|price|cost|height|age|capital|president|prime minister|ceo|"
                     r"score|result|winner|distance|meaning|definition|time|date|release date|net worth|size|length|value)\b|"
                     r"(?:who|what|when|where|why|how|which|is|are|does|did|can)\b", m.group("q"), re.I):
-            return None
+            return ("web_answer", {"query": m.group("q")})
         return ("browse", {"search": m.group("q")})
     m = _FIND_FILE.match(text)
     if m and _FILEISH.search(text) and not re.search(r"\be-?mails?\b", text, re.I) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I) and not re.search(r"\b(?:biggest|largest)\s+files?\b", text, re.I) and not re.search(r"\bworking\s+on\b", text, re.I):
@@ -1752,6 +1756,12 @@ def _everyday2(text):
             u = "minutes" if u == "hours" else u
         length = f"{n} {u}"
         return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
+    # a list for a topic: "make a to-do list for moving house", "a packing list for a beach trip"
+    m = re.match(r"^(?:please\s+)?(?:make|create|write|start|give\s+me|draw\s+up)\s+(?:me\s+)?(?:a\s+|an\s+|my\s+)?(?P<l>to-?do|todo|packing|shopping|check)\s*-?list\s+"
+                 r"(?:for|about|to)\s+(?P<t>.+?)\s*[.!]?$", low)
+    if m:
+        lst = {"todo": "to-do", "to-do": "to-do", "check": "checklist"}.get(m.group("l"), m.group("l"))
+        return ("make_list", {"list": lst, "topic": t[m.start("t"):m.end("t")].strip()})
     # a new text file: "make a text file called todo on my desktop", "... called notes.txt in Sweep Test"
     m = re.match(r"^(?:please\s+)?(?:make|create|start|new)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:new\s+)?(?:empty\s+|blank\s+)?(?:text\s+|txt\s+|plain\s+text\s+)?file\s+"
                  r"(?:called|named)\s+(?P<n>[\w .,'-]+?)(?:\s+(?:on|in|inside)\s+(?:my\s+|the\s+)?(?:(?P<w>desktop|documents|downloads|home(?:\s+folder)?)|(?P<f>[\w .'-]+?))(?:\s+folder)?)?$", low)
@@ -2408,3 +2418,10 @@ def owner_folder(name):
                 if best is None or p.count("/") < best.count("/"):
                     best = p
     return ("~" + best[len(home):]) if best else None
+
+
+_FACT_Q = re.compile(r"^\s*(?:who\s+(?:is|was|are|were|won|wrote|invented|founded|discovered|directed|painted|plays|played|sang|owns|runs|leads)\b"
+                     r"|when\s+(?:did|was|were|is|does)\b|what\s+year\b"
+                     r"|what(?:'s|\s+is|\s+was)\s+the\s+(?:population|capital|height|price|cost|distance|area|currency|gdp|net worth|name of|largest|tallest|biggest|longest|oldest|highest|deepest|fastest|first)\b"
+                     r"|how\s+(?:tall|old|far|big|long|high|deep|many people|much does|much is a)\b"
+                     r"|(?:what|which)\s+(?:country|city|team|company|planet|language)\b)", re.I)

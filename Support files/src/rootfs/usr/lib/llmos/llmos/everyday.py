@@ -1600,6 +1600,7 @@ def weather(desk, line, low):
     except Exception as e:
         return _say(desk, line, f"I couldn't get the forecast just now: {_plain_err(e)}.")
     unit = "°F" if us else "°C"
+    src = " (Source: Open-Meteo forecast, open-meteo.com.)"   # where the numbers come from, every time
     d = f["daily"]
     idx = 1 if "tomorrow" in when else 0
     m2 = re.match(r"on (\w+day)", when)
@@ -1617,15 +1618,15 @@ def weather(desk, line, low):
             dd = dt.date.fromisoformat(t)
             if "week" in when and "weekend" not in when or dd.weekday() >= 5:
                 rows.append(f"{dd.strftime('%a')} {_WMO.get(d['weather_code'][i], 'mixed')}, {round(d['temperature_2m_max'][i])}/{round(d['temperature_2m_min'][i])}{unit}")
-        return _say(desk, line, f"{name}: " + "; ".join(rows) + ".")
+        return _say(desk, line, f"{name}: " + "; ".join(rows) + "." + src)
     if gd.get("r") or gd.get("u"):
         wet = rain >= 40 if rain is not None else d["weather_code"][idx] >= 51     # the chance decides; a code alone can mislead
         if gd.get("u") in ("coat", "jacket"):
             cold = lo < (50 if us else 10)
-            return _say(desk, line, f"{'Yes' if cold else 'Probably not'}: {day.lower()} in {name} goes down to {lo}{unit} ({desc}).")
-        return _say(desk, line, f"{'Yes, likely' if wet else 'Probably not'}: {rain if rain is not None else '?'}% chance of rain {day.lower()} in {name} ({desc}, {hi}/{lo}{unit}).")
+            return _say(desk, line, f"{'Yes' if cold else 'Probably not'}: {day.lower()} in {name} goes down to {lo}{unit} ({desc}).{src}")
+        return _say(desk, line, f"{'Yes, likely' if wet else 'Probably not'}: {rain if rain is not None else '?'}% chance of rain {day.lower()} in {name} ({desc}, {hi}/{lo}{unit}).{src}")
     now = f" Now {round(f['current']['temperature_2m'])}{unit}." if idx == 0 and f.get("current") else ""
-    return _say(desk, line, f"{day} in {name}: {desc}, high {hi}{unit}, low {lo}{unit}, {rain if rain is not None else '?'}% chance of rain.{now}")
+    return _say(desk, line, f"{day} in {name}: {desc}, high {hi}{unit}, low {lo}{unit}, {rain if rain is not None else '?'}% chance of rain.{now}{src}")
 
 
 def net_and_dates(desk, line, low):

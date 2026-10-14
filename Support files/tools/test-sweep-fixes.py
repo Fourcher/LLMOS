@@ -126,7 +126,7 @@ check("colour back to dark", intent.match("change the colour back to dark") == (
 check("not a language", intent.match("switch back to blue") is None)
 
 # 8. a question searched on the web gets an answer (the assistant), not just a browser window
-check("search the web for a question -> answer", intent.match("search the web for the population of Tokyo") is None)
+check("search the web for a question -> sourced answer", intent.match("search the web for the population of Tokyo") == ("web_answer", {"query": "the population of Tokyo"}))
 check("search the web for a thing -> browser", intent.match("search the web for cheap flights to Denver") == ("browse", {"search": "cheap flights to Denver"}))
 
 # 9. which model / what version: instant answers
