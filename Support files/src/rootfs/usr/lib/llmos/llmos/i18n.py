@@ -1362,3 +1362,55 @@ def t(key, area=None, **fmt):
         return s.format(**fmt)
     except (KeyError, IndexError, ValueError):     # a stored translation with a broken placeholder: English
         return EN.get(key, key).format(**fmt)
+
+
+# ---- system windows in the owner's language: any English label, translated once and kept on disk
+
+_ui_lock = __import__("threading").Lock()
+_ui_busy = set()
+
+
+def _ui_path(code):
+    return config.data(f"ui-words-{code}.json")
+
+
+def ui_words(code):
+    """{English: translation} already known for this language (saved; read once)."""
+    return config.load_json(_ui_path(code), {})
+
+
+def ui_translate_later(code, language, phrases, done):
+    """Translate English phrases the system windows show (titles, buttons, headings) into the language with the
+    on-device model, in the background, save them, then call done(). Phrases already known are skipped."""
+    with _ui_lock:
+        known = ui_words(code)
+        todo = [x for x in dict.fromkeys(phrases) if x and x not in known and (code, x) not in _ui_busy]
+        if not todo:
+            return
+        _ui_busy.update((code, x) for x in todo)
+
+    def run():
+        try:
+            from . import llm
+            out = {}
+            for i in range(0, len(todo), 25):
+                part = todo[i:i + 25]
+                r = llm.chat([{"role": "system", "content": f"Translate each line into {language}. These are short labels "
+                               "of a computer's settings and windows. Reply with exactly one translated line per input line, "
+                               "same order, nothing else."},
+                              {"role": "user", "content": "\n".join(part)}], max_tokens=40 * len(part), temperature=0.1)
+                lines = [x.strip() for x in str(r.get("content", "")).strip().splitlines() if x.strip()]
+                if len(lines) == len(part):
+                    out.update(zip(part, lines))
+            if out:
+                with _ui_lock:
+                    cur = ui_words(code)
+                    cur.update(out)
+                    config.save_json(_ui_path(code), cur)
+                done()
+        except Exception:
+            pass
+        finally:
+            with _ui_lock:
+                _ui_busy.difference_update((code, x) for x in todo)
+    __import__("threading").Thread(target=run, daemon=True).start()

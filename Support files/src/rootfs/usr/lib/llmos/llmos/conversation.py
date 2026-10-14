@@ -110,6 +110,11 @@ class Chat:
             return True
         if time.time() - t["last"] > GAP:
             return False
+        # a fresh piece of work ("write a story about a dragon", "tell me a joke") that points back at nothing is a new
+        # topic, even when it shares a word with the last answer (a joke and a story ended up as one topic)
+        if re.match(r"^\s*(?:please\s+)?(?:write|tell|make|create|compose|draw|generate|give|plan|draft)\s+(?:me\s+|us\s+)?(?:a|an|some)\s", request, re.I) \
+                and not REF_ANY.search(request):
+            return False
         req = words(request)
         if not req:                                   # "why?", "go on", "what can I do about it"
             return len(request.split()) <= 3 or bool(REF_ANY.search(request))

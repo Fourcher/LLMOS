@@ -63,7 +63,9 @@
     f.contentWindow.postMessage({ llmos: what, text }, "*");
   };
   // a button: the OS does it at once (never behind a request the model is still working on)
-  function act(text) { if (text && text.trim()) post({ t: "act", text: text.trim() }); }
+  // a button pressed: the previous answer (folded at the bottom) is not about this, so it steps aside instead of
+  // staying on screen as if it were the result (the button's own result comes as a notice or a window)
+  function act(text) { if (text && text.trim()) { post({ t: "act", text: text.trim() }); if (!busy && !cur && typeof hideReply === "function") hideReply(); } }
   // Do (act on it) or Ask (an answer in words, no actions): the owner's choice, remembered on this computer
   let askMode = false;
   try { askMode = localStorage.getItem("llmos-mode") === "ask"; } catch (e) {}
@@ -638,6 +640,7 @@
   function onScreen(win) {
     const st = $("stage"), W = st.clientWidth, H = st.clientHeight;
     const left = parseFloat(win.style.left) || 0, top = parseFloat(win.style.top) || 0;
+    if (win.offsetWidth > W - 8) win.style.width = Math.max(260, W - 16) + "px";
     win.style.left = Math.min(Math.max(0, left), Math.max(0, W - Math.min(win.offsetWidth, W))) + "px";
     win.style.top = Math.min(Math.max(0, top), Math.max(0, H - 44)) + "px";
     if (win.offsetHeight > H - (parseFloat(win.style.top) || 0)) win.style.maxHeight = Math.max(160, H - (parseFloat(win.style.top) || 0) - 12) + "px";
@@ -1055,6 +1058,9 @@
     o.setAttribute("aria-label", t("d_show_task", "Show what I'm working on"));
     o.addEventListener("click", showReply);
     o.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showReply(); } }); }
+  // a bigger text size (zoom) or a smaller screen: every window is moved back so it fits (A+ pushed Settings off the edge)
+  let refit = null;
+  window.addEventListener("resize", () => { clearTimeout(refit); refit = setTimeout(() => { for (const [, w] of wins) if (!w.min) onScreen(w.el); overlaps(); }, 150); });
   inp.addEventListener("focus", () => winFront(false));
   $("cmd").addEventListener("mousedown", () => winFront(false));
   $("stage").parentElement.addEventListener("mousedown", (e) => { if (!e.target.closest(".win, #cmd, #reply, #top, #dock, #start, #startmenu, #overlay")) winFront(false); });

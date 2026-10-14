@@ -1755,8 +1755,13 @@ def change_setting(a, ctx):
                 return f"do not disturb is on for {mins} minutes: programs' notifications stay hidden"
             return "do not disturb is on: programs' notifications stay hidden" if on else "do not disturb is off"
         if hasattr(ctx, "start_night_light"):
-            ctx.start_night_light()
-        return "night light is on: the screen turns warmer from 7 pm to 7 am" if on else "night light is off"
+            ctx.start_night_light(preview=bool(on))
+        if not on:
+            return "night light is off"
+        if hasattr(ctx, "night_light_now") and not ctx.night_light_now():
+            return ("night light is on: it starts at 7 pm and ends at 7 am. The screen just showed it warm for a few "
+                    "seconds as a preview")
+        return "night light is on: the screen is warmer now, until 7 am"
     if s == "clock":
         h24 = bool(re.search(r"24|twenty.?four|military|\b24h\b", str(v), re.I))
         config.settings.set("clock24", h24)

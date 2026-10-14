@@ -18,6 +18,7 @@ drive the desk from the text console -- that is how the automated tests
 exercise the graphical interface.
 """
 import glob
+import copy
 import json
 import os
 import queue
@@ -627,8 +628,11 @@ class DeskCtx:
     def start_idle(self):
         self.d.start_idle()
 
-    def start_night_light(self):
-        self.d.start_night_light()
+    def start_night_light(self, preview=False):
+        self.d.start_night_light(preview=preview)
+
+    def night_light_now(self):
+        return self.d.night_light_now()
 
     def show_panel(self, panel):
         self.d.open_panel(panel)
@@ -875,11 +879,29 @@ class Desk:
             pass
         self.start_night_light()
 
-    def start_night_light(self):
-        """Warmer colours in the evening (settings: night_light on/off; 19:00 to 07:00 unless set)."""
+    def night_light_hours(self):
+        return str(config.settings.get("night_light_start") or "19:00"), str(config.settings.get("night_light_end") or "07:00")
+
+    def night_light_now(self):
+        """True between the evening start and the morning end."""
+        start, end = self.night_light_hours()
+        now = time.strftime("%H:%M")
+        return (now >= start or now < end) if start > end else (start <= now < end)
+
+    def start_night_light(self, preview=False):
+        """Warmer colours in the evening (settings: night_light on/off; 19:00 to 07:00 unless set). preview=True
+        (just turned on, in the daytime): a few seconds of the warm screen first, so the owner sees what it does."""
         subprocess.run(["pkill", "-x", "wlsunset"], capture_output=True)
         if not config.settings.get("night_light") or not shutil.which("wlsunset"):
             return
+        if preview and not self.night_light_now():
+            try:
+                subprocess.Popen(["wlsunset", "-t", "3800", "-T", "3801"], env=dict(os.environ, **(media.desk_env() or {})),
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                threading.Timer(4.0, self.start_night_light).start()      # then the normal evening schedule
+                return
+            except OSError:
+                pass
         try:
             subprocess.Popen(["wlsunset", "-t", "3800", "-T", "6500", "-S", str(config.settings.get("night_light_end") or "07:00"),
                               "-s", str(config.settings.get("night_light_start") or "19:00")],
@@ -1600,10 +1622,52 @@ class Desk:
 
     # ---- windows
 
+    def _localize(self, spec):
+        """A system window (settings, panels) in the owner's language: its title, headings, button labels and row
+        names. Known words at once; new ones are translated in the background and the window is shown again."""
+        wid = str(spec.get("id") or "")
+        if not (wid.startswith(("panel-", "mail-inbox", "alarm", "away")) or spec.get("slot") == "side"):
+            return spec
+        language = config.settings.get("settings_language") or config.settings.get("language") or ""
+        code = i18n.lang_code(language) if language else "en"
+        if code == "en":
+            return spec
+        words, missing = i18n.ui_words(code), []
+
+        def tr(x):
+            if not isinstance(x, str) or not re.search(r"[A-Za-z]{2}", x) or len(x) > 120:
+                return x
+            if x in words:
+                return words[x]
+            missing.append(x)
+            return x
+        out = copy.deepcopy(spec)
+        out["title"] = tr(out.get("title", ""))
+        for b in out.get("blocks", []):
+            t = b.get("type")
+            if t == "heading":
+                b["text"] = tr(b.get("text", ""))
+            elif t == "kv":
+                b["rows"] = [[tr(k), v] for k, v in b.get("rows", [])]
+            elif t in ("buttons", "choices"):
+                for it in b.get("items", []):
+                    it["label"] = tr(it.get("label", ""))
+            elif t == "toggle":
+                b["label"] = tr(b.get("label", ""))
+        if missing:
+            original = copy.deepcopy(spec)
+            i18n.ui_translate_later(code, language, missing,
+                                    lambda: self.windows.get(wid) is not None and self.open_window(original))
+        return out
+
     def open_window(self, spec):
         spec = uispec.normalize(spec)
         if not spec:
             return None
+        try:
+            spec = self._localize(spec)
+        except Exception as e:
+            sys.stderr.write(f"desk: translating a window failed: {e}\n")
         wid = spec.get("id") or ""
         if not wid or wid not in self.windows and not spec.get("replace"):
             if not wid:
