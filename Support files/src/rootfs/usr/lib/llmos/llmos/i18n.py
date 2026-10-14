@@ -64,7 +64,7 @@ EN = {
     "d_morning": "Good morning", "d_afternoon": "Good afternoon", "d_evening": "Good evening", "d_idle_hint": "Tell me what you want, or try one of these.",
     "d_thinking": "thinking…", "d_writing": "writing…", "d_listening": "listening…", "d_speaking": "speaking…", "d_waiting": "needs your answer", "s_motion": "Animations", "v_motion_full": "Full", "v_motion_reduced": "Reduced", "v_motion_off": "Off",
     "d_home": "Home", "d_empty_folder": "(empty folder)",
-    "d_read": "Read", "d_archive": "Archive", "d_inbox_zero": "Inbox zero", "d_send_reply": "Send reply", "d_delete": "Delete", "d_restart_now": "Restart now", "d_install_now": "Install now", "d_not_now": "Not now", "d_erase_whole": "Erase a whole disk instead", "c_purple": "Purple", "c_teal": "Teal", "c_orange": "Orange", "c_green": "Green", "c_light": "Light",
+    "d_read": "Read", "d_archive": "Archive", "d_inbox_zero": "Sort my inbox for me", "d_send_reply": "Send reply", "d_delete": "Delete", "d_restart_now": "Restart now", "d_install_now": "Install now", "d_not_now": "Not now", "d_erase_whole": "Erase a whole disk instead", "c_purple": "Purple", "c_teal": "Teal", "c_orange": "Orange", "c_green": "Green", "c_light": "Light",
     "d_use": "Use", "d_download": "Download {size} GB", "d_remove": "Remove", "d_cancel": "Cancel", "d_forget": "Forget",
     "ask_timezone": "Which time zone are you in? (e.g. America/New_York)",
     "s_timezone": "Time zone",

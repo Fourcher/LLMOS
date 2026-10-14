@@ -1468,6 +1468,7 @@ class Desk:
         self.set_screen("desk", {"name": config.Profile().get("name", "")})
         self.push_status()
         self._model_watch()
+        self._inbox_key = "unset"       # unlocking: the away card comes back if there is still something unseen
         self.show_away()
         def on_unlock():
             for t in store.on_event("unlock"):
@@ -4380,7 +4381,11 @@ class Desk:
         try:
             start = log.tell()
             p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                 start_new_session=True, env=self._child_env(), cwd="/")   # never inside the vault
+                                 start_new_session=True, env=self._child_env(),
+                                 # the home folder, so a program's Open/Save starts there (it started at "/"); with
+                                 # the passphrase vault on, "/" (a program sitting inside the vault would keep it from
+                                 # closing when the owner locks)
+                                 cwd="/" if config.settings.get("vault") else config.home())
         except OSError as e:
             return f"could not start {argv[0]}: {e}"
         name = name or os.path.basename(argv[0])

@@ -1999,7 +1999,10 @@ def mail_send(a, ctx):
         mail.send(str(a.get("to", "")), str(a.get("subject", "")), str(a.get("body", "")), attachments=files)
     except mail.MailError as e:
         return f"error: {e}"
-    return f"sent to {a.get('to')}" + (f" with {', '.join(os.path.basename(p) for p in files)} attached" if files else "")
+    # what went out, so the owner can see it (the reply said only "Sent to ...")
+    body = str(a.get("body", "")).strip()
+    return (f"sent to {a.get('to')}" + (f" with {', '.join(os.path.basename(p) for p in files)} attached" if files else "")
+            + f". Subject: {a.get('subject', '')}." + (f" Text: {body[:300]}" + ("…" if len(body) > 300 else "") if body else ""))
 
 
 @tool("mail_reply", "Reply to an email (by id from mail_inbox, or by the sender's name / subject words); "
