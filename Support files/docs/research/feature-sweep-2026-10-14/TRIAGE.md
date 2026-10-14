@@ -67,3 +67,37 @@ The browser problem the owner reported did **not** reproduce on the VM. Pages lo
     - Timer and reminder names are mixed up.
     - History merges topics.
     - Stale reply text.
+
+## Status after fixes and retests (1.8.7, 2026-10-14)
+Retests 21–25 were run by Haiku testers through the screen on the VM, on the fixed build.
+- **Fixed and retested (PASS):**
+  - Deleting files and folders by request or button; a bare name finds the file in a subfolder.
+  - Files made "in <folder>"; moves into folders the owner made; the "note … and save it as X" naming.
+  - Email: the Read button opens the message; Delete, summarize unread, open by sender.
+  - Windows: Settings and Files stay open together; no window lost off screen; restore stays on screen; open windows refresh after changes.
+  - Queue: quick answers show while busy; Stop says what it cancelled.
+  - Video: pause keeps the picture; resume, full screen, exit full screen, close the video.
+  - The Files tile; mpv opens.
+  - Settings: language and colour back; proper language names.
+  - Answers: which model, Wi-Fi wording and panel, disk-space numbers (now matching the window), search the web for a question (with a source).
+  - The desk filling the screen after an update. This was found by a retest screenshot and fixed.
+- **Fixed after its retest, host-tested only:**
+  - "Put the wallpaper back" restores the previous picture.
+  - The inbox window updates and isn't stacked; the summary lists every message.
+- **Still open:**
+  - Weather has no source.
+  - Search answers are slow (85 s on the VM CPU).
+  - "make a to-do list for X" can come back empty; "A and B" is added as one item.
+  - Apps run as root, so the root warning appears in Mousepad and Thunar. Fixing it is the planned unprivileged-user work.
+  - The calculator's bottom row is cut off.
+  - A closed editor leaves its chip.
+  - Stale reply text after some actions.
+  - The mute state isn't shown.
+  - The lock icon needs two clicks.
+  - Timer and reminder names.
+  - History merges topics.
+  - Night light has no preview.
+  - Restore after maximize moves the window.
+  - A stopped story has no "Stopped" line on its card.
+  - "show my documents" replaces the Home window.
+- **Not reproduced:** "the browser doesn't work" works on the arm64 VM. It needs a look on the owner's machine.
