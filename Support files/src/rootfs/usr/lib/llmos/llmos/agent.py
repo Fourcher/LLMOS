@@ -1446,8 +1446,11 @@ def execute(ctx, name, arguments):
             gone = not os.path.lexists(os.path.abspath(tools._path(p)))
         except Exception:
             gone = False
-        if gone and p and "/" not in p and not p.startswith("~"):
-            # a bare name ("delete notes.txt"): the one file of that name in the owner's folders
+        if gone and p and ("/" not in p or (p.startswith(("~", "/home/", config.home().rstrip("/") + "/"))
+                                            and os.path.basename(p.rstrip("/")))):
+            # a bare name ("delete notes.txt"), or a path that isn't there (the model guessed "/home/<name>/..."):
+            # the one file of that name in the owner's folders
+            p = os.path.basename(p.rstrip("/")) if "/" in p else p
             hits = [h for h in tools.find_paths(p) if os.path.basename(h).lower() == p.lower()]
             if len(hits) == 1:
                 args = dict(args, path=hits[0])
@@ -1458,6 +1461,8 @@ def execute(ctx, name, arguments):
                         + ", ".join("~" + h[len(home):] if h.startswith(home) else h for h in hits[:5]) + ". Ask which one.")
         if gone:
             return f"error: there's nothing called {p} to delete"   # nothing to ask about
+        if str(args.get("path") or "") == str(p) and p:
+            args = dict(args, path=tools._path(p))   # the activity line shows the real place, not the model's guess
     # an unasked call (a gate miss, see above) is shown first like ALWAYS_CONFIRM, and runs without asking under full trust
     held = unasked is not None and not full_trust
     if always or held or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):

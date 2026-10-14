@@ -79,7 +79,7 @@ CASES = {
     "uninstall": None,
     "remove duplicates": ("find_duplicates", {"folder": "~", "delete": True}),
     "remove this photo": ("which_file", {"request": "remove this photo"}),
-    "remove the file notes.txt": ("delete_file", {"path": "~/notes.txt"}),
+    "remove the file notes.txt": ("delete_file", {"path": "notes.txt"}),
 }
 
 fails = 0

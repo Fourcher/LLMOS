@@ -1164,7 +1164,11 @@ def _files(text):
     m = _DEL_FILE.match(text)
     if m:
         p = m.group("p")
-        return ("delete_file", {"path": p if p.startswith(("~", "/")) else "~/" + p})
+        return ("delete_file", {"path": p})          # a bare name is found in the owner's folders (agent.execute)
+    # "delete thanks.txt", "trash my notes.txt": a file name with its ending
+    m = re.match(r"^\s*(?:please\s+)?(?:delete|remove|trash|bin)\s+(?:the\s+|my\s+)?(?P<p>[\w][\w .'-]*\.[A-Za-z0-9]{1,5})\s*[.!]?\s*$", text, re.I)
+    if m:
+        return ("delete_file", {"path": m.group("p").strip()})
     m = _FILES.match(text)
     if not m:
         return None

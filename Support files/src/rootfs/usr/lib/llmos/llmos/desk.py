@@ -459,6 +459,7 @@ class DeskCtx:
 
     def status(self, text):
         # a progress line from inside a tool updates that tool's activity line in place; other notes append
+        self._last_status = str(text) if getattr(self, "_tool_open", False) else None
         self.d.emit({"t": "activity", "text": str(text), "replace": bool(getattr(self, "_tool_open", False)), "chat": getattr(self, "chat_id", "main")})
 
     def begin_tool(self, tool, args, risk):
@@ -469,6 +470,10 @@ class DeskCtx:
 
     def end_tool(self, tool, result):
         self._tool_open = False
+        last, self._last_status = getattr(self, "_last_status", None), None
+        if last and last.endswith("…"):     # a progress line still saying "writing …" once the tool has finished
+            self.d.emit({"t": "activity", "text": last[:-1].rstrip() + (" — stopped" if str(result).startswith("error") else " — done"),
+                         "replace": True, "chat": getattr(self, "chat_id", "main")})
         cur, self._cur_tool = getattr(self, "_cur_tool", None), None
         # something changed: the windows that show it (files, models, inbox, sound...) show it at once
         if cur and not str(result).startswith("error") and (cur[2] in (tools.CHANGE, tools.DESTRUCTIVE, tools.SECURITY)

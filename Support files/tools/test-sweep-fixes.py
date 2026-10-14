@@ -169,5 +169,16 @@ check("note file exists", os.path.exists(saved), out)
 check("note has no blanks and matches the reply", os.path.exists(saved) and "[" not in open(saved).read()
       and open(saved).read().strip() in out and "Saved as ~/Documents/thanks2.txt" in out, out)
 
+# 13. the last blanks are filled or left out; "delete thanks3.txt" is a fast delete by name; a guessed home path is found
+fixed = T._fill_blanks_in("Dear [Neighbor's Name],\n\nThank you during [specific reason]. Thanks.\n\nBest,\n[Your Name]",
+                          "a short thank-you note to my neighbour", "Jordan")
+check("blanks filled", fixed == "Dear neighbour,\n\nThank you. Thanks.\n\nBest,\nJordan", fixed)
+check("delete name.ext", intent.match("delete thanks3.txt") == ("delete_file", {"path": "thanks3.txt"}), intent.match("delete thanks3.txt"))
+check("delete the file name", intent.match("delete the file thanks3.txt") == ("delete_file", {"path": "thanks3.txt"}))
+g = os.path.join(HOME, "Documents", "guess.txt")
+open(g, "w").write("x")
+out = agent.execute(ctx(), "delete_file", {"path": "/home/" + "jordan/Documents/guess.txt"})
+check("a guessed /home path finds the file by name", not os.path.exists(g), out)
+
 print("all good" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

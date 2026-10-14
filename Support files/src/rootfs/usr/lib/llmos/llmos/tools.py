@@ -479,6 +479,26 @@ _BLANK = re.compile(r"\[(?=[^\]\n]{2,70}\])(?=[^\]]*(?:\b[Nn]ame\b|\b[Yy]our\b|\
                     r"\b[Ii]nsert\b|\b[Rr]eason\b|\b[Cc]ompany\b|\b[Pp]hone\b))[^\]\n]{2,70}\](?!\()")
 
 
+def _fill_blanks_in(text, req, writer=""):
+    """Last resort for blanks the model kept: "[Neighbour's Name]" becomes who the request names ("my neighbour"),
+    any other blank is left out."""
+    m = re.search(r"\bto\s+(?:my|our|the)\s+([a-z][\w'-]*(?:\s+[a-z][\w'-]*)?)", req, re.I)
+    who = m.group(1).split(" about")[0].split(" for")[0] if m else ""
+
+    def one(mm):
+        inner = mm.group(0)
+        if re.search(r"\bname\b", inner, re.I):
+            return (writer if re.search(r"\b(?:your|my|sender)\b", inner, re.I) else who) or ""
+        return ""
+    out = _BLANK.sub(one, text)
+    out = re.sub(r"[ \t]+([,.;:!?])", r"\1", out)
+    out = re.sub(r"\b(during|for|with|about|on|of|at|in)([,.;:!?])", r"\2", out)   # "support during." -> "support."
+    out = re.sub(r"[ \t]+([,.;:!?])", r"\1", out)
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    out = re.sub(r"^(Dear|Hi|Hello)\s*,", lambda x: x.group(1) + (" " + who if who else "") + ",", out, flags=re.M)
+    return out.strip()
+
+
 def _fill_in_blanks(path, text):
     """Template blanks ("[Neighbour's Name]", "[specific reason]") left in a letter or note; code and markdown links are not judged."""
     if os.path.splitext(path)[1].lower() not in ("", ".txt", ".md", ".text", ".rtf"):
@@ -3715,6 +3735,8 @@ def make_list(a, ctx):
         return "error: no items came back; try again"
     for it in items[:10]:
         store.add_note(it, lst)
+    if hasattr(ctx, "status"):
+        ctx.status(f"made the {lst} list")
     _notes_window(ctx, lst)
     return f"made the {lst} list for {topic} with {len(items[:10])} items: " + "; ".join(items[:10]) + ". The list is shown. Say one sentence at most."
 
@@ -3733,18 +3755,24 @@ def write_document(a, ctx):
     if hasattr(ctx, "status"):
         ctx.status(f"writing {os.path.basename(path)}…")
     text = ""
-    for attempt in range(2):
+    sysmsg = ("You write finished text for a person to use as it is. Reply with the text only: no title line, no intro, "
+              "no notes about it. Never leave fill-in blanks such as [Name] or [reason]: use what the request says, or "
+              "leave that part out." + (f" The writer's name is {who}." if who else ""))
+    msgs = [{"role": "system", "content": sysmsg}, {"role": "user", "content": "Write: " + req}]
+    for attempt in range(3):
         try:
-            r = llm.chat([{"role": "system", "content": "You write finished text for a person to use as it is. Reply with the text only: "
-                                                       "no title line, no intro, no notes about it. Never leave fill-in blanks such as "
-                                                       "[Name] or [reason]: use what the request says, or leave that part out."
-                                                       + (f" The writer's name is {who}." if who else "")},
-                          {"role": "user", "content": "Write: " + req}], max_tokens=700, temperature=0.5, think=False)
+            r = llm.chat(msgs, max_tokens=700, temperature=0.5 if attempt == 0 else 0.2, think=False)
         except Exception as e:
             return f"error: the text could not be written ({e})"
         text = str(r.get("content", "")).strip()
-        if text and not _fill_in_blanks(path, text):
+        blanks = _fill_in_blanks(path, text)
+        if text and not blanks:
             break
+        msgs = msgs[:2] + [{"role": "assistant", "content": text},
+                           {"role": "user", "content": f"Write it again without any square brackets: replace {', '.join(blanks[:3])} "
+                                                       "with plain words from the request (for a person you only know as "
+                                                       "'my neighbour', write 'neighbour'), or leave that part out."}]
+    text = _fill_blanks_in(text, req, who)
     if not text:
         return "error: no text came back; try again"
     try:
@@ -3755,6 +3783,8 @@ def write_document(a, ctx):
         return f"error: {e.strerror}: {path}"
     home = config.home().rstrip("/")
     shown = "~" + path[len(home):] if path.startswith(home) else path
+    if hasattr(ctx, "status"):
+        ctx.status(f"saved {shown}")          # the "writing …" line ends
     return f"{text}\n\nSaved as {shown}."
 
 
