@@ -583,8 +583,8 @@
       cascade++;
     }
     win.style.left = x + "px"; win.style.top = y + "px";
-    win.style.maxHeight = Math.max(160, stage.clientHeight - y - 12) + "px";   // never under the bar
-    if (spec.kind === "app" || spec.kind === "chat") win.style.height = Math.min(stage.clientHeight - y - 12, { s: 600, m: 640, l: 700, xl: 760 }[spec.size] || 640) + "px";
+    win.style.maxHeight = Math.max(160, stage.clientHeight - y - 12 - barRoom()) + "px";   // opens above the bar
+    if (spec.kind === "app" || spec.kind === "chat") win.style.height = Math.min(stage.clientHeight - y - 12 - barRoom(), { s: 600, m: 640, l: 700, xl: 760 }[spec.size] || 640) + "px";
     stage.appendChild(win);
     wins.set(id, { el: win, spec, min: false, max: false });
     if (cur) cur.opened = true;
@@ -613,12 +613,14 @@
   function closeWindow(id, tell) {
     const w = wins.get(id); if (!w) return;
     wins.delete(id);
+    if (![...wins.values()].some(x => !x.min)) winFront(false);
     if (tell) post({ t: "window.closed", id });
     afterAnim(w.el, "closing", () => { w.el.remove(); overlaps(); });
     dock(); idle(); overlaps();
   }
   function minimize(id) {
     const w = wins.get(id); if (!w) return; w.min = true;
+    if (![...wins.values()].some(x => !x.min)) winFront(false);
     towards(w.el, $("dock"));
     afterAnim(w.el, "mini", () => { w.el.classList.add("hidden"); w.el.classList.remove("mini"); overlaps(); });
     dock(); idle();
@@ -630,7 +632,12 @@
     else { Object.assign(w.el.style, w.saved || {}); w.el.classList.remove("maxed"); }
     w.max = !w.max; raise(w.el); setTimeout(overlaps, 360);
   }
-  function raise(win) { win.style.zIndex = ++z; if (focused) focused.classList.remove("focus"); focused = win; win.classList.add("focus"); if (!busy && !cur) collapseReply(); }
+  function raise(win) { win.style.zIndex = ++z; if (focused) focused.classList.remove("focus"); focused = win; win.classList.add("focus"); winFront(true); if (!busy && !cur) collapseReply(); }
+  // the window in use goes in front of the input bar; the bar comes back to the front when it is wanted
+  function winFront(on) { $("desk").classList.toggle("winfront", !!on && [...wins.values()].some(w => !w.min)); }
+  // room kept free at the bottom of the window area so a new window opens above the input bar (moving, resizing and
+  // maximizing may still use all of it)
+  function barRoom() { const st = $("stage").getBoundingClientRect(), c = $("cmd").getBoundingClientRect(); return Math.max(0, st.bottom - c.top + 12); }
   function collapseReply() { const r = $("reply"); if (r.classList.contains("hidden") || r.classList.contains("collapsed")) return; clearTimeout(autoHide); r.classList.add("collapsed"); r.scrollTop = 0; }
   function expandReply() { const r = $("reply"); if (!r.classList.contains("collapsed")) return; r.classList.remove("collapsed"); r.style.animation = "none"; void r.offsetWidth; r.style.animation = ""; }
   // one pair of window-level listeners per gesture, attached on mousedown and removed on mouseup (nothing leaks)
@@ -843,6 +850,7 @@
   const THINK = '<span class="think"><i></i><i></i><i></i></span>';
   function replyStart(m) {
     $("hint").textContent = "";
+    winFront(false);                                  // the computer is answering: its card comes to the front
     replyBrain({ online: false });
     cur = { req: m.request, text: "", activity: [], t0: Date.now(), eta: null };
     const r = $("reply"); r.classList.remove("closing", "writing", "collapsed");
@@ -1011,6 +1019,22 @@
     if (e.key === "F1") { e.preventDefault(); post({ t: "voice" }); }
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && !(e.key === " " && document.activeElement.tagName === "BUTTON") && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.tagName !== "SELECT") inp.focus();
   });
+
+  // the orb in the bar brings back the current task's card (or the last answer) after it was hidden or folded
+  function showReply() {
+    const r = $("reply");
+    if (!cur && !conv.length && r.classList.contains("hidden")) { inp.focus(); return; }
+    clearTimeout(autoHide);
+    r.classList.remove("hidden", "closing"); expandReply(); winFront(false);
+    if (cur) $("reply").scrollTop = 1e6;
+  }
+  { const o = $("orb"); o.setAttribute("role", "button"); o.tabIndex = 0; o.style.cursor = "pointer";
+    o.setAttribute("aria-label", t("d_show_task", "Show what I'm working on"));
+    o.addEventListener("click", showReply);
+    o.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showReply(); } }); }
+  inp.addEventListener("focus", () => winFront(false));
+  $("cmd").addEventListener("mousedown", () => winFront(false));
+  $("stage").parentElement.addEventListener("mousedown", (e) => { if (!e.target.closest(".win, #cmd, #reply, #top, #dock, #start, #startmenu, #overlay")) winFront(false); });
 
   // ---------------------------------------------------------------- dispatch
   window.llmos = {

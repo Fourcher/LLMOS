@@ -90,7 +90,7 @@ def _wallpaper():
 
 
 # strings the page needs (everything else is rendered in Python)
-_PAGE_KEYS = ("hint", "d_queue_next", "d_queue_remove", "d_mode_do", "d_mode_ask", "d_mode_do_tip", "d_mode_ask_tip", "while_away", "passphrase", "wrong_passphrase", "unlocking", "locked", "welcome",
+_PAGE_KEYS = ("hint", "d_show_task", "d_queue_next", "d_queue_remove", "d_mode_do", "d_mode_ask", "d_mode_do_tip", "d_mode_ask_tip", "while_away", "passphrase", "wrong_passphrase", "unlocking", "locked", "welcome",
               "ask_language", "ask_name", "ask_timezone", "ask_autonomy", "ask_internet", "ask_tor",
               "ask_passphrase", "ask_passphrase_again", "passphrase_mismatch", "creating_vault", "onboard_done",
               "v_hands-off", "v_balanced", "v_hands-on", "v_yes", "v_no", "v_ask", "listening", "heard",

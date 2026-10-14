@@ -104,7 +104,7 @@ _LIVE_FACTS = tuple(re.compile(p) for p in _FACT_PATS)
 _FACT_MATCH = "^(?:" + "|".join(_FACT_PATS) + r")[?.!]?$"
 
 MATCH = re.compile(
-    r"updates? (?:from|off|status|source)|updates (?:come|coming) from|^(?:pair|connect|link) .* for updates$|^" + _FREE_SPACE_Q + r"[?.!]?$|" +
+    r"\b(?:version|build)\b|updates? (?:from|off|status|source)|updates (?:come|coming) from|^(?:pair|connect|link) .* for updates$|^" + _FREE_SPACE_Q + r"[?.!]?$|" +
     r"^how much (?:free |disk )?(?:space|storage|room)(?: is| do i have)?(?: (?:left|free|remaining))?(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?(?: (?:left|free|remaining))?$|^how much (?:disk )?space (?:is )?(?:left|free)$|"
     r"^(?:turn|switch) (?:on|off) (?:the |my )?bluetooth$|^(?:turn|switch) (?:the |my )?bluetooth (?:on|off)$|^bluetooth (?:on|off)$|^(?:yes|yeah|yep|yup|sure|ok|okay)$|(?:the |my )?(?:screen|computer|pc|laptop|everything) (?:has |have )?(?:froze|frozen|locked up|is stuck)$|"
     r"(?:computer|pc|laptop|machine) (?:is |has been |got |feels )?(?:really |very |so |quite )?slow\b|"
@@ -1130,6 +1130,31 @@ _OTA = re.compile(r"^(?:please )?(?P<stop>stop|turn off|no more|disable|forget) 
                   r"^(?P<status>(?:where do|where are) (?:my |the )?updates (?:come|coming) from|updates? source|are updates from my (?:computer|mac) on)$")
 
 
+_VERSION_Q = re.compile(r"^(?:(?:can|could) you\s+)?(?:what(?:'s| is)?|which|tell me(?: the)?|show(?: me)?(?: the)?|pull up(?: the)?|give me(?: the)?|check(?: the)?|find(?: the)?|get(?: the)?)\s+(?:my\s+|the\s+|this\s+)?(?:(?:llm ?os|os|system|software)\s+)?"
+                        r"(?:version|build|release)(?:\s+(?:of\s+)?(?:llm ?os|the os|the system|this|this computer|this system))?"
+                        r"(?:\s+(?:is\s+(?:this|it|installed|running)|am\s+i\s+(?:on|running|using)|do\s+i\s+have|are\s+(?:we|you)\s+(?:on|running)|is\s+(?:this\s+)?(?:computer|system)\s+on))?\s*\??$|"
+                        r"^(?:llm ?os\s+)?(?:version|build)\??$")
+
+
+def version_answer(desk, line, low):
+    """'What LLM OS version is this?': the build stamp, at once (no model), and where updates come from."""
+    if not _VERSION_Q.match(low):
+        return False
+    from . import version_line
+    text = f"This is {version_line()}."
+    try:
+        from . import ota
+        o = ota.paired()
+        if o:
+            last = (ota._state().get("last") or {})
+            text += f" Updates come from {o['name']}" + (f"; the last one ({last.get('version')}) was "
+                                                        f"{'installed' if last.get('ok') else 'not kept'}." if last else ".")
+    except Exception:
+        pass
+    desk.instant_reply(line, text)
+    return True
+
+
 def ota_updates(desk, line, low):
     """Updates pushed from the owner's own computer (ota.py): pair, unpair, status."""
     m = _OTA.match(low)
@@ -1913,7 +1938,7 @@ def jokes(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, ota_updates, web_block, howto):
+    for fn in (jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, ota_updates, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True

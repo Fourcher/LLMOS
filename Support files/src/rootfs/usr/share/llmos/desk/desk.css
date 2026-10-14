@@ -286,7 +286,12 @@ body.light #desk.wall::before { background: linear-gradient(180deg, rgba(255,255
 .chip .dot.busy { background: var(--accent); animation: blink calc(1.1s * var(--dur)) steps(1) infinite; }
 
 /* the stage (windows) always sits UNDER the computer's own column: reply card, bar, toasts, dialogs */
-#stage { position: absolute; inset: 46px 0 96px 0; z-index: 4; isolation: isolate; pointer-events: none; }
+#stage { position: absolute; inset: 46px 0 0 0; z-index: 4; isolation: isolate; pointer-events: none; }
+/* the window being used is in front of the input bar and the reply card; typing, a click on the bar or on the empty
+   desk, or a new reply brings the bar back to the front */
+#desk.winfront #cmd, #desk.winfront #reply { z-index: 3; }
+:root[data-layout="windows"] #stage { inset: 0 0 48px 0; }
+:root[data-layout="mac"] #stage { inset: 32px 0 0 0; }
 #stage > .win { pointer-events: auto; }
 
 /* windows */
