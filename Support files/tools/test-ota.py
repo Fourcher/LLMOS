@@ -146,6 +146,22 @@ for path in ("/ota/../keys/k", "/ota/k", "/ota/latest", "/tools/ota.py", "/ota/m
         check(f"does not serve {path}", False)
     except Exception:
         check(f"does not serve {path}", True)
+# the one-time setup script for a machine without the client: served with this server's address and key,
+# and its install step really installs the signed update (run here against the fake device root)
+script = ota._get(base + "/b").decode()
+check("setup script names this server and its key", f"S=\"{base}\"" in script and host.fingerprint(key) in script)
+py = script.split("<<'EOF_PY'\n", 1)[1].split("\nEOF_PY\n", 1)[0]
+open(old, "w").write('VERSION = "1.0.0"\n')
+for f in ("ota.py",):
+    try:
+        os.unlink(os.path.join(ROOT, "usr/lib/llmos/llmos", f))
+    except OSError:
+        pass
+bt = os.path.join(TMP, "boot")
+os.makedirs(bt)
+r = subprocess.run([sys.executable, "-", base, bt], input=py, text=True, capture_output=True, timeout=120)
+check("setup script installs the signed update", r.returncode == 0 and ota.current_version() == "9.9.9", r.stdout + r.stderr)
+check("setup script records the update as installed", ota._state().get("id") == uid)
 ota._report(base, {"host": "t", "ok": True, "version": "9.9.9", "detail": "x"})
 check("reports are recorded", '"host": "t"' in open(host.REPORTS).read())
 srv.shutdown()

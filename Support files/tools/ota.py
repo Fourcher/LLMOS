@@ -8,6 +8,9 @@
     tools/ota.py info                   this server's address and key fingerprint (to compare when pairing)
     tools/ota.py reports                what devices said after installing
 
+A machine without the update client yet (1.8.2 and older) gets it once with, in its terminal, as root:
+    wget -qO- http://<this computer's address>:8781/b | sh
+
 On the device, the owner says "get updates from my computer" (or "get updates from 192.168.1.20") once.
 The server serves only the published updates folder: never the source tree, the key or anything else.
 """
@@ -156,6 +159,56 @@ def latest():
         return ""
 
 
+BOOTSTRAP = r"""#!/bin/sh
+# LLM OS: get updates from @NAME@ (key @FP@). Run once, as root, on a machine that has no update client yet.
+# It checks the signature against that key, installs the update with a backup, then pairs and restarts the desk.
+set -e
+S="@URL@"
+[ "$(id -u)" = 0 ] || { echo "Run this as root."; exit 1; }
+command -v ssh-keygen >/dev/null 2>&1 || apk add -q openssh-keygen
+T=$(mktemp -d)
+python3 - "$S" "$T" <<'EOF_PY'
+import hashlib, json, os, sys, tarfile, time, urllib.request
+S, T = sys.argv[1], sys.argv[2]
+get = lambda p: urllib.request.urlopen(S + p, timeout=300).read()
+hello = json.loads(get("/ota/hello"))
+uid = json.loads(get("/ota/wait?have=bootstrap"))["id"]
+raw, sig = get(f"/ota/manifest-{uid}.json"), get(f"/ota/manifest-{uid}.json.sig")
+m = json.loads(raw)
+data = get("/ota/" + m["payload"])
+if hashlib.sha256(data).hexdigest() != m["sha256"]:
+    sys.exit("the files did not match the signed checksum: nothing was installed")
+open(os.path.join(T, "p.tar"), "wb").write(data)
+# the update's own installer (llmos/ota.py), unpacked beside it, checks and installs it
+with tarfile.open(os.path.join(T, "p.tar")) as tf:
+    for t in tf.getmembers():
+        name = t.name[2:] if t.name.startswith("./") else t.name
+        if name.startswith("usr/lib/llmos/llmos/") and t.isfile():
+            t.name = name[len("usr/lib/llmos/"):]
+            tf.extract(t, T)
+sys.path.insert(0, T)
+from llmos import ota
+if not ota.verify_manifest(raw, sig, hello["key"]):
+    sys.exit("the signature did not match the server's key: nothing was installed")
+ota.check_manifest(m)
+os.makedirs(ota.STATE_DIR, exist_ok=True)
+rec = ota.apply_files(os.path.join(T, "p.tar"), os.path.join(ota.STATE_DIR, f"backup-{uid}.tar"))
+ota._stamp_release(m["version"])
+st = ota._state()
+st["id"] = uid
+st["last"] = {"id": uid, "version": m["version"], "ok": True, "detail": "first install (bootstrap)", "ts": time.time()}
+ota._save_state(st)
+print(f"installed LLM OS {m['version']} from {hello['name']} (key {hello['fp']}): {len(rec['names'])} files")
+EOF_PY
+rm -rf "$T"
+rc-update add llmos-ota default >/dev/null 2>&1 || true
+/usr/bin/llmos ota pair "$S"
+echo "Updates from @NAME@ are on. The desk restarts now."
+sleep 2
+pkill -x labwc || true
+"""
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     server_version = "llmos-ota"
 
@@ -171,6 +224,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
+        if u.path in ("/b", "/ota/bootstrap"):        # the one-time setup script for a machine without the client
+            host = (self.headers.get("Host") or f"{lan_ip()}:{PORT}").strip()
+            if not re.fullmatch(r"[A-Za-z0-9.-]+(?::\d+)?", host):
+                return self._send(400, b"{}")
+            key = pubkey()
+            text = (BOOTSTRAP.replace("@URL@", "http://" + host).replace("@NAME@", socket.gethostname())
+                    .replace("@FP@", fingerprint(key)))
+            return self._send(200, text.encode(), "text/plain; charset=utf-8")
         if u.path == "/ota/hello":
             key = pubkey()
             return self._send(200, json.dumps({"name": socket.gethostname(), "key": key, "fp": fingerprint(key)}).encode())
