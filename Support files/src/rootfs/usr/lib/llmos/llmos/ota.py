@@ -341,6 +341,23 @@ def _desk_app():
     return None
 
 
+def _fullscreen_desk(env):
+    """Make sure the new desk window fills the screen (the compositor ignored the desk's own first request when
+    it was started again outside the compositor's start-up)."""
+    if not shutil.which("wlrctl"):
+        return
+    e = dict(env)
+    e.setdefault("XDG_RUNTIME_DIR", "/run/llmos")
+    e.setdefault("WAYLAND_DISPLAY", "wayland-0")
+    for _ in range(30):
+        time.sleep(0.5)
+        r = subprocess.run(["wlrctl", "toplevel", "list"], capture_output=True, text=True, env=e)
+        if "org.llmos.desk" in r.stdout:
+            time.sleep(1.0)
+            subprocess.run(["wlrctl", "toplevel", "fullscreen", "app_id:org.llmos.desk"], capture_output=True, env=e)
+            return
+
+
 def restart_desk():
     """Start the desk program again with the new files, in the same screen session: only "llmos desk-app" is
     replaced (same environment, same user); the compositor and the login session stay up. (Ending the compositor
@@ -379,6 +396,7 @@ def restart_desk():
                 os.setuid(uid)
         subprocess.Popen(["/usr/bin/llmos", "desk-app"], env=env, cwd=env.get("HOME", "/"), stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=become, close_fds=True)
+        _fullscreen_desk(env)
         return
     # no desk program running at all (a test shell, or the desk was closed): start the whole desk session
     if subprocess.run(["pgrep", "-x", "labwc"], capture_output=True).returncode:

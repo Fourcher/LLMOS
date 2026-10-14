@@ -772,6 +772,10 @@ class Desk:
             win.set_child(self.webview)
             win.fullscreen()
             win.present()
+            # asked again once the window is on screen: a desk started again by an update (outside the compositor's
+            # own start-up) had its first request ignored and stayed a 200x200 window in the corner
+            for ms in (500, 1500, 4000):
+                GLib.timeout_add(ms, lambda w=win: (w.fullscreen(), False)[1])
             GLib.timeout_add(400, self._apply_zoom)
             try:
                 Gdk.Display.get_default().get_monitors().connect("items-changed", lambda *a: GLib.timeout_add(600, self._apply_zoom))
