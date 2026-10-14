@@ -81,23 +81,15 @@ Retests 21–25 were run by Haiku testers through the screen on the VM, on the f
   - Settings: language and colour back; proper language names.
   - Answers: which model, Wi-Fi wording and panel, disk-space numbers (now matching the window), search the web for a question (with a source).
   - The desk filling the screen after an update. This was found by a retest screenshot and fixed.
-- **Fixed after its retest, host-tested only:**
-  - "Put the wallpaper back" restores the previous picture.
-  - The inbox window updates and isn't stacked; the summary lists every message.
-- **Still open:**
-  - Weather has no source.
-  - Search answers are slow (85 s on the VM CPU).
-  - "make a to-do list for X" can come back empty; "A and B" is added as one item.
-  - Apps run as root, so the root warning appears in Mousepad and Thunar. Fixing it is the planned unprivileged-user work.
-  - The calculator's bottom row is cut off.
-  - A closed editor leaves its chip.
-  - Stale reply text after some actions.
-  - The mute state isn't shown.
-  - The lock icon needs two clicks.
-  - Timer and reminder names.
-  - History merges topics.
-  - Night light has no preview.
-  - Restore after maximize moves the window.
-  - A stopped story has no "Stopped" line on its card.
-  - "show my documents" replaces the Home window.
-- **Not reproduced:** "the browser doesn't work" works on the arm64 VM. It needs a look on the owner's machine.
+- **Everything else, fixed in 1.8.8 and checked on the VM screen (retests 26–29 and my own screenshots):**
+  - Wallpaper back to the previous picture; the inbox window; weather with its source; fast sourced web answers; to-do lists with real items; "milk and eggs" as two items.
+  - No root-account bar in Thunar or Mousepad (a small GTK module hides only that bar; built for arm64 and x86-64).
+  - Calculator keypad complete; a closed editor's dock chip goes; mute shown; lock icon locks at once (the lock screen draws first, programs and the vault close behind it).
+  - Timer and reminder names right; reminder replies without internal ids; Cancel greys the row out at once.
+  - Topics kept apart; night light preview; a stopped story keeps its text and ends with "Stopped".
+  - Restore after maximize returns the window to its exact place; folder names open folders; the apps grid closes after opening a program.
+  - Video: the card follows the player (pause by clicking the picture, card gone when the player closes), one volume shared by the card and the Sound panel, a Full screen button and no maximize on the card, the video window placed below the top bar and kept in front.
+  - "Write … and save it as X": the OS writes the file (the model once said "saved" for a file that didn't exist), with no "[Name]" blanks; "delete X.txt" is fast and says which folder the file was in.
+  - Update notices that arrive while the computer is locked are shown at unlock.
+  - "show my documents" changing the Home window is the Files window moving to that folder (↑ goes back), as in any file manager.
+- **The browser on x86:** with the current code, Firefox on the x86-64 image (emulated) opens and fully loads Wikipedia (screenshot `x86-web2.png`). Updates now report the chip, the graphics driver, recent program start errors, and a hidden browser check, so a machine-specific failure shows up in the update report without the owner doing anything.
