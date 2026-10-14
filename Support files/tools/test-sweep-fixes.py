@@ -180,5 +180,13 @@ open(g, "w").write("x")
 out = agent.execute(ctx(), "delete_file", {"path": "/home/" + "jordan/Documents/guess.txt"})
 check("a guessed /home path finds the file by name", not os.path.exists(g), out)
 
+# 14. "milk and eggs" on a shopping list is two things; a dish stays one; the delete reply says where the file was
+check("milk and eggs split", T.split_items("milk and eggs", "shopping") == ["milk", "eggs"])
+check("mac and cheese stays", T.split_items("mac and cheese", "shopping") == ["mac and cheese"])
+w = os.path.join(HOME, "Documents", "where.txt")
+open(w, "w").write("x")
+out = agent.execute(ctx(), "delete_file", {"path": "where.txt"})
+check("delete reply names the folder", "from ~/Documents" in out, out)
+
 print("all good" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

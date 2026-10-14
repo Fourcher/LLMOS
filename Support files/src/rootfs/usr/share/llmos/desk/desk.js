@@ -746,16 +746,18 @@
     if (spec.actions && spec.actions.length) body.appendChild(renderBlock({ type: "buttons", items: spec.actions }));
   }
   let fullTrust = false;   // the owner chose full trust: a delete button deletes, no "Sure?" first
+  // a row whose delete/cancel was pressed greys out at once and can't be pressed again while the window refreshes
+  function fade(b) { const row = b.closest(".item"); if (row) { row.classList.add("gone"); setTimeout(() => row.classList.remove("gone"), 8000); } }   // back if nothing changed
   function actionBtn(a) {
     const b = el("button", "btn small" + (a.primary ? " primary" : "") + (a.danger ? " danger" : ""), esc(a.label));
     if (!a.danger || fullTrust) {
-      b.onclick = () => { act(a.say); if (a.closes) { const w = b.closest(".win"); if (w && w.dataset.id) closeWindow(w.dataset.id, true); } };
+      b.onclick = () => { act(a.say); if (a.danger) fade(b); if (a.closes) { const w = b.closest(".win"); if (w && w.dataset.id) closeWindow(w.dataset.id, true); } };
       return b;
     }
     // a button that deletes or ends something asks once more, right where it is: first press "Sure?", second does it
     let armed = null;
     b.onclick = () => {
-      if (armed) { clearTimeout(armed); armed = null; b.innerHTML = esc(a.label); act(a.say); return; }
+      if (armed) { clearTimeout(armed); armed = null; b.innerHTML = esc(a.label); act(a.say); fade(b); return; }
       b.innerHTML = esc(t("d_sure") === "d_sure" ? "Sure? Press again" : t("d_sure"));
       armed = setTimeout(() => { armed = null; b.innerHTML = esc(a.label); }, 4000);
     };

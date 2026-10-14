@@ -3580,7 +3580,10 @@ def delete_file(a, ctx):
     _undo_push("trash", (path, dest))
     if hasattr(ctx, "close_ui"):
         ctx.close_ui("file:" + path)
-    return f"moved {os.path.basename(path)} to the trash ({dest}). Say one sentence at most."
+    home = config.home().rstrip("/")
+    where = os.path.dirname(path)
+    where = "~" + where[len(home):] if where == home or where.startswith(home + "/") else where
+    return f"moved {os.path.basename(path)} from {where} to the trash ({dest}). Say one sentence at most."
 
 
 @tool("restore_file", "Put a file or folder back from the trash to where it was.", {"name": STR}, ["name"], risk=CHANGE)
@@ -3684,7 +3687,15 @@ def split_items(text, lst="notes"):
     m = re.fullmatch(r"(?P<a>.+?)\s+(?:and|&)\s+(?P<b>.+)", text)
     if m and len(m.group("a").split()) >= 2 and len(m.group("b").split()) >= 2:
         return [m.group("a").strip(), m.group("b").strip()]
+    # things to buy: "milk and eggs" is two things; a dish or flavour named with "and" is one
+    if m and str(lst).lower() in ("shopping", "groceries", "grocery", "packing") and \
+            not _ONE_THING.search(text):
+        return [m.group("a").strip(), m.group("b").strip()]
     return [text]
+
+
+_ONE_THING = re.compile(r"\b(?:(?:mac|macaroni) (?:and|&) cheese|fish (?:and|&) chips|salt (?:and|&) vinegar|sweet (?:and|&) sour|"
+                        r"peanut butter (?:and|&) jelly|cookies (?:and|&) cream|half (?:and|&) half)\b", re.I)
 
 
 @tool("note_add", "Add an item to one of the owner's lists (shopping, to-do, ideas, …) or a plain note. Use for "

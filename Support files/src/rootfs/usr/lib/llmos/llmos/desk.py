@@ -3930,7 +3930,13 @@ class Desk:
                 c.record(text, final, cont)
             except OSError as e:
                 sys.stderr.write(f"desk: the conversation could not be kept: {e}\n")
-            self.emit({"t": "reply.end", "text": final, "chat": chat})
+            if self.ctx.cancel.is_set():
+                # Stop pressed while the answer was being written: the model's stream ended early without an error;
+                # the card keeps what was written and says it was stopped
+                self.emit({"t": "reply.error", "text": T("stopped"), "chat": chat, "stopped": True})
+                final = ""
+            else:
+                self.emit({"t": "reply.end", "text": final, "chat": chat})
             if final and config.settings.get("speak_replies"):
                 self.emit({"t": "speaking", "on": True})
                 try:
@@ -4101,6 +4107,8 @@ class Desk:
 
     def lock(self):
         self.lock_stuck = False
+        self._locking_now = True            # an unlock typed fast waits for the closing below to finish
+        self.set_screen("lock", {"note": ""})   # the lock screen at once; the closing below takes a few seconds
         self.stop_all()                     # a turn in progress stops; nothing queued runs behind the lock
         self._keybinds(False)
         # locking closes every program of this session (a browser with its profile in the vault, a terminal
@@ -4140,7 +4148,9 @@ class Desk:
         for wid in list(self.windows):
             self.close_window(wid)
         self.chats = {}                     # read again from the vault after unlocking
-        self.set_screen("lock", {"note": note})
+        if note:
+            self.set_screen("lock", {"note": note})
+        self._locking_now = False
         self.push_status()
 
     def unlock(self, passphrase):
@@ -4152,6 +4162,10 @@ class Desk:
             return
         if not passphrase or self.screen != "lock":
             return
+        for _ in range(150):                # the lock still closing programs and the vault: wait for it (15 s at most)
+            if not getattr(self, "_locking_now", False):
+                break
+            time.sleep(0.1)
         if not self._unlocking.acquire(blocking=False):
             return                          # already trying this passphrase (Enter pressed twice)
         try:
