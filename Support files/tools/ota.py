@@ -224,9 +224,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         u = urllib.parse.urlparse(self.path)
-        if u.path in ("/b", "/ota/bootstrap"):        # the one-time setup script for a machine without the client
-            host = (self.headers.get("Host") or f"{lan_ip()}:{PORT}").strip()
-            if not re.fullmatch(r"[A-Za-z0-9.-]+(?::\d+)?", host):
+        if u.path in ("/", "/b", "/ota/bootstrap"):   # the one-time setup script for a machine without the client
+            host = (self.headers.get("Host") or lan_ip()).strip().split(":")[0] + f":{PORT}"
+            if not re.fullmatch(r"[A-Za-z0-9.-]+:\d+", host):
                 return self._send(400, b"{}")
             key = pubkey()
             text = (BOOTSTRAP.replace("@URL@", "http://" + host).replace("@NAME@", socket.gethostname())
@@ -277,6 +277,22 @@ def cmd_serve(a):
     srv.daemon_threads = True
     print(f"serving LLM OS updates at http://{lan_ip()}:{PORT}  key {fingerprint(pubkey())}  latest {latest() or '-'}",
           flush=True)
+    # the one-time setup script also on the plain web port, so a machine without the client needs no port number
+    # or symbols: "curl 192.168.1.20 -o u" then "sh u". Only that script is served there.
+    class Boot(Handler):
+        def do_GET(self):
+            self.path = "/b"
+            Handler.do_GET(self)
+
+        def do_POST(self):
+            self._send(404, b"{}")
+    try:
+        boot = http.server.ThreadingHTTPServer(("0.0.0.0", 80), Boot)
+        boot.daemon_threads = True
+        threading.Thread(target=boot.serve_forever, daemon=True).start()
+        print(f"one-time setup on a machine without updates: curl {lan_ip()} -o u   then   sh u", flush=True)
+    except OSError as e:
+        print(f"(port 80 not available: {e}; the setup script is at http://{lan_ip()}:{PORT}/b)", flush=True)
     srv.serve_forever()
 
 
