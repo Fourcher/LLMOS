@@ -209,6 +209,7 @@
   }
   function status(m) {
     busy = !!m.busy; listening = !!m.listening;
+    if (m.volume != null) document.querySelectorAll("input.npvol").forEach(v => { if (document.activeElement !== v) v.value = m.volume; });
     const box = $("status"); box.innerHTML = "";
     const dot = m.model_ok ? (busy ? "busy" : "ok") : "";
     box.append(chip(`<i class="dot ${dot}"></i>${esc(m.model || t("loading_model"))}`, "models", (m.host_gpu ? t("d_host_gpu") + " · " : "") + t("models")));
@@ -632,7 +633,7 @@
   function maximize(id) {
     const w = wins.get(id); if (!w) return;
     w.el.classList.add("geo"); setTimeout(() => w.el.classList.remove("geo"), 350);
-    if (!w.max) { w.saved = { left: w.el.style.left, top: w.el.style.top, width: w.el.style.width, height: w.el.style.height, maxHeight: w.el.style.maxHeight }; w.el.classList.add("maxed"); w.el.style.left = "12px"; w.el.style.top = "8px"; w.el.style.width = "calc(100% - 24px)"; w.el.style.height = "calc(100% - 16px)"; w.el.style.maxHeight = "none"; }
+    if (!w.max) { w.saved = { left: w.el.offsetLeft + "px", top: w.el.offsetTop + "px", width: w.el.offsetWidth + "px", height: w.el.style.height, maxHeight: w.el.style.maxHeight }; w.el.classList.add("maxed"); w.el.style.left = "12px"; w.el.style.top = "8px"; w.el.style.width = "calc(100% - 24px)"; w.el.style.height = "calc(100% - 16px)"; w.el.style.maxHeight = "none"; }
     else { Object.assign(w.el.style, w.saved || {}); w.el.classList.remove("maxed"); onScreen(w.el); }
     w.max = !w.max; raise(w.el); setTimeout(overlaps, 360);
   }
@@ -860,9 +861,12 @@
         const pb = el("button", "btn small", esc(b.state === "paused" ? t("d_resume") : t("d_pause")));
         pb.onclick = () => post({ t: "media", action: b.state === "paused" ? "resume" : "pause" });
         const sb = el("button", "btn small ghost", esc(t("d_stop"))); sb.onclick = () => post({ t: "media", action: "stop" });
-        const vol = el("input"); vol.type = "range"; vol.min = 0; vol.max = 100; vol.value = 100; vol.title = t("d_volume");
+        // the computer's own volume, the same number as the Sound panel (status updates keep it in step)
+        const vol = el("input", "npvol"); vol.type = "range"; vol.min = 0; vol.max = 100; vol.value = b.volume ?? 100; vol.title = t("d_volume");
         vol.onchange = () => post({ t: "media", action: "volume", value: +vol.value });
-        ctl.append(pb, sb, vol); return e;
+        ctl.append(pb, sb);
+        if (b.video) { const fb = el("button", "btn small ghost", esc(t("d_fullscreen"))); fb.onclick = () => post({ t: "media", action: "fullscreen" }); ctl.append(fb); }
+        ctl.append(vol); return e;
       }
       case "sources": { const e = el("div", "sources"); b.items.forEach(s => { const a = el("a", "", esc(s.title)); a.href = "#"; a.dataset.url = s.url; e.append(a); }); return e; }
     }

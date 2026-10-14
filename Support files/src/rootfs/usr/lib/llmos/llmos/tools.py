@@ -465,9 +465,25 @@ def write_file(a, ctx):
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         with open(path, "a" if a.get("append") else "w", encoding="utf-8") as f:
             f.write(str(a.get("content", "")))
-        return f"wrote {os.path.getsize(path)} bytes to {path}"
+        out = f"wrote {os.path.getsize(path)} bytes to {path}"
+        blanks = _fill_in_blanks(path, str(a.get("content", "")))
+        if blanks:
+            out += (f". The text still has fill-in blanks ({', '.join(blanks[:4])}): write the file again with them filled in "
+                    "from what they said (\"my neighbour\" -> \"Dear neighbour\") or left out, then quote the saved text exactly")
+        return out
     except OSError as e:
         return f"error: {e.strerror}: {path}"
+
+
+_BLANK = re.compile(r"\[(?=[^\]\n]{2,70}\])(?=[^\]]*(?:\b[Nn]ame\b|\b[Yy]our\b|\b[Ss]pecific\b|e\.g\.|\b[Dd]ate\b|\b[Aa]ddress\b|"
+                    r"\b[Ii]nsert\b|\b[Rr]eason\b|\b[Cc]ompany\b|\b[Pp]hone\b))[^\]\n]{2,70}\](?!\()")
+
+
+def _fill_in_blanks(path, text):
+    """Template blanks ("[Neighbour's Name]", "[specific reason]") left in a letter or note; code and markdown links are not judged."""
+    if os.path.splitext(path)[1].lower() not in ("", ".txt", ".md", ".text", ".rtf"):
+        return []
+    return list(dict.fromkeys(_BLANK.findall(text)))
 
 
 # What people call programs that are not Alpine packages, or are named differently: Alpine package, or a Flathub app id

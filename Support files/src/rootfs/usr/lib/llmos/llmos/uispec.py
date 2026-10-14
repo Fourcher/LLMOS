@@ -254,7 +254,8 @@ def _block(b):
     if t == "media":
         return {"type": "media", "title": _s(b.get("title"), 200), "subtitle": _s(b.get("subtitle"), 200),
                 "thumbnail": _url(b.get("thumbnail"), local_only=True), "state": _s(b.get("state") or "playing", 20),
-                "link": _url(b.get("link"))}
+                "link": _url(b.get("link")), "video": bool(b.get("video")),
+                "volume": max(0, min(100, int(b["volume"]))) if isinstance(b.get("volume"), (int, float)) else None}
     if t == "sources":
         items = []
         for it in _list(b.get("items"))[:10]:

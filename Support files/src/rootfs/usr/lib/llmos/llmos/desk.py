@@ -98,7 +98,7 @@ _PAGE_KEYS = ("hint", "d_muted", "d_show_task", "d_queue_next", "d_queue_remove"
               "no_mic", "stopped", "error", "model_down", "loading_model", "shutting_down", "restarting",
               "allow", "d_stop", "d_history", "d_close", "d_minimize", "d_maximize", "d_window", "d_next", "d_back", "d_skip", "d_done",
               "d_unlock", "d_working", "d_apps", "d_close_app", "d_conversation", "d_you", "d_dont",
-              "d_other_language", "d_open", "d_pause", "d_resume", "d_volume", "d_now_playing", "d_yes_start",
+              "d_other_language", "d_open", "d_pause", "d_resume", "d_volume", "d_fullscreen", "d_now_playing", "d_yes_start",
               "d_no_thanks", "d_type_language", "d_keep", "d_send", "d_clear", "d_shortcuts", "d_empty",
               "settings", "models", "tasks", "memory", "audit", "help_1", "help_2",
               "w_title", "w_text", "w_begin", "w_step", "w_recommended", "w_tz_search", "w_tz_hint", "w_net_title",
@@ -4531,6 +4531,7 @@ class Desk:
             info["video"] = not audio_only
             info["audio"] = media.has_audio()
             self._now_playing(info, "playing")
+            threading.Thread(target=self._watch_player, args=(p, info), daemon=True).start()
             return info
         if action in ("pause", "resume", "stop"):
             if action == "stop":
@@ -4544,21 +4545,52 @@ class Desk:
                     # asking the desk brought it in front of the video: the picture comes back to the front
                     threading.Timer(0.4, lambda: wm.act("focus", "llmos-media")).start()
             return (action + "d") if ok else "nothing is playing"
+        if action == "fullscreen":
+            ok = media.ipc({"command": ["set_property", "fullscreen", True]})
+            if ok:
+                threading.Timer(0.3, lambda: wm.act("focus", "llmos-media")).start()
+            return "full screen" if ok else "nothing is playing"
         if action == "volume":
             v = kw.get("value")
             try:
-                v = max(0, min(130, int(v)))
+                v = max(0, min(100, int(v)))
             except (TypeError, ValueError):
                 return "volume must be a number"
+            # one volume: the card's slider is the computer's volume, the same one the Sound panel shows
+            if self._volume_pct() is not None:
+                agent.execute(self.ctx, "set_volume", {"percent": v})
+                self.push_status()
+                self.refresh_windows()
+                return "volume set"
             return "volume set" if media.ipc({"command": ["set_property", "volume", v]}) else "nothing is playing"
         return "unknown media action"
+
+    def _watch_player(self, p, info):
+        """The card follows the player: paused or playing as the player shows it, and gone when the player is
+        closed (its X, the end of the video)."""
+        state = "playing"
+        while p.poll() is None:
+            time.sleep(1)
+            if getattr(self, "_np", None) is not info:
+                return                                   # another video replaced this one
+            paused = media.get("pause")
+            if paused is None:
+                continue
+            now = "paused" if paused else "playing"
+            if now != state:
+                state = now
+                self._now_playing(info, now)
+        if getattr(self, "_np", None) is info:
+            self._np = None
+            self.close_window("nowplaying")
 
     def _now_playing(self, info, state):
         self._np = info
         self.open_window({"id": "nowplaying", "replace": True, "title": T("d_now_playing"), "kind": "media", "size": "s",
                           "blocks": [{"type": "media", "title": info.get("title", ""), "subtitle": info.get("channel", "") +
                                       (f" · {info['duration']}" if info.get("duration") else ""),
-                                      "thumbnail": info.get("thumbnail", ""), "state": state, "link": info.get("url", "")}]})
+                                      "thumbnail": info.get("thumbnail", ""), "state": state, "link": info.get("url", ""),
+                                      "video": bool(info.get("video")), "volume": self._volume_pct()}]})
 
     def _refresh_now_playing(self, state):
         if getattr(self, "_np", None):

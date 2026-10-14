@@ -550,3 +550,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 .slider-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
 .slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
 .slider-row .slider-val { min-width: 3ch; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* the Now playing card has nothing to make bigger: full screen is its own button */
+.win.kind-media .head .max { display: none; }

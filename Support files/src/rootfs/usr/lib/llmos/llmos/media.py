@@ -161,6 +161,35 @@ def ipc(command):
         return False
 
 
+def get(prop):
+    """One property of the running mpv (desk mode), or None."""
+    if not os.path.exists(IPC):
+        return None
+    try:
+        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        s.settimeout(2)
+        s.connect(IPC)
+        s.sendall((json.dumps({"command": ["get_property", prop], "request_id": 7}) + "\n").encode())
+        buf = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+            for line in buf.split(b"\n"):
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if d.get("request_id") == 7:        # mpv also sends events on the same socket
+                    s.close()
+                    return d.get("data") if d.get("error") == "success" else None
+        s.close()
+    except OSError:
+        pass
+    return None
+
+
 def stop():
     pid = playing()
     if pid:
@@ -190,6 +219,17 @@ def pause(resume=False):
     return True
 
 
+def _input_conf():
+    """mpv's own keys plus: a click on the picture pauses or plays (the bottom bar keeps its own clicks)."""
+    path = os.path.join(config.RUN, "mpv-input.conf")
+    try:
+        with open(path, "w") as f:
+            f.write("MBTN_LEFT cycle pause\nMBTN_LEFT_DBL cycle fullscreen\n")
+    except OSError:
+        pass
+    return path
+
+
 def play_windowed(info, audio_only, env):
     """mpv as a window of the desk's compositor, with an IPC socket."""
     os.makedirs(config.RUN, exist_ok=True)
@@ -200,7 +240,7 @@ def play_windowed(info, audio_only, env):
     # gpu output only through a Wayland GL context (never X11); without one
     # (a VM) mpv falls back to plain shared-memory frames
     args = ["mpv", f"--input-ipc-server={IPC}", "--wayland-app-id=llmos-media", f"--title={info.get('title', 'LLM OS')[:80]}",
-            "--osc=yes", "--vo=gpu,wlshm", "--gpu-context=wayland", "--geometry=62%x62%", "--autofit-larger=90%x85%",
+            "--osc=yes", f"--input-conf={_input_conf()}", "--vo=gpu,wlshm", "--gpu-context=wayland", "--geometry=62%x62%", "--autofit-larger=90%x85%",
             *_common_args()]
     if os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1" or env.get("LIBGL_ALWAYS_SOFTWARE") == "1":
         args[args.index("--vo=gpu,wlshm")] = "--vo=wlshm"
