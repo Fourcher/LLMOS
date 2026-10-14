@@ -24,13 +24,18 @@ if tool == "Bash" and re.fullmatch(r"cp \"/Volumes/Files/Claude Work Area/LLMOS/
                                    r"\"?/Users/[^/\s\"']+/Downloads/\"?", text.strip()):
     sys.exit(0)
 
-home = r"(?:/Users/[^/\s\"']+|~|\$HOME|\$\{HOME\})"
+# a real Mac home path: "/Users/<name>", or "~" / "$HOME" used as a path (at a word start, then "/" or the end of the
+# word). A "~" inside code or a regex ("(?:~|/)", "~/Documents" in the OS's own source passed to python) is not a path
+# the command opens, so it is not judged here (that blocked ordinary source edits).
+home = r"(?:/Users/[^/\s\"']+|(?<![\w(|\\\"'])~(?=/|\s|$)|\$HOME|\$\{HOME\})"
 bad = [
-    home + r"(?:/(?!\.claude(?:/|\b))[^\s\"']*)?(?=[\s\"';)|&]|$)",      # the home folder or anything in it except ~/.claude
+    home + r"(?:/(?!\.claude(?:/|\b))[^\s\"']*)?(?=[\s\"';)&]|$)",       # the home folder or anything in it except ~/.claude
     r"/Volumes/(?!Files/Claude Work Area/LLMOS)",                         # other drives / folders on this SSD
-    r"Library/(?:Mobile Documents|CloudStorage)|/(?:Music|Pictures|Movies|Downloads|Desktop|Documents)/?(?=[\s\"';)|&]|$)",
+    r"Library/(?:Mobile Documents|CloudStorage)|/Users/[^/\s\"']+/(?:Music|Pictures|Movies|Downloads|Desktop|Documents)\b",
     r"\bmdfind\b|\bfind\s+/(?:\s|$)|\bfind\s+/Users\b",
 ]
+# a heredoc's body (python fed on stdin, a file written with cat <<EOF) is data or code, not a path the shell opens
+text = re.sub(r"<<-?\s*'?(\w+)'?\n.*?\n\1(?=\n|$)", "", text, flags=re.S)
 # paths inside the guest image ("/root/Downloads", "~/Downloads" in OS source or VM commands) are not the Mac's:
 # only judge text outside quoted strings that are clearly guest/test data would be guesswork, so judge Mac-side paths only
 scan = re.sub(r"/root/[^\s\"']*", "", text)

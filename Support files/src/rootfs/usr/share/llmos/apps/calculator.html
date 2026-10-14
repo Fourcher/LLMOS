@@ -1,11 +1,11 @@
 <!-- llmos-app: id=calculator; title=Calculator; size=s; words=calculator calc calculate calculating arithmetic -->
 <style>
 .calc{display:flex;flex-direction:column;height:100%;gap:10px}
-.screen{background:var(--card);border-radius:var(--r);padding:14px 16px;text-align:right;min-height:84px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
+.screen{background:var(--card);border-radius:var(--r);padding:14px 16px;text-align:right;min-height:64px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}
 .screen .hist{color:var(--dim);font-size:15px;min-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .screen .cur{font-size:40px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex:1}
-.keys button{font-size:22px;min-height:54px}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:minmax(0,1fr);gap:8px;flex:1;min-height:0}
+.keys button{font-size:22px;min-height:0}
 .keys .op{background:color-mix(in srgb,var(--accent) 22%,var(--card));color:var(--fg)}
 .keys .eq{background:var(--accent);color:var(--on-accent)}
 .keys .wide{grid-column:span 2}

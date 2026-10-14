@@ -807,7 +807,7 @@ def _model(text):
 
 # "show my files" / "what's in ~/projects" / "take a screenshot"
 _FILES = re.compile(r"^\s*(?:please\s+)?(?:(?:show|open|list)\s+(?:me\s+)?(?:my\s+|the\s+)?(?:files|documents|downloads|pictures|desktop|home|folder)(?:\s+(?:folder|directory|dir))?(?:\s+(?:in|of|at)\s+(?P<p>\S+))?"
-                    r"|(?:show|list)\s+(?:me\s+)?(?:my\s+)?files\s+in\s+(?P<p2>\S+)|what(?:'s|\s+is)\s+in\s+(?P<p3>(?:~|/)\S*))\s*[.!?]?\s*$", re.I)
+                    r"|(?:show|list)\s+(?:me\s+)?(?:my\s+)?files\s+in\s+(?P<p2>(?:~|/)[^\n]*?|\S+)|what(?:'s|\s+is)\s+in\s+(?P<p3>(?:~|/)\S*))\s*[.!?]?\s*$", re.I)
 _SHOT = re.compile(r"^\s*(?:please\s+)?(?:take|grab|capture|make|do)\s+(?:a\s+|me\s+a\s+)?screen ?shot(?:\s+of\s+(?:the\s+|my\s+|this\s+)?(?:screen|window|page|desktop))?\s*[.!]?\s*$|"
                    r"^\s*(?:screen ?shot|snip|print screen)(?:\s+(?:this|the|my)\s+(?:screen|window|page))?\s*[.!]?\s*$|"
                    r"^\s*(?:take a picture of|capture) (?:the|my|this) screen\s*[.!]?\s*$", re.I)
@@ -1453,6 +1453,10 @@ def _everyday(text):
     m = re.match(r"^\s*show\s+the\s+folder\s+(?P<p>(?:~|/).*?)\s*$", text)
     if m:
         return ("show_files", {"path": m.group("p")})
+    # the Delete button on a file or folder row: "delete the file /root/Documents/my notes.txt" (a full path; spaces ok)
+    m = re.match(r"^\s*(?:delete|trash|remove)\s+the\s+(?:file|folder)\s+(?P<p>(?:~|/).*?)\s*$", text)
+    if m:
+        return ("delete_file", {"path": m.group("p")})
     if _OPEN_BROWSER.match(text):
         return ("browse", {})
     m = _OPEN_FOLDER.match(text)

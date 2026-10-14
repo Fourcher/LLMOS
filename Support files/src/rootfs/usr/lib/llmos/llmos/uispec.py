@@ -23,7 +23,7 @@ import re
 SIZES = ("s", "m", "l", "xl")
 KINDS = ("panel", "dialog", "image", "media", "text", "form")
 BLOCK_TYPES = ("text", "kv", "stat", "list", "table", "image", "buttons", "toggle", "form",
-               "quote", "code", "progress", "choices", "media", "sources", "heading", "divider", "gallery")
+               "quote", "code", "progress", "choices", "media", "sources", "heading", "divider", "gallery", "slider")
 MAX_BLOCKS = 40
 MAX_ITEMS = 60
 MAX_TEXT = 12000
@@ -117,6 +117,14 @@ def _block(b):
         return {"type": "heading", "text": text} if text else None
     if t == "divider":
         return {"type": "divider"}
+    if t == "slider":
+        try:
+            lo, hi = int(b.get("min", 0)), int(b.get("max", 100))
+            v = max(lo, min(hi, int(b.get("value", lo))))
+        except (TypeError, ValueError):
+            return None
+        say = _s(b.get("say"), 200)
+        return {"type": "slider", "label": _s(b.get("label"), 60), "value": v, "min": lo, "max": hi, "say": say} if "{v}" in say else None
     if t == "kv":
         rows = []
         src = b.get("rows") or b.get("items") or []

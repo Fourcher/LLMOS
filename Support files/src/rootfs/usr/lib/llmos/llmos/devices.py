@@ -110,7 +110,7 @@ def volume(percent=None, mute=None, delta=None):
         if delta is not None and m:
             percent = int(m.group(1)) + int(delta)
         else:
-            return f"Volume is {m.group(1)}%." if m else "The volume level can't be read."
+            return (f"Volume is {m.group(1)}%" + (" (muted)." if "[off]" in r.stdout else ".")) if m else "The volume level can't be read."
     pct = max(0, min(100, int(percent)))
     r = _amixer("set", ctl, f"{pct}%")
     if r.returncode != 0:

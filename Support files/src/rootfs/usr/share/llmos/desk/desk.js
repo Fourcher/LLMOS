@@ -224,8 +224,8 @@
     box.append(chip(m.net === "offline" ? ic("M2 4.3 3.3 3 21 20.7 19.7 22l-3.4-3.4L12 21 .6 9.6a17 17 0 0 1 4.2-2.9zM12 3c4.4 0 8.4 1.7 11.4 4.6l-6.5 6.5L8.6 5.8A16 16 0 0 1 12 3z")
                         : m.net === "wired" ? ic("M7 3h10v6h-3v4h5v4h2v4h-6v-4h2v-2H7v2h2v4H3v-4h2v-4h5V9H7z")
                         : ic("M12 21 .6 9.6A16.5 16.5 0 0 1 12 5c4.4 0 8.4 1.7 11.4 4.6z"), "network", t("d_network")));
-    if (m.volume != null) box.append(chip(ic(m.volume === 0 ? "M3 9v6h4l5 5V4L7 9zm13.6 3 2.7-2.7-1.4-1.4L15.2 10.6 12.5 7.9l-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"
-                        : "M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"), "sound", t("d_sound") + " " + m.volume + "%"));
+    if (m.volume != null) box.append(chip(ic(m.volume === 0 || m.muted ? "M3 9v6h4l5 5V4L7 9zm13.6 3 2.7-2.7-1.4-1.4L15.2 10.6 12.5 7.9l-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"
+                        : "M3 9v6h4l5 5V4L7 9zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"), "sound", t("d_sound") + " " + (m.muted ? t("d_muted", "muted") : m.volume + "%")));
     if (m.battery) box.append(chip(ic("M16 4h-2V2h-4v2H8a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z") + ` ${m.battery.pct}%${m.battery.charging ? "⚡" : ""}`, "power", t("d_battery")));
     box.append(chip(ic("M13 3h-2v10h2zm4.8 2.2-1.4 1.4A6.96 6.96 0 0 1 19 12a7 7 0 1 1-11.4-5.4L6.2 5.2A9 9 0 1 0 21 12c0-2.7-1.2-5.2-3.2-6.8z"), "power", t("d_power")));
     $("greet").textContent = m.name ? "· " + m.name : "";
@@ -759,6 +759,14 @@
       case "text": return el("div", "b-text" + (b.dim ? " dim" : ""), md(b.text));
       case "heading": return el("div", "b-heading", esc(b.text));
       case "divider": return el("div", "b-divider");
+      case "slider": {
+        const e = el("label", "slider-row"), r = el("input"); r.type = "range"; r.min = b.min; r.max = b.max; r.value = b.value;
+        const v = el("span", "slider-val", esc(String(b.value)));
+        if (b.label) e.append(el("span", "k", esc(b.label)));
+        r.oninput = () => { v.textContent = r.value; };
+        r.onchange = () => act(b.say.replace("{v}", r.value));
+        e.append(r, v); return e;
+      }
       case "kv": { const e = el("div", "kv"); for (const [k, v] of b.rows) { e.append(el("span", "k", esc(k)), el("span", "v", esc(v))); } return e; }
       case "stat": {
         const e = el("div"); e.append(el("div", "stat", `<span>${esc(b.label)}</span><span class="v">${esc(b.value)}</span>`));
@@ -898,7 +906,10 @@
     if (opened && short) setTimeout(() => { if (!busy && !cur) collapseReply(); }, motionOff() ? 0 : 900);
     else if (short && !motionOff()) autoHide = setTimeout(() => { if (!$("reply").matches(":hover") && !busy) hideReply(); }, Math.max(12000, 250 * $("reply-text").textContent.length));
   }
-  function replyError(m) { if (!cur) replyStart({ request: "" }); $("reply-text").className = "text err"; $("reply-text").textContent = m.text; cur.text = m.text; conv.push(cur); cur = null; histPos = -1; orb("attention", ""); setTimeout(presence, 1500); }
+  function replyError(m) {
+    // Stop: what was already written stays, with a clear end line (the text used to just stop, or be replaced)
+    if (m.stopped && cur && cur.text) { replyEnd({ text: cur.text.replace(/\s+$/, "") + "\n\n*— " + (m.text || "Stopped.") + "*" }); return; }
+    if (!cur) replyStart({ request: "" }); $("reply-text").className = "text err"; $("reply-text").textContent = m.text; cur.text = m.text; conv.push(cur); cur = null; histPos = -1; orb("attention", ""); setTimeout(presence, 1500); }
   function activity(m) {
     if (!cur) return;
     const box = $("reply-activity"), last = box.lastElementChild;

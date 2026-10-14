@@ -545,3 +545,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
   font-size: 12px; cursor: pointer; white-space: nowrap; }
 #cmd .mode[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
   background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* a slider in a window (the volume) */
+.slider-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.slider-row .slider-val { min-width: 3ch; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }

@@ -90,7 +90,7 @@ def _wallpaper():
 
 
 # strings the page needs (everything else is rendered in Python)
-_PAGE_KEYS = ("hint", "d_show_task", "d_queue_next", "d_queue_remove", "d_mode_do", "d_mode_ask", "d_mode_do_tip", "d_mode_ask_tip", "while_away", "passphrase", "wrong_passphrase", "unlocking", "locked", "welcome",
+_PAGE_KEYS = ("hint", "d_muted", "d_show_task", "d_queue_next", "d_queue_remove", "d_mode_do", "d_mode_ask", "d_mode_do_tip", "d_mode_ask_tip", "while_away", "passphrase", "wrong_passphrase", "unlocking", "locked", "welcome",
               "ask_language", "ask_name", "ask_timezone", "ask_autonomy", "ask_internet", "ask_tor",
               "ask_passphrase", "ask_passphrase_again", "passphrase_mismatch", "creating_vault", "onboard_done",
               "v_hands-off", "v_balanced", "v_hands-on", "v_yes", "v_no", "v_ask", "listening", "heard",
@@ -1587,11 +1587,13 @@ class Desk:
                    "tz": system.timezone(), "busy": self.busy, "listening": self.listening,
                    "mic": voice.available(), "tasks": len(store.tasks()), "live": _live(),
                    "net": ("wifi" if _wifi_device() and _online() else "wired" if _online() else "offline"),
-                   "battery": _battery(), "volume": self._volume_pct()})
+                   "battery": _battery(), "volume": self._volume_pct(), "muted": getattr(self, "_muted", False)})
 
     def _volume_pct(self):
         try:
-            m = re.search(r"Volume is (\d+)%", devices.volume())
+            out = devices.volume()
+            self._muted = "(muted)" in out
+            m = re.search(r"Volume is (\d+)%", out)
             return int(m.group(1)) if m else None
         except Exception:
             return None
@@ -1713,10 +1715,14 @@ class Desk:
 
     def sound_panel(self):
         v = self._volume_pct()
-        blocks = [{"type": "kv", "rows": [[T("d_volume"), f"{v}%" if v is not None else T("d_sound_none")]]}]
+        muted = getattr(self, "_muted", False)
+        blocks = [{"type": "kv", "rows": [[T("d_volume"), (f"{v}%" + (" · " + T("d_muted", "muted") if muted else "")) if v is not None else T("d_sound_none")]]}]
         if v is not None:
-            blocks.append({"type": "buttons", "items": [{"label": "🔇", "say": "mute"}, {"label": "🔈", "say": "unmute"}] +
-                           [{"label": f"{p}%", "say": f"set the volume to {p}%", "primary": v == p} for p in (25, 50, 75, 100)]})
+            blocks.append({"type": "slider", "value": v, "min": 0, "max": 100, "say": "set the volume to {v}%"})
+            blocks.append({"type": "buttons", "items": [{"label": "🔈 " + T("d_unmute", "Unmute"), "say": "unmute", "primary": True} if muted
+                                                        else {"label": "🔇 " + T("d_mute", "Mute"), "say": "mute"}] +
+                           [{"label": f"{p}%", "say": f"set the volume to {p}%"} for p in (25, 50, 75, 100)]})
+        self.note_window_source("panel-sound", "call", "sound_panel")      # refreshed after a change
         outs = syspanels.audio_devices("Sinks")
         if len(outs) > 1:
             blocks.append({"type": "heading", "text": "Sound comes out of"})
@@ -1783,6 +1789,8 @@ class Desk:
                     try:
                         if tool == "panel":
                             self.open_panel(args)
+                        elif tool == "call":
+                            getattr(self, args)()
                         elif tool in tools.REGISTRY:
                             quiet._cur_tool = (tool, args, tools.READ)
                             tools.REGISTRY[tool].fn(dict(args), quiet)
@@ -2421,6 +2429,7 @@ class Desk:
             if self.shortcut(text):
                 self.last_reply = self.__dict__.pop("_said", None) or "Done."
                 getattr(self, "refresh_windows", lambda: None)()
+                getattr(self, "push_status", lambda: None)()
                 return False
             m = intent.match(text)
             if not m:
@@ -3811,6 +3820,7 @@ class Desk:
         if chat == "main" and (self.shortcut(text) or (fixed != text and self.shortcut(fixed))):
             self.last_reply = self.__dict__.pop("_said", None) or "Done."
             getattr(self, "refresh_windows", lambda: None)()
+            getattr(self, "push_status", lambda: None)()
             return
         c = self.chat(chat)
         cont = c.continues(text)
@@ -3843,7 +3853,7 @@ class Desk:
         except llm.ModelDown:
             self.emit({"t": "reply.error", "text": T("model_down"), "chat": chat})
         except agent.Cancelled:
-            self.emit({"t": "reply.error", "text": T("stopped"), "chat": chat})
+            self.emit({"t": "reply.error", "text": T("stopped"), "chat": chat, "stopped": True})
         except Exception as e:
             self.emit({"t": "reply.error", "text": agent._plain_error(str(e)), "chat": chat})
         finally:
@@ -4362,6 +4372,39 @@ class Desk:
         self._push_apps()
 
     def _push_apps(self):
+        self.emit({"t": "apps", "items": [{"pid": pid, "name": a["name"]} for pid, a in self.apps.items()]})
+        if self.apps and not getattr(self, "_chip_watch", False):
+            self._chip_watch = True
+            threading.Thread(target=self._watch_app_windows, daemon=True).start()
+
+    def _watch_app_windows(self):
+        """A program's dock button goes when its window does. Some programs (the text editor) keep running after
+        their window is closed, so waiting for the process left a button with nothing behind it."""
+        try:
+            while self.apps:
+                time.sleep(3)
+                try:
+                    wins = set(wm.windows())
+                except Exception:
+                    continue
+                gone = []
+                for pid, a in list(self.apps.items()):
+                    name = os.path.basename(str((a.get("argv") or [""])[0]))
+                    want = {x for x, pr in wm.PROCS.items() if pr == name} | {name, name.lower()}
+                    if want & wins:
+                        a["seen"], a["missed"] = True, 0
+                    elif a.get("seen"):
+                        a["missed"] = a.get("missed", 0) + 1
+                        if a["missed"] >= 2:
+                            gone.append(pid)
+                for pid in gone:
+                    self.apps.pop(pid, None)
+                if gone:
+                    self._push_apps_only()
+        finally:
+            self._chip_watch = False
+
+    def _push_apps_only(self):
         self.emit({"t": "apps", "items": [{"pid": pid, "name": a["name"]} for pid, a in self.apps.items()]})
 
     def close_app(self, pid):
