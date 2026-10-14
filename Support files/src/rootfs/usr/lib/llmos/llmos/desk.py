@@ -2090,6 +2090,16 @@ class Desk:
         self.open_window({"id": "away", "replace": True, "title": T("while_away"), "size": "m", "slot": "cascade",
                           "blocks": [{"type": "list", "items": items}]})
         self.away_ids = [m["id"] for m in un]          # marked seen when the owner closes the card
+        alarms = [m for m in un if m.get("alarm") and m["id"] not in getattr(self, "_alarms_shown", set())]
+        if alarms:
+            # a timer or reminder going off is its own window in front, big, with OK (in the away card alone, under
+            # windows already open, it was easy to miss)
+            self.__dict__.setdefault("_alarms_shown", set()).update(m["id"] for m in alarms)
+            self.open_window({"id": "alarm", "replace": True, "title": "⏰ " + alarms[-1]["title"][:60], "size": "s", "slot": "cascade",
+                              "blocks": [{"type": "heading", "text": ui.strip(m["text"])[:160]} for m in alarms[-3:]] +
+                                        [{"type": "buttons", "items": [{"label": "OK", "say": "close window alarm", "primary": True}]}]})
+            if not config.settings.get("do_not_disturb"):
+                threading.Timer(1.2, devices.chime).start()       # a second chime, a moment after the first
         if getattr(self, "ready", False) and not config.settings.get("do_not_disturb"):     # (do not disturb: the card only, no toast, chime or speech)
             self.emit({"t": "toast", "text": ui.strip(un[-1]["text"])[:120] or un[-1]["title"], "long": True})
             devices.chime()

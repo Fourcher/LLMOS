@@ -110,7 +110,7 @@ def run_task(t):
     direct = direct_result(t)
     if direct:
         store.finished(t["id"], direct)
-        store.notify(direct[:80], direct)
+        store.notify(direct[:80], direct, alarm=True)          # a timer or reminder: its own alert on the desk
         return direct
     ctx = HeadlessCtx()
     ctx.approved = bool(t.get("approved"))

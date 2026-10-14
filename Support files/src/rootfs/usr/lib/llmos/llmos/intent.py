@@ -1748,6 +1748,8 @@ def _everyday2(text):
                  r"\s*(?P<u>sec(?:ond)?s?|min(?:ute)?s?|h(?:ou)?rs?)(?:\s+for\s+(?P<what>.+))?$", low)
     if m:
         u = {"s": "seconds", "m": "minutes", "h": "hours"}[m.group("u")[0]]
+        if m.group("n") in ("1", "one"):
+            u = u[:-1]                               # "1 minute", not "1 minutes"
         length = f"{m.group('n')} {u}"
         return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
     # "set a 3 minute timer", "3 minute timer", "a 90 second timer for the eggs"
@@ -1758,7 +1760,7 @@ def _everyday2(text):
         n = m.group("n").replace("half an", "30").replace("half a", "30")
         if "half" in m.group("n"):
             u = "minutes" if u == "hours" else u
-        length = f"{n} {u}"
+        length = f"{n} {u[:-1] if n.strip() == '1' and u.endswith('s') else u}"      # "1 minute", not "1 minutes"
         return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
     # a list for a topic: "make a to-do list for moving house", "a packing list for a beach trip"
     m = re.match(r"^(?:please\s+)?(?:make|create|write|start|give\s+me|draw\s+up)\s+(?:me\s+)?(?:a\s+|an\s+|my\s+)?(?P<l>to-?do|todo|packing|shopping|check)\s*-?list\s+"
@@ -1890,7 +1892,7 @@ def _everyday2(text):
     if m:
         why = (m.group("why") or m.group("why2") or "").strip()
         return ("schedule_task", {"when": m.group("w") or m.group("w4") or m.group("w2"), "task": "Alarm" + (f": {why}" if why else ""), "kind": "reminder"})
-    if re.match(r"^(?:what|which)\s+(?:reminders|alarms|timers|tasks)\s+(?:do\s+i\s+have|are\s+(?:set|on|there))|^(?:show|list|see)\s+(?:me\s+)?(?:all\s+)?"
+    if re.match(r"^(?:what|which)\s+(?:reminders|alarms|timers|tasks)\s+(?:do\s+i\s+have|are\s+(?:set|on|there))|^what\s+are\s+my\s+(?:reminders|alarms|timers|scheduled tasks)\??$|^(?:show|list|see)\s+(?:me\s+)?(?:all\s+)?"
                 r"(?:my\s+|the\s+)?(?:reminders|alarms|timers)$|^what(?:'s|\s+is)\s+scheduled$|^my\s+(?:reminders|alarms|timers)$", low):
         return ("manage_tasks", {"action": "list"})
     m = re.match(r"^(?:please\s+)?(?:cancel|delete|remove|stop|turn\s+off)\s+(?:the\s+|my\s+)?(?:(?P<what>[\w: ]+?)\s+)?(?P<kind>alarm|reminder|timer)s?$", low)

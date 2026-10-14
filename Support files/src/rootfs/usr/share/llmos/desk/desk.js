@@ -201,7 +201,7 @@
   function chip(html, sayText, title) {
     const c = el("button", "chip", html);
     c.type = "button";
-    if (sayText) { c.onclick = () => launch(sayText); c.title = title || sayText; c.setAttribute("aria-label", title || sayText); }
+    if (sayText) { c.onclick = () => (sayText === "lock" ? post({ t: "lock" }) : launch(sayText)); c.title = title || sayText; c.setAttribute("aria-label", title || sayText); }   // lock: at once, like typing it
     else { c.disabled = true; }
     return c;
   }

@@ -309,11 +309,11 @@ def lists():
 
 
 @_locked
-def notify(title, text):
+def notify(title, text, alarm=False):
     path = config.data("inbox.json")
     cur = config.load_json(path, [])
     cur.append({"id": uuid.uuid4().hex[:8], "ts": time.time(), "title": title,
-                "text": text, "seen": False})
+                "text": text, "seen": False, **({"alarm": True} if alarm else {})})
     config.save_json(path, cur[-200:])
 
 
