@@ -1490,6 +1490,12 @@ def _everyday(text):
         return ("move_files", args)
     m = _WEB_SEARCH.match(text)
     if m and not _FILEISH.search(m.group("q")):
+        # a question ("the population of Tokyo", "who won the game") wants the answer: the assistant searches and
+        # answers with its source; anything else (a product, a site, a topic to browse) opens the browser
+        if re.match(r"(?:the\s+|a\s+|an\s+)?(?:population|weather|forecast|price|cost|height|age|capital|president|prime minister|ceo|"
+                    r"score|result|winner|distance|meaning|definition|time|date|release date|net worth|size|length|value)\b|"
+                    r"(?:who|what|when|where|why|how|which|is|are|does|did|can)\b", m.group("q"), re.I):
+            return None
         return ("browse", {"search": m.group("q")})
     m = _FIND_FILE.match(text)
     if m and _FILEISH.search(text) and not re.search(r"\be-?mails?\b", text, re.I) and not re.search(r"\b(?:near|restaurant|flight|hotel|recipe|weather|news)\b", text, re.I) and not re.search(r"\b(?:biggest|largest)\s+files?\b", text, re.I) and not re.search(r"\bworking\s+on\b", text, re.I):

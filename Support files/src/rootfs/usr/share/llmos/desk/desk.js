@@ -573,8 +573,10 @@
       // the system's own windows (settings, lists, files, models…) share one slot on the right and replace
       // each other; the stage stays free for what the owner asked for. The away card and the passphrase
       // form are not slot windows: nothing evicts them and they evict nothing.
-      for (const [oid, ow] of wins) if (oid !== id && isSystem(oid, ow.spec) && !ow.min) closeWindow(oid, true);
-      x = Math.max(12, stage.clientWidth - wpx - 20); y = 20;
+      // (they used to replace each other; now each new one opens beside the others, stepped, so Settings and Files
+      // can be open together)
+      const n = [...wins].filter(([oid, ow]) => oid !== id && isSystem(oid, ow.spec) && !ow.min).length % 6;
+      x = Math.max(12, stage.clientWidth - wpx - 20 - n * 36); y = 20 + n * 30;
     } else {
       // conversation windows cascade from the top left and never start below the upper third
       if (24 + (cascade % 7) * 30 > stage.clientHeight * 0.34) cascade = 0;
@@ -629,8 +631,16 @@
     const w = wins.get(id); if (!w) return;
     w.el.classList.add("geo"); setTimeout(() => w.el.classList.remove("geo"), 350);
     if (!w.max) { w.saved = { left: w.el.style.left, top: w.el.style.top, width: w.el.style.width, height: w.el.style.height, maxHeight: w.el.style.maxHeight }; w.el.classList.add("maxed"); w.el.style.left = "12px"; w.el.style.top = "8px"; w.el.style.width = "calc(100% - 24px)"; w.el.style.height = "calc(100% - 16px)"; w.el.style.maxHeight = "none"; }
-    else { Object.assign(w.el.style, w.saved || {}); w.el.classList.remove("maxed"); }
+    else { Object.assign(w.el.style, w.saved || {}); w.el.classList.remove("maxed"); onScreen(w.el); }
     w.max = !w.max; raise(w.el); setTimeout(overlaps, 360);
+  }
+  // a window put back (restore, a smaller screen) is moved so its title bar is on screen and it fits
+  function onScreen(win) {
+    const st = $("stage"), W = st.clientWidth, H = st.clientHeight;
+    const left = parseFloat(win.style.left) || 0, top = parseFloat(win.style.top) || 0;
+    win.style.left = Math.min(Math.max(0, left), Math.max(0, W - Math.min(win.offsetWidth, W))) + "px";
+    win.style.top = Math.min(Math.max(0, top), Math.max(0, H - 44)) + "px";
+    if (win.offsetHeight > H - (parseFloat(win.style.top) || 0)) win.style.maxHeight = Math.max(160, H - (parseFloat(win.style.top) || 0) - 12) + "px";
   }
   function raise(win) { win.style.zIndex = ++z; if (focused) focused.classList.remove("focus"); focused = win; win.classList.add("focus"); winFront(true); if (!busy && !cur) collapseReply(); }
   // the window in use goes in front of the input bar; the bar comes back to the front when it is wanted
@@ -654,7 +664,9 @@
   function drag(handle, win) {
     gesture(handle, {
       begin: (e) => { win.classList.add("dragging"); return { sx: e.clientX, sy: e.clientY, ox: win.offsetLeft, oy: win.offsetTop }; },
-      move: (e, s) => { win.style.left = Math.max(-40, s.ox + e.clientX - s.sx) + "px"; win.style.top = Math.max(0, s.oy + e.clientY - s.sy) + "px"; }
+      // the title bar always stays on screen (a window dragged too far could not be reached again)
+      move: (e, s) => { const st = $("stage"); win.style.left = Math.min(st.clientWidth - 120, Math.max(120 - win.offsetWidth, s.ox + e.clientX - s.sx)) + "px";
+                        win.style.top = Math.min(st.clientHeight - 44, Math.max(0, s.oy + e.clientY - s.sy)) + "px"; }
     }, () => { win.classList.remove("dragging"); overlaps(); });
   }
   function resize(grip, win) {

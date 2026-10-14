@@ -104,7 +104,7 @@ _LIVE_FACTS = tuple(re.compile(p) for p in _FACT_PATS)
 _FACT_MATCH = "^(?:" + "|".join(_FACT_PATS) + r")[?.!]?$"
 
 MATCH = re.compile(
-    r"\b(?:version|build)\b|updates? (?:from|off|status|source)|updates (?:come|coming) from|^(?:pair|connect|link) .* for updates$|^" + _FREE_SPACE_Q + r"[?.!]?$|" +
+    r"\b(?:version|build)\b|^(?:which|what)\s+(?:ai\s+|language\s+|llm\s+)?model\b|(?:ai|llm|brain)\s+(?:are\s+you|is\s+this)|running on\??$|updates? (?:from|off|status|source)|updates (?:come|coming) from|^(?:pair|connect|link) .* for updates$|^" + _FREE_SPACE_Q + r"[?.!]?$|" +
     r"^how much (?:free |disk )?(?:space|storage|room)(?: is| do i have)?(?: (?:left|free|remaining))?(?: on (?:my |the )?(?:disk|computer|drive|hard drive|machine))?(?: (?:left|free|remaining))?$|^how much (?:disk )?space (?:is )?(?:left|free)$|"
     r"^(?:turn|switch) (?:on|off) (?:the |my )?bluetooth$|^(?:turn|switch) (?:the |my )?bluetooth (?:on|off)$|^bluetooth (?:on|off)$|^(?:yes|yeah|yep|yup|sure|ok|okay)$|(?:the |my )?(?:screen|computer|pc|laptop|everything) (?:has |have )?(?:froze|frozen|locked up|is stuck)$|"
     r"(?:computer|pc|laptop|machine) (?:is |has been |got |feels )?(?:really |very |so |quite )?slow\b|"
@@ -1136,6 +1136,29 @@ _VERSION_Q = re.compile(r"^(?:(?:can|could) you\s+)?(?:what(?:'s| is)?|which|tel
                         r"^(?:llm ?os\s+)?(?:version|build)\??$")
 
 
+_MODEL_Q = re.compile(r"^(?:which|what)\s+(?:ai\s+|language\s+|llm\s+)?model\s+(?:are\s+you|am\s+i|is\s+(?:this|it))(?:\s+(?:using|running|on))?(?:\s+(?:now|right now))?\??$|"
+                      r"^(?:what|which)\s+(?:ai|llm|brain)\s+(?:are\s+you|is\s+this)(?:\s+using)?\??$|^what\s+are\s+you\s+running\s+on\??$")
+
+
+def model_answer(desk, line, low):
+    """'Which model are you using?': the chat model this computer runs (and the online one when it is used)."""
+    if not _MODEL_Q.match(low):
+        return False
+    from . import models
+    m = models.active()
+    text = (f"I'm using {m['name']} on this computer ({m['size'] / 1e9:.1f} GB)." if m else "No on-device model is set up yet.")
+    try:
+        if config.settings.get("brain") not in (None, "local"):
+            from . import llm
+            label = llm.cloud_label()
+            if label:
+                text += f" Online: {label}, " + ("for everything." if config.settings.get("brain") == "cloud" else "when you allow it.")
+    except Exception:
+        pass
+    desk.instant_reply(line, text + " Change it on the Models page.")
+    return True
+
+
 def version_answer(desk, line, low):
     """'What LLM OS version is this?': the build stamp, at once (no model), and where updates come from."""
     if not _VERSION_Q.match(low):
@@ -1940,7 +1963,7 @@ def jokes(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, ota_updates, web_block, howto):
+    for fn in (jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, model_answer, ota_updates, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True

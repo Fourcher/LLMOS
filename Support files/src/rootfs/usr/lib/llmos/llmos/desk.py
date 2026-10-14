@@ -3172,9 +3172,17 @@ class Desk:
                 self.emit({"t": "toast", "text": T("d_nothing_running")})
             return True
         if low in ("network", "wifi", "wi-fi", "internet", "show wifi networks", "show the wifi networks", "wifi networks",
-                   "connect to wifi", "connect to wi-fi", "network settings", "show the network settings"):
+                   "connect to wifi", "connect to wi-fi", "network settings", "show the network settings") or \
+                re.fullmatch(r"(?:please\s+)?(?:how\s+(?:do|can)\s+i\s+|help\s+me\s+|can\s+you\s+|i\s+(?:want|need)\s+to\s+)?"
+                             r"(?:connect|get|go)\s+(?:me\s+|this(?:\s+computer)?\s+)?(?:on(?:to)?|to)\s+(?:the\s+|a\s+)?"
+                             r"(?:wi-?fi|wireless|internet|network)(?:\s+network)?", low.rstrip("?.! ")):
             self.network_panel()
-            self.last_reply = self._said = "Here are the Wi-Fi networks."
+            # what the panel shows, in words (it said "Here are the Wi-Fi networks" on a computer without Wi-Fi)
+            if _wifi_device() is None:
+                self.instant_reply(line, "This computer has no Wi-Fi. " + ("It's online through its network cable." if _online()
+                                                                           else "Plug in a network cable to get online."))
+            else:
+                self.last_reply = self._said = "Here are the Wi-Fi networks: click one to connect."
             return True
         if low in ("sound", "volume", "sound settings", "audio"):
             self.sound_panel()
@@ -3605,6 +3613,12 @@ class Desk:
                                                 "bluetooth": "Here's Bluetooth.", "printers": "Here are the printers.", "about": "Here's this computer.",
                                                 "input": "Check the cable or batteries and try another USB port. Here are the mouse and keyboard settings.", "storage": "Here's the storage.",
                                                 "updates": "Checking for updates; the list is on the right."}[which]
+                if which == "storage":          # the numbers in words too, not only in the window
+                    try:
+                        u = shutil.disk_usage(config.home())
+                        self.last_reply = self._said = f"You have {u.free / 1e9:.1f} GB free of {u.total / 1e9:.1f} GB. The details are in the window."
+                    except OSError:
+                        pass
                 return True
         m = re.fullmatch(r"end process (\d+)", low)
         if m:
@@ -3722,8 +3736,13 @@ class Desk:
     def instant_reply(self, request, text):
         """An answer the OS knows itself, shown like any reply (no model involved)."""
         text = text if self.busy else replytr.translate(text, config.llm_language())
-        self.emit({"t": "reply.start", "request": request})
-        self.emit({"t": "reply.end", "text": text})
+        if self.busy and getattr(self, "_turn_open", False):
+            # a longer request is on the card: this answer is a notice beside it, not over it (it was lost when the
+            # card's next words arrived)
+            self.emit({"t": "toast", "text": f"{request}: {text}"[:400], "long": True})
+        else:
+            self.emit({"t": "reply.start", "request": request})
+            self.emit({"t": "reply.end", "text": text})
         self.last_reply = self._said = text
         try:
             self.chat().record(request, text, False)
@@ -3783,6 +3802,7 @@ class Desk:
         self.last_activity = []
         self.sources = []
         self.emit({"t": "reply.start", "request": text, "chat": chat})
+        self._turn_open = chat == "main"
         self.push_status()
         final = ""
         try:
@@ -3811,6 +3831,7 @@ class Desk:
             self.busy = False
             self.last_reply = final
             self.push_status()
+        self._turn_open = False
         if self.ctx.after_turn:
             self.shutdown(self.ctx.after_turn)
 
@@ -3941,9 +3962,11 @@ class Desk:
         self.ctx.cancel.set()
         llm.abort()                   # (the model may still be reading the request: that stops too)
         self.decline_dialogs()
+        dropped = 0
         while True:
             try:
                 done = self.requests.get_nowait()[1]
+                dropped += 1
             except queue.Empty:
                 break
             with self._pending_lock:              # a dropped request never reaches the worker: count it off here
@@ -3954,6 +3977,8 @@ class Desk:
             with self._pending_lock:
                 self._waiting, self._dropped = [], set()
             self._emit_queue()
+        if dropped:
+            self.emit({"t": "toast", "text": f"Stopped. {dropped} waiting request{'s' if dropped != 1 else ''} cancelled too."})
 
     def lock(self):
         self.lock_stuck = False
