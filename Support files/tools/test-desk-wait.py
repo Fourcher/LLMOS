@@ -35,7 +35,7 @@ def slice_between(start_mark, end_mark):
 # (a) say(): the counter goes up before the request is queued
 say_body = slice_between("    def say(self, text, done=None, chat=\"main\"):", "    # tools that finish")
 inc = say_body.find("self._req_pending += 1")
-put = say_body.find("self.requests.put((text, done, chat))")
+put = say_body.find("self.requests.put((text, done, chat, qid))")
 check(inc != -1 and put != -1 and inc < put, "say() increments _req_pending before requests.put")
 check("with self._pending_lock:" in say_body[:put], "say() increments under _pending_lock")
 

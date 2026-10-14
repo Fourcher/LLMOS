@@ -62,7 +62,10 @@ NEW_KEYS = {"no_model", "d_maximize", "d_window", "d_sure", "d_slow_turn"}  # ke
 # the model-size words for the set-up's "More models" list (every block has them; the old values are unchanged)
 ADDED_KEYS = {"w_model_slow", "w_more_models",
               # the web-page check's dialog sentence: says why the confirm was asked (test-guard-explain.py)
-              "d_guard_tainted"}
+              "d_guard_tainted",
+              # live work, the request queue and the Do / Ask switch (desk: watch(), queue strip, Ask mode)
+              "d_reading_request", "d_thinking_now", "d_about_to", "d_queued", "d_queue_next", "d_queue_remove",
+              "d_mode_do", "d_mode_ask", "d_mode_do_tip", "d_mode_ask_tip"}
 # the "online for everything" description gained the sentence "Your name and saved memory go with each request." (test-privacy-disclosure.py)
 ALLOWED_EDITS = {"q_brain_2",
                  # the "yes" internet choice says it also keeps the clock right (the boot timer syncs it; test-net-disclosure.py)

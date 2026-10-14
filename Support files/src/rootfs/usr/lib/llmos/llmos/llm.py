@@ -129,10 +129,19 @@ def wait_ready(timeout=600, tick=None):
     return False
 
 
-def _read_stream(lines, on_text, reasoning=None):
+def _watch(watch, *data):
+    try:
+        watch(*data)
+    except Exception:
+        pass                           # showing the work must never break the work
+
+
+def _read_stream(lines, on_text, reasoning=None, watch=None):
     """Accumulate an OpenAI-style chat-completions SSE stream (llama-server and every OpenAI-compatible
     service speak it). Returns (content, tool_calls, timings, non_sse_text). Thinking text (reasoning_content)
-    is never content; when a list is passed as reasoning, it is appended there."""
+    is never content; when a list is passed as reasoning, it is appended there. watch(kind, *data), when given,
+    sees the work as it happens, so the owner can too: ("reading", done, total) while the request is read
+    (llama-server's prompt_progress), ("thinking", text) and ("tool", name, arguments so far)."""
     content, calls, timings, other = "", {}, {}, []
     for raw in lines:
         line = (raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw).strip()
@@ -151,13 +160,19 @@ def _read_stream(lines, on_text, reasoning=None):
             continue
         if chunk.get("timings"):
             timings = chunk["timings"]
+        pp = chunk.get("prompt_progress")
+        if watch and isinstance(pp, dict) and pp.get("total"):
+            _watch(watch, "reading", int(pp.get("processed", 0)), int(pp["total"]))
         if chunk.get("error"):
             e = chunk["error"]
             raise ModelError(str(e.get("message", e) if isinstance(e, dict) else e)[:200])
         for ch in chunk.get("choices") or []:
             d = ch.get("delta") or {}
-            if d.get("reasoning_content") and reasoning is not None:
-                reasoning.append(str(d["reasoning_content"]))
+            if d.get("reasoning_content"):
+                if reasoning is not None:
+                    reasoning.append(str(d["reasoning_content"]))
+                if watch:
+                    _watch(watch, "thinking", str(d["reasoning_content"]))
             if d.get("content"):
                 content += d["content"]
                 if on_text:
@@ -173,6 +188,8 @@ def _read_stream(lines, on_text, reasoning=None):
                     e["name"] += f["name"]
                 if f.get("arguments"):
                     e["arguments"] += f["arguments"]
+                if watch and e["name"]:
+                    _watch(watch, "tool", e["name"], e["arguments"])
     return content, [calls[i] for i in sorted(calls)], timings, "\n".join(other)
 
 
@@ -194,7 +211,7 @@ def _plain(messages):
 
 
 def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
-         json_schema=None, think=None):
+         json_schema=None, think=None, watch=None):
     """Stream one completion from the on-device model. Returns {"content", "tool_calls", "timings"}.
     Tool calls are accumulated from streamed deltas."""
     if think is None:
@@ -202,6 +219,8 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
     body = {"messages": _plain(messages), "stream": True, "temperature": temperature,
             "top_p": 0.95, "max_tokens": max_tokens, "cache_prompt": True,
             "chat_template_kwargs": {"enable_thinking": think}}
+    if watch:
+        body["return_progress"] = True     # llama-server streams how far it has read the request (ignored by older ones)
     if _testshell():
         body["temperature"] = 0
         body["seed"] = 42
@@ -214,7 +233,7 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
         _OPEN.add(c)
     _count(1)
     try:
-        return _chat_on(c, body, on_text)
+        return _chat_on(c, body, on_text, watch) if watch else _chat_on(c, body, on_text)
     except (OSError, http.client.HTTPException, ValueError) as e:
         if getattr(c, "_llmos_aborted", False):
             raise Cancelled()
@@ -228,7 +247,7 @@ def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
         c.close()                     # closing mid-stream (Ctrl+C, Stop) makes llama-server stop generating
 
 
-def _chat_on(c, body, on_text):
+def _chat_on(c, body, on_text, watch=None):
     c.request("POST", "/v1/chat/completions", json.dumps(body),
               {"Content-Type": "application/json"})
     r = c.getresponse()
@@ -243,7 +262,7 @@ def _chat_on(c, body, on_text):
             detail = "the request was too long for the model's memory; try a shorter one"
         raise ModelError(str(detail)[:200])
     reasoning = []
-    content, calls, timings, _ = _read_stream(r, on_text, reasoning)
+    content, calls, timings, _ = _read_stream(r, on_text, reasoning, watch)
     if not content and not calls and reasoning and not (body.get("chat_template_kwargs") or {}).get("enable_thinking"):
         # the model spent its whole turn thinking: its thinking is not the answer, so the empty content goes to the
         # caller's existing empty-reply path (agent.py: "I couldn't finish that")

@@ -64,7 +64,17 @@
   };
   // a button: the OS does it at once (never behind a request the model is still working on)
   function act(text) { if (text && text.trim()) post({ t: "act", text: text.trim() }); }
-  function say(text) { if (!text || !text.trim()) return; if (text.trim().toLowerCase() === "lock") { post({ t: "lock" }); return; } post({ t: "say", text: text.trim() }); }
+  // Do (act on it) or Ask (an answer in words, no actions): the owner's choice, remembered on this computer
+  let askMode = false;
+  try { askMode = localStorage.getItem("llmos-mode") === "ask"; } catch (e) {}
+  function paintMode() {
+    const b = $("mode"); if (!b) return;
+    b.textContent = askMode ? t("d_mode_ask") : t("d_mode_do"); b.setAttribute("aria-pressed", askMode ? "true" : "false");
+    b.title = askMode ? t("d_mode_ask_tip") : t("d_mode_do_tip");
+  }
+  if ($("mode")) $("mode").onclick = () => { askMode = !askMode; try { localStorage.setItem("llmos-mode", askMode ? "ask" : "do"); } catch (e) {} paintMode(); $("in").focus(); };
+  paintMode();
+  function say(text) { if (!text || !text.trim()) return; if (text.trim().toLowerCase() === "lock") { post({ t: "lock" }); return; } post({ t: "say", text: text.trim(), mode: askMode ? "ask" : "do" }); }
   document.addEventListener("click", (e) => {
     const a = e.target.closest("a[data-url]");
     if (a) { e.preventDefault(); say("open " + a.dataset.url + " in the browser"); }
@@ -94,6 +104,7 @@
     document.querySelectorAll("[data-s]").forEach(e => { e.textContent = t(e.dataset.s); });
     document.querySelectorAll("[data-ph]").forEach(e => { e.placeholder = t(e.dataset.ph); e.setAttribute("aria-label", t(e.dataset.ph)); });
     $("in").placeholder = t("hint", "Tell me what you want…");
+    paintMode();
     $("in").setAttribute("aria-label", t("hint", "Tell me what you want…"));
     const desk = $("desk");
     if ((m.wallpaper || "") !== wallpaper && wallpaper && !motionOff()) {
@@ -875,6 +886,20 @@
     else { cur.activity.push(m.text); box.append(el("div", "", esc(m.text))); }
     $("reply").scrollTop = 1e6; orb("thinking", t("d_working"));
   }
+  // the requests waiting behind the one in progress: in order, each with ✕ to take it out of the queue
+  function queueStrip(m) {
+    const q = $("reply-queue"), items = m.items || [];
+    q.innerHTML = ""; q.classList.toggle("hidden", !items.length);
+    if (!items.length) return;
+    q.append(el("div", "", esc(t("d_queue_next"))));
+    items.forEach((it, i) => {
+      const row = el("div", "q", `<span class="n">${i + 1}.</span><span class="t">${esc(it.text)}</span>`);
+      const x = el("button", "", "✕"); x.type = "button"; x.title = t("d_queue_remove"); x.setAttribute("aria-label", t("d_queue_remove") + ": " + it.text);
+      x.onclick = (e) => { e.stopPropagation(); post({ t: "queue.drop", id: it.id }); };
+      row.append(x); q.append(row);
+    });
+    const r = $("reply"); if (r.classList.contains("hidden")) r.classList.remove("hidden");
+  }
   function hideReply() { const r = $("reply"); if (r.classList.contains("hidden")) return; afterAnim(r, "closing", () => { r.classList.add("hidden"); r.classList.remove("closing"); idle(); }); }
   // a progress bar with the time left, from the average rate since this phase began
   let prog = null;
@@ -1002,6 +1027,7 @@
         case "reply.error": return m.chat && m.chat !== "main" ? sideEvent(m) : replyError(m);
         case "reply.brain": return replyBrain(m);
         case "reply.eta": if (cur) cur.eta = m.seconds; return;
+        case "queue": return queueStrip(m);
         case "activity": return m.chat && m.chat !== "main" ? sideEvent(m) : activity(m);
         case "progress": return progress(m);
         case "toast": return toast(m);

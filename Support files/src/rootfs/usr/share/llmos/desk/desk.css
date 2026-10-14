@@ -526,3 +526,17 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 /* the chat box already draws its ring on #cmd:focus-within, so its inner input gets no second outline (outside forced colours) */
 @media not (forced-colors: active) { #cmd input:focus-visible { outline-color: transparent; } }
 @media (forced-colors: active) { input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible, [tabindex]:focus-visible, a:focus-visible { outline: 2px solid CanvasText; } }
+
+/* requests waiting their turn behind the one in progress */
+#reply .queue { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 13px; color: var(--dim); }
+#reply .queue .q { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+#reply .queue .q .n { min-width: 1.4em; color: var(--dim); }
+#reply .queue .q .t { flex: 1; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#reply .queue .q button { background: transparent; border: 0; color: var(--dim); cursor: pointer; font-size: 13px; padding: 2px 6px; border-radius: 6px; }
+#reply .queue .q button:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 10%, transparent); }
+
+/* Do / Ask: Ask answers in words and takes no action (much faster on a slow computer) */
+#cmd .mode { border: 1px solid var(--line); background: transparent; color: var(--dim); border-radius: 999px; padding: 4px 10px;
+  font-size: 12px; cursor: pointer; white-space: nowrap; }
+#cmd .mode[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, transparent); }
