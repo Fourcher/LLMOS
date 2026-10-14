@@ -446,10 +446,48 @@ def _report(base, body):
         pass
 
 
+NOTES = os.path.join(STATE_DIR, "notes.json")
+
+
+def _home_locked():
+    try:
+        from . import config, vault
+        return bool(config.settings.get("vault")) and not vault.unlocked()
+    except Exception:
+        return False
+
+
 def _notify(title, text):
+    """A note for the owner's away card. While the computer is locked their home (where the card's notes live) is
+    closed, so the note waits here and is handed over at unlock (flush_notes, called by the desk)."""
+    if _home_locked():
+        try:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            cur = json.load(open(NOTES)) if os.path.exists(NOTES) else []
+            json.dump((cur + [{"title": title, "text": text}])[-20:], open(NOTES, "w"))
+        except (OSError, ValueError):
+            pass
+        return
+    flush_notes()
     try:
         from . import store
         store.notify(title, text)
+    except Exception:
+        pass
+
+
+def flush_notes():
+    if not os.path.exists(NOTES) or _home_locked():
+        return
+    try:
+        cur = json.load(open(NOTES))
+        os.unlink(NOTES)
+    except (OSError, ValueError):
+        return
+    try:
+        from . import store
+        for n in cur:
+            store.notify(n["title"], n["text"])
     except Exception:
         pass
 

@@ -21,6 +21,7 @@ import glob
 import copy
 import json
 import os
+import platform
 import queue
 import re
 import shlex
@@ -1469,6 +1470,11 @@ class Desk:
         self.push_status()
         self._model_watch()
         self._inbox_key = "unset"       # unlocking: the away card comes back if there is still something unseen
+        try:
+            from . import ota
+            ota.flush_notes()           # updates installed while it was locked
+        except Exception:
+            pass
         self.show_away()
         def on_unlock():
             for t in store.on_event("unlock"):
@@ -4338,6 +4344,11 @@ class Desk:
         env = dict(os.environ, MOZ_ENABLE_WAYLAND="1", GDK_BACKEND="wayland", QT_QPA_PLATFORM="wayland",
                    SDL_VIDEODRIVER="wayland", XDG_SESSION_TYPE="wayland")
         env.update(config.personal_env())
+        # Thunar and Mousepad warn on every window that they run as root: true by design here, so the bar is hidden
+        # (src/gtk-noroot/noroot.c; every other bar stays)
+        mod = f"/usr/lib/llmos/gtk/noroot-{platform.machine()}.so"
+        if os.path.exists(mod) and mod not in env.get("GTK3_MODULES", ""):
+            env["GTK3_MODULES"] = ":".join(x for x in (env.get("GTK3_MODULES", ""), mod) if x)
         return env
 
     def _app_evt(self):
