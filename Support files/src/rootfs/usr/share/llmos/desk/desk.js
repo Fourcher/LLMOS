@@ -64,7 +64,17 @@
   };
   // a button: the OS does it at once (never behind a request the model is still working on)
   function act(text) { if (text && text.trim()) post({ t: "act", text: text.trim() }); }
-  function say(text) { if (!text || !text.trim()) return; if (text.trim().toLowerCase() === "lock") { post({ t: "lock" }); return; } post({ t: "say", text: text.trim() }); }
+  // Do (act on it) or Ask (an answer in words, no actions): the owner's choice, remembered on this computer
+  let askMode = false;
+  try { askMode = localStorage.getItem("llmos-mode") === "ask"; } catch (e) {}
+  function paintMode() {
+    const b = $("mode"); if (!b) return;
+    b.textContent = askMode ? t("d_mode_ask") : t("d_mode_do"); b.setAttribute("aria-pressed", askMode ? "true" : "false");
+    b.title = askMode ? t("d_mode_ask_tip") : t("d_mode_do_tip");
+  }
+  if ($("mode")) $("mode").onclick = () => { askMode = !askMode; try { localStorage.setItem("llmos-mode", askMode ? "ask" : "do"); } catch (e) {} paintMode(); $("in").focus(); };
+  paintMode();
+  function say(text) { if (!text || !text.trim()) return; if (text.trim().toLowerCase() === "lock") { post({ t: "lock" }); return; } post({ t: "say", text: text.trim(), mode: askMode ? "ask" : "do" }); }
   document.addEventListener("click", (e) => {
     const a = e.target.closest("a[data-url]");
     if (a) { e.preventDefault(); say("open " + a.dataset.url + " in the browser"); }
@@ -94,6 +104,7 @@
     document.querySelectorAll("[data-s]").forEach(e => { e.textContent = t(e.dataset.s); });
     document.querySelectorAll("[data-ph]").forEach(e => { e.placeholder = t(e.dataset.ph); e.setAttribute("aria-label", t(e.dataset.ph)); });
     $("in").placeholder = t("hint", "Tell me what you want…");
+    paintMode();
     $("in").setAttribute("aria-label", t("hint", "Tell me what you want…"));
     const desk = $("desk");
     if ((m.wallpaper || "") !== wallpaper && wallpaper && !motionOff()) {
@@ -572,8 +583,8 @@
       cascade++;
     }
     win.style.left = x + "px"; win.style.top = y + "px";
-    win.style.maxHeight = Math.max(160, stage.clientHeight - y - 12) + "px";   // never under the bar
-    if (spec.kind === "app" || spec.kind === "chat") win.style.height = Math.min(stage.clientHeight - y - 12, { s: 600, m: 640, l: 700, xl: 760 }[spec.size] || 640) + "px";
+    win.style.maxHeight = Math.max(160, stage.clientHeight - y - 12 - barRoom()) + "px";   // opens above the bar
+    if (spec.kind === "app" || spec.kind === "chat") win.style.height = Math.min(stage.clientHeight - y - 12 - barRoom(), { s: 600, m: 640, l: 700, xl: 760 }[spec.size] || 640) + "px";
     stage.appendChild(win);
     wins.set(id, { el: win, spec, min: false, max: false });
     if (cur) cur.opened = true;
@@ -602,12 +613,14 @@
   function closeWindow(id, tell) {
     const w = wins.get(id); if (!w) return;
     wins.delete(id);
+    if (![...wins.values()].some(x => !x.min)) winFront(false);
     if (tell) post({ t: "window.closed", id });
     afterAnim(w.el, "closing", () => { w.el.remove(); overlaps(); });
     dock(); idle(); overlaps();
   }
   function minimize(id) {
     const w = wins.get(id); if (!w) return; w.min = true;
+    if (![...wins.values()].some(x => !x.min)) winFront(false);
     towards(w.el, $("dock"));
     afterAnim(w.el, "mini", () => { w.el.classList.add("hidden"); w.el.classList.remove("mini"); overlaps(); });
     dock(); idle();
@@ -619,7 +632,12 @@
     else { Object.assign(w.el.style, w.saved || {}); w.el.classList.remove("maxed"); }
     w.max = !w.max; raise(w.el); setTimeout(overlaps, 360);
   }
-  function raise(win) { win.style.zIndex = ++z; if (focused) focused.classList.remove("focus"); focused = win; win.classList.add("focus"); if (!busy && !cur) collapseReply(); }
+  function raise(win) { win.style.zIndex = ++z; if (focused) focused.classList.remove("focus"); focused = win; win.classList.add("focus"); winFront(true); if (!busy && !cur) collapseReply(); }
+  // the window in use goes in front of the input bar; the bar comes back to the front when it is wanted
+  function winFront(on) { $("desk").classList.toggle("winfront", !!on && [...wins.values()].some(w => !w.min)); }
+  // room kept free at the bottom of the window area so a new window opens above the input bar (moving, resizing and
+  // maximizing may still use all of it)
+  function barRoom() { const st = $("stage").getBoundingClientRect(), c = $("cmd").getBoundingClientRect(); return Math.max(0, st.bottom - c.top + 12); }
   function collapseReply() { const r = $("reply"); if (r.classList.contains("hidden") || r.classList.contains("collapsed")) return; clearTimeout(autoHide); r.classList.add("collapsed"); r.scrollTop = 0; }
   function expandReply() { const r = $("reply"); if (!r.classList.contains("collapsed")) return; r.classList.remove("collapsed"); r.style.animation = "none"; void r.offsetWidth; r.style.animation = ""; }
   // one pair of window-level listeners per gesture, attached on mousedown and removed on mouseup (nothing leaks)
@@ -832,6 +850,7 @@
   const THINK = '<span class="think"><i></i><i></i><i></i></span>';
   function replyStart(m) {
     $("hint").textContent = "";
+    winFront(false);                                  // the computer is answering: its card comes to the front
     replyBrain({ online: false });
     cur = { req: m.request, text: "", activity: [], t0: Date.now(), eta: null };
     const r = $("reply"); r.classList.remove("closing", "writing", "collapsed");
@@ -874,6 +893,20 @@
     if (m.replace && last) { last.textContent = m.text; cur.activity[cur.activity.length - 1] = m.text; }
     else { cur.activity.push(m.text); box.append(el("div", "", esc(m.text))); }
     $("reply").scrollTop = 1e6; orb("thinking", t("d_working"));
+  }
+  // the requests waiting behind the one in progress: in order, each with ✕ to take it out of the queue
+  function queueStrip(m) {
+    const q = $("reply-queue"), items = m.items || [];
+    q.innerHTML = ""; q.classList.toggle("hidden", !items.length);
+    if (!items.length) return;
+    q.append(el("div", "", esc(t("d_queue_next"))));
+    items.forEach((it, i) => {
+      const row = el("div", "q", `<span class="n">${i + 1}.</span><span class="t">${esc(it.text)}</span>`);
+      const x = el("button", "", "✕"); x.type = "button"; x.title = t("d_queue_remove"); x.setAttribute("aria-label", t("d_queue_remove") + ": " + it.text);
+      x.onclick = (e) => { e.stopPropagation(); post({ t: "queue.drop", id: it.id }); };
+      row.append(x); q.append(row);
+    });
+    const r = $("reply"); if (r.classList.contains("hidden")) r.classList.remove("hidden");
   }
   function hideReply() { const r = $("reply"); if (r.classList.contains("hidden")) return; afterAnim(r, "closing", () => { r.classList.add("hidden"); r.classList.remove("closing"); idle(); }); }
   // a progress bar with the time left, from the average rate since this phase began
@@ -987,6 +1020,22 @@
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1 && !(e.key === " " && document.activeElement.tagName === "BUTTON") && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA" && document.activeElement.tagName !== "SELECT") inp.focus();
   });
 
+  // the orb in the bar brings back the current task's card (or the last answer) after it was hidden or folded
+  function showReply() {
+    const r = $("reply");
+    if (!cur && !conv.length && r.classList.contains("hidden")) { inp.focus(); return; }
+    clearTimeout(autoHide);
+    r.classList.remove("hidden", "closing"); expandReply(); winFront(false);
+    if (cur) $("reply").scrollTop = 1e6;
+  }
+  { const o = $("orb"); o.setAttribute("role", "button"); o.tabIndex = 0; o.style.cursor = "pointer";
+    o.setAttribute("aria-label", t("d_show_task", "Show what I'm working on"));
+    o.addEventListener("click", showReply);
+    o.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showReply(); } }); }
+  inp.addEventListener("focus", () => winFront(false));
+  $("cmd").addEventListener("mousedown", () => winFront(false));
+  $("stage").parentElement.addEventListener("mousedown", (e) => { if (!e.target.closest(".win, #cmd, #reply, #top, #dock, #start, #startmenu, #overlay")) winFront(false); });
+
   // ---------------------------------------------------------------- dispatch
   window.llmos = {
     receive(m) {
@@ -1002,6 +1051,7 @@
         case "reply.error": return m.chat && m.chat !== "main" ? sideEvent(m) : replyError(m);
         case "reply.brain": return replyBrain(m);
         case "reply.eta": if (cur) cur.eta = m.seconds; return;
+        case "queue": return queueStrip(m);
         case "activity": return m.chat && m.chat !== "main" ? sideEvent(m) : activity(m);
         case "progress": return progress(m);
         case "toast": return toast(m);

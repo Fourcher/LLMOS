@@ -30,6 +30,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 
 from . import clip, record, folderlock, everyday, reset, agent, apps, programs, config, conversation, syspanels, wm, i18n, intent, llm, themes, media, models, store, system, tools, ui, uispec, vault, voice, devices, version_line, waits, replytr
 
@@ -89,7 +90,7 @@ def _wallpaper():
 
 
 # strings the page needs (everything else is rendered in Python)
-_PAGE_KEYS = ("hint", "while_away", "passphrase", "wrong_passphrase", "unlocking", "locked", "welcome",
+_PAGE_KEYS = ("hint", "d_show_task", "d_queue_next", "d_queue_remove", "d_mode_do", "d_mode_ask", "d_mode_do_tip", "d_mode_ask_tip", "while_away", "passphrase", "wrong_passphrase", "unlocking", "locked", "welcome",
               "ask_language", "ask_name", "ask_timezone", "ask_autonomy", "ask_internet", "ask_tor",
               "ask_passphrase", "ask_passphrase_again", "passphrase_mismatch", "creating_vault", "onboard_done",
               "v_hands-off", "v_balanced", "v_hands-on", "v_yes", "v_no", "v_ask", "listening", "heard",
@@ -412,7 +413,37 @@ class DeskCtx:
         self._net_ok = set()
 
     def new_stream(self):
+        self._watch_last, self._watch_t = None, 0.0
         return object()
+
+    def watch(self, kind, *data):
+        """What the model is doing right now, shown under the request: how far it has read it, its thinking, and the
+        action it is writing (llm.chat's watch). Lines of one kind update in place; a few per second at most."""
+        now = time.time()
+        if kind == "reading":
+            done, total = data
+            if done < total and now - getattr(self, "_watch_t", 0) < 0.4:
+                return
+            self._watch_t = now
+            self.d.emit({"t": "progress", "label": T("d_reading_request"), "done": done, "total": total})
+            return
+        if kind == "thinking":
+            self._thought = (getattr(self, "_thought", "") + data[0])[-400:]
+            text = T("d_thinking_now") + " " + " ".join(self._thought.split())[-160:]
+        elif kind == "tool":
+            name, raw = data
+            try:
+                args = json.loads(raw)
+                text = T("d_about_to") + " " + self.d.describe_tool(name, args)
+            except (ValueError, TypeError, AttributeError):
+                text = T("d_about_to") + " " + name.replace("_", " ") + " …"
+        else:
+            return
+        if kind == getattr(self, "_watch_last", None) and now - getattr(self, "_watch_t", 0) < 0.3:
+            return
+        self.d.emit({"t": "activity", "text": text, "replace": kind == getattr(self, "_watch_last", None),
+                     "chat": getattr(self, "chat_id", "main")})
+        self._watch_last, self._watch_t = kind, now
 
     def on_text(self, stream, text):
         if self.cancel.is_set():
@@ -429,6 +460,7 @@ class DeskCtx:
         self.d.emit({"t": "activity", "text": str(text), "replace": bool(getattr(self, "_tool_open", False)), "chat": getattr(self, "chat_id", "main")})
 
     def begin_tool(self, tool, args, risk):
+        self._watch_last = None
         self._tool_open = True
         self.d.emit({"t": "activity", "text": self.d.describe_tool(tool, args), "chat": getattr(self, "chat_id", "main")})
 
@@ -679,6 +711,7 @@ class Desk:
         self._req_pending = 0        # requests queued or running (counted from say() until the worker finishes them)
         self._req_done = 0           # requests the worker has finished (a counter: wait "N after M" tells a finished one from none)
         self._pending_lock = threading.Lock()
+        self._waiting, self._dropped = [], set()   # requests queued behind the one in progress (shown on the desk)
 
     # ---- GTK / WebKit
 
@@ -1108,7 +1141,8 @@ class Desk:
                 slot[0].set()
         elif t == "say":
             self.last_active = time.time()
-            self.say(str(msg.get("text", "")))
+            text = str(msg.get("text", "")).strip()
+            self.say(("ask: " + text) if msg.get("mode") == "ask" and text else text)
         elif t == "chat.say":
             cid = str(msg.get("chat", ""))
             if cid.startswith("side-") and "chat-" + cid in self.windows:
@@ -1339,6 +1373,8 @@ class Desk:
             self.voice_turn()
         elif t == "cancel":
             self.stop_all()
+        elif t == "queue.drop":
+            self.drop_queued(str(msg.get("id", "")))
         elif t == "window.closed" and str(msg.get("id")) == "away":
             self.windows.pop("away", None)
             store.mark_seen(getattr(self, "away_ids", []))
@@ -2259,9 +2295,29 @@ class Desk:
         self._enqueue(text, done, chat)
 
     def _enqueue(self, text, done, chat):
+        qid = uuid.uuid4().hex[:8]
         with self._pending_lock:
             self._req_pending += 1
-        self.requests.put((text, done, chat))
+            waiting = self.busy or not getattr(self.requests, "empty", lambda: True)()
+            if chat == "main":
+                self.__dict__.setdefault("_waiting", []).append({"id": qid, "text": text[:160]})
+        self.requests.put((text, done, chat, qid))
+        if chat == "main" and waiting:
+            self.emit({"t": "toast", "text": T("d_queued")})
+        self._emit_queue()
+
+    def _emit_queue(self):
+        """The requests waiting their turn, in order, for the desk's queue strip (each can be removed)."""
+        with self._pending_lock:
+            items = [dict(w) for w in self.__dict__.get("_waiting", [])]
+        self.emit({"t": "queue", "items": items})
+
+    def drop_queued(self, qid):
+        with self._pending_lock:
+            if any(w["id"] == qid for w in self._waiting):
+                self._dropped.add(qid)
+                self._waiting = [w for w in self._waiting if w["id"] != qid]
+        self._emit_queue()
 
     # tools that finish at once and need no model: safe to run beside a request in progress
     _SLOW = {"install_app", "manage_models", "find_by_meaning", "edit_images", "convert_media", "web_search", "read_webpage", "show_image", "set_wallpaper", "install_to_disk",
@@ -2346,7 +2402,7 @@ class Desk:
                 self.emit({"t": "toast", "text": reply[:240]})
         except Exception as e:
             self.emit({"t": "toast", "text": agent._plain_error(str(e))})
-        how = self.ctx.after_turn               # a button that restarts or shuts down (system_power): do it now, as
+        how = getattr(getattr(self, "ctx", None), "after_turn", None)   # a button that restarts or shuts down (system_power): do it now, as
         if how:                                 # a typed request does after its reply; before this, nothing happened
             self.ctx.after_turn = None
             self.shutdown(how)
@@ -2379,8 +2435,16 @@ class Desk:
     def _worker(self):
         while True:
             item = self.requests.get()
-            text, done, chat = (item + ("main",))[:3] if len(item) == 2 else item
+            text, done, chat = (item + ("main",))[:3] if len(item) == 2 else item[:3]
+            qid = item[3] if len(item) > 3 else None
+            with self._pending_lock:
+                skip = qid in self._dropped
+                self._dropped.discard(qid)
+                self._waiting = [w for w in self._waiting if w["id"] != qid]
+            self._emit_queue()
             try:
+                if skip:                    # the owner removed it from the queue: it never runs
+                    continue
                 self.turn(text, chat)
             except Exception as e:      # never let the worker die
                 self.emit({"t": "reply.error", "text": agent._plain_error(str(e))})
@@ -3641,6 +3705,12 @@ class Desk:
         return None
 
     def turn(self, text, chat="main"):
+        # Ask mode (the switch beside the input): an answer in words, no actions. "ask: " marks it through the queue.
+        ask = bool(re.match(r"ask:\s", text))
+        if ask:
+            text = text[4:].strip()
+        if getattr(self, "ctx", None) is not None:
+            self.ctx.ask_only = ask
         fixed = intent._retype(text)          # typo-fixed copy: the fast paths get a second pass on it; the model always gets text as typed
         parts = self._split_compound(text) if chat == "main" else None
         if parts:
@@ -3838,6 +3908,10 @@ class Desk:
                 self._req_pending = max(0, self._req_pending - 1)
             if done:
                 done.set()
+        if hasattr(self, "_waiting"):
+            with self._pending_lock:
+                self._waiting, self._dropped = [], set()
+            self._emit_queue()
 
     def lock(self):
         self.lock_stuck = False

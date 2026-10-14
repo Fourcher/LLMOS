@@ -711,6 +711,8 @@ def run(ctx, user_text, history):
         forced = "cloud" if m.group("cloud") else "local"
         user_text = m.group("rest").strip()
     ctx.current_request = user_text
+    if getattr(ctx, "ask_only", False):
+        user_text += "\n\n(Ask mode: answer in words only. Take no action and do not offer to.)"
     if hasattr(ctx, "_net_ok"):
         ctx._net_ok.clear()   # "ask each time" means each request, not once per boot
 
@@ -859,6 +861,10 @@ def run(ctx, user_text, history):
     first_calls = []           # the step-0 tool calls, kept as a routine when the turn goes well
     tool_steps = 0
     blocked, no_tools = set(), False             # calls a guard refused; once one comes back, the model answers in words
+    if getattr(ctx, "ask_only", False):
+        # Ask mode: a question answered in words. No tools are offered, so the model reads a far shorter prompt
+        # (the tool list is most of it) and cannot set off anything.
+        no_tools = True
     rare_on = False                              # a rare tool was called this turn: keep offering the rare group
     fresh = len(msgs[-1].get("content") or "")   # characters the model has not seen yet (its cache holds the rest)
     while True:
@@ -874,8 +880,9 @@ def run(ctx, user_text, history):
                 _ctx(ctx, "expect", est, step)
             t0 = time.time()
             try:
+                watch = getattr(ctx, "watch", None) if where != "cloud" else None
                 result = chat(msgs, tools=None if no_tools else (tools.schemas() if where == "cloud" else tool_schemas(user_text, sticky=rare_on)),
-                              on_text=lambda t: ctx.on_text(stream, t))
+                              on_text=lambda t: ctx.on_text(stream, t), **({"watch": watch} if callable(watch) else {}))
             except llm.CloudError as e:
                 # the online model did not answer: say so and carry on here with the same messages
                 ctx.end_stream(stream)
