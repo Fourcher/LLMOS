@@ -273,8 +273,8 @@ def apply_files(payload, backup):
             t.uid = t.gid = 0
             t.uname = t.gname = "root"
             dest = os.path.join(ROOT, name)
-            if not t.isdir() and os.path.lexists(dest) and (os.path.islink(dest) or t.issym()):
-                os.unlink(dest)
+            if not t.isdir() and os.path.lexists(dest) and not os.path.isdir(dest):
+                os.unlink(dest)                 # a new copy, never rewritten in place (a running script keeps its old one)
             tf.extract(t, ROOT, set_attrs=True, filter="fully_trusted") if _has_filter() else tf.extract(t, ROOT)
     return {"backup": backup, "new": new, "names": names}
 
@@ -322,18 +322,66 @@ def _desk_up(wait):
     return False
 
 
+def _desk_app():
+    """(pid, environ, uid, gid) of the running desk program ("llmos desk-app" inside the compositor), or None."""
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            with open(f"/proc/{d}/cmdline", "rb") as f:
+                argv = f.read().split(b"\0")
+            if b"desk-app" not in argv or not any(x.endswith(b"llmos") for x in argv):
+                continue
+            with open(f"/proc/{d}/environ", "rb") as f:
+                env = dict(kv.split(b"=", 1) for kv in f.read().split(b"\0") if b"=" in kv)
+            st = os.stat(f"/proc/{d}")
+            return int(d), {k.decode(): v.decode() for k, v in env.items()}, st.st_uid, st.st_gid
+        except (OSError, ValueError):
+            continue
+    return None
+
+
 def restart_desk():
-    """End the desk session; init's getty starts it again. On a test shell (no getty for the desk) start it here."""
-    subprocess.run(["pkill", "-f", "[l]lmos desk-app"], capture_output=True)
-    subprocess.run(["pkill", "-x", "labwc"], capture_output=True)
-    for _ in range(10):
-        time.sleep(1)
-        if not os.path.exists("/run/llmos/desk.sock") or subprocess.run(["pgrep", "-x", "labwc"], capture_output=True).returncode:
-            break
-    if _desk_up(25):
+    """Start the desk program again with the new files, in the same screen session: only "llmos desk-app" is
+    replaced (same environment, same user); the compositor and the login session stay up. (Ending the compositor
+    instead made the login fall back to the text console on a real install.)"""
+    found = _desk_app()
+    if found:
+        pid, env, uid, gid = found
+        try:
+            os.kill(pid, 15)
+        except OSError:
+            pass
+        for _ in range(50):
+            if not os.path.exists(f"/proc/{pid}"):
+                break
+            time.sleep(0.2)
+        else:
+            try:
+                os.kill(pid, 9)
+            except OSError:
+                pass
+            time.sleep(0.5)
+        try:
+            os.unlink("/run/llmos/desk.sock")      # the new desk makes its own
+        except OSError:
+            pass
+
+        def become():
+            os.setsid()
+            if uid != 0:
+                import pwd
+                try:
+                    os.initgroups(pwd.getpwuid(uid).pw_name, gid)
+                except (KeyError, OSError):
+                    pass
+                os.setgid(gid)
+                os.setuid(uid)
+        subprocess.Popen(["/usr/bin/llmos", "desk-app"], env=env, cwd=env.get("HOME", "/"), stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=become, close_fds=True)
         return
-    if subprocess.run(["pgrep", "-x", "labwc"], capture_output=True).returncode:     # nothing started it again
-        subprocess.run(["pkill", "-x", "seatd"], capture_output=True)
+    # no desk program running at all (a test shell, or the desk was closed): start the whole desk session
+    if subprocess.run(["pgrep", "-x", "labwc"], capture_output=True).returncode:
         for f in ("/run/seatd.sock", "/run/llmos/desk.sock"):
             try:
                 os.unlink(f)
@@ -341,6 +389,24 @@ def restart_desk():
                 pass
         subprocess.Popen(["setsid", "/usr/libexec/llmos-desk"], stdin=subprocess.DEVNULL,
                          stdout=open("/run/llmos/desk.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
+
+
+def desk_behind():
+    """True when the desk program started before the last update was installed (it still runs the old files):
+    an update installed by an older client that could not restart the desk properly leaves it that way."""
+    found = _desk_app()
+    last = (_state().get("last") or {})
+    if not found or not last.get("ok") or last.get("desk_restarted"):
+        return False
+    try:
+        with open("/proc/uptime") as f:
+            up = float(f.read().split()[0])
+        with open(f"/proc/{found[0]}/stat") as f:
+            started_ticks = int(f.read().rsplit(")", 1)[1].split()[19])
+        started = time.time() - up + started_ticks / os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError):
+        return False
+    return started < float(last.get("files_at", last.get("ts", 0)))
 
 
 def _restart(services, desk_was_up):
@@ -370,6 +436,14 @@ def _notify(title, text):
         pass
 
 
+def _sha(path):
+    try:
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except OSError:
+        return ""
+
+
 def install(base, m, key, log=print):
     """Fetch, verify and install update manifest m from base. Returns (ok, detail)."""
     data = _get(f"{base}/ota/{m['payload']}", timeout=120, limit=2 * 1024 ** 3)
@@ -388,7 +462,10 @@ def install(base, m, key, log=print):
         if r.returncode:
             return False, f"package {p} could not be installed: {r.stderr.strip()[:200]}"
     desk_was_up = os.path.exists("/run/llmos/desk.sock")
+    me = os.path.join(ROOT, "usr/lib/llmos/llmos/ota.py")
+    before = _sha(me)
     rec = apply_files(payload, os.path.join(STATE_DIR, f"backup-{m['id']}.tar"))
+    install.files_at, install.self_changed = time.time(), _sha(me) != before
     if _restart(m.get("restart", ["desk"]), desk_was_up):
         _stamp_release(m["version"])      # only once it is kept: a rolled-back update leaves the stamp as it was
         return True, f"{len(rec['names'])} files"
@@ -400,6 +477,12 @@ def install(base, m, key, log=print):
 
 def client():
     """The llmos-ota service: wait for updates from the paired server, install each new one once."""
+    try:
+        if paired() and desk_behind():
+            print("ota: the desk still runs the files from before the last update: starting it again", flush=True)
+            restart_desk()
+    except Exception as e:
+        print(f"ota: could not restart the desk: {e}", flush=True)
     while True:
         o = paired()
         if not o:
@@ -441,7 +524,9 @@ def client():
             ok, detail = False, f"error: {e}"
         live = "MEDIUM=live" in (open(RELEASE).read() if os.path.exists(RELEASE) else "")
         st = _state()
-        st["last"] = {"id": m["id"], "version": m["version"], "ok": ok, "detail": detail, "ts": time.time()}
+        st["last"] = {"id": m["id"], "version": m["version"], "ok": ok, "detail": detail, "ts": time.time(),
+                      "files_at": getattr(install, "files_at", time.time()),
+                      "desk_restarted": ok and "desk" in m.get("restart", [])}
         if ok:
             st["id"] = m["id"]
         else:
@@ -455,5 +540,5 @@ def client():
                     + (" This is the live USB, so it lasts until restart." if live else ""))
         else:
             _notify("Update undone", f"An update from {o['name']} was not kept: {detail}.")
-        if ok and any(n.endswith("llmos/ota.py") for n in check_payload(os.path.join(STATE_DIR, "incoming.tar"))):
+        if ok and getattr(install, "self_changed", False):
             os._exit(0)                   # this program itself changed: the service starts the new one
