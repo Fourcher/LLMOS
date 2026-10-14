@@ -152,5 +152,22 @@ check("previous wallpaper comes back", open(dest, "rb").read() == b"AAAA" and C.
 T.set_wallpaper({"subject": "previous"}, ctx())
 check("putting it back twice undoes", open(dest, "rb").read() == b"BBBB")
 
+# 12. "write ... and save it as X": the OS saves the file (the model once said "saved" and wrote nothing), no blanks kept
+r = intent.match("write a short thank-you note to my neighbour and save it as thanks2.txt")
+check("compose-and-save goes to write_document", r == ("write_document", {"request": "a short thank-you note to my neighbour",
+                                                                          "name": "thanks2.txt"}), r)
+from llmos import llm as L  # noqa: E402
+_answers = iter(["Dear [Neighbour's Name],\nThanks for [specific reason].", "Dear neighbour,\n\nThank you for everything.\n\nJordan"])
+_real_chat = L.chat
+L.chat = lambda *a, **k: {"content": next(_answers)}
+try:
+    out = T.write_document({"request": "a short thank-you note to my neighbour", "name": "thanks2.txt"}, ctx())
+finally:
+    L.chat = _real_chat
+saved = os.path.join(HOME, "Documents", "thanks2.txt")
+check("note file exists", os.path.exists(saved), out)
+check("note has no blanks and matches the reply", os.path.exists(saved) and "[" not in open(saved).read()
+      and open(saved).read().strip() in out and "Saved as ~/Documents/thanks2.txt" in out, out)
+
 print("all good" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

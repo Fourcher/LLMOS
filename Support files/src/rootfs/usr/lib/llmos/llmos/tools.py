@@ -3719,6 +3719,45 @@ def make_list(a, ctx):
     return f"made the {lst} list for {topic} with {len(items[:10])} items: " + "; ".join(items[:10]) + ". The list is shown. Say one sentence at most."
 
 
+@tool("write_document", "Write a letter, note, poem or other text the owner asked for and save it as a file: 'write a thank-you "
+      "note to my neighbour and save it as thanks.txt'.", {"request": STR, "name": STR}, ["request", "name"], risk=CHANGE)
+def write_document(a, ctx):
+    """The text is the model's; the saving is done here, so a reply can never say "saved" for a file that isn't there."""
+    req, name = str(a.get("request") or "").strip(), str(a.get("name") or "").strip().strip("'\"")
+    if not req or not name:
+        return "error: what should I write, and under what name?"
+    if not os.path.splitext(name)[1]:
+        name += ".txt"
+    path = _path(name if ("/" in name or name.startswith("~")) else "~/Documents/" + name)
+    who = config.Profile().get("name", "") if hasattr(config, "Profile") else ""
+    if hasattr(ctx, "status"):
+        ctx.status(f"writing {os.path.basename(path)}…")
+    text = ""
+    for attempt in range(2):
+        try:
+            r = llm.chat([{"role": "system", "content": "You write finished text for a person to use as it is. Reply with the text only: "
+                                                       "no title line, no intro, no notes about it. Never leave fill-in blanks such as "
+                                                       "[Name] or [reason]: use what the request says, or leave that part out."
+                                                       + (f" The writer's name is {who}." if who else "")},
+                          {"role": "user", "content": "Write: " + req}], max_tokens=700, temperature=0.5, think=False)
+        except Exception as e:
+            return f"error: the text could not be written ({e})"
+        text = str(r.get("content", "")).strip()
+        if text and not _fill_in_blanks(path, text):
+            break
+    if not text:
+        return "error: no text came back; try again"
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text + "\n")
+    except OSError as e:
+        return f"error: {e.strerror}: {path}"
+    home = config.home().rstrip("/")
+    shown = "~" + path[len(home):] if path.startswith(home) else path
+    return f"{text}\n\nSaved as {shown}."
+
+
 @tool("notes_show", "Show one of the owner's lists (shopping, to-do, notes …) or, with no list, everything, as a window.",
       {"list": STR}, [], risk=READ)
 def notes_show(a, ctx):

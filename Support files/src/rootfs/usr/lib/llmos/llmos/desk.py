@@ -471,8 +471,11 @@ class DeskCtx:
         self._tool_open = False
         cur, self._cur_tool = getattr(self, "_cur_tool", None), None
         # something changed: the windows that show it (files, models, inbox, sound...) show it at once
-        if cur and cur[2] in (tools.CHANGE, tools.DESTRUCTIVE, tools.SECURITY) and not str(result).startswith("error"):
+        if cur and not str(result).startswith("error") and (cur[2] in (tools.CHANGE, tools.DESTRUCTIVE, tools.SECURITY)
+                                                            or cur[0] in ("set_volume", "set_brightness")):
             self.d.refresh_windows()
+            if cur[0] in ("set_volume", "set_brightness"):
+                getattr(self.d, "push_status", lambda: None)()      # the top bar and the video card's slider too
 
     def progress(self, phase, done, total):
         self.d.emit({"t": "progress", "label": {"download": "downloading", "verify": "verifying"}.get(phase, phase),
@@ -1824,14 +1827,14 @@ class Desk:
     def show_apps(self):
         mine = apps.installed()
         items = [{"title": a["title"], "subtitle": time.strftime("%b %d", time.localtime(a["made"])),
-                  "actions": [{"label": T("d_open"), "say": f"open the app {a['id']}", "primary": True},
+                  "actions": [{"label": T("d_open"), "say": f"open the app {a['id']}", "primary": True, "closes": True},
                               {"label": T("d_remove"), "say": f"remove the app {a['id']}", "danger": True}]} for a in mine]
         blocks = [{"type": "list", "items": items}] if items else [{"type": "text", "text": T("d_apps_none"), "dim": True}]
         from . import programs
         progs = programs.everyday()
         if progs:
             blocks += [{"type": "heading", "text": T("d_programs")},
-                       {"type": "buttons", "items": [{"label": lab, "say": f"open {p['name']}"} for lab, p in progs[:40]]}]
+                       {"type": "buttons", "items": [{"label": lab, "say": f"open {p['name']}", "closes": True} for lab, p in progs[:40]]}]
         blocks += [{"type": "heading", "text": T("d_apps_make")},
                    {"type": "buttons", "items": [{"label": t["title"], "say": f"make a {t['id']} app"} for t in apps.templates()]},
                    {"type": "text", "text": T("d_apps_hint"), "dim": True},
@@ -4597,7 +4600,7 @@ class Desk:
 
     def _now_playing(self, info, state):
         self._np = info
-        self.open_window({"id": "nowplaying", "replace": True, "title": T("d_now_playing"), "kind": "media", "size": "s",
+        self.open_window({"id": "nowplaying", "replace": True, "title": T("d_now_playing"), "kind": "media", "size": "s", "slot": "side",
                           "blocks": [{"type": "media", "title": info.get("title", ""), "subtitle": info.get("channel", "") +
                                       (f" · {info['duration']}" if info.get("duration") else ""),
                                       "thumbnail": info.get("thumbnail", ""), "state": state, "link": info.get("url", ""),

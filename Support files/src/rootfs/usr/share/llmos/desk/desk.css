@@ -553,3 +553,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 
 /* the Now playing card has nothing to make bigger: full screen is its own button */
 .win.kind-media .head .max { display: none; }
+#reply.collapsed .text p::after { content: " "; }       /* paragraphs on one line keep a space between them */
+.media .ctl .btn { white-space: nowrap; }
+.list .item .t.opens { cursor: pointer; } .list .item .t.opens:hover { color: var(--accent); }

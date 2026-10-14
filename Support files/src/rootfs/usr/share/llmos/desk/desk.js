@@ -634,7 +634,7 @@
     const w = wins.get(id); if (!w) return;
     w.el.classList.add("geo"); setTimeout(() => w.el.classList.remove("geo"), 350);
     if (!w.max) { w.saved = { left: w.el.offsetLeft + "px", top: w.el.offsetTop + "px", width: w.el.offsetWidth + "px", height: w.el.style.height, maxHeight: w.el.style.maxHeight }; w.el.classList.add("maxed"); w.el.style.left = "12px"; w.el.style.top = "8px"; w.el.style.width = "calc(100% - 24px)"; w.el.style.height = "calc(100% - 16px)"; w.el.style.maxHeight = "none"; }
-    else { Object.assign(w.el.style, w.saved || {}); w.el.classList.remove("maxed"); onScreen(w.el); }
+    else { Object.assign(w.el.style, w.saved || {}); w.el.classList.remove("maxed"); const el2 = w.el; setTimeout(() => onScreen(el2), 360); }   // after the animation: mid-way it is still full width
     w.max = !w.max; raise(w.el); setTimeout(overlaps, 360);
   }
   // a window put back (restore, a smaller screen) is moved so its title bar is on screen and it fits
@@ -748,7 +748,10 @@
   let fullTrust = false;   // the owner chose full trust: a delete button deletes, no "Sure?" first
   function actionBtn(a) {
     const b = el("button", "btn small" + (a.primary ? " primary" : "") + (a.danger ? " danger" : ""), esc(a.label));
-    if (!a.danger || fullTrust) { b.onclick = () => act(a.say); return b; }
+    if (!a.danger || fullTrust) {
+      b.onclick = () => { act(a.say); if (a.closes) { const w = b.closest(".win"); if (w && w.dataset.id) closeWindow(w.dataset.id, true); } };
+      return b;
+    }
     // a button that deletes or ends something asks once more, right where it is: first press "Sure?", second does it
     let armed = null;
     b.onclick = () => {
@@ -788,6 +791,9 @@
           if (it.detail) main.append(el("div", "det", md(it.detail)));
           row.append(main);
           if (it.actions && it.actions.length) { const acts = el("div", "acts"); it.actions.forEach(a => acts.append(actionBtn(a))); row.append(acts); }
+          // a file or folder opens from its name too (a click on the name, a double-click on the row), as in any file window
+          const open1 = (it.actions || []).find(a => !a.danger && /^(show my files in|open the file) /.test(a.say));
+          if (open1) { const tt = main.querySelector(".t"); tt.classList.add("opens"); tt.onclick = () => act(open1.say); row.ondblclick = (ev) => { if (!ev.target.closest("button, .t")) act(open1.say); }; }
           e.append(row);
         });
         return e;

@@ -79,6 +79,8 @@ def _action(a):
         out["primary"] = True
     if a.get("danger"):
         out["danger"] = True
+    if a.get("closes"):
+        out["closes"] = True          # pressing it also closes its window (a program picked from the apps grid)
     return out
 
 

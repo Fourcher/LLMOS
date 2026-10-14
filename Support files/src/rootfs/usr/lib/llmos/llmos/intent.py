@@ -1762,6 +1762,11 @@ def _everyday2(text):
             u = "minutes" if u == "hours" else u
         length = f"{n} {u[:-1] if n.strip() == '1' and u.endswith('s') else u}"      # "1 minute", not "1 minutes"
         return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
+    # "write a thank-you note to my neighbour and save it as thanks.txt": the text is written, then saved by the OS
+    m = re.match(r"^(?:please\s+)?(?:write|draft|compose|make|create)\s+(?:me\s+)?(?P<w>.+?)\s+and\s+(?:save|put|store|keep)\s+it\s+"
+                 r"(?:as|in|to|into|under)\s+(?:a\s+file\s+(?:called|named)\s+)?(?P<f>[\w .'-]+?\.(?:txt|md))\s*[.!]?$", low)
+    if m:
+        return ("write_document", {"request": t[m.start("w"):m.end("w")].strip(), "name": t[m.start("f"):m.end("f")].strip()})
     # a list for a topic: "make a to-do list for moving house", "a packing list for a beach trip"
     m = re.match(r"^(?:please\s+)?(?:make|create|write|start|give\s+me|draw\s+up)\s+(?:me\s+)?(?:a\s+|an\s+|my\s+)?(?P<l>to-?do|todo|packing|shopping|check)\s*-?list\s+"
                  r"(?:for|about|to)\s+(?P<t>.+?)\s*[.!]?$", low)
