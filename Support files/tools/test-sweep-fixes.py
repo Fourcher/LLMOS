@@ -129,5 +129,12 @@ check("search the web for a thing -> browser", intent.match("search the web for 
 # 9. which model / what version: instant answers
 check("which model are you using: instant", bool(everyday.MATCH.search("which model are you using")) and bool(everyday._MODEL_Q.match("which model are you using")))
 
+# 10. "delete notes.txt" when the file is inside a folder: the one file of that name
+os.makedirs(os.path.join(HOME, "Documents", "Sweep Test"), exist_ok=True)
+inner = os.path.join(HOME, "Documents", "Sweep Test", "inner-notes.txt")
+open(inner, "w").write("x")
+out = agent.execute(ctx(), "delete_file", '{"path": "inner-notes.txt"}')
+check("delete by bare name finds the file in a folder", "moved" in out and not os.path.exists(inner), out)
+
 print("all good" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

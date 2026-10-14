@@ -1203,8 +1203,9 @@ def _shortcut_words(name, args, out):
         m = re.match(r"(\d+) unread message", out)
         rows = re.findall(r"(?m)^\[\d+\][^|\n]*\|\s*(.+?)\s*\|\s*(.+)$", out)
         lead = f"{m.group(1)} unread email{'s' if m and m.group(1) != '1' else ''}" if m else "Your unread email"
-        return lead + (": " + "; ".join(f"{re.sub(r'<.*', '', s).strip()} ({t.strip()[:60]})" for s, t in rows[:3]) if rows else "") + \
-            (" …" if len(rows) > 3 else "") + ". They're listed on the screen."
+        # every message, one per line (it stopped at three with "…", which read as cut off)
+        return lead + (":\n" + "\n".join(f"• {re.sub(r'<.*', '', s).strip()}: {t.strip()[:70]}" for s, t in rows[:12]) if rows else ".") + \
+            (f"\n…and {len(rows) - 12} more in the window." if len(rows) > 12 else "")
     if name == "mail_read":
         if low.startswith("error: no message matches"):
             who = str(args.get("id", "")).strip()
@@ -1442,6 +1443,16 @@ def execute(ctx, name, arguments):
             gone = not os.path.lexists(os.path.abspath(tools._path(p)))
         except Exception:
             gone = False
+        if gone and p and "/" not in p and not p.startswith("~"):
+            # a bare name ("delete notes.txt"): the one file of that name in the owner's folders
+            hits = [h for h in tools.find_paths(p) if os.path.basename(h).lower() == p.lower()]
+            if len(hits) == 1:
+                args = dict(args, path=hits[0])
+                gone = False
+            elif len(hits) > 1:
+                home = config.home().rstrip("/")
+                return ("there are several files called " + p + ": "
+                        + ", ".join("~" + h[len(home):] if h.startswith(home) else h for h in hits[:5]) + ". Ask which one.")
         if gone:
             return f"error: there's nothing called {p} to delete"   # nothing to ask about
     # an unasked call (a gate miss, see above) is shown first like ALWAYS_CONFIRM, and runs without asking under full trust

@@ -1810,7 +1810,7 @@ def mail_inbox(a, ctx):
         return f"error: {e}"
     if not items:
         return "no unread mail"
-    show(ctx, {"title": f"Inbox · {len(items)}", "size": "l", "blocks": [{"type": "list", "items": [
+    show(ctx, {"id": "mail-inbox", "title": f"Inbox · {len(items)}", "size": "l", "blocks": [{"type": "list", "items": [
         {"id": m["uid"], "title": _sender_name(m["from"])[:60], "subtitle": m["subject"][:90],
          "actions": [{"label": i18n.t("d_read"), "say": f"read email {m['uid']}"},
                      {"label": i18n.t("d_archive"), "say": f"archive email {m['uid']}"}]} for m in items]},
