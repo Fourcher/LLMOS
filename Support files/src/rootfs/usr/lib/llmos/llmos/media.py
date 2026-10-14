@@ -240,7 +240,7 @@ def play_windowed(info, audio_only, env):
     # gpu output only through a Wayland GL context (never X11); without one
     # (a VM) mpv falls back to plain shared-memory frames
     args = ["mpv", f"--input-ipc-server={IPC}", "--wayland-app-id=llmos-media", f"--title={info.get('title', 'LLM OS')[:80]}",
-            "--osc=yes", f"--input-conf={_input_conf()}", "--vo=gpu,wlshm", "--gpu-context=wayland", "--geometry=55%x55%", "--autofit-larger=90%x85%",
+            "--osc=yes", f"--input-conf={_input_conf()}", "--vo=gpu,wlshm", "--gpu-context=wayland", "--geometry=50%x50%", "--autofit-larger=90%x85%",
             *_common_args()]
     if os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1" or env.get("LIBGL_ALWAYS_SOFTWARE") == "1":
         args[args.index("--vo=gpu,wlshm")] = "--vo=wlshm"
