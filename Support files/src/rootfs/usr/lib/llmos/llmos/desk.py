@@ -2529,6 +2529,22 @@ class Desk:
             else:
                 self.show_away(force=True)      # an explicit owner request: the card opens even under do-not-disturb
             return True
+        # the video / music player: full screen, back, close (before "close <program>", which did not know it)
+        if media.playing():
+            q = low.rstrip("?.! ")
+            if re.fullmatch(r"(?:make\s+|put\s+|turn\s+|go\s+|watch\s+)?(?:the\s+|this\s+|my\s+)?(?:video|movie|player)?\s*(?:in\s+|to\s+)?(?:full ?screen)(?:\s+(?:the\s+)?(?:video|player|mode))?|(?:make|put)\s+(?:it|the video|this)\s+(?:bigger|full ?screen)|maximi[sz]e\s+(?:the\s+)?(?:video|player)", q):
+                media.ipc({"command": ["set_property", "fullscreen", True]})
+                wm.act("focus", "llmos-media")
+                self.instant_reply(line, "Full screen. Press Esc or say “exit full screen” to go back.")
+                return True
+            if re.fullmatch(r"(?:exit|leave|stop|end|undo)\s+(?:the\s+)?full ?screen(?:\s+mode)?|(?:make|put)\s+(?:it|the video)\s+(?:smaller|back)|un-?full ?screen", q):
+                media.ipc({"command": ["set_property", "fullscreen", False]})
+                self.instant_reply(line, "Back to a window.")
+                return True
+            if re.fullmatch(r"(?:close|stop|quit|end|turn off|exit|shut)\s+(?:the\s+|this\s+|my\s+)?(?:video|movie|music|song|player|media player|playback)(?:\s+player)?", q):
+                self.media_action("stop")
+                self.instant_reply(line, "Stopped and closed.")
+                return True
         hit = self._app_question(low)
         if hit:
             kind, a, wid = hit
@@ -4398,6 +4414,9 @@ class Desk:
             ok = media.ipc({"command": ["set_property", "pause", action == "pause"]})
             if ok:
                 self._refresh_now_playing("paused" if action == "pause" else "playing")
+                if (getattr(self, "_np", None) or {}).get("video"):
+                    # asking the desk brought it in front of the video: the picture comes back to the front
+                    threading.Timer(0.4, lambda: wm.act("focus", "llmos-media")).start()
             return (action + "d") if ok else "nothing is playing"
         if action == "volume":
             v = kw.get("value")

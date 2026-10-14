@@ -30,7 +30,8 @@ def check(cond, what):
 
 # the shortcut up to the first route after the new one (everything before it is the part under test)
 method = src[src.index("    def shortcut(self, line):"):src.index("        hit = self._app_question(low)")]
-ns = {"re": re, "intent": intent, "store": None}
+ns = {"re": re, "intent": intent, "store": None,
+      "media": type("NoPlayer", (), {"playing": staticmethod(lambda: None)})}   # nothing playing: the player phrases step aside
 exec("class Desk:\n" + method, ns)
 Desk = ns["Desk"]
 

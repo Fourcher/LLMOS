@@ -105,5 +105,29 @@ D.said = None
 everyday.handle(D(), "add call the bank to todo.txt")
 check("a real append still works", (D.said or "").startswith("Added"), D.said)
 
+# 5. a program's own name opens that program (/usr/bin/Thunar made "Thunar File Manager" run as Thunar + 2 files)
+from llmos import programs  # noqa: E402
+a = programs.argv({"exec": "mpv --player-operation-mode=pseudo-gui --"})
+check("mpv as a program gets Wayland output, no stray --", a[:3] == ["mpv", "--vo=gpu,wlshm", "--gpu-context=wayland"] and a[-1] != "--", a)
+check("other programs unchanged", programs.argv({"exec": "thunar"}) == ["thunar"])
+
+# 6. wallpaper: "a picture of mountains" searches mountains; putting it back is the default
+check("wallpaper subject without 'a picture of'", intent.match("set my wallpaper to a picture of mountains") == ("set_wallpaper", {"subject": "mountains"}))
+for q in ("put the wallpaper back to how it was", "change the wallpaper back to the original one", "reset my wallpaper"):
+    check(f"wallpaper back: {q!r}", intent.match(q) == ("set_wallpaper", {"subject": "default"}), intent.match(q))
+
+# 7. settings back: language and colours (they changed other settings before)
+check("language back to English", intent.match("change the language back to English") == ("set_appearance", {"language": "english"}))
+check("switch back to english", intent.match("switch back to english") == ("set_appearance", {"language": "english"}))
+check("colour back to dark", intent.match("change the colour back to dark") == ("set_appearance", {"theme": "dark"}))
+check("not a language", intent.match("switch back to blue") is None)
+
+# 8. a question searched on the web gets an answer (the assistant), not just a browser window
+check("search the web for a question -> answer", intent.match("search the web for the population of Tokyo") is None)
+check("search the web for a thing -> browser", intent.match("search the web for cheap flights to Denver") == ("browse", {"search": "cheap flights to Denver"}))
+
+# 9. which model / what version: instant answers
+check("which model are you using: instant", bool(everyday.MATCH.search("which model are you using")) and bool(everyday._MODEL_Q.match("which model are you using")))
+
 print("all good" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

@@ -1224,12 +1224,44 @@ _WALLPAPER = re.compile(r"^\s*(?:please\s+)?(?:(?:use|set|put|make|show)\s+(?:a|
                         r"|(?P<none>remove|clear|turn off|no)\s+(?:my\s+|the\s+)?wallpaper)\s*[.!]?\s*$", re.I)
 
 
+_WALLPAPER_BACK = re.compile(r"^\s*(?:please\s+)?(?:(?:put|change|set|turn|switch|bring)\s+(?:my\s+|the\s+)?(?:wallpaper|background|desktop(?:\s+background)?)"
+                             r"\s+back(?:\s+to\s+(?:how\s+it\s+was|normal|the\s+(?:original|default|old|usual)(?:\s+one)?|what\s+it\s+was))?"
+                             r"|(?:reset|restore|undo)\s+(?:my\s+|the\s+)?(?:wallpaper|background|desktop(?:\s+background)?)"
+                             r"|(?:set|change|put)\s+(?:my\s+|the\s+)?(?:wallpaper|background)\s+(?:back\s+)?to\s+(?:the\s+)?(?:default|original|normal|usual)(?:\s+one)?)\s*[.!]?\s*$", re.I)
+
+
+_SETTING_BACK = re.compile(r"^\s*(?:please\s+)?(?:change|set|switch|put|turn|go)\s+(?:the\s+|my\s+)?(?:(?P<k>language|colou?rs?|theme|look|screen)\s+)?back\s+(?:to\s+)?"
+                           r"(?:the\s+)?(?P<v>[a-zà-ÿ]+(?:\s+mode)?)\s*[.!]?\s*$", re.I)
+
+
+def _setting_back(text):
+    """'change the language back to English', 'switch back to English', 'change the colour back to dark'."""
+    m = _SETTING_BACK.match(text)
+    if not m:
+        return None
+    k, v = (m.group("k") or "").lower(), m.group("v").lower().removesuffix(" mode")
+    from . import i18n
+    if k == "language" or (not k and v in i18n._ALIAS):     # a language the OS knows by name, not "blue"
+        return ("set_appearance", {"language": v})
+    if v in ("dark", "light", "default", "normal", "original", "usual"):
+        return ("set_appearance", {"theme": "default" if v in ("normal", "original", "usual") else v})
+    return None
+
+
 def _photo(text):
+    r = _setting_back(text)
+    if r:
+        return r
+    if _WALLPAPER_BACK.match(text):
+        return ("set_wallpaper", {"subject": "default"})      # the built-in background, as it was before
     m = _WALLPAPER.match(text)
     if m:
         if m.group("none"):
             return ("set_wallpaper", {"subject": "none"})
-        return ("set_wallpaper", {"subject": (m.group("what") or m.group("what2")).strip()})
+        what = (m.group("what") or m.group("what2")).strip()
+        # "a picture of mountains": the search is for mountains, not for the words "picture of"
+        what = re.sub(r"(?i)^(?:a\s+|an\s+|some\s+)?(?:nice\s+|beautiful\s+|pretty\s+)?(?:picture|photo|photograph|image|pic|shot)s?\s+of\s+(?:a\s+|an\s+|the\s+|some\s+)?", "", what) or what
+        return ("set_wallpaper", {"subject": what})
     m = _PHOTO.match(text)
     if m and not re.search(r"\bwallpaper|background\b", text, re.I):
         what = m.group("what").strip()

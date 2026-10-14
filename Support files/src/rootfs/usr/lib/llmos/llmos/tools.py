@@ -720,6 +720,8 @@ def _protect_layout(css):
         "should differ from the rest (e.g. 'settings in Chinese, rest in English' -> language=English, "
         "settings_language=Chinese)"}})
 def set_appearance(a, ctx):
+    if a.get("theme"):
+        a = dict(a, theme=re.sub(r"(?i)^(?:back\s+to\s+|to\s+)", "", str(a["theme"])).removesuffix(" mode").strip())   # "go back to light mode"
     corners = None
     if a.get("corners"):
         corners = str(a["corners"]).lower().strip()
@@ -829,7 +831,7 @@ def set_appearance(a, ctx):
             if key == "settings_language" and i18n.lang_code(val) == i18n.lang_code(config.settings.get("language")):
                 val = ""
             config.settings.set(key, i18n.display_name(val) if val else "")
-            changed.append(f"{key.replace('_', ' ')} {val or 'same as everything'}")
+            changed.append(f"{key.replace('_', ' ')} {i18n.display_name(val) if val else 'same as everything'}")
             if val and i18n.lang_code(val) not in i18n.BUILTIN:
                 ctx.background(lambda v=val: i18n.table_for(v))
     if not changed:
@@ -4009,6 +4011,12 @@ def open_app(a, ctx):
     # (also when the words are the program's own command, "pavucontrol": a program with a menu entry is a window program)
     # a command line with arguments ("thunar /root/Documents") is run as written below
     is_command_line = len(cmd.split()) > 1 and shutil.which(cmd.split()[0])
+    if is_command_line:
+        # an installed program's own name ("Thunar File Manager": /usr/bin/Thunar exists too) is that program, not
+        # "Thunar" with the files "File" and "Manager"
+        named = programs.find(cmd)
+        if named and str(named.get("name", "")).lower() == cmd.strip().lower():
+            is_command_line = False
     if hasattr(ctx, "launch") and _display_available() and not is_command_line:
         p = programs.find(cmd)
         if p and p.get("terminal"):

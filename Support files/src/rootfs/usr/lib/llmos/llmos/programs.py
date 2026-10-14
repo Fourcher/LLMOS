@@ -140,6 +140,11 @@ def refresh():
 
 def argv(p, arg=None):
     a = shlex.split(p["exec"])
+    if a and os.path.basename(a[0]) == "mpv" and not any(x.startswith("--vo") for x in a):
+        # mpv's default output tries X11 first, and there is no X server here: it stopped with an assertion
+        a[1:1] = ["--vo=gpu,wlshm", "--gpu-context=wayland"]
+    if a and a[-1] == "--":
+        a.pop()                                  # (the "-- %U" of a menu entry with no file given)
     if arg:
         a.append(arg)
     return a
