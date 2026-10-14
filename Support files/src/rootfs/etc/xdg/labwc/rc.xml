@@ -32,7 +32,7 @@
     <windowRule identifier="org.llmos.desk" serverDecoration="no" skipTaskbar="yes" skipWindowSwitcher="no" fixedPosition="yes"><action name="ToggleOmnipresent"/></windowRule>
     <!-- the video player: top left under the bar, clear of the Now playing card (right) and the request box
          (bottom), and kept in front so a click on the desk does not hide it -->
-    <windowRule identifier="llmos-media"><action name="MoveToEdge" direction="up" snapWindows="no"/><action name="MoveToEdge" direction="left" snapWindows="no"/><action name="MoveRelative" x="16" y="10"/><action name="ToggleAlwaysOnTop"/><action name="Raise"/></windowRule>
+    <windowRule identifier="llmos-media"><action name="MoveToEdge" direction="up" snapWindows="no"/><action name="MoveToEdge" direction="left" snapWindows="no"/><action name="MoveRelative" x="16" y="60"/><action name="ToggleAlwaysOnTop"/><action name="Raise"/></windowRule>
   </windowRules>
   <keyboard>
     <keybind key="A-Tab"><action name="NextWindow"/></keybind>
