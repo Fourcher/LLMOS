@@ -987,6 +987,35 @@ def show_image(a, ctx):
     return f"shown: {info['title']} ({credit}). Source: {info['page']}. Say one sentence at most; do not describe the photo."
 
 
+def _keep_previous_wallpaper(dest, swap=False):
+    """Before the wallpaper changes, keep what it was (picture and background style) so "put it back" can restore
+    it. swap=True restores that kept one (and keeps the current one in its place, so "put it back" twice undoes)."""
+    prev = dest + ".prev"
+    cur_backdrop = config.settings.get("appearance.backdrop") or "living"
+    if swap:
+        prev_backdrop = config.settings.get("appearance.prev_backdrop") or "living"
+        if os.path.exists(prev):
+            tmp = dest + ".swap"
+            if os.path.exists(dest):
+                os.replace(dest, tmp)
+            os.replace(prev, dest)
+            if os.path.exists(tmp):
+                os.replace(tmp, prev)
+        elif os.path.exists(dest):
+            os.replace(dest, prev)
+        config.settings.set("appearance.backdrop", prev_backdrop if (prev_backdrop != "photo" or os.path.exists(dest)) else "living")
+        config.settings.set("appearance.prev_backdrop", cur_backdrop)
+        return
+    if os.path.exists(dest):
+        shutil.copyfile(dest, prev)
+    else:
+        try:
+            os.unlink(prev)
+        except OSError:
+            pass
+    config.settings.set("appearance.prev_backdrop", cur_backdrop)
+
+
 @tool("set_wallpaper", "Set the wallpaper: a picture file of the owner's (its path), 'random' (one of their pictures), a photo of "
       "a subject from the web (Wikimedia Commons), or 'default'. Only when a wallpaper/background is asked for; to just show a photo, use show_image.",
       {"subject": {"type": "string", "description": "what the photo should show, e.g. 'the Alps at dawn'; or the path of the owner's own picture (~/Pictures/beach.jpg); 'random' = a random one of the owner's pictures; 'none' or 'default' puts the default background back"}},
@@ -1007,7 +1036,17 @@ def set_wallpaper(a, ctx):
     if subject.lower() in ("none", "remove", "off", "") and req and not re.search(r"\b(remove|no|off|delete|get rid|plain|clear|without|stop|default|original|normal|back)\b", req, re.I):
         return "not done: you did not ask to remove the wallpaper. Ask which picture they mean."
     dest = config.data("wallpaper.img")
+    if subject.lower() in ("previous", "last", "before", "undo"):
+        # "put the wallpaper back to how it was": the one before the last change
+        prev, prev_backdrop = dest + ".prev", config.settings.get("appearance.prev_backdrop")
+        if not prev_backdrop and not os.path.exists(prev):
+            subject = "none"
+        else:
+            _keep_previous_wallpaper(dest, swap=True)
+            ctx.redraw()
+            return "wallpaper put back to how it was"
     if subject.lower() in ("none", "remove", "off", ""):
+        _keep_previous_wallpaper(dest)
         try:
             os.unlink(dest)
         except OSError:
@@ -1023,6 +1062,7 @@ def set_wallpaper(a, ctx):
     if local and os.path.isfile(local):
         if os.path.splitext(local)[1].lower() not in _IMAGE_EXT:
             return f"error: {os.path.basename(local)} is not a picture"
+        _keep_previous_wallpaper(dest)
         shutil.copyfile(local, dest + ".tmp")
         os.replace(dest + ".tmp", dest)
         config.settings.set("appearance.backdrop", "photo")
@@ -1031,6 +1071,7 @@ def set_wallpaper(a, ctx):
     try:
         info = web.wikimedia_image(subject)
         web.fetch(info["url"], dest=dest + ".tmp")
+        _keep_previous_wallpaper(dest)
         os.replace(dest + ".tmp", dest)
     except (web.WebError, OSError) as e:
         return f"no photo found: {e}"

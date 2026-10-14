@@ -3635,7 +3635,7 @@ class Desk:
                                                 "updates": "Checking for updates; the list is on the right."}[which]
                 if which == "storage":          # the numbers in words too, not only in the window
                     try:
-                        u = shutil.disk_usage(config.home())
+                        u = shutil.disk_usage("/")          # the same disk the storage window shows
                         self.last_reply = self._said = f"You have {u.free / 1e9:.1f} GB free of {u.total / 1e9:.1f} GB. The details are in the window."
                     except OSError:
                         pass

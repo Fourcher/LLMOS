@@ -1253,7 +1253,9 @@ def _photo(text):
     if r:
         return r
     if _WALLPAPER_BACK.match(text):
-        return ("set_wallpaper", {"subject": "default"})      # the built-in background, as it was before
+        # "back to how it was" / "undo": the previous one; "back to the default / original", "reset": the built-in one
+        prev = re.search(r"(?i)how it was|what it was|previous|\bold\b|undo|back\s*[.!]?\s*$", text) and not re.search(r"(?i)default|original|normal|usual|reset", text)
+        return ("set_wallpaper", {"subject": "previous" if prev else "default"})
     m = _WALLPAPER.match(text)
     if m:
         if m.group("none"):

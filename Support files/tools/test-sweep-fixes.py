@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.join(_ROOT, "usr/lib/llmos"))
 os.environ.setdefault("LLMOS_SHARE", os.path.join(_ROOT, "usr/share/llmos"))
 HOME = tempfile.mkdtemp(prefix="sweep-home-")
 os.environ["LLMOS_HOME"] = HOME
+os.environ["LLMOS_ETC"] = os.path.join(HOME, "etc")      # settings written here, not through the root helper
+os.makedirs(os.environ["LLMOS_ETC"], exist_ok=True)
 for d in ("Documents/Sweep Test", "Downloads", "Desktop"):
     os.makedirs(os.path.join(HOME, d), exist_ok=True)
 open(os.path.join(HOME, "Documents", "my-notes.txt"), "w").write("x\n")
@@ -113,8 +115,9 @@ check("other programs unchanged", programs.argv({"exec": "thunar"}) == ["thunar"
 
 # 6. wallpaper: "a picture of mountains" searches mountains; putting it back is the default
 check("wallpaper subject without 'a picture of'", intent.match("set my wallpaper to a picture of mountains") == ("set_wallpaper", {"subject": "mountains"}))
-for q in ("put the wallpaper back to how it was", "change the wallpaper back to the original one", "reset my wallpaper"):
-    check(f"wallpaper back: {q!r}", intent.match(q) == ("set_wallpaper", {"subject": "default"}), intent.match(q))
+for q, want in (("put the wallpaper back to how it was", "previous"), ("undo the wallpaper", "previous"),
+                ("change the wallpaper back to the original one", "default"), ("reset my wallpaper", "default")):
+    check(f"wallpaper back: {q!r}", intent.match(q) == ("set_wallpaper", {"subject": want}), intent.match(q))
 
 # 7. settings back: language and colours (they changed other settings before)
 check("language back to English", intent.match("change the language back to English") == ("set_appearance", {"language": "english"}))
@@ -135,6 +138,19 @@ inner = os.path.join(HOME, "Documents", "Sweep Test", "inner-notes.txt")
 open(inner, "w").write("x")
 out = agent.execute(ctx(), "delete_file", '{"path": "inner-notes.txt"}')
 check("delete by bare name finds the file in a folder", "moved" in out and not os.path.exists(inner), out)
+
+# 11. "put the wallpaper back to how it was" restores the previous picture (it reset to the default)
+from llmos import tools as T, config as C  # noqa: E402
+pa, pb = os.path.join(HOME, "a.png"), os.path.join(HOME, "b.png")
+open(pa, "wb").write(b"AAAA")
+open(pb, "wb").write(b"BBBB")
+T.set_wallpaper({"subject": pa}, ctx())
+T.set_wallpaper({"subject": pb}, ctx())
+T.set_wallpaper({"subject": "previous"}, ctx())
+dest = C.data("wallpaper.img")
+check("previous wallpaper comes back", open(dest, "rb").read() == b"AAAA" and C.settings.get("appearance.backdrop") == "photo")
+T.set_wallpaper({"subject": "previous"}, ctx())
+check("putting it back twice undoes", open(dest, "rb").read() == b"BBBB")
 
 print("all good" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)
