@@ -309,9 +309,14 @@ def lists():
 
 
 @_locked
-def notify(title, text, alarm=False):
+def notify(title, text, alarm=False, replace=False):
+    """replace: an older unseen note with the same title is superseded (one "Updated" row, not one per update)."""
     path = config.data("inbox.json")
     cur = config.load_json(path, [])
+    if replace:
+        for m in cur:
+            if m.get("title") == title and not m.get("seen"):
+                m["seen"] = True
     cur.append({"id": uuid.uuid4().hex[:8], "ts": time.time(), "title": title,
                 "text": text, "seen": False, **({"alarm": True} if alarm else {})})
     config.save_json(path, cur[-200:])
@@ -328,6 +333,17 @@ def mark_seen(ids):
     for m in cur:
         if m["id"] in ids:
             m["seen"] = True
+    config.save_json(path, cur)
+
+
+@_locked
+def mark_rung(ids):
+    """Announced (toast, chime, the reminder's own window): a restart shows the card again but does not ring again."""
+    path = config.data("inbox.json")
+    cur = config.load_json(path, [])
+    for m in cur:
+        if m["id"] in ids:
+            m["rung"] = True
     config.save_json(path, cur)
 
 

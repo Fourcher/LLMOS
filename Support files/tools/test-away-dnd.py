@@ -75,12 +75,16 @@ class Store:
     """Records seen-state the way the store does: items stay unseen until mark_seen."""
     def __init__(self):
         self.seen = set()
+        self.rung = set()
 
     def unseen(self):
-        return [m for m in MSG if m["id"] not in self.seen]
+        return [dict(m, rung=m["id"] in self.rung) for m in MSG if m["id"] not in self.seen]
 
     def mark_seen(self, ids):
         self.seen.update(ids)
+
+    def mark_rung(self, ids):
+        self.rung.update(ids)
 
 
 class Ui:
@@ -120,7 +124,7 @@ def reset_stubs():
 
 def call(desk, settings, force=False):
     """Run show_away once on the given desk (the same desk across polls keeps _inbox_key, away_ids)."""
-    g = {"os": os, "re": re, "config": Config(settings), "devices": DEV, "voice": VOICE,
+    g = {"os": os, "re": re, "threading": type("T", (), {"Timer": staticmethod(lambda t, fn: type("X", (), {"start": lambda self: fn()})())}), "config": Config(settings), "devices": DEV, "voice": VOICE,
          "store": STORE, "ui": Ui(), "T": lambda k: k}
     exec(compile(show_away, "show_away", "exec"), g)
     desk.show_away = g["show_away"].__get__(desk, Desk)
@@ -182,6 +186,22 @@ check(d.away_ids == [1, 2] and STORE.seen == set(), "away_ids set; still nothing
 print("unchanged poll under do not disturb off after an explicit request")
 call(d, Settings(do_not_disturb=False, chime=True, speak_replies=False))
 check(len(d.windows) == 1, "no duplicate card on the normal poll")
+
+print("desk started again (an update or a reboot) with the card never closed")
+d = call(reset_stubs(), Settings(do_not_disturb=False, chime=True, speak_replies=True))
+check(STORE.rung == {1, 2}, "both items recorded as announced")
+DEV.chimes = 0
+VOICE.spoken = []
+d2 = call(Desk(), Settings(do_not_disturb=False, chime=True, speak_replies=True))
+check(len(d2.windows) == 1 and titles(d2) == ["Mail", "Timer"], "the card comes back with the unseen items")
+check(d2.emitted == [] and DEV.chimes == 0 and VOICE.spoken == [], "no second toast, chime or speech")
+MSG.append({"id": 3, "title": "Reminder", "text": "Stand up.", "alarm": True})
+d3 = call(Desk(), Settings(do_not_disturb=False, chime=True, speak_replies=False))
+check([m.get("text") for m in d3.emitted] == ["Stand up."] and DEV.chimes == 2, "a new item rings (toast; chime twice for an alarm)")
+check([w["id"] for w in d3.windows] == ["away", "alarm"], "a new reminder gets its own window")
+d4 = call(Desk(), Settings(do_not_disturb=False, chime=True, speak_replies=False))
+check([w["id"] for w in d4.windows] == ["away"], "after a restart the reminder's window does not open again")
+MSG.pop()
 
 if fails:
     print(f"{fails} FAILED")

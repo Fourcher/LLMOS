@@ -234,6 +234,39 @@ def _display_scale(monitor):
     return 2.0 if ppi >= 192 else 1.5 if ppi >= 144 else 1.25 if ppi >= 120 else 1.0
 
 
+def _scale_outputs_first(desk):
+    """Give each screen its size (125% on a typical laptop) before the desk opens its window: WebKit misses a
+    scale change that comes after the page is laid out, and the desk then stays about half again too big.
+    _apply_zoom does the same later for screens that appear afterwards."""
+    if os.environ.get("LLMOS_NO_OUTPUT_SCALE") or not shutil.which("wlr-randr"):
+        return
+    try:
+        p = subprocess.run(["wlr-randr", "--json"], capture_output=True, text=True, timeout=10)
+        outs = json.loads(p.stdout or "[]") if p.returncode == 0 else []
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return
+    done = {}
+    for o in outs if isinstance(outs, list) else []:
+        try:
+            if not o.get("enabled") or float(o.get("scale") or 1) != 1:
+                continue
+            mode = next((m for m in o.get("modes") or [] if m.get("current")), None)
+            mm = int((o.get("physical_size") or {}).get("width") or 0)
+            if o.get("transform") in ("90", "270", "flipped-90", "flipped-270"):
+                mm = int((o.get("physical_size") or {}).get("height") or 0)
+            if not mode or not (150 <= mm <= 1000):
+                continue
+            ppi = int(mode["width"]) / (mm / 25.4)
+            sc = 2.0 if ppi >= 192 else 1.5 if ppi >= 144 else 1.25 if ppi >= 120 else 1.0
+            if sc > 1 and subprocess.run(["wlr-randr", "--output", o["name"], "--scale", str(sc)],
+                                         capture_output=True, timeout=10).returncode == 0:
+                done[o["name"]] = sc
+                sys.stderr.write(f"desk: screen {o['name']} at {int(sc * 100)}% ({ppi:.0f} pixels per inch)\n")
+        except (KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError):
+            continue
+    desk._out_scaled = done
+
+
 _CHROMIUM_APPS = ("com.visualstudio.code", "com.discordapp.Discord", "com.slack.Slack", "md.obsidian.Obsidian", "org.signal.Signal",
                   "com.github.IsmaelMartinez.teams_for_linux", "com.spotify.Client", "com.brave.Browser", "com.rtosta.zapzap")
 
@@ -758,6 +791,7 @@ class Desk:
     # ---- GTK / WebKit
 
     def run(self):
+        _scale_outputs_first(self)
         import gi
         gi.require_version("Gtk", "4.0")
         gi.require_version("Gdk", "4.0")
@@ -1202,6 +1236,9 @@ class Desk:
                 self._reloaded = False
                 for wid, spec in list(self.windows.items()):    # the windows that were open before the page ended
                     self.emit({"t": "window", "id": wid, "spec": spec})
+        elif t == "metrics":
+            sys.stderr.write(f"desk: page {msg.get('w')}x{msg.get('h')} css px, device pixel ratio {msg.get('dpr')}, text {msg.get('fs')}\n")
+            self._check_page_size(msg)
         elif t in ("rect.result", "rects.result"):
             slot = self._rect_wait.get(str(msg.get("id")))
             if slot is not None:
@@ -1644,12 +1681,43 @@ class Desk:
                 g = mon.get_geometry() if mon is not None else None
                 sys.stderr.write(f"desk: zoom {self._zoom():.2f} (screen {g.width if g else '?'}x{g.height if g else '?'} logical, "
                                  f"{mon.get_width_mm() if mon is not None else '?'} mm, gtk scale {mon.get_scale() if mon is not None and hasattr(mon, 'get_scale') else '?'}, "
-                                 f"display_scale {self.display_scale})\n")
+                                 f"display_scale {self.display_scale}, window {self.gtkwin.get_width() if getattr(self, 'gtkwin', None) else '?'}x"
+                                 f"{self.gtkwin.get_height() if getattr(self, 'gtkwin', None) else '?'})\n")
+                self.GLib.timeout_add(1000, lambda: (self.emit({"t": "eval", "js": "window.webkit.messageHandlers.llmos.postMessage({t: 'metrics', "
+                                      "w: innerWidth, h: innerHeight, dpr: devicePixelRatio, fs: getComputedStyle(document.body).fontSize})"}), False)[1])
             except Exception:
                 pass
         except Exception as e:
             sys.stderr.write(f"desk: zoom not applied: {e}\n")
         return False
+
+    def _check_page_size(self, msg):
+        """WebKit can miss a screen-scale change made after the page loaded (the boot sets 125% on a laptop
+        screen a moment after the desk starts): the page then lays out for a smaller screen and everything is
+        about half again too big. Nudge the zoom so it measures again; if that is not enough, load the page anew."""
+        try:
+            w = float(msg.get("w") or 0)
+            win = self.gtkwin.get_width() if getattr(self, "gtkwin", None) is not None else 0
+            want = win / self._zoom() if win else 0
+        except Exception:
+            return
+        if not (w and want) or abs(w - want) <= want * 0.03:
+            self._size_fixes = 0
+            return
+        n = getattr(self, "_size_fixes", 0)
+        if n >= 3:
+            return
+        self._size_fixes = n + 1
+        sys.stderr.write(f"desk: page is {w:.0f} css px wide on a {win} px window: {'starting the desk again' if n else 'zoom nudge'}\n")
+        if n == 0:
+            self.webview.set_zoom_level(self._zoom() * 1.01)
+            self.webview.set_zoom_level(self._zoom())
+            self.GLib.timeout_add(1500, self._apply_zoom)
+        else:
+            # loading the page again does not help (the web process keeps the old size); a new desk does
+            subprocess.Popen([sys.executable, "-c", "from llmos import ota; ota.restart_desk()"], start_new_session=True,
+                             cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def apply_theme(self):
         ui.reload_theme()
@@ -2233,7 +2301,8 @@ class Desk:
         self.open_window({"id": "away", "replace": True, "title": T("while_away"), "size": "m", "slot": "cascade",
                           "blocks": [{"type": "list", "items": items}]})
         self.away_ids = [m["id"] for m in un]          # marked seen when the owner closes the card
-        alarms = [m for m in un if m.get("alarm") and m["id"] not in getattr(self, "_alarms_shown", set())]
+        fresh = [m for m in un if not m.get("rung")]      # rung before a restart: the card only, no second ring
+        alarms = [m for m in fresh if m.get("alarm") and m["id"] not in getattr(self, "_alarms_shown", set())]
         if alarms:
             # a timer or reminder going off is its own window in front, big, with OK (in the away card alone, under
             # windows already open, it was easy to miss)
@@ -2243,11 +2312,19 @@ class Desk:
                                         [{"type": "buttons", "items": [{"label": "OK", "say": "close window alarm", "primary": True}]}]})
             if not config.settings.get("do_not_disturb"):
                 threading.Timer(1.2, devices.chime).start()       # a second chime, a moment after the first
-        if getattr(self, "ready", False) and not config.settings.get("do_not_disturb"):     # (do not disturb: the card only, no toast, chime or speech)
-            self.emit({"t": "toast", "text": ui.strip(un[-1]["text"])[:120] or un[-1]["title"], "long": True})
+        if fresh and getattr(self, "ready", False) and not config.settings.get("do_not_disturb"):     # (do not disturb: the card only, no toast, chime or speech)
+            self.emit({"t": "toast", "text": ui.strip(fresh[-1]["text"])[:120] or fresh[-1]["title"], "long": True})
             devices.chime()
             if config.settings.get("speak_replies"):
-                self.ctx.background(lambda t=ui.strip(un[-1]["text"])[:400]: voice.speak(t))
+                self.ctx.background(lambda t=ui.strip(fresh[-1]["text"])[:400]: voice.speak(t))
+        rung = [m["id"] for m in (fresh if getattr(self, "ready", False) else alarms)]
+        if rung:
+            store.mark_rung(rung)
+            try:
+                st = os.stat(config.data("inbox.json"))
+                self._inbox_key = (st.st_mtime_ns, st.st_size)     # (our own write is not news)
+            except OSError:
+                pass
 
     def sleep_now(self):
         """Sleep; with a passphrase the screen locks first, so waking needs it (as on any PC)."""

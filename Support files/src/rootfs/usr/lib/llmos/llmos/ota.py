@@ -571,7 +571,7 @@ def _notify(title, text):
     flush_notes()
     try:
         from . import store
-        store.notify(title, text)
+        store.notify(title, text, replace=title == "Updated")
     except Exception:
         pass
 
@@ -587,7 +587,7 @@ def flush_notes():
     try:
         from . import store
         for n in cur:
-            store.notify(n["title"], n["text"])
+            store.notify(n["title"], n["text"], replace=n["title"] == "Updated")
     except Exception:
         pass
 
