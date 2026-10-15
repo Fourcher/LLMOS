@@ -505,7 +505,8 @@ def describe(spec, first):
         mins = (first - dt.datetime.now()).total_seconds() / 60
         if 0 < mins < 60:
             n = max(1, round(mins))
-            return f"in {n} minute{'s' if n != 1 else ''} ({first.strftime('%H:%M')})"
+            near = first + dt.timedelta(seconds=30)        # 04:02:45 is said as 04:03 (it rang "late" at 04:02)
+            return f"in {n} minute{'s' if n != 1 else ''} ({near.strftime('%H:%M')})"
         return first.strftime("%a %d %b %H:%M")
     if spec["kind"] == "interval":
         s = spec["seconds"]

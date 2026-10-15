@@ -162,7 +162,14 @@ def main():
             tick()
         except Exception:
             pass
-        time.sleep(20)
+        # a timer rings on its second, not up to 20 s late: sleep until the next one is due when that is sooner
+        # (one already overdue is waiting for the model: the usual 20 s, not a busy loop)
+        try:
+            now = time.time()
+            nxt = min((t["next"] for t in store.tasks() if t.get("next") and t["next"] > now), default=None)
+        except Exception:
+            nxt = None
+        time.sleep(max(0.5, min(20.0, (nxt - time.time()) if nxt else 20.0)))
 
 
 if __name__ == "__main__":

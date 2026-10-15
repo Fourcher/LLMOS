@@ -83,8 +83,9 @@ with patch.object(tools, "_has_wifi", return_value=True), \
         check(has == want, f"{req!r}: rare group {'included' if has else 'excluded'} (want {'included' if want else 'excluded'})")
 
     # order: the non-rare part is exactly today's order minus the rare group; rare tools come last
-    gated = lambda n: rare(n) or n in agent._ASKED_ONLY
+    gated = lambda n: rare(n) or n in agent._ASKED_ONLY or n in agent._GATED
     for req in ["what's the weather", "scan my network for devices"]:
+        agent._GATED_ON.clear()
         got = names(agent.tool_schemas(req))
         plain = [n for n in got if not gated(n)]
         check(plain == [n for n in full if not gated(n)], f"{req!r}: non-rare part identical to today's order")
@@ -94,7 +95,33 @@ with patch.object(tools, "_has_wifi", return_value=True), \
     got = names(agent.tool_schemas("give me a famous quote by Einstein"))
     check(got[-1:] == ["real_quote"], "quote tool offered (at the end) when a quote is asked for")
 
+    # word-gated tools: only when the request is about them, then kept for 30 minutes (the conversation's prompt holds)
+    agent._GATED_ON.clear()
+    got = names(agent.tool_schemas("what's the weather"))
+    check(not any(n in agent._GATED for n in got), "weather: no word-gated tool")
+    got = names(agent.tool_schemas("convert this video to mp3"))
+    check("convert_media" in got and got.index("convert_media") > max(i for i, n in enumerate(got) if not gated(n)),
+          "'convert this video to mp3': convert_media offered, after the always-sent tools")
+    check("convert_media" in names(agent.tool_schemas("thanks, now what's the weather")), "still offered on the next turn")
+    agent._GATED_ON["convert_media"] -= 1801
+    check("convert_media" not in names(agent.tool_schemas("what's the weather")), "gone 30 minutes later")
+    for req, tool in [("find duplicate photos", "find_duplicates"), ("unzip the download", "extract_archive"),
+                      ("make a budget spreadsheet", "make_spreadsheet"), ("print my letter", "print_file"),
+                      ("switch to a smarter model", "manage_models"), ("set up my email", "mail_setup"),
+                      ("trim the first 10 seconds of the video", "trim_video"), ("back up my documents to the usb stick", "backup_files")]:
+        agent._GATED_ON.clear()
+        check(tool in names(agent.tool_schemas(req)), f"{req!r}: {tool} offered")
+    agent._GATED_ON.clear()
+    core = [n for n in full if not gated(n)]
+    for must in ("find_files", "move_files", "undo", "web_answer", "which_file", "write_document", "rename_file", "browse", "make_folder"):
+        check(must in core, f"{must} is always sent")
+    import json as _j
+    sch = {x["function"]["name"]: x for x in tools.schemas(compact=True)}
+    print(f"     always sent: {len(core)} tools, about {sum(len(_j.dumps(sch[n])) for n in core) / 3.6:.0f} tokens; "
+          f"word-gated: {sum(len(_j.dumps(sch[n])) for n in full if n in agent._GATED) / 3.6:.0f} tokens")
+
     # sticky: a rare tool already used this turn keeps the group for a non-matching request
+    agent._GATED_ON.clear()
     got = names(agent.tool_schemas("what's the weather", sticky=True))
     check(any(rare(n) for n in got), "sticky + non-matching request: rare group kept")
     check(names(agent.tool_schemas("what's the weather", sticky=True)) ==
@@ -117,6 +144,7 @@ with patch.object(tools, "_has_wifi", return_value=True), \
      patch.object(llm, "context_size", return_value=BIG), \
      patch.object(llm, "chat") as chat_mock, \
      patch.object(agent.time, "sleep", return_value=None):
+    agent._GATED_ON.clear()
     agent.warm_up()
     check(chat_mock.call_count == 1, "warm-up sent one request")
     warm_tools = chat_mock.call_args.kwargs["tools"]
@@ -130,8 +158,9 @@ with patch.object(tools, "_has_wifi", return_value=True), \
      patch.object(tools, "_connectors_synced", True), \
      patch.object(llm, "context_size", return_value=SMALL):
     budget_full = names(tools.schemas(compact=True, budget=max(1500, SMALL - 3400)))
+    agent._GATED_ON.clear()
     plain_small = agent.tool_schemas("what's the weather")
-    check(names(plain_small) == [n for n in budget_full if not rare(n) and n not in agent._ASKED_ONLY],
+    check(names(plain_small) == [n for n in budget_full if not rare(n) and n not in agent._ASKED_ONLY and n not in agent._GATED],
           "6k context: budgeted list minus the rare group, same order")
     check(not any(rare(n) for n in names(plain_small)), "6k context: no rare tool for a non-matching request")
 

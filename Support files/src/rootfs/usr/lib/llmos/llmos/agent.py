@@ -136,6 +136,52 @@ _RARE_RE = re.compile(r"security|secure|hack|scan|\bports?\b|network|traffic|pac
 
 _ASKED_ONLY = {"real_quote": re.compile(r"\bquot|\bsaid\b|\bsayings?\b|\bwords of\b|\bwho (?:said|wrote)\b")}
 
+# Tools for less common work (about 3,300 tokens of schema), offered when the request's words are about them. On a
+# laptop's built-in graphics the model reads a 9k-token prompt at ~23 tokens/s once 9k is in memory, so every turn
+# waited half a minute for 400 new tokens; the always-sent part is now ~6k. The common tools (find, move, rename one
+# file, undo, write, web answers…) stay in the always-sent part: the model is often the only way to them.
+_W = lambda rx: re.compile(rx, re.I)
+_GATED = {
+    # models, voices, the online model, connectors, the assistant's own rules, mail accounts, programs
+    "manage_models": _W(r"\bmodels?\b|\bllm\b|\bai\b|\bbrain\b|smarter|faster answers"),
+    "check_new_models": _W(r"\bmodels?\b|\bnewer?\b.*\b(?:ai|brain)\b"),
+    "add_model": _W(r"\bmodels?\b|\bgguf\b|hugging ?face"),
+    "manage_voice": _W(r"\bvoices?\b|\bspeak|\bspeech\b|\btalk|\bread (?:it|this|that|aloud)|\baloud\b|accent|\bwhisper\b|microphone|dictat"),
+    "online_model": _W(r"\bonline\b|\bcloud\b|\bclaude\b|\bopenai\b|\bgpt\b|\bgemini\b|\bapi key\b|anthropic"),
+    "manage_connectors": _W(r"\bconnectors?\b|\bmcp\b|\bintegrat|\bplug-?ins?\b|\bconnect (?:to )?(?:my )?(?:notion|github|slack|calendar|drive)"),
+    "edit_conduct": _W(r"\bconduct\b|\brules?\b|\bbehav|\balways\b|\bnever\b|\bpersonality\b|\btone\b|\bstop (?:asking|saying|doing)"),
+    "mail_setup": _W(r"\be-?mails?\b|\bmail\b|\binbox\b|\bgmail\b|\boutlook\b|\bimap\b|\bsmtp\b"),
+    "remote_testing": _W(r"\bremote\b"),
+    "set_default_app": _W(r"\bdefault\b|\balways open\b|open (?:with|in)\b"),
+    "restyle": _W(r"\bstyle\b|\blook\b|\btheme\b|\bcolou?rs?\b|\bfont\b|\bretro\b|\bdesign\b|\bskin\b"),
+    "make_app": _W(r"\bapps?\b|\bcalculator\b|\btimer\b|\bwidget\b|\bgame\b|\btool\b|\bmake (?:me )?an?\b"),
+    "manage_apps": _W(r"\bapps?\b|\bprograms?\b|\bsoftware\b|\binstalled\b|\buninstall|\bremove\b"),
+    "remove_software": _W(r"\buninstall|\bremove\b|\bdelete\b.*\b(?:app|program|software)|\bget rid of\b"),
+    # many files at once, backups, archives
+    "rename_files": _W(r"\brenam|\bnumber (?:them|the files)|\bnames?\b"),
+    "rename_series": _W(r"\brenam|\bepisodes?\b|\bseasons?\b|\bseries\b|\bshow\b|\btv\b"),
+    "find_duplicates": _W(r"\bduplicat|\bsame (?:file|photo|picture)s?\b|\bcopies\b|\btwice\b|\bdoubles?\b"),
+    "compress_files": _W(r"\bzip\b|\bcompress|\bsmaller\b|\barchive\b|\bshrink\b"),
+    "extract_archive": _W(r"\bzip\b|\bunzip|\bextract|\barchive\b|\btar\b|\b7z\b|\brar\b|\bopen (?:the|this) .*\.(?:zip|tar|gz|7z|rar)\b"),
+    "biggest_files": _W(r"\bbig(?:gest)?\b|\blarge(?:st)?\b|\bspace\b|\bdisk\b|\bstorage\b|\bfull\b|\bfree up\b|\bclean ?up\b"),
+    "backup_files": _W(r"\bback ?ups?\b|\bcopy (?:of )?(?:all |everything|my)|\busb\b|\bstick\b|\bdrive\b|\bsafe copy\b"),
+    "restore_backup": _W(r"\bback ?ups?\b|\brestor|\bget (?:it|them|my \w+) back\b|\brecover"),
+    "share_folder": _W(r"\bshar(?:e|ing)\b|\bnetwork\b|\bother computers?\b|\bphone\b"),
+    "find_by_meaning": _W(r"\babout\b|\bmention|\bthat (?:talks|says)\b|\bwhere i (?:wrote|said|noted)\b|\bfind\b|\bsearch\b|\blook for\b|\bwhich (?:file|document|note)"),
+    "last_saved": _W(r"\blast\b|\brecent|\blatest\b|\bjust (?:saved|made|downloaded)\b|\byesterday\b|\btoday\b|\bwhere did\b"),
+    # media and documents
+    "convert_media": _W(r"\bconvert|\bmp3\b|\bmp4\b|\bwav\b|\bmkv\b|\bmov\b|\bwebm\b|\bflac\b|\bogg\b|\bgif\b|\baudio\b|\bvideo\b|\bsound only\b"),
+    "trim_video": _W(r"\btrim|\bcut\b|\bclip\b|\bshorten|\bvideo\b|\bfirst \d+|\blast \d+|\bseconds?\b"),
+    "edit_images": _W(r"\bphotos\b|\bpictures\b|\bimages\b|\ball (?:the |my )?(?:photos|pictures|images)\b|\bresize\b|\bwatermark"),
+    "make_spreadsheet": _W(r"\bspreadsheet|\btable\b|\bcsv\b|\bexcel\b|\bbudget\b|\bcolumns?\b|\brows?\b|\btracker\b|\bxlsx\b|\bods\b"),
+    "merge_pdfs": _W(r"\bpdfs?\b|\bmerge|\bcombine|\bjoin\b"),
+    "make_document": _W(r"\bdocument\b|\bdocx?\b|\bword\b|\breport\b|\bletter\b|\bcv\b|\bresume\b|\bodt\b|\bformatted\b"),
+    "text_from_image": _W(r"\btext\b|\bread\b|\bwords?\b|\bocr\b|\bscan(?:ned)?\b|\bcopy (?:the )?(?:text|words)\b|\bwhat does (?:it|this|the \w+) say\b"),
+    "print_file": _W(r"\bprint"),
+    "check_site": _W(r"\bsite\b|\bwebsite\b|\bdown\b|\bup\b|\bonline\b|\bworking\b|\bloading\b|\.(?:com|org|net|io|co)\b"),
+}
+_GATED_ON = {}            # name -> when last offered for a matching request: kept for 30 min, so a conversation's prompt holds
+
 
 def _is_rare(name):
     return name in RARE_TOOLS or name.startswith("wifi_")
@@ -157,7 +203,14 @@ def tool_schemas(request_text=None, sticky=False):
     if request_text is None:
         return full
     low = request_text.lower()
-    norm = [s for s in full if not _is_rare(s["function"]["name"]) and s["function"]["name"] not in _ASKED_ONLY]
+    now = time.time()
+    for name, rx in _GATED.items():
+        if rx.search(low):
+            _GATED_ON[name] = now
+    on = {n for n, t in _GATED_ON.items() if now - t < 1800}
+    norm = [s for s in full if not _is_rare(s["function"]["name"]) and s["function"]["name"] not in _ASKED_ONLY
+            and s["function"]["name"] not in _GATED]
+    norm += [s for s in full if s["function"]["name"] in on]
     if sticky or _RARE_RE.search(low):
         norm += [s for s in full if _is_rare(s["function"]["name"])]
     # tools a small model reached for unasked (a Wikiquote window in the middle of "how does a rainbow form")

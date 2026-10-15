@@ -869,7 +869,7 @@ class Desk:
             threading.Thread(target=self._control_socket, daemon=True).start()
             GLib.timeout_add_seconds(3, self._poll_drives)
             threading.Thread(target=self._worker, daemon=True).start()
-            GLib.timeout_add_seconds(20, self._poll_away)
+            GLib.timeout_add_seconds(5, self._poll_away)
             GLib.timeout_add_seconds(30, self._poll_autolock)
             GLib.timeout_add_seconds(5, self._poll_power)
             GLib.timeout_add(3000, lambda: (self.start_idle(), False)[1])
@@ -2417,12 +2417,22 @@ class Desk:
             sys.stderr.write(f"desk: autolock check failed: {e}\n")
         return True
 
+    def _alarm_waiting(self):
+        """A timer or reminder has gone off and not rung yet (it rings even while an answer is being written)."""
+        try:
+            st = os.stat(config.data("inbox.json"))
+            if (st.st_mtime_ns, st.st_size) == getattr(self, "_inbox_key", None):
+                return False
+        except OSError:
+            return False
+        return any(m.get("alarm") and not m.get("rung") for m in store.unseen())
+
     def _poll_away(self):
-        """Every 20 s: background results to show; and if another session
-        (the text console) finished onboarding or unlocked the vault while
+        """Every 5 s (a look at one file's time): background results to show, timers and reminders at once even
+        while busy; and if another session (the text console) finished onboarding or unlocked the vault while
         this screen was waiting, move on."""
         try:
-            if self.screen == "desk" and not self.busy:
+            if self.screen == "desk" and (not self.busy or self._alarm_waiting()):
                 self.show_away()
             elif self.screen == "wizard" and config.settings.get("onboarded"):
                 self.enter_desk()
@@ -2847,6 +2857,8 @@ class Desk:
                     uniq.append(n)
             names = uniq
             self.last_reply = self._said = ("Open now: " + ", ".join(names) + ".") if names else "Nothing is open, just the desk."
+            if names and not low.startswith("what's on") and not low.startswith("what is on"):
+                self.GLib.idle_add(lambda: (self.open_window(self.windows_panel()), False)[1])    # each with Show / Close
             return True
         if re.fullmatch(r"what(?:'s| is| are| devices are)? (?:plugged|connected) (?:in|into|to) (?:my |the |this )?(?:computer|pc|laptop|machine)|what(?:'s| is) plugged in|(?:list|show)(?: me)? (?:my |the )?(?:usb |connected |plugged[- ]in )?devices", low.rstrip("?.! ")):
             from . import hardware

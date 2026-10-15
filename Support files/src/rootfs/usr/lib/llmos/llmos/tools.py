@@ -1077,8 +1077,10 @@ def show_image(a, ctx):
         ctx.display(p.stdout)
     if a.get("drawn"):
         # "draw me a picture of a cat": nothing here can draw a new picture, and saying so beats a link to ASCII art
-        return (f"I can't draw new pictures on this computer, so here is a real photo instead: "
-                f"{info['title']} ({credit}).")
+        # (the photo's file name and credit are in its window; read aloud they were noise)
+        subject = re.sub(r"^(?:a|an|the|some)\s+", "", str(a.get("subject", "")).strip(), flags=re.I) or "it"
+        art = "" if subject.endswith("s") or subject == "it" else "an " if subject[:1].lower() in "aeiou" else "a "
+        return f"I can't draw pictures on this computer, so here's a real photo of {art}{subject} instead."
     return f"shown: {info['title']} ({credit}). Source: {info['page']}. Say one sentence at most; do not describe the photo."
 
 
