@@ -557,3 +557,5 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 .media .ctl .btn { white-space: nowrap; }
 .list .item .t.opens { cursor: pointer; } .list .item .t.opens:hover { color: var(--accent); }
 .list .item.gone { animation: none !important; opacity: .35 !important; pointer-events: none; transition: opacity .15s; }
+/* the Mac layout puts its dock where the help line is: the help line steps aside while the dock shows buttons */
+:root[data-layout="mac"] #desk:has(#dock .chip) .hint { visibility: hidden; }

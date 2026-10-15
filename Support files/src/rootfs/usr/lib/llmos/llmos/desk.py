@@ -402,6 +402,12 @@ def _nothing_open_reply(text):
 
 # --------------------------------------------------------------- ctx
 
+
+def _stay_awake():
+    """The computer never sleeps by itself (the screen may still turn off): a test or demo computer with remote
+    testing on must stay reachable, or the owner set "stay_awake"."""
+    return bool(config.settings.get("devlink") or config.settings.get("stay_awake"))
+
 class DeskCtx:
     """Bridges the agent to the desk: streaming, tool feedback, confirmations,
     windows, media, apps."""
@@ -2204,7 +2210,13 @@ class Desk:
                     lid = fh.read().split()[-1]
             was, self._lid = getattr(self, "_lid", lid), lid
             if lid == "closed" and was == "open" and config.settings.get("lid", "sleep") == "sleep" and not self._external_screen():
-                threading.Thread(target=self.sleep_now, daemon=True).start()
+                if _stay_awake():
+                    # a test computer stays reachable: only the screen goes off (it comes back with the lid)
+                    subprocess.run(["wlopm", "--off", "*"], capture_output=True, env=dict(os.environ, **(media.desk_env() or {})))
+                else:
+                    threading.Thread(target=self.sleep_now, daemon=True).start()
+            elif lid == "open" and was == "closed" and _stay_awake():
+                subprocess.run(["wlopm", "--on", "*"], capture_output=True, env=dict(os.environ, **(media.desk_env() or {})))
             b = _battery()
             if b and not b["charging"]:
                 warned = getattr(self, "_low_warned", 100)
@@ -2235,7 +2247,7 @@ class Desk:
         if not shutil.which("swayidle"):
             return
         off = int(config.settings.get("screen_off", 10) or 0)
-        nap = int(config.settings.get("sleep_after", 0) or 0)
+        nap = 0 if _stay_awake() else int(config.settings.get("sleep_after", 0) or 0)
         argv = ["swayidle"]
         if off > 0 and shutil.which("wlopm"):
             argv += ["timeout", str(off * 60), "wlopm --off '*'", "resume", "wlopm --on '*'"]

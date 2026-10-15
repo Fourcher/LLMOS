@@ -59,6 +59,19 @@ def _reachable(hp):
         return False
 
 
+def _wifi_awake():
+    """Wi-Fi power saving off (it naps between beacons and answers late)."""
+    try:
+        for n in os.listdir("/sys/class/net"):
+            if os.path.isdir(f"/sys/class/net/{n}/wireless"):
+                out = subprocess.run(["iw", "dev", n, "get", "power_save"], capture_output=True, text=True, timeout=5).stdout
+                if "on" in out:
+                    subprocess.run(["iw", "dev", n, "set", "power_save", "off"], capture_output=True, timeout=5)
+                    _log(f"Wi-Fi power saving off on {n}")
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def _repair_iwd():
     """Wi-Fi won't start: the usual cause is its DNS helper (resolvconf) missing or not runnable. Make it runnable,
     or else let Wi-Fi manage without it, and start Wi-Fi again."""
@@ -92,6 +105,8 @@ def run():
                 _rc("iwd", "start")
                 if not _running("iwd"):
                     _repair_iwd()
+            if config.settings.get("devlink") or config.settings.get("stay_awake"):
+                _wifi_awake()            # a test computer answers at once, also when idle
             if config.settings.get("ota") and _has_service("llmos-ota") and not _running("llmos-ota"):
                 _log("the update service was stopped: starting it")
                 _rc("llmos-ota", "start")
