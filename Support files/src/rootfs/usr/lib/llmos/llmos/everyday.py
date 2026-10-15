@@ -2046,7 +2046,8 @@ def hardware(desk, line, low):
         desk.emit({"t": "toast", "text": "Measuring the internet speed (about 10 seconds)…"})
         t0, got = _t.time(), 0
         try:
-            r = _u.urlopen("https://speed.cloudflare.com/__down?bytes=50000000", timeout=10)
+            r = _u.urlopen(_u.Request("https://speed.cloudflare.com/__down?bytes=50000000",
+                                      headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) LLM-OS"}), timeout=10)
             while _t.time() - t0 < 8:
                 b = r.read(262144)
                 if not b:

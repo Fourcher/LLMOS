@@ -3740,6 +3740,24 @@ class Desk:
                                                 "bluetooth": "Here's Bluetooth.", "printers": "Here are the printers.", "about": "Here's this computer.",
                                                 "input": "Check the cable or batteries and try another USB port. Here are the mouse and keyboard settings.", "storage": "Here's the storage.",
                                                 "updates": "Checking for updates; the list is on the right."}[which]
+                if which == "about":            # the facts in words too: "how much memory", "what computer is this"
+                    class _Cap:
+                        said = ""
+
+                        def instant_reply(self, _l, text):
+                            _Cap.said = text
+
+                        def emit(self, _m):
+                            pass
+                    q = low if everyday._HW.search(low) else "what computer is this"
+                    if not re.search(r"memory|ram\b", q) and not re.search(r"what (?:computer|laptop|machine|pc|model)|processor|cpu", q):
+                        q = "what computer is this"
+                    try:
+                        everyday.hardware(_Cap(), line, q)
+                    except Exception:
+                        pass
+                    if _Cap.said:
+                        self.last_reply = self._said = _Cap.said
                 if which == "storage":          # the numbers in words too, not only in the window
                     try:
                         u = shutil.disk_usage("/")          # the same disk the storage window shows
