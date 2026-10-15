@@ -1970,10 +1970,21 @@ def _everyday2(text):
     if m:
         where = m.group("f") or ("music" if m.group("k") in ("song", "track", "recording") else "videos")
         return ("open_latest", {"where": where})
+    # "remind me every Monday to take out the bins": the repeat said before the task
+    m = re.match(r"^(?:please\s+)?remind\s+me\s+(?P<when>every\s+(?:day|morning|evening|night|weekday|weekend|week|hour|"
+                 r"(?:mon|tues|wednes|thurs|fri|satur|sun)day)s?(?:\s+(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?)\s*,?\s+(?:to\s+)?(?P<what>.+?)\s*[.!]?$", low)
+    if m:
+        return ("schedule_task", {"when": m.group("when"), "task": m.group("what"), "kind": "reminder"})
     m = re.match(r"^(?:please\s+)?remind\s+me\s+(?:to\s+)?(?P<what>.+?)\s+(?P<when>every\s+(?:day|morning|evening|night|weekday|weekend|week|hour|"
                  r"(?:mon|tues|wednes|thurs|fri|satur|sun)day)(?:\s+(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?)\s*[.!]?$", low)
     if m:
         return ("schedule_task", {"when": m.group("when"), "task": m.group("what"), "kind": "reminder"})
+    # "cancel the dentist reminder", "cancel my alarm", "delete the reminder to call mum": by the words in it
+    m = re.match(r"^(?:please\s+)?(?:cancel|delete|remove)\s+(?:the\s+|my\s+)?(?:(?P<w>[\w' -]+?)\s+)?(?P<k>reminder|alarm|timer)s?"
+                 r"(?:\s+(?:for|to|about|at)\s+(?P<w2>.+?))?\s*[.!]?$", low)
+    if m and (m.group("w") or m.group("w2") or m.group("k") == "alarm") and not re.fullmatch(r"all|every|each", m.group("w") or ""):
+        which = (m.group("w2") or m.group("w") or "alarm").strip()
+        return ("manage_tasks", {"action": "cancel", "which": which})
     # alarms and the list of what's scheduled
     m = re.match(r"^(?:please\s+)?(?:(?:set|make|add)\s+(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?P<w>.+?)"
                  r"|(?:an?\s+|my\s+)?alarm\s+(?:for|at)\s+(?=(?:\d|noon\b|midnight\b|tomorrow\s+at\s+\d|in\s+\d+\s+(?:minutes?|hours?)\b))(?P<w4>.+?))"

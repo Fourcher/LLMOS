@@ -485,6 +485,11 @@ def parse_when(text, now=None):
 
 def describe(spec, first):
     if not spec:
+        # within the hour: how long, then the clock time ("02:36" alone read as seconds away when it was a minute)
+        mins = (first - dt.datetime.now()).total_seconds() / 60
+        if 0 < mins < 60:
+            n = max(1, round(mins))
+            return f"in {n} minute{'s' if n != 1 else ''} ({first.strftime('%H:%M')})"
         return first.strftime("%a %d %b %H:%M")
     if spec["kind"] == "interval":
         s = spec["seconds"]

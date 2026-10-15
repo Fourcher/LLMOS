@@ -794,7 +794,8 @@
           row.append(main);
           if (it.actions && it.actions.length) { const acts = el("div", "acts"); it.actions.forEach(a => acts.append(actionBtn(a))); row.append(acts); }
           // a file or folder opens from its name too (a click on the name, a double-click on the row), as in any file window
-          const open1 = (it.actions || []).find(a => !a.danger && /^(show my files in|open the file) /.test(a.say));
+          // (a list item's name ticks it off or back on, like its Done button)
+          const open1 = (it.actions || []).find(a => !a.danger && /^(show my files in|open the file|tick off item|untick item) /.test(a.say));
           if (open1) { const tt = main.querySelector(".t"); tt.classList.add("opens"); tt.onclick = () => act(open1.say); row.ondblclick = (ev) => { if (!ev.target.closest("button, .t")) act(open1.say); }; }
           e.append(row);
         });

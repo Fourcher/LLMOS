@@ -1031,6 +1031,9 @@ def web_answer(a, ctx):
         answer = f"(the model could not answer: {e}) Best result: {res[0]['title']}: {res[0]['snippet'][:200]}"
     from urllib.parse import urlparse
     site = urlparse(src_url).netloc.removeprefix("www.")
+    # footnote marks copied from the page ("Paris[b]", "[4]", "[citation needed]") are not words
+    answer = re.sub(r"\[(?:\d{1,3}|[a-z]|note\s*\d+|citation needed|nb\s*\d+)\]", "", answer, flags=re.I)
+    answer = re.sub(r"\s+([,.;:])", r"\1", answer).strip()
     return f"{answer} (Source: {site}, {src_url})"
 
 
@@ -3748,6 +3751,8 @@ def _notes_window(ctx, lst=None):
         if row:
             blocks.append({"type": "buttons", "items": row})
     show(ctx, {"id": "notes", "replace": True, "title": title, "size": "m", "blocks": blocks})
+    if hasattr(ctx, "note_source"):
+        ctx.note_source("notes", "notes_show", {"list": lst} if lst else {})   # a refresh shows this same list
     return len(items)
 
 

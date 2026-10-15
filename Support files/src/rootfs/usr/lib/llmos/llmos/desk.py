@@ -693,7 +693,15 @@ class DeskCtx:
         if cur and cur[2] in (tools.READ, tools.SAFE) and isinstance(spec, dict) and spec.get("id") and cur[0] \
                 and cur[0] not in _NO_REFRESH and spec.get("kind") != "image":
             self.d.note_window_source(spec["id"], cur[0], cur[1])
+        elif cur and isinstance(spec, dict) and spec.get("id"):
+            # drawn by a change (a new list, an edit): the window's old source would paint over it on the next
+            # refresh ("make a packing list" came back as the shopping list); the tool may name a new source itself
+            self.d.__dict__.setdefault("_win_src", {}).pop(spec["id"], None)
         return self.d.open_window(spec)
+
+    def note_source(self, wid, tool, args):
+        """A tool names what rebuilds its window (a read-only tool and its arguments)."""
+        self.d.note_window_source(wid, tool, args)
 
     def close_ui(self, wid):
         if wid in self.d.windows:
@@ -1632,6 +1640,13 @@ class Desk:
             self.display_scale = 1.0
         try:
             self.webview.set_zoom_level(self._zoom())
+            try:
+                g = mon.get_geometry() if mon is not None else None
+                sys.stderr.write(f"desk: zoom {self._zoom():.2f} (screen {g.width if g else '?'}x{g.height if g else '?'} logical, "
+                                 f"{mon.get_width_mm() if mon is not None else '?'} mm, gtk scale {mon.get_scale() if mon is not None and hasattr(mon, 'get_scale') else '?'}, "
+                                 f"display_scale {self.display_scale})\n")
+            except Exception:
+                pass
         except Exception as e:
             sys.stderr.write(f"desk: zoom not applied: {e}\n")
         return False
