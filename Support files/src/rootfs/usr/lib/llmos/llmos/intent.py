@@ -1914,9 +1914,10 @@ def _everyday2(text):
         if v in ("read", "open", "show"):
             return ("mail_read", {"id": m.group("id")})
         return ("mail_archive" if v == "archive" else "mail_delete", {"ids": m.group("id")})
-    if re.match(r"^(?:please\s+)?(?:summari[sz]e|sum up|go through|what are)\s+(?:my\s+|the\s+)?(?:unread\s+|new\s+)?(?:e-?mails?|mail|inbox|messages)"
-                r"(?:\s+in\s+my\s+inbox)?(?:\s+about)?$", low):
-        return ("mail_inbox", {})
+    m = re.match(r"^(?:please\s+)?(?P<v>summari[sz]e|sum up|go through|what are)\s+(?:my\s+|the\s+)?(?:unread\s+|new\s+)?(?:e-?mails?|mail|inbox|messages)"
+                 r"(?:\s+in\s+my\s+inbox)?(?P<about>\s+about)?$", low)
+    if m:
+        return ("mail_inbox", {"summarize": True} if (m.group("v") != "what are" or m.group("about")) else {})
     m = re.match(r"^(?:please\s+)?(?:read|open|show)\s+(?:me\s+)?(?:the\s+|my\s+)?(?:latest\s+|last\s+|newest\s+)?(?:e-?mail|mail|message)\s+from\s+(?P<w>[\w.@ -]+)$", low)
     if m:
         return ("mail_read", {"id": m.group("w").strip()})

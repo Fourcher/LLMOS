@@ -1933,8 +1933,8 @@ def mail_setup(a, ctx):
     return f"email set up: {acct['address']} via {acct['imap_host']} / {acct['smtp_host']} (login verified)"
 
 
-@tool("mail_inbox", "List unread email, newest first: id, from, subject, preview.",
-      {"limit": {"type": "integer"}}, [], risk=READ, network=True, available=lambda: mail.account() is not None)
+@tool("mail_inbox", "List unread email, newest first: id, from, subject, preview; summarize=true also sums them up.",
+      {"limit": {"type": "integer"}, "summarize": {"type": "boolean"}}, [], risk=READ, network=True, available=lambda: mail.account() is not None)
 def mail_inbox(a, ctx):
     try:
         items = mail.unread(limit=int(a.get("limit") or 20))
@@ -1947,6 +1947,19 @@ def mail_inbox(a, ctx):
          "actions": [{"label": i18n.t("d_read"), "say": f"read email {m['uid']}"},
                      {"label": i18n.t("d_archive"), "say": f"archive email {m['uid']}"}]} for m in items]},
         {"type": "buttons", "items": [{"label": i18n.t("d_inbox_zero"), "say": "get me to inbox zero", "primary": True}]}]})
+    if a.get("summarize"):
+        # "summarize my unread emails": what they are about and what needs doing, not the list again
+        listing = "\n".join(f"- From {_sender_name(m['from'])}: {m['subject']}. {str(m.get('snippet') or '')[:300]}" for m in items)
+        try:
+            r = llm.chat([{"role": "system", "content": "Summarize these unread emails for their owner in 2 to 4 short sentences: what "
+                                                       "matters, what needs a reply or an action, and what can be ignored (ads, "
+                                                       "newsletters, automatic notices). Plain words, no list, no ids."},
+                          {"role": "user", "content": listing}], max_tokens=220, temperature=0.2, think=False)
+            summary = str(r.get("content", "")).strip()
+        except Exception:
+            summary = ""
+        if summary:
+            return summary
     return (f"{len(items)} unread message(s) are now listed on screen exactly as above "
             f"(ids {', '.join(m['uid'] for m in items)}). Do not repeat or paraphrase them; add at most one sentence.\n"
             + mail.format_list(items))
