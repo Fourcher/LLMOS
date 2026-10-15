@@ -1211,6 +1211,8 @@ def _shortcut_words(name, args, out):
     if name == "mail_inbox":
         if low.startswith("no unread"):
             return "No unread email."
+        if args.get("summarize") and not re.match(r"\d+ unread message", out):
+            return out.strip()                   # the summary itself
         m = re.match(r"(\d+) unread message", out)
         rows = re.findall(r"(?m)^\[\d+\][^|\n]*\|\s*(.+?)\s*\|\s*(.+)$", out)
         lead = f"{m.group(1)} unread email{'s' if m and m.group(1) != '1' else ''}" if m else "Your unread email"
