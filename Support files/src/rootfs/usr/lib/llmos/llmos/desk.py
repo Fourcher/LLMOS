@@ -2630,6 +2630,9 @@ class Desk:
         except Exception as e:
             reply = agent._plain_error(str(e))
         self.emit({"t": "toast", "text": (reply or "Done.")[:240]})
+        self.push_status()                      # the top bar names the model now in use (it kept the old name)
+        if action == "use":
+            self._model_watch()                 # "loading…" until the new model answers, then its prompt is warmed
         if "panel-models" in self.windows:
             try:
                 self.open_panel("models")       # the page shows the new state (downloaded, in use, removed)
