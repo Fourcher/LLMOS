@@ -1971,6 +1971,30 @@ def jokes(desk, line, low):
     return _say(desk, line, joke)
 
 
+_WEEKDAY_Q = re.compile(r"^(?:what(?:'?s| is)\s+(?:the\s+)?date\s+(?:of\s+|on\s+)?|what\s+date\s+is\s+|when\s+is\s+|which\s+date\s+is\s+)?"
+                        r"(?P<w>this|next|last|coming)\s+(?P<d>monday|tuesday|wednesday|thursday|friday|saturday|sunday)"
+                        r"(?:'?s\s+date)?$")
+
+
+def weekday_date(desk, line, low):
+    m = _WEEKDAY_Q.match(low)
+    if not m or not re.search(r"date|when|what|which", low):
+        return False
+    days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    today = dt.date.today()
+    want = days.index(m.group("d"))
+    ahead = (want - today.weekday()) % 7 or 7               # the coming one (never today)
+    coming = today + dt.timedelta(days=ahead)
+    fmt = lambda d: d.strftime("%B %-d")
+    if m.group("w") == "last":
+        back = (today.weekday() - want) % 7 or 7
+        return _say(desk, line, f"Last {m.group('d').title()} was {fmt(today - dt.timedelta(days=back))}.")
+    if m.group("w") == "next":
+        later = coming + dt.timedelta(days=7)
+        return _say(desk, line, f"This coming {m.group('d').title()} is {fmt(coming)}; next week's is {fmt(later)}.")
+    return _say(desk, line, f"This {m.group('d').title()} is {fmt(coming)}.")
+
+
 # ------------------------------------------------------------------ the computer itself: exact facts, read from the hardware
 
 _HW = re.compile(
@@ -2083,7 +2107,7 @@ def hardware(desk, line, low):
 
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (hardware, jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, model_answer, ota_updates, web_block, howto):
+    for fn in (hardware, weekday_date, jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, model_answer, ota_updates, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True
@@ -2092,4 +2116,4 @@ def handle(desk, line):
             return True
     return False
 
-MATCH = re.compile(f"(?:{MATCH.pattern})|(?:{_HW.pattern})", MATCH.flags)   # the hardware facts answer at once too
+MATCH = re.compile(f"(?:{MATCH.pattern})|(?:{_HW.pattern})|(?:{_WEEKDAY_Q.pattern})", MATCH.flags)   # the hardware facts answer at once too

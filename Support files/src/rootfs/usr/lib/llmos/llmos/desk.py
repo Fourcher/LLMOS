@@ -795,6 +795,10 @@ class Desk:
             # own start-up) had its first request ignored and stayed a 200x200 window in the corner
             for ms in (500, 1500, 4000):
                 GLib.timeout_add(ms, lambda w=win: (w.fullscreen(), False)[1])
+            # and kept so: on a real laptop (1.25x scaling) a desk restarted by an update stayed a 250x250 block even
+            # after those requests, because GTK already counted it as full-screen and repeated requests did nothing.
+            # Every 3 s: smaller than the screen -> leave full-screen and take it again (the compositor then obeys).
+            GLib.timeout_add_seconds(3, lambda w=win: self._keep_fullscreen(w))
             GLib.timeout_add(400, self._apply_zoom)
             try:
                 Gdk.Display.get_default().get_monitors().connect("items-changed", lambda *a: GLib.timeout_add(600, self._apply_zoom))
@@ -4561,6 +4565,22 @@ class Desk:
             os.killpg(pid, signal.SIGTERM)
         except OSError:
             pass
+
+    def _keep_fullscreen(self, win):
+        try:
+            mons = self.Gdk.Display.get_default().get_monitors()
+            mon = mons.get_item(0) if mons.get_n_items() else None
+            if mon is None:
+                return True
+            g = mon.get_geometry()
+            w, h = win.get_width(), win.get_height()
+            if w and h and (w < g.width * 0.9 or h < g.height * 0.9):
+                sys.stderr.write(f"desk: window {w}x{h} on a {g.width}x{g.height} screen: full-screen again\n")
+                win.unfullscreen()
+                self.GLib.timeout_add(150, lambda: (win.fullscreen(), win.present(), False)[2])
+        except Exception as e:
+            sys.stderr.write(f"desk: full-screen check failed: {e}\n")
+        return True
 
     def _focus_desk(self):
         """The desk comes back in front of programs, ready to type (the Super key, and after a test reset)."""

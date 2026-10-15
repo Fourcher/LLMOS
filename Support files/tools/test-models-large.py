@@ -96,7 +96,7 @@ def tool_use(m, mem):
 # expected argv for a model that fits (8 GB machine, 4 GB model): recorded from the code before this change
 FITS_ARGV = ["llama-server", "-m", GGUF.name, "--host", "127.0.0.1", "--port", "8080",
              "--jinja", "-c", "16384", "-t", "4", "-np", "1",
-             "--no-webui", "--no-slots", "--cache-reuse", "256", "--cache-ram", "1024"]
+             "--no-webui", "--no-slots", "--cache-reuse", "256", "--cache-ram", "1024", "-ngl", "0"]
 
 # 1. a model bigger than memory: use() proceeds, one service restart, the note is attached
 big = model(4)

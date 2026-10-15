@@ -273,6 +273,16 @@ _LAYOUT_PRESETS = {"windows": {"layout": "windows", "accent": "#4aa3ff", "backgr
                    "clean": {"layout": "clean", "accent": "default", "background": "default", "color": "default"}}
 
 
+_LANG_WORDS = {
+    "english": r"\benglish\b|\bingl[eé]s\b|\banglais\b|\benglisch\b|英语|英文|英語",
+    "spanish": r"\bspanish\b|\bespa[nñ]ol\b|\bespagnol\b|\bspanisch\b|西班牙语|スペイン語",
+    "french": r"\bfrench\b|\bfranc[eé]s\b|\bfran[cç]ais\b|\bfranz[oö]sisch\b|法语|フランス語",
+    "german": r"\bgerman\b|\balem[aá]n\b|\ballemand\b|\bdeutsch\b|德语|ドイツ語",
+    "chinese": r"\bchinese\b|\bchino\b|\bchinois\b|\bchinesisch\b|中文|汉语|中国語",
+    "japanese": r"\bjapanese\b|\bjapon[eé]s\b|\bjaponais\b|\bjapanisch\b|日语|日本語",
+}
+
+
 def _layout(text):
     m = _LAYOUT.match(text)
     if not m or _QUESTION.search(text):
@@ -407,7 +417,8 @@ _TZ = re.compile(r"^\s*(?:please\s+)?(?:(?:set|change|switch|update|put)\s+(?:my
 
 _SCREEN_OFF = re.compile(r"^\s*(?:please\s+)?(?:(?P<keep>keep|leave)\s+(?:(?:the\s+|my\s+)?(?:screen|display|computer)\s+(?:on|awake)|awake)(?:\s+(?:all\s+the\s+time|always|(?:during|while)\s+.+?))?|"
                          r"(?:never|don'?t|do\s+not|stop)\s+(?:turn(?:ing)?\s+off|blank(?:ing)?|dim(?:ming)?)\s+(?:the\s+|my\s+)?(?:screen|display)|presentation\s+mode(?:\s+on)?|"
-                         r"(?:turn|switch)\s+(?:the\s+|my\s+)?(?:screen|display)\s+off\s+after\s+(?P<n>\d+)\s*(?P<u>min(?:ute)?s?|hours?)|"
+                         r"(?:(?:turn|switch)\s+(?:the\s+|my\s+)?(?:screen|display)\s+off|(?:set|make)\s+(?:the\s+|my\s+)?(?:screen|display)\s+(?:to\s+)?(?:turn|switch|go)\s+off|"
+                         r"(?:the\s+|my\s+)?(?:screen|display)\s+(?:should\s+)?(?:turn|switch|go)\s+off)\s+after\s+(?P<n>\d+)\s*(?P<u>min(?:ute)?s?|hours?)|"
                          r"(?:put\s+(?:the\s+|my\s+)?computer\s+to\s+sleep|sleep)\s+after\s+(?P<s>\d+)\s*(?P<su>min(?:ute)?s?|hours?)(?:\s+(?:of\s+)?(?:idle|inactivity|not\s+using\s+it))?|"
                          r"(?P<lidn>(?:when\s+i\s+)?clos(?:e|ing)\s+the\s+lid\s+(?:should\s+)?(?:do(?:es)?\s+nothing|keep(?:s)?\s+(?:it\s+)?running|stay(?:s)?\s+awake)|don'?t\s+sleep\s+when\s+i\s+close\s+the\s+lid))\s*[.!]?\s*$", re.I)
 
@@ -1776,6 +1787,16 @@ def _everyday2(text):
     if m:
         return ("remote_testing", {"on": m.group("v").split()[0] in ("start", "turn", "enable", "switch")
                                    and not m.group("v").endswith("off")})
+    # "reset the accent colour" (it once replied "accent green" and changed nothing)
+    if re.match(r"^(?:please\s+)?(?:reset|restore|clear|undo)\s+(?:the\s+|my\s+)?(?:accent|highlight)\s+colou?r(?:\s+(?:back\s+)?to\s+(?:the\s+)?default)?\s*[.!]?$|"
+                r"^(?:please\s+)?(?:change|set|put|turn)\s+(?:the\s+|my\s+)?(?:accent|highlight)\s+colou?r\s+back(?:\s+to\s+(?:the\s+)?(?:default|normal|original))?\s*[.!]?$", low):
+        return ("set_appearance", {"accent": "default"})
+    # the language asked for in any of the desk's languages ("cambia el idioma a inglés", "mets la langue en anglais")
+    if re.search(r"\b(?:language|idioma|lengua|langue|sprache)\b|语言|言語|言葉", low) and \
+            not re.search(r"translat|tradu|übersetz|翻译|翻訳|\blearn|\bteach|\bsay\b|\bspeak|\bwritten\b|\bwhat\b|\bhow\b|\bwhich\b|\?", low):
+        for lang, words in _LANG_WORDS.items():
+            if re.search(words, low):
+                return ("set_appearance", {"language": lang})
     # "write a thank-you note to my neighbour and save it as thanks.txt": the text is written, then saved by the OS
     m = re.match(r"^(?:please\s+)?(?:write|draft|compose|make|create)\s+(?:me\s+)?(?P<w>.+?)\s+and\s+(?:save|put|store|keep)\s+it\s+"
                  r"(?:as|in|to|into|under)\s+(?:a\s+file\s+(?:called|named)\s+)?(?P<f>[\w .'-]+?\.(?:txt|md))\s*[.!]?$", low)

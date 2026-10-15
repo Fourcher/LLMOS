@@ -110,7 +110,7 @@ log "packages (official Alpine $ALPINE, signed)"
 cp /etc/apk/repositories $TARGET/etc/apk/repositories
 PKGS="
   python3 e2fsprogs dosfstools curl ca-certificates tzdata nano less
-  llama-server llama.cpp-cpu
+  llama-server llama.cpp-cpu llama.cpp-vulkan mesa-vulkan-ati
   whisper.cpp
   yt-dlp quickjs-ng mpv
   alsa-utils alsa-ucm-conf pciutils espeak-ng chafa
@@ -132,6 +132,8 @@ PKGS="
   wlr-randr wlrctl lswt wl-clipboard flatpak mako libnotify swayidle wlopm wlsunset slurp playerctl xdg-desktop-portal xdg-desktop-portal-wlr poppler-utils wf-recorder imagemagick gvfs-mtp gvfs-gphoto2 wvkbd openssh-client openssh-keygen git rsync tesseract-ocr tesseract-ocr-data-eng smartmontools adwaita-icon-theme
   nmap clamav tshark tcpdump nikto john hydra aircrack-ng wireshark zaproxy ffuf
 "
+# Intel's Vulkan driver exists for x86 only: the model reads prompts on Intel graphics ~4.5x faster with it
+[ "$ARCH" = x86_64 ] && PKGS="$PKGS mesa-vulkan-intel"
 # shellcheck disable=SC2086
 apk add --root $TARGET --no-cache -q $PKGS
 

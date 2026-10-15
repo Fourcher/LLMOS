@@ -3,6 +3,7 @@ download with verification, switching, and the llama-server launch line."""
 import hashlib
 import json
 import os
+import re
 import subprocess
 import time
 
@@ -267,13 +268,45 @@ def use(mid):
     return m
 
 
+def _perf_threads():
+    """Threads for the model: the physical cores, and on Intel's hybrid chips only the performance cores (the
+    efficiency cores slow every step down to their pace)."""
+    try:
+        with open("/sys/devices/cpu_core/cpus") as f:          # hybrid Intel: "0-7" = 4 P-cores with 2 threads each
+            lo, _, hi = f.read().strip().partition("-")
+            n = int(hi or lo) - int(lo) + 1
+            return max(2, n // 2)
+    except (OSError, ValueError):
+        pass
+    try:
+        with open("/sys/devices/system/cpu/cpu0/topology/thread_siblings_list") as f:
+            per = len(f.read().strip().replace("-", ",").split(","))
+        return max(2, (os.cpu_count() or 2) // max(1, per))
+    except (OSError, ValueError):
+        return max(2, os.cpu_count() or 2)
+
+
+def _gpu_offload(m):
+    """Layers for the graphics chip (-ngl): all of them on a discrete card with room, else 0 (the chip, when there is
+    one with a Vulkan driver, still reads the prompt)."""
+    try:
+        out = subprocess.run(["llama-server", "--list-devices"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.SubprocessError):
+        return 0
+    for name, free in re.findall(r"Vulkan\d+:\s*(.+?)\s*\(\d+ MiB,\s*(\d+) MiB free\)", out):
+        discrete = re.search(r"NVIDIA|GeForce|RTX|Radeon RX|Radeon Pro|Arc\b", name, re.I)
+        if discrete and int(free) * 1024 ** 2 > m["size"] * 1.3:
+            return 99
+    return 0
+
+
 def serve_argv():
     """Command line for llama-server with the active model. Bound to
     127.0.0.1: the model is reachable from this machine only."""
     m = active()
     if not m:
         return None
-    threads = os.cpu_count() or 2
+    threads = _perf_threads()
     spare = ram_gb() - m["size"] / 1024 ** 3 - 1.0
     big = _bigger_than_ram(m, ram_gb())   # runs from disk: smallest context, and no pinning or no-mmap flags, ever
     # Context size from the RAM left after the weights (f16 KV cache: about
@@ -288,7 +321,12 @@ def serve_argv():
             "--no-webui", "--no-slots", "--cache-reuse", "256",
             # with memory to spare, earlier prompts are kept in RAM: a side job (a translation, a style, a decision) no
             # longer pushes out the main prompt, which a CPU would otherwise read again for minutes
-            "--cache-ram", "1024" if spare > 4.0 else "512" if spare > 3.0 else "0"]
+            "--cache-ram", "4096" if spare > 10.0 else "2048" if spare > 7.0 else "1024" if spare > 4.0 else "512" if spare > 3.0 else "0"]
+    # the graphics chip: on a real graphics card with room for the weights the whole model runs there; on built-in
+    # graphics (Intel Iris Xe, AMD APUs) the weights stay on the CPU, which writes faster there, and the chip only reads
+    # the prompt, about 4.5x faster than the CPU (measured on an i7-1260P: 227 vs 51 tokens/s; writing 16 vs 15 tokens/s)
+    gpu = _gpu_offload(m)
+    argv += ["-ngl", str(gpu)]
     if m.get("chat_kwargs"):                     # e.g. a model that thinks before answering by default: off, for CPU speed
         argv += ["--chat-template-kwargs", json.dumps(m["chat_kwargs"], separators=(",", ":"))]  # no spaces: exec $argv word-splits
     d = draft_path(m)
