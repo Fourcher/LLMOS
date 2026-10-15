@@ -32,6 +32,9 @@ if __name__ == "__main__":
             desk.control(["state"])
         else:
             desk.control(words)
+    elif arg == "watchdog":                   # the llmos-watchdog service: Wi-Fi and the update link stay alive
+        from llmos import watchdog
+        watchdog.run()
     elif arg == "ota-client":                 # the llmos-ota service: updates from the owner's own computer
         from llmos import ota
         ota.client()

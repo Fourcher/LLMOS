@@ -1,0 +1,23 @@
+#!/sbin/openrc-run
+# Keeps Wi-Fi and the update link alive with nobody at the keyboard (see llmos/watchdog.py). It needs no network
+# itself, so it can start Wi-Fi and the update service again when they stop.
+
+name="llmos-watchdog"
+description="LLM OS network and update-link watchdog"
+command="/usr/bin/llmos"
+command_args="watchdog"
+supervisor=supervise-daemon
+respawn_delay=10
+respawn_max=0
+pidfile="/run/llmos-watchdog.pid"
+output_log="/run/llmos/watchdog.log"
+error_log="/run/llmos/watchdog.log"
+
+depend() {
+    need localmount
+    after llmos-hw
+}
+
+start_pre() {
+    checkpath -d -m 0755 /run/llmos
+}

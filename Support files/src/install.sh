@@ -231,6 +231,7 @@ for s in killprocs mount-ro savecache; do rc-update add $s shutdown; done
 rc-update add llmos-hw sysinit
 rc-update add llmos-model default
 rc-update add llmos-scheduler default
+rc-update add llmos-watchdog default
 rc-update add llmos-ota default        # idle until the owner pairs it with their computer
 rc-update add nftables default
 rc-update add acpid default

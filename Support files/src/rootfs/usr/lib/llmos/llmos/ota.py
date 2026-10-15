@@ -600,6 +600,11 @@ def client():
     except Exception as e:
         print(f"ota: could not restart the desk: {e}", flush=True)
     try:
+        from . import watchdog
+        watchdog.ensure_service()        # Wi-Fi and this service come back by themselves if they stop
+    except Exception as e:
+        print(f"ota: watchdog not started: {e}", flush=True)
+    try:
         from . import netfix
         netfix.ensure(lambda m: print(m, flush=True))      # name lookups on real hardware (images up to 1.8.9)
     except Exception as e:
