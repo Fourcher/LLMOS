@@ -99,7 +99,7 @@ _PAGE_KEYS = ("hint", "d_muted", "d_show_task", "d_queue_next", "d_queue_remove"
               "no_mic", "stopped", "error", "model_down", "loading_model", "shutting_down", "restarting",
               "allow", "d_stop", "d_history", "d_close", "d_minimize", "d_maximize", "d_window", "d_next", "d_back", "d_skip", "d_done",
               "d_unlock", "d_working", "d_apps", "d_close_app", "d_conversation", "d_you", "d_dont",
-              "d_other_language", "d_open", "d_pause", "d_resume", "d_volume", "d_fullscreen", "d_now_playing", "d_yes_start",
+              "d_other_language", "d_open", "d_pause", "d_resume", "d_volume", "d_fullscreen", "d_starting", "d_now_playing", "d_yes_start",
               "d_no_thanks", "d_type_language", "d_keep", "d_send", "d_clear", "d_shortcuts", "d_empty",
               "settings", "models", "tasks", "memory", "audit", "help_1", "help_2",
               "w_title", "w_text", "w_begin", "w_step", "w_recommended", "w_tz_search", "w_tz_hint", "w_net_title",
@@ -2714,7 +2714,9 @@ class Desk:
                 and getattr(self, "_np_query", ""):
             def skip():
                 try:
-                    self.media_action("skip")
+                    info = self.media_action("skip")
+                    if isinstance(info, dict) and info.get("title"):
+                        self.emit({"t": "toast", "text": f"Now playing “{info['title']}”"})
                 except Exception as e:
                     self.emit({"t": "toast", "text": f"Couldn't skip: {e}"})
             threading.Thread(target=skip, daemon=True).start()
@@ -4594,7 +4596,7 @@ class Desk:
             p = media.play_windowed(info, audio_only, self._child_env())
             info["video"] = not audio_only
             info["audio"] = media.has_audio()
-            self._now_playing(info, "playing")
+            self._now_playing(info, "loading")
             threading.Thread(target=self._watch_player, args=(p, info), daemon=True).start()
             return info
         if action in ("pause", "resume", "stop"):
@@ -4632,11 +4634,17 @@ class Desk:
     def _watch_player(self, p, info):
         """The card follows the player: paused or playing as the player shows it, and gone when the player is
         closed (its X, the end of the video)."""
-        state = "playing"
+        state = "loading"
         while p.poll() is None:
             time.sleep(1)
             if getattr(self, "_np", None) is not info:
                 return                                   # another video replaced this one
+            if state == "loading":                       # the card says "Starting…" until the first frame plays
+                tp = media.get("time-pos")
+                if isinstance(tp, (int, float)) and tp > 0:
+                    state = "playing"
+                    self._now_playing(info, "playing")
+                continue
             paused = media.get("pause")
             if paused is None:
                 continue

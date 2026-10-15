@@ -1236,12 +1236,20 @@ def _safe_eval(n):
 
 # ------------------------------------------------------------ media & devices
 
+_MUSIC = re.compile(r"\b(?:music|songs?|album|playlist|radio|jazz|blues|classical|lo-?fi|beats|podcast|ambient|piano|"
+                    r"soundtrack|hip ?hop|rock|pop|country|edm|techno|chill|relaxing sounds?|white noise|rain sounds)\b", re.I)
+_VIDEO = re.compile(r"\b(?:video|videos|watch|clip|trailer|movie|film|episode|show|tutorial|how to|cats?|dogs?)\b", re.I)
+
+
 @tool("play_media", "Find and play a video or music (e.g. from YouTube) on this computer's screen and speakers.",
       {"query": {"type": "string", "description": "what to play, or a URL"},
        "audio_only": {"type": "boolean"}}, ["query"], risk=READ, network=True,
       available=lambda: shutil.which("mpv") is not None)
 def play_media(a, ctx):
-    ctx.status("looking for: " + str(a.get("query", "")))
+    q = str(a.get("query", ""))
+    if a.get("audio_only") is None and _MUSIC.search(q) and not _VIDEO.search(q) and not re.match(r"https?://", q):
+        a = dict(a, audio_only=True)          # music is listened to: no picture window, the card has the controls
+    ctx.status("looking for: " + q)
     try:
         if hasattr(ctx, "media"):
             info = ctx.media("play", query=str(a.get("query", "")), audio_only=bool(a.get("audio_only")))

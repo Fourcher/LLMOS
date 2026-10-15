@@ -864,7 +864,8 @@
       case "quote": return el("div", "quote", `“${esc(b.text)}”${b.author ? `<div class="who">— ${esc(b.author)}</div>` : ""}${b.source ? `<div class="src"><a href="#" data-url="${esc(b.source)}">${esc(b.source)}</a></div>` : ""}`);
       case "code": return el("pre", "", esc(b.text));
       case "media": {
-        const e = el("div", "media", `${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="">` : ""}<div><div class="t">${esc(b.title)}</div><div class="st">${esc(b.subtitle)}</div><div class="ctl"></div></div>`);
+        const loading = b.state === "loading";      // found, the player still starting (a video can take ~10 s)
+        const e = el("div", "media", `${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="">` : ""}<div><div class="t">${esc(b.title)}</div><div class="st">${esc(loading ? t("d_starting") : b.subtitle)}</div><div class="ctl"></div></div>`);
         const ctl = e.querySelector(".ctl");
         const pb = el("button", "btn small", esc(b.state === "paused" ? t("d_resume") : t("d_pause")));
         pb.onclick = () => post({ t: "media", action: b.state === "paused" ? "resume" : "pause" });
