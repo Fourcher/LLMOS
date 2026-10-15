@@ -134,7 +134,7 @@ def cmd_publish(a):
         f.write(data)
     m = {"format": 1, "id": uid, "version": version, "payload": f"payload-{uid}.tar", "sha256": digest,
          "size": len(data), "files": n, "created": int(time.time()), "from": socket.gethostname(),
-         "restart": [s for s in (a.restart or "llmos-rootd,llmos-scheduler,desk").split(",") if s],
+         "restart": [s for s in (a.restart or "llmos-rootd,llmos-scheduler,llmos-watchdog,desk").split(",") if s],
          "apk": [p for p in (a.apk or "").split(",") if p], "note": a.note or "",
          "enable": [p for p in (getattr(a, "enable", None) or "").split(",") if p],
          "disable": [p for p in (getattr(a, "disable", None) or "").split(",") if p]}
