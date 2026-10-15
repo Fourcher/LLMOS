@@ -3445,6 +3445,8 @@ def edit_image(a, ctx):
         # the result on screen (it is then "it" for the next step)
         show(ctx, {"id": "file:" + dest, "replace": True, "title": os.path.basename(dest), "kind": "image", "size": "l",
                    "blocks": [{"type": "image", "src": dest, "caption": f"{shown} · {', '.join(done) or 'copy'}"}]})
+    if not done and os.path.splitext(dest)[1].lower() != ext.lower():
+        done = ["made a " + os.path.splitext(dest)[1].lstrip(".").upper() + " of it"]      # "save it as a PDF" changed its kind, not "no changes"
     return (f"saved {shown} ({_human_size(os.path.getsize(dest))}) with: {', '.join(done) or 'no changes'}" +
             (f"; not understood (left out): {', '.join(unknown)}" if unknown else "") + "; the original is unchanged "
             f"[path for a next step: {dest}].")

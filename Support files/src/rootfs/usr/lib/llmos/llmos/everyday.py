@@ -1726,7 +1726,9 @@ _CLOCK_TIME = re.compile(r"\b\d{1,2}(?::\d{2})?\s?(?:am|pm|a\.m\.|p\.m\.)|\b\d{1
 
 def _first_sentences(text, n=2, cap=300):
     """The first one or two sentences of a search snippet, at most `cap` characters."""
-    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"“(])", " ".join(str(text or "").split()))
+    text = re.sub(r"\[(?:\d{1,3}|[a-z]|note\s*\d+|citation needed|nb\s*\d+)\]", "", str(text or ""), flags=re.I)   # footnote marks ("Paris[b]", "[4]")
+    text = re.sub(r"\s+([,.;:])", r"\1", text)
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"“(])", " ".join(text.split()))
     out = " ".join(parts[:n]).strip()
     if len(out) > cap:
         out = out[:cap].rsplit(" ", 1)[0].rstrip(" ,;:") + "..."

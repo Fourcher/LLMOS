@@ -134,6 +134,9 @@ _RARE_RE = re.compile(r"security|secure|hack|scan|\bports?\b|network|traffic|pac
                       r"\bopen ports?\b|install (?:it |llm os |this )?(?:to|on) (?:the |this |my )?(?:disk|drive|laptop|computer|pc)\b")
 
 
+_ASKED_ONLY = {"real_quote": re.compile(r"\bquot|\bsaid\b|\bsayings?\b|\bwords of\b|\bwho (?:said|wrote)\b")}
+
+
 def _is_rare(name):
     return name in RARE_TOOLS or name.startswith("wifi_")
 
@@ -153,9 +156,12 @@ def tool_schemas(request_text=None, sticky=False):
         full = tools.schemas(compact=True, budget=max(1500, n - 3400))
     if request_text is None:
         return full
-    norm = [s for s in full if not _is_rare(s["function"]["name"])]
-    if sticky or _RARE_RE.search(request_text.lower()):
+    low = request_text.lower()
+    norm = [s for s in full if not _is_rare(s["function"]["name"]) and s["function"]["name"] not in _ASKED_ONLY]
+    if sticky or _RARE_RE.search(low):
         norm += [s for s in full if _is_rare(s["function"]["name"])]
+    # tools a small model reached for unasked (a Wikiquote window in the middle of "how does a rainbow form")
+    norm += [s for s in full if _ASKED_ONLY.get(s["function"]["name"]) and (sticky or _ASKED_ONLY[s["function"]["name"]].search(low))]
     return norm
 
 
@@ -1111,15 +1117,21 @@ def _shortcut_words(name, args, out):
             m = re.match(r"scheduled \[\w+\] (.+?): ", out, re.I)   # "scheduled [id] Thu 01 Oct 09:52: task"
             desc = m.group(1) if m else ""
             repeating = desc.lower().startswith("every")
-            when = desc.split(" ")[-1] if desc and not repeating else ""
-            day = " ".join(desc.split(" ")[:-1]) if when else ""
+            soon = desc.lower().startswith("in ")                 # "in 2 minutes (02:36)" (store.describe, within the hour)
+            when = desc if soon else desc.split(" ")[-1] if desc and not repeating else ""
+            day = " ".join(desc.split(" ")[:-1]) if when and not soon else ""
             if day and day != time.strftime("%a %d %b"):        # another day than today: say which
                 day = "tomorrow" if day == time.strftime("%a %d %b", time.localtime(time.time() + 86400)) else day
                 when = f"{day} at {when}"
             if kind == "timer":
-                return f"Timer set — {task}, it rings at {when}." if when else f"Timer set — {task}."
+                return (f"Timer set — {task}, it rings {when}." if soon else f"Timer set — {task}, it rings at {when}.") if when else f"Timer set — {task}."
             if repeating:
                 return f"Reminder {desc}: {task}."
+            if re.match(r"alarm\b", task, re.I):       # "wake me up at 7": an alarm, not "Reminder set for 07:00: Alarm"
+                why = task.split(":", 1)[1].strip() if ":" in task else ""
+                return (f"Alarm set {when}" if soon else f"Alarm set for {when}" if when else "Alarm set") + (f": {why}." if why else ".")
+            if soon:
+                return f"Reminder set {when}: {task}."
             return f"Reminder set for {when}: {task}." if when else f"Reminder set: {task}."
         if low.startswith("scheduled ["):
             return "Scheduled — " + out.split("] ", 1)[1] + "."

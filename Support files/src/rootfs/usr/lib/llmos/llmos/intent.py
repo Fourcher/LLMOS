@@ -867,6 +867,11 @@ def _notes(text):
         if m.group("show") or m.group("oops"):
             return ("show_files", {"path": "~/.Trash"})
         return ("restore_file", {"name": (m.group("name") or m.group("file")).strip()})
+    # "make a packing list with socks, charger and toothbrush": exactly those items, in the list's window (the model
+    # answered in the chat bubble and added things nobody asked for)
+    m = _LIST_WITH.match(text)
+    if m:
+        return ("note_add", {"text": m.group("items").strip(), "list": (m.group("l") or m.group("l2")).strip().lower()})
     m = _NOTE_ADD.match(text)
     if m and not _QUESTION.search(text):
         return ("note_add", {"text": m.group("item").strip(), "list": m.group("list").strip()})
@@ -959,6 +964,16 @@ def _remind_to(text):
             continue                             # not a time phrase: try the next split ("meet in the park at 5")
         return ("schedule_task", {"when": when.lower(), "task": task, "kind": "reminder"})
     return None
+
+
+_LIST_WITH = re.compile(r"^\s*(?:please\s+)?(?:make|create|start|write|put\s+together)\s+(?:me\s+)?(?:a\s+(?:new\s+)?|my\s+)?"
+                        r"(?:(?P<l>[a-z][\w-]{1,20})\s+list|list\s+(?:called|named)\s+(?P<l2>[a-z][\w-]{1,20}))\s*(?:with|of|containing|:)\s+(?P<items>.+?)\s*[.!]?\s*$", re.I)
+
+
+def _timer_label(length, what):
+    """'Pasta (2 minutes)' for "a 2 minute timer for the pasta"; the length alone without a name."""
+    w = re.sub(r"^(?:the|my|our|a|an)\s+", "", (what or "").strip().rstrip(".!"), flags=re.I)
+    return f"{w[:1].upper() + w[1:]} ({length})" if w else length
 
 
 def _timer(text):
@@ -1777,7 +1792,7 @@ def _everyday2(text):
         if m.group("n") in ("1", "one"):
             u = u[:-1]                               # "1 minute", not "1 minutes"
         length = f"{m.group('n')} {u}"
-        return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
+        return ("schedule_task", {"when": f"in {length}", "task": _timer_label(length, m.group("what")), "kind": "timer"})
     # "set a 3 minute timer", "3 minute timer", "a 90 second timer for the eggs"
     m = re.match(r"^(?:please\s+)?(?:set\s+|start\s+|make\s+)?(?:a|an|me\s+a)?\s*(?P<n>\d+(?:\.\d+)?|one|two|three|four|five|ten|fifteen|twenty|thirty|half\s+an?)\s*[- ]?"
                  r"(?P<u>sec(?:ond)?s?|min(?:ute)?s?|h(?:ou)?rs?)\s+timer(?:\s+for\s+(?P<what>.+))?$", low)
@@ -1787,7 +1802,7 @@ def _everyday2(text):
         if "half" in m.group("n"):
             u = "minutes" if u == "hours" else u
         length = f"{n} {u[:-1] if n.strip() == '1' and u.endswith('s') else u}"      # "1 minute", not "1 minutes"
-        return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
+        return ("schedule_task", {"when": f"in {length}", "task": _timer_label(length, m.group("what")), "kind": "timer"})
     # remote testing from the update computer (development): off / on
     m = re.match(r"^(?:please\s+)?(?P<v>stop|end|turn\s+off|disable|switch\s+off|start|turn\s+on|enable|switch\s+on)\s+"
                  r"(?:the\s+)?remote\s+(?:testing|control|viewing|session)\s*[.!]?$", low)
@@ -1797,6 +1812,10 @@ def _everyday2(text):
     # "draw me a picture of a cat": no image generator here; a real photo, said plainly
     m = re.match(r"^(?:please\s+)?(?:draw|paint|sketch|generate|create|make)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:picture|image|drawing|painting|illustration|art)\s+of\s+"
                  r"(?:a\s+|an\s+|the\s+|some\s+)?(?P<w>.+?)\s*[.!]?$", t, re.I)
+    if not m:      # "draw me a cat", "paint a sunset" (draw/paint/sketch only: "make a cat" is not a picture)
+        m = re.match(r"^(?:please\s+)?(?:can\s+you\s+)?(?:draw|paint|sketch)\s+(?:me\s+|us\s+)?(?:a\s+|an\s+|the\s+|some\s+)?(?P<w>[a-z][\w' -]{1,40}?)\s*[.!?]?$", t, re.I)
+        if m and re.fullmatch(r"(?:on|in|with|from|up|out|a\s+line|lines?|line|curtains|blinds|blood|attention|conclusions?|breath|money|power|water)\b.*", m.group("w"), re.I):
+            m = None
     if m:
         return ("show_image", {"subject": m.group("w"), "drawn": True})
     # picture edits on the picture on screen ("it"), a named one, or the last screenshot: never a new screenshot
@@ -1979,6 +1998,10 @@ def _everyday2(text):
                  r"(?:mon|tues|wednes|thurs|fri|satur|sun)day)(?:\s+(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?)\s*[.!]?$", low)
     if m:
         return ("schedule_task", {"when": m.group("when"), "task": m.group("what"), "kind": "reminder"})
+    # the Cancel button in the Scheduled window: "cancel the task 70e93e" (the model, given it, answered with the code)
+    m = re.fullmatch(r"(?:please\s+)?cancel\s+the\s+task\s+(?P<id>[0-9a-f]{4,16})[.!]?", low)
+    if m:
+        return ("manage_tasks", {"action": "cancel", "which": m.group("id")})
     # "cancel the dentist reminder", "cancel my alarm", "delete the reminder to call mum": by the words in it
     m = re.match(r"^(?:please\s+)?(?:cancel|delete|remove)\s+(?:the\s+|my\s+)?(?:(?P<w>[\w' -]+?)\s+)?(?P<k>reminder|alarm|timer)s?"
                  r"(?:\s+(?:for|to|about|at)\s+(?P<w2>.+?))?\s*[.!]?$", low)

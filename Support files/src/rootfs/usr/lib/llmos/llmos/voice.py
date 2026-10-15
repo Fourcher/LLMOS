@@ -17,6 +17,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import threading
 import time
 import wave
 
@@ -40,11 +41,16 @@ def _rms(buf):
     return math.sqrt(sum(x * x for x in a) / len(a))
 
 
+CANCEL = threading.Event()          # Esc while listening: stop now, nothing is typed
+
+
 def _vad_collect(read, max_s=15, silence_s=1.2, wait_s=6):
     """Read 0.1 s chunks until the speaker has spoken and then paused."""
     frames, noise, speaking, quiet = [], [], False, 0.0
     t0 = time.time()
     while time.time() - t0 < max_s:
+        if CANCEL.is_set():
+            return b""
         buf = read()
         if not buf:
             break
@@ -300,6 +306,7 @@ def listen():
     but its capture side is silent on macOS, so the bridge is the only path
     that carries a real microphone there. On real hardware there is no bridge
     and ALSA is used."""
+    CANCEL.clear()
     pcm = None
     if _bridge_available():
         pcm = _record_bridge()

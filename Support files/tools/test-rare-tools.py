@@ -83,18 +83,23 @@ with patch.object(tools, "_has_wifi", return_value=True), \
         check(has == want, f"{req!r}: rare group {'included' if has else 'excluded'} (want {'included' if want else 'excluded'})")
 
     # order: the non-rare part is exactly today's order minus the rare group; rare tools come last
+    gated = lambda n: rare(n) or n in agent._ASKED_ONLY
     for req in ["what's the weather", "scan my network for devices"]:
         got = names(agent.tool_schemas(req))
-        plain = [n for n in got if not rare(n)]
-        check(plain == [n for n in full if not rare(n)], f"{req!r}: non-rare part identical to today's order")
+        plain = [n for n in got if not gated(n)]
+        check(plain == [n for n in full if not gated(n)], f"{req!r}: non-rare part identical to today's order")
         check(got[:len(plain)] == plain, f"{req!r}: rare tools only after all the others")
+    # tools offered only when asked for (a small model opened Wikiquote in the middle of a rainbow answer)
+    check("real_quote" not in names(agent.tool_schemas("explain how a rainbow forms in two sentences")), "no quote tool for a rainbow question")
+    got = names(agent.tool_schemas("give me a famous quote by Einstein"))
+    check(got[-1:] == ["real_quote"], "quote tool offered (at the end) when a quote is asked for")
 
     # sticky: a rare tool already used this turn keeps the group for a non-matching request
     got = names(agent.tool_schemas("what's the weather", sticky=True))
     check(any(rare(n) for n in got), "sticky + non-matching request: rare group kept")
     check(names(agent.tool_schemas("what's the weather", sticky=True)) ==
-          [n for n in full if not rare(n)] + [n for n in full if rare(n)],
-          "sticky keeps the exact order: non-rare as today, then the rare group in today's order")
+          [n for n in full if not gated(n)] + [n for n in full if rare(n)] + [n for n in full if n in agent._ASKED_ONLY],
+          "sticky keeps the exact order: non-rare as today, then the rare group in today's order, then the asked-only tools")
 
     # token savings for a non-matching request (chars/3.6, as tools.schemas budgets it)
     import json
@@ -126,7 +131,7 @@ with patch.object(tools, "_has_wifi", return_value=True), \
      patch.object(llm, "context_size", return_value=SMALL):
     budget_full = names(tools.schemas(compact=True, budget=max(1500, SMALL - 3400)))
     plain_small = agent.tool_schemas("what's the weather")
-    check(names(plain_small) == [n for n in budget_full if not rare(n)],
+    check(names(plain_small) == [n for n in budget_full if not rare(n) and n not in agent._ASKED_ONLY],
           "6k context: budgeted list minus the rare group, same order")
     check(not any(rare(n) for n in names(plain_small)), "6k context: no rare tool for a non-matching request")
 

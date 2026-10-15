@@ -905,7 +905,8 @@
   function paintReply() { paintQueued = false; if (cur) { $("reply-text").innerHTML = md(cur.text); $("reply").scrollTop = 1e6; } }
   function replyDelta(m) {
     if (!cur) replyStart({ request: "" });
-    if (!cur.text) { orb("thinking", t("d_writing")); $("reply").classList.add("writing"); }
+    if (m.reset) cur.text = "";        // a later round writes the answer anew
+    if (!cur.text) { orb("thinking", t("d_writing")); $("reply").classList.add("writing"); $("reply-progress").classList.add("hidden"); prog = null; }
     cur.text += m.text;
     // one repaint per frame, however fast tokens arrive
     if (!paintQueued) { paintQueued = true; requestAnimationFrame(paintReply); }
@@ -971,7 +972,7 @@
     const log = w.el.querySelector(".chatlog"); if (!log) return;
     let b = log.querySelector(".msg.ai.pending");
     if (m.t === "reply.start") { if (!b) { b = el("div", "msg ai pending", THINK); log.append(b); } }
-    else if (m.t === "reply.delta") { if (!b) { b = el("div", "msg ai pending"); log.append(b); } b.dataset.raw = (b.dataset.raw || "") + m.text; b.innerHTML = md(b.dataset.raw); }
+    else if (m.t === "reply.delta") { if (!b) { b = el("div", "msg ai pending"); log.append(b); } b.dataset.raw = (m.reset ? "" : (b.dataset.raw || "")) + m.text; b.innerHTML = md(b.dataset.raw); }
     else if (m.t === "activity") { if (b && !b.dataset.raw) { let a = b.querySelector(".act"); if (!a) { b.innerHTML = THINK; a = el("div", "act"); b.append(a); } a.textContent = m.text; } }
     else { if (!b) { b = el("div", "msg ai"); log.append(b); } b.classList.remove("pending"); if (m.t === "reply.error") b.classList.add("err"); b.innerHTML = md(m.text || b.dataset.raw || ""); delete b.dataset.raw; }
     log.scrollTop = 1e6;
@@ -1016,7 +1017,7 @@
     else if (e.key === "ArrowUp" && conv.length) { e.preventDefault(); histPos = histPos < 0 ? conv.length - 1 : Math.max(0, histPos - 1); inp.value = conv[histPos].req; }
     else if (e.key === "ArrowDown" && histPos >= 0) { e.preventDefault(); histPos = histPos + 1 >= conv.length ? -1 : histPos + 1; inp.value = histPos < 0 ? "" : conv[histPos].req; }
   });
-  $("mic").onclick = () => post({ t: "voice" });
+  $("mic").onclick = () => post({ t: listening ? "voice.stop" : "voice" });     // a second press stops listening
   // the OS auto-locks after idle time: tell it the owner is here (at most once every 20 s)
   let lastPing = 0;
   const ping = () => { const now = Date.now(); if (now - lastPing > 20000) { lastPing = now; post({ t: "active" }); } };
@@ -1050,6 +1051,7 @@
     }
     if (wizard.active || $("desk").classList.contains("hidden")) return;
     if (e.key === "Escape") {
+      if (listening) { post({ t: "voice.stop" }); return; }      // Esc stops listening; it closes nothing
       if (document.activeElement === inp && inp.value) { inp.value = ""; return; }
       if (focused && wins.has(focused.dataset.id)) { closeWindow(focused.dataset.id, true); focused = null; return; }
       hideReply();
