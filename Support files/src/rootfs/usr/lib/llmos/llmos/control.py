@@ -375,6 +375,10 @@ def press(keys):
         parts = _combo_parts(combo)
         if not parts:
             continue
+        if parts in (["super"], ["win"], ["windows"], ["logo"], ["meta"]):
+            # the Windows key alone brings the desk back on release; a virtual key press of it alone is not seen as
+            # that, so the same action's other key is used: Windows+Space
+            parts = ["super", "space"]
         mods = [_MODS[p] for p in parts[:-1] if p in _MODS]
         key = parts[-1]
         key = _KEYNAMES.get(key, key if len(key) == 1 else key.capitalize())
