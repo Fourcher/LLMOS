@@ -102,7 +102,10 @@ def build_payload(version):
                 ti.uid = ti.gid = 0
                 ti.uname = ti.gname = "root"
                 if ti.isreg():
-                    ti.mode = 0o755 if (rel in EXEC or rel.startswith("etc/init.d/")) else 0o644
+                    # a program keeps its run permission: listed ones, services, helpers, and anything executable here
+                    # (1.8.9.2 shipped usr/libexec/llmos-resolvconf without it and Wi-Fi would not start)
+                    ti.mode = 0o755 if (rel in EXEC or rel.startswith(("etc/init.d/", "usr/libexec/", "usr/bin/"))
+                                        or os.access(full, os.X_OK)) else 0o644
                     data = open(full, "rb").read()
                     if rel == "usr/lib/llmos/llmos/__init__.py":
                         data = re.sub(rb'^VERSION = "[^"]+"', f'VERSION = "{version}"'.encode(), data, flags=re.M)

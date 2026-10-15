@@ -27,6 +27,11 @@ def _gateway():
 
 def ensure(log=print):
     changed_iwd = False
+    try:
+        if os.path.exists(SHIM) and not os.access(SHIM, os.X_OK):
+            os.chmod(SHIM, 0o755)              # iwd will not start when its resolvconf can't run
+    except OSError as e:
+        log(f"netfix: resolvconf not made runnable: {e}")
     if os.path.exists(SHIM) and not os.path.lexists("/sbin/resolvconf") and not shutil.which("resolvconf"):
         try:
             os.symlink(SHIM, "/sbin/resolvconf")
@@ -34,7 +39,7 @@ def ensure(log=print):
             log(f"netfix: resolvconf not linked: {e}")
     try:
         conf = open(IWD).read() if os.path.exists(IWD) else ""
-        if "NameResolvingService=none" in conf and os.path.lexists("/sbin/resolvconf"):
+        if "NameResolvingService=none" in conf and os.path.lexists("/sbin/resolvconf") and os.access("/sbin/resolvconf", os.X_OK):
             with open(IWD, "w") as f:
                 f.write(conf.replace("NameResolvingService=none", "NameResolvingService=resolvconf"))
             changed_iwd = True

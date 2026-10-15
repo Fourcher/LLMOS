@@ -59,6 +59,25 @@ def _reachable(hp):
         return False
 
 
+def _repair_iwd():
+    """Wi-Fi won't start: the usual cause is its DNS helper (resolvconf) missing or not runnable. Make it runnable,
+    or else let Wi-Fi manage without it, and start Wi-Fi again."""
+    conf = "/etc/iwd/main.conf"
+    try:
+        for p in ("/usr/libexec/llmos-resolvconf",):
+            if os.path.exists(p) and not os.access(p, os.X_OK):
+                os.chmod(p, 0o755)
+                _log(f"made {p} runnable")
+        txt = open(conf).read() if os.path.exists(conf) else ""
+        if "NameResolvingService=resolvconf" in txt and not os.access("/sbin/resolvconf", os.X_OK):
+            with open(conf, "w") as f:
+                f.write(txt.replace("NameResolvingService=resolvconf", "NameResolvingService=none"))
+            _log("Wi-Fi set back to manage without resolvconf")
+    except OSError as e:
+        _log(f"Wi-Fi repair failed: {e}")
+    _rc("iwd", "start")
+
+
 def _log(msg):
     print(time.strftime("%H:%M:%S ") + "watchdog: " + msg, flush=True)
 
@@ -71,6 +90,8 @@ def run():
             if _has_service("iwd") and _wifi_present() and not _running("iwd"):
                 _log("Wi-Fi was stopped: starting it")
                 _rc("iwd", "start")
+                if not _running("iwd"):
+                    _repair_iwd()
             if config.settings.get("ota") and _has_service("llmos-ota") and not _running("llmos-ota"):
                 _log("the update service was stopped: starting it")
                 _rc("llmos-ota", "start")
