@@ -332,7 +332,7 @@ _NOT_A_PLAIN_ANSWER = re.compile(r"(?i)\s*(?:the .{0,60}window shows|here it is|
 _NOT_AN_APP = "not done: that is not a request for an app."
 _PLAIN_REPLY = {"show_panel", "system_panel", "show_files", "set_appearance", "change_setting", "open_app", "play_media",
                 "screenshot", "set_brightness", "set_volume", "notes_show", "note_add", "open_file", "show_image", "set_wallpaper",
-                "biggest_files"}
+                "biggest_files", "convert_media", "rename_series", "make_spreadsheet", "trim_video", "find_duplicates"}
 
 
 def _failed(out):

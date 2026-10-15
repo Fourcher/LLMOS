@@ -102,6 +102,20 @@ exec("import re\n" + "\n".join(l for l in src.splitlines() if l.startswith(("_VO
 check(bool(ns["_VOICES_Q"].fullmatch("which voices can you speak with")), "'which voices can you speak with' answered here")
 check(bool(ns["_MODELS_Q"].fullmatch("what models can i use")), "'what models can I use' opens the models")
 
+# rounds 21-22: a spreadsheet FOR something is made even where a spreadsheet program is installed; reminders in N minutes
+from unittest.mock import patch  # noqa: E402
+from llmos import programs, store  # noqa: E402
+import datetime as _dt  # noqa: E402
+with patch.object(programs, "find", return_value={"name": "gnumeric"}):
+    r = M("make a spreadsheet for a monthly budget with rent, food and transport")
+    check(r and r[0] == "make_spreadsheet", f"with a spreadsheet program installed, the budget is still made: {r}")
+    check(M("open a spreadsheet") == ("open_app", {"command": "spreadsheet"}), "'open a spreadsheet' opens the program")
+check(M("set a reminder in 2 minutes to stretch") == ("schedule_task", {"when": "in 2 minutes", "task": "stretch", "kind": "reminder"}),
+      "'set a reminder in 2 minutes to stretch'")
+_now = _dt.datetime(2026, 10, 15, 4, 0)
+check(store.parse_when("2 minutes", _now)[0] == _dt.datetime(2026, 10, 15, 4, 2), "a bare '2 minutes' is from now (was 00:02 tomorrow)")
+check(store.parse_when("two hours from now", _now)[0] == _dt.datetime(2026, 10, 15, 6, 0), "'two hours from now'")
+
 if fails:
     print(f"{fails} FAILED")
     sys.exit(1)

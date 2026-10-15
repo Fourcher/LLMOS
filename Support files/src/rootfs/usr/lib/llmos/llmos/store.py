@@ -467,6 +467,13 @@ def parse_when(text, now=None):
         if n is None:
             raise WhenError(f"couldn't read the number in '{text}'")
         return now + dt.timedelta(seconds=n * UNITS[m.group(2)]), None
+    # "2 minutes", "for 10 minutes", "two hours from now": a length, from now (it was read as the clock time 00:02)
+    m = re.fullmatch(r"\s*(?:for\s+|after\s+)?(?:a|an|\d+(?:\.\d+)?|[a-z]+)\s*(second|sec|minute|min|hour|hr|day|week)s?(?:\s+(?:from now|later|time))?\s*", s)
+    if m:
+        w = re.match(r"\s*(?:for\s+|after\s+)?(\S+)", s).group(1)
+        n = 1 if w in ("a", "an") else float(w) if re.match(r"\d", w) else NUMWORDS.get(w)
+        if n is not None:
+            return now + dt.timedelta(seconds=n * UNITS[m.group(1)]), None
 
     # one-time, absolute
     day = None

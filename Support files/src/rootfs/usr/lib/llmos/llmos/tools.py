@@ -2513,6 +2513,8 @@ def show_files(a, ctx):
     if is_trash and items:
         blocks.append({"type": "buttons", "items": [{"label": i18n.t("d_empty_trash"), "say": "empty the trash", "danger": True}]})
     show(ctx, {"id": "files", "replace": True, "title": title, "size": "l", "blocks": blocks})
+    if hasattr(ctx, "note_source"):          # the window follows this folder, however it was drawn (a rename redraws it too)
+        ctx.note_source("files", "show_files", {"path": path, **({"sort": a["sort"]} if a.get("sort") else {})})
     return f"{len(items) + len(pics)} item(s) in {shown} are listed on screen" + (f" (the first {uispec.MAX_ITEMS} of more)" if cut else "") + "; do not repeat them, say one sentence at most."
 
 
@@ -2575,7 +2577,9 @@ def rename_series(a, ctx):
         done_names.append(os.path.basename(dest))
     if _LAST_FOLDER == folder:
         show_files({"path": folder}, ctx)
-    return f"renamed {len(plan)} file(s) in {folder}: {done_names[0]} … {done_names[-1]}. Done: reply in one sentence."
+    home = config.home().rstrip("/")
+    shown = "~" + folder[len(home):] if folder.startswith(home + "/") else folder
+    return f"renamed {len(plan)} file(s) in {shown}: {done_names[0]} … {done_names[-1]}. Done: reply in one sentence."
 
 
 def _newest(folders, exts):
@@ -3115,13 +3119,18 @@ def find_duplicates(a, ctx):
                     gone += 1
         return (f"moved {gone} extra cop{'y' if gone == 1 else 'ies'} ({_human_size(waste)}) to the trash; the oldest copy of each file is kept. "
                 "Done: reply in one sentence (they can say 'show the trash' to put any back).")
+    # one row per file: the one kept, then each extra copy with a short Delete (long "Delete ~/a/b/c.mp4" buttons
+    # squeezed the names to one word per line)
     items = []
     for sz, g in groups[:40]:
-        items.append({"title": os.path.basename(g[0]), "subtitle": f"{len(g)} copies · {_human_size(sz)} each · oldest kept: {short(g[0])}",
-                      "actions": [{"label": f"Delete {short(p)}", "say": f"delete the file {p}", "danger": True} for p in g[1:4]]})
+        items.append({"title": os.path.basename(g[0]), "subtitle": f"kept (the oldest) · {short(os.path.dirname(g[0]))} · {_human_size(sz)}"})
+        for p in g[1:12]:
+            items.append({"title": os.path.basename(p), "subtitle": f"the same as {os.path.basename(g[0])} · {short(os.path.dirname(p))}",
+                          "actions": [{"label": "Delete", "say": f"delete the file {p}", "danger": True}]})
+    extra = sum(len(g) - 1 for _, g in groups)
     show(ctx, {"id": "dupes", "replace": True, "title": "Duplicates", "size": "l", "blocks": [
-        {"type": "text", "text": f"{len(groups)} file(s) have copies; the extra copies take {_human_size(waste)}. The oldest copy of each is kept; "
-                                 "delete the others with the buttons (they go to the trash)."},
+        {"type": "text", "text": (f"{extra} extra cop{'y' if extra == 1 else 'ies'} of {len(groups)} file{'' if len(groups) == 1 else 's'}, "
+                                  f"taking {_human_size(waste)}. The oldest of each is kept; Delete moves a copy to the trash.")},
         {"type": "list", "items": items}]})
     return f"{len(groups)} duplicate group(s), {_human_size(waste)} in extra copies, shown on screen; say one sentence at most."
 _MEDIA_EXT = (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac", ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v")

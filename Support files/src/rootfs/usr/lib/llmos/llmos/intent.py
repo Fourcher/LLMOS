@@ -1623,7 +1623,9 @@ def _apps(text):
     if m and re.search(r"\bapp\b", text, re.I) and apps.find(m.group("n")):
         return ("manage_apps", {"action": "remove", "name": m.group("n").strip()})
     if re.search(r"\b(spreadsheet|excel|word document|word doc|document in word|presentation|slides|powerpoint)\b", text, re.I) and \
-            re.match(r"^\s*(?:please\s+)?(?:make|create|start|open|i\s+(?:want|need)|new|build|set\s+up)\b", text, re.I):
+            re.match(r"^\s*(?:please\s+)?(?:make|create|start|open|i\s+(?:want|need)|new|build|set\s+up)\b", text, re.I) and \
+            not (re.search(r"\bspreadsheet|excel\b", text, re.I) and re.search(r"\b(?:for|of|about|with|listing|containing|to track)\b", text, re.I)):
+        # (a spreadsheet FOR something is made with its rows by make_spreadsheet; this only opens the empty program)
         kind = "spreadsheet" if re.search(r"spreadsheet|excel", text, re.I) else \
             "presentation" if re.search(r"presentation|slides|powerpoint", text, re.I) else "word processor"
         from . import programs
@@ -2012,6 +2014,13 @@ def _everyday2(text):
                  r"(?:mon|tues|wednes|thurs|fri|satur|sun)day)(?:\s+(?:at\s+)?\d{1,2}(?::\d\d)?\s*(?:am|pm)?)?)\s*[.!]?$", low)
     if m:
         return ("schedule_task", {"when": m.group("when"), "task": m.group("what"), "kind": "reminder"})
+    # "set a reminder in 2 minutes to stretch", "set a reminder for 10 minutes to check the oven"
+    m = re.match(r"^(?:please\s+)?(?:set|make|add|create)\s+(?:me\s+)?(?:a\s+)?reminder\s+(?:in|for)\s+(?P<n>\d+(?:\.\d+)?|an?|one|two|three|four|five|ten|fifteen|twenty|thirty)\s*"
+                 r"(?P<u>sec(?:ond)?s?|min(?:ute)?s?|h(?:ou)?rs?)\s+(?:to|about|that)\s+(?P<what>.+?)\s*[.!]?$", low)
+    if m:
+        n = {"a": "1", "an": "1"}.get(m.group("n"), m.group("n"))
+        u = {"s": "second", "m": "minute", "h": "hour"}[m.group("u")[0]]
+        return ("schedule_task", {"when": f"in {n} {u}{'' if n in ('1', 'one') else 's'}", "task": m.group("what"), "kind": "reminder"})
     # the Cancel button in the Scheduled window: "cancel the task 70e93e" (the model, given it, answered with the code)
     m = re.fullmatch(r"(?:please\s+)?cancel\s+the\s+task\s+(?P<id>[0-9a-f]{4,16})[.!]?", low)
     if m:
