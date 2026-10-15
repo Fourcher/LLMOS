@@ -300,16 +300,17 @@ def _no_blas():
 
 
 def _gpu_offload(m):
-    """Layers for the graphics chip (-ngl): all of them when a real (not software) Vulkan device has room, else 0."""
+    """(layers for the graphics chip (-ngl), its name): all of them when a real (not software) Vulkan device has room,
+    else 0."""
     try:
         out = subprocess.run(["llama-server", "--list-devices"], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError):
-        return 0
+        return 0, ""
     for name, free in re.findall(r"Vulkan\d+:\s*(.+?)\s*\(\d+ MiB,\s*(\d+) MiB free\)", out):
         # room for the weights and the conversation memory beside them (built-in graphics share the RAM)
         if int(free) * 1024 ** 2 > m["size"] + 2.5 * 1024 ** 3 and not re.search(r"llvmpipe|lavapipe|software", name, re.I):
-            return 99
-    return 0
+            return 99, name
+    return 0, ""
 
 
 def serve_argv():
@@ -338,8 +339,12 @@ def serve_argv():
     # an i7-1260P with Iris Xe at the ~9k-token context every turn has (the tool list): writing 8.1 tokens/s on the
     # chip vs 3.3 on the CPU; a short prompt reads 4.5x faster too (227 vs 51 tokens/s)
     _no_blas()
-    gpu = _gpu_offload(m)
+    gpu, gname = _gpu_offload(m)
     argv += ["-ngl", str(gpu)] + (["-fa", "on"] if gpu else [])
+    if gpu and re.search(r"\bIntel\b", gname):
+        # Intel's driver resets a GPU job that runs too long ("GPU HANG", the model server then dies mid-answer):
+        # reading the prompt in 256-token pieces keeps each job short (a 9.6k-token prompt read cleanly, 76 tokens/s)
+        argv += ["-ub", "256", "-b", "256"]
     if m.get("chat_kwargs"):                     # e.g. a model that thinks before answering by default: off, for CPU speed
         argv += ["--chat-template-kwargs", json.dumps(m["chat_kwargs"], separators=(",", ":"))]  # no spaces: exec $argv word-splits
     d = draft_path(m)

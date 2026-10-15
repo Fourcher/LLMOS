@@ -210,13 +210,34 @@ def _plain(messages):
     return [{k: v for k, v in m.items() if not str(k).startswith("_")} for m in messages]
 
 
+def _alternate(messages):
+    """Some chat templates (Ministral's) refuse two turns of the same role in a row, or a system message after the
+    first: the server then answers with an error and the owner gets an empty reply. Same-role text turns are joined,
+    a later system note becomes part of the next user turn, and the system messages at the start become one."""
+    out = []
+    for m in messages:
+        m = dict(m)
+        role, text = m.get("role"), m.get("content")
+        if role == "system" and out and any(x.get("role") != "system" for x in out):
+            m["role"], role = "user", "user"
+            m["content"] = text = f"(note) {text}" if isinstance(text, str) else text
+        prev = out[-1] if out else None
+        if prev and prev.get("role") == role and role in ("system", "user", "assistant") \
+                and isinstance(text, str) and isinstance(prev.get("content"), str) \
+                and not prev.get("tool_calls") and not m.get("tool_calls"):
+            prev["content"] = (prev["content"] + "\n\n" + text).strip()
+            continue
+        out.append(m)
+    return out
+
+
 def chat(messages, tools=None, on_text=None, max_tokens=1200, temperature=0.3,
          json_schema=None, think=None, watch=None):
     """Stream one completion from the on-device model. Returns {"content", "tool_calls", "timings"}.
     Tool calls are accumulated from streamed deltas."""
     if think is None:
         think = bool(config.settings.get("think"))
-    body = {"messages": _plain(messages), "stream": True, "temperature": temperature,
+    body = {"messages": _alternate(_plain(messages)), "stream": True, "temperature": temperature,
             "top_p": 0.95, "max_tokens": max_tokens, "cache_prompt": True,
             "chat_template_kwargs": {"enable_thinking": think}}
     if watch:
