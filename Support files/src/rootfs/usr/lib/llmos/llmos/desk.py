@@ -3225,10 +3225,7 @@ class Desk:
             self.last_reply = self._said = "Here are the wallpaper choices."
             return True
         if _BATTERY_Q.fullmatch(low):
-            b = _battery()
-            self.instant_reply(line, "This computer has no battery; it runs on mains power." if not b else
-                               f"The battery is at {b['pct']}%" + (", charging." if b["charging"] else "."))
-            return True
+            return everyday.hardware(self, line, "how much battery")      # charging, full or on battery, said exactly
         if _TIME_Q.fullmatch(low):
             now = time.localtime()
             self.instant_reply(line, time.strftime("It's %-I:%M %p on %A, %B %-d, %Y.", now))

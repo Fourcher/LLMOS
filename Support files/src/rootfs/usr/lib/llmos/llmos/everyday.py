@@ -1962,9 +1962,118 @@ def jokes(desk, line, low):
     return _say(desk, line, joke)
 
 
+# ------------------------------------------------------------------ the computer itself: exact facts, read from the hardware
+
+_HW = re.compile(
+    r"^(?:how much|what(?:'?s| is)(?: my| the)?) (?:battery|charge)(?: (?:level|percent(?:age)?|left|is left))?(?: do i have)?(?: left)?$|"
+    r"^(?:is (?:it|the (?:laptop|computer|battery)|my (?:laptop|computer|battery))|am i) (?:charging|plugged in)$|"
+    r"^(?:what|which|whats|what's)\b[^,]*\b(?:(?:graphics|video) (?:card|chip|adapter)s?|gpus?)\b|(?:graphics|video) card do i have|"
+    r"(?:screen|display|monitor) (?:resolution|size)\b|^(?:what(?:'?s| is) (?:my |the )?)?resolution$|how big is (?:my |the |this )?(?:screen|display)|"
+    r"^how much (?:memory|ram)\b|\bram do i have\b|^what(?:'?s| is) (?:my |the )?(?:memory|ram)$|"
+    r"^what (?:computer|laptop|machine|pc|model) is (?:this|it)$|^what(?:'?s| is) (?:this|my) (?:computer|laptop|machine|pc)$|"
+    r"(?:computer|laptop) model|what (?:cpu|processor)|which (?:cpu|processor)|"
+    r"how fast is (?:my |the )?(?:internet|connection|wifi|wi-fi)|internet speed|speed ?test")
+
+
+def _read(path):
+    try:
+        with open(path, errors="replace") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def _gpus():
+    out = []
+    try:
+        p = subprocess.run(["lspci", "-mm"], capture_output=True, text=True, timeout=10)
+        for ln in p.stdout.splitlines():
+            f = re.findall(r'"([^"]*)"', ln)
+            if len(f) >= 3 and re.search(r"VGA|3D|Display", f[0]):
+                out.append(f"{f[1].split(' Corporation')[0]} {f[2]}".strip())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    drivers = []
+    for card in sorted(glob.glob("/sys/class/drm/card[0-9]")):
+        d = os.path.join(card, "device", "driver")
+        if os.path.islink(d):
+            drivers.append(os.path.basename(os.readlink(d)))
+    return out, drivers
+
+
+def hardware(desk, line, low):
+    if not _HW.search(low):
+        return False
+    if re.search(r"battery|charg|plugged", low):
+        base = "/sys/class/power_supply"
+        for n in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+            if _read(f"{base}/{n}/type") == "Battery":
+                pct, st = _read(f"{base}/{n}/capacity"), _read(f"{base}/{n}/status")
+                ac = any(_read(f"{base}/{m}/online") == "1" for m in os.listdir(base) if _read(f"{base}/{m}/type") == "Mains")
+                how = {"Charging": "charging", "Full": "full and plugged in", "Not charging": "plugged in, not charging (it is full enough)",
+                       "Discharging": "on battery"}.get(st, "plugged in" if ac else st.lower() or "on battery")
+                return _say(desk, line, f"The battery is at {pct}%, {how}.")
+        return _say(desk, line, "This computer has no battery: it runs from the mains.")
+    if re.search(r"graphics|video (?:card|chip|adapter)|gpu", low):
+        names, drivers = _gpus()
+        if not names and not drivers:
+            return _say(desk, line, "I can't read the graphics hardware on this computer.")
+        nice = {"i915": "Intel's driver", "xe": "Intel's driver", "nouveau": "the open NVIDIA driver (nouveau)", "nvidia": "NVIDIA's own driver",
+                "amdgpu": "AMD's driver", "radeon": "AMD's older driver", "virtio-pci": "a virtual machine's graphics"}
+        txt = ("Graphics: " + " and ".join(names) + "." if names else "") + \
+              (" In use: " + ", ".join(dict.fromkeys(nice.get(d, d) for d in drivers)) + "." if drivers else "")
+        return _say(desk, line, txt.strip())
+    if re.search(r"resolution|screen size|how big is", low):
+        try:
+            from . import media
+            out = subprocess.run(["wlr-randr"], capture_output=True, text=True, timeout=10,
+                                 env=dict(os.environ, **(media.desk_env() or {}))).stdout
+        except (OSError, subprocess.SubprocessError):
+            out = ""
+        cur = re.findall(r"(\d+)x(\d+) px(?:, ([\d.]+) Hz)?[^\n]*current", out)
+        sc = re.findall(r"Scale: ([\d.]+)", out)
+        if not cur:
+            return _say(desk, line, "I can't read the screen's resolution right now.")
+        parts = [f"{w} × {h}" + (f" at {float(hz):.0f} Hz" if hz else "") for w, h, hz in cur]
+        return _say(desk, line, "Screen: " + "; ".join(parts) + (f", scaled {float(sc[0]):g}×" if sc and float(sc[0]) != 1 else "") + ".")
+    if re.search(r"memory|ram", low):
+        mi = dict(re.findall(r"^(\w+):\s+(\d+)", _read("/proc/meminfo"), re.M))
+        tot, avail = int(mi.get("MemTotal", 0)) / 1048576, int(mi.get("MemAvailable", 0)) / 1048576
+        return _say(desk, line, f"{tot:.1f} GB of memory (RAM); {avail:.1f} GB of it is free right now.")
+    if re.search(r"how fast|speed", low):
+        import time as _t
+        import urllib.request as _u
+        desk.emit({"t": "toast", "text": "Measuring the internet speed (about 10 seconds)…"})
+        t0, got = _t.time(), 0
+        try:
+            r = _u.urlopen("https://speed.cloudflare.com/__down?bytes=50000000", timeout=10)
+            while _t.time() - t0 < 8:
+                b = r.read(262144)
+                if not b:
+                    break
+                got += len(b)
+        except Exception as e:
+            if not got:
+                return _say(desk, line, f"I couldn't measure it: the test site didn't answer ({_plain_err(e)}).")
+        secs = max(_t.time() - t0, 0.1)
+        return _say(desk, line, f"Download speed: about {got * 8 / secs / 1e6:.0f} Mbit/s (measured for {secs:.0f} s).")
+    vendor, model = _read("/sys/class/dmi/id/sys_vendor"), _read("/sys/class/dmi/id/product_name")
+    cpu = re.search(r"^model name\s*:\s*(.+)$", _read("/proc/cpuinfo"), re.M)
+    mi = dict(re.findall(r"^(\w+):\s+(\d+)", _read("/proc/meminfo"), re.M))
+    names, _ = _gpus()
+    bits = [f"{vendor} {model}".strip() or "This computer"]
+    if cpu:
+        bits.append(f"processor {re.sub(r'\s+', ' ', cpu.group(1)).strip()} ({os.cpu_count()} threads)")
+    if mi.get("MemTotal"):
+        bits.append(f"{int(mi['MemTotal']) / 1048576:.0f} GB of memory")
+    if names:
+        bits.append("graphics " + " and ".join(names))
+    return _say(desk, line, ", ".join(bits) + ".")
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, model_answer, ota_updates, web_block, howto):
+    for fn in (hardware, jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, model_answer, ota_updates, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True
@@ -1972,3 +2081,5 @@ def handle(desk, line):
             desk.instant_reply(line, f"That didn't work: {_plain_err(e)}.")
             return True
     return False
+
+MATCH = re.compile(f"(?:{MATCH.pattern})|(?:{_HW.pattern})", MATCH.flags)   # the hardware facts answer at once too

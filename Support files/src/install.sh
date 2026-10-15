@@ -91,7 +91,7 @@ EOF
       linux-firmware-ath9k_htc linux-firmware-ath10k linux-firmware-ath11k linux-firmware-ath12k \
       linux-firmware-qca linux-firmware-rtlwifi linux-firmware-rtw88 linux-firmware-rtw89 \
       linux-firmware-realtek linux-firmware-rtl_nic linux-firmware-rtl_bt linux-firmware-brcm \
-      linux-firmware-mediatek linux-firmware-other
+      linux-firmware-mediatek linux-firmware-other sof-firmware linux-firmware-nvidia
   # fstab by UUID (disks get different names on real machines)
   cat > $TARGET/etc/fstab <<EOF
 UUID=$(blkid -s UUID -o value "$ROOTDEV")  /         ext4  rw,relatime  0 1
@@ -113,7 +113,7 @@ PKGS="
   llama-server llama.cpp-cpu
   whisper.cpp
   yt-dlp quickjs-ng mpv
-  alsa-utils espeak-ng chafa
+  alsa-utils alsa-ucm-conf pciutils espeak-ng chafa
   tor cryptsetup nftables
   kbd font-terminus
   cage seatd seatd-launch foot w3m
