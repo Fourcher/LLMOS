@@ -2437,6 +2437,10 @@ class Desk:
                 mt = os.stat(tools._dir((args or {}).get("path") or "~")).st_mtime_ns
             except OSError:
                 mt = -1
+            if mt == -1 and seen.get(wid) not in (None, -1):
+                self.GLib.idle_add(lambda w=wid: (self.close_window(w), False)[1])    # the folder itself is gone
+                seen.pop(wid, None)
+                continue
             if seen.get(wid) not in (None, mt):
                 changed = True
             seen[wid] = mt

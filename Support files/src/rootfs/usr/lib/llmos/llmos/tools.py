@@ -3132,7 +3132,8 @@ def find_duplicates(a, ctx):
         {"type": "text", "text": (f"{extra} extra cop{'y' if extra == 1 else 'ies'} of {len(groups)} file{'' if len(groups) == 1 else 's'}, "
                                   f"taking {_human_size(waste)}. The oldest of each is kept; Delete moves a copy to the trash.")},
         {"type": "list", "items": items}]})
-    return f"{len(groups)} duplicate group(s), {_human_size(waste)} in extra copies, shown on screen; say one sentence at most."
+    return (f"Found {extra} extra cop{'y' if extra == 1 else 'ies'} of {len(groups)} file{'' if len(groups) == 1 else 's'} "
+            f"({_human_size(waste)}); they are listed with a Delete button each. Say one sentence at most.")
 _MEDIA_EXT = (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac", ".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v")
 _AUDIO_EXT = (".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav", ".aac")
 
