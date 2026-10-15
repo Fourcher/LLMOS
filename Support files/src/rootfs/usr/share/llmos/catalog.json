@@ -168,6 +168,32 @@
   ]
  },
  {
+  "id": "huihui-ornith-1.5-9b",
+  "name": "Huihui Ornith 1.5 9B (uncensored)",
+  "maker": "huihui-ai, from Ornith 1.5 (a Qwen 3.5 model); file converted by mradermacher",
+  "origin": "not stated",
+  "license": "MIT",
+  "repo": "mradermacher/Huihui-Ornith-1.5-9B-abliterated-GGUF",
+  "file": "Huihui-Ornith-1.5-9B-abliterated.Q4_K_M.gguf",
+  "size": 5629109696,
+  "sha256": "84779a40e0a237f1f0275ac86bb92ae1a0fb5245f127b7b2e25a4ddabf7d03ad",
+  "ram_gb": 8,
+  "note": "uncensored: its refusals were removed (abliterated); newer and smarter than Dolphin",
+  "speed": "slow",
+  "good_at": [
+   "answers anything the owner asks",
+   "stronger reasoning than the 3B and 8B models",
+   "recommended by users of local models (2026)"
+  ],
+  "limits": [
+   "9B: wants 16 GB of memory",
+   "writes about 4 words a second on a laptop without a graphics card"
+  ],
+  "chat_kwargs": {
+   "enable_thinking": false
+  }
+ },
+ {
   "id": "granite-4.1-8b",
   "name": "Granite 4.1 8B",
   "maker": "IBM",

@@ -60,7 +60,7 @@ old = blocks_from_source(old_src.stdout) if old_src.returncode == 0 else {}
 check(sorted(new) == sorted(BLOCKS), "all six language blocks present")
 NEW_KEYS = {"no_model", "d_maximize", "d_window", "d_sure", "d_slow_turn"}  # keys added to every block (no assistant set up yet; window controls; sure-press and slow-turn notices)
 # the model-size words for the set-up's "More models" list (every block has them; the old values are unchanged)
-ADDED_KEYS = {"d_fullscreen", "d_starting", "w_model_slow", "w_more_models",
+ADDED_KEYS = {"d_fullscreen", "d_starting", "s_screen_off", "w_model_slow", "w_more_models",
               # the web-page check's dialog sentence: says why the confirm was asked (test-guard-explain.py)
               "d_guard_tainted",
               # live work, the request queue and the Do / Ask switch (desk: watch(), queue strip, Ask mode)

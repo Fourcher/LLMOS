@@ -73,7 +73,7 @@ on = desk._model_tiers(True)
 check(all(t["need_gb"] <= 15.3 - 1 for t in on), "every choice fits the memory with 1 GB left for the system")
 check(all(not t.get("bigger") for t in on), "nothing is marked running-from-disk when it fits")
 allm = desk._model_all(True)
-check([m["bigger"] for m in allm] == [False] * 11 + [True] and allm[-1]["id"] == "underdog-27b",
+check([m["bigger"] for m in allm] == [False] * 12 + [True] and allm[-1]["id"] == "underdog-27b",
       "16 GB: all_models offers every model; only the 20 GB one is marked running from disk, and it is last")
 check([m["id"] for m in desk._model_all(False)] == ["ministral-3-3b"], "16 GB offline: all_models is only what is installed")
 check([t["id"] for t in off] == ["ministral-3-3b"], "offline: only what is already installed")

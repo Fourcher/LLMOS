@@ -2136,6 +2136,10 @@ class Desk:
                  "say_off": "stop reading replies aloud"},
                 {"type": "toggle", "label": L("s_focus"), "on": bool(s.get("focus", {}).get("on")), "say_on": "turn on focus mode",
                  "say_off": "turn off focus mode"},
+                {"type": "heading", "text": L("s_screen_off")},
+                {"type": "choices", "selected": (L("v_minutes", n=int(s.get("screen_off", 10) or 0)) if int(s.get("screen_off", 10) or 0) else L("v_never")),
+                 "items": [{"label": L("v_never"), "say": "keep the screen on"}] +
+                          [{"label": L("v_minutes", n=n), "say": f"turn the screen off after {n} minutes"} for n in (5, 10, 15, 30)]},
                 {"type": "kv", "rows": [[L("s_vault"), L("v_on") if s.get("vault") else L("v_off")]]},
             ] + ([
                 {"type": "heading", "text": L("s_autolock")},
