@@ -600,6 +600,11 @@ def client():
     except Exception as e:
         print(f"ota: could not restart the desk: {e}", flush=True)
     try:
+        from . import netfix
+        netfix.ensure(lambda m: print(m, flush=True))      # name lookups on real hardware (images up to 1.8.9)
+    except Exception as e:
+        print(f"ota: name lookup check failed: {e}", flush=True)
+    try:
         import threading
         from . import devlink
         threading.Thread(target=devlink.run, daemon=True).start()     # remote testing (idle unless turned on)

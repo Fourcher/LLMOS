@@ -181,6 +181,9 @@ else
 fi
 chroot $TARGET /usr/lib/llmos/embed/llama-server --version >/dev/null 2>&1 || { echo "the search-by-meaning runtime does not run"; exit 1; }
 
+# the build's resolver (the build VM's 10.0.2.3) must not stay: on the owner's computer the network's DHCP writes it
+: > $TARGET/etc/resolv.conf
+
 log "system configuration"
 echo llmos > $TARGET/etc/hostname
 printf '127.0.0.1\tllmos localhost\n::1\t\tllmos localhost\n' > $TARGET/etc/hosts
@@ -210,7 +213,9 @@ grep -q ' /tmp ' $TARGET/etc/fstab || echo 'tmpfs /tmp tmpfs nosuid,nodev,mode=1
 
 # Wi-Fi (real hardware): iwd with its own DHCP client
 mkdir -p $TARGET/etc/iwd
-printf '[General]\nEnableNetworkConfiguration=true\n\n[Network]\nNameResolvingService=none\n' > $TARGET/etc/iwd/main.conf
+# its DHCP's DNS servers go to /etc/resolv.conf through LLM OS's small resolvconf (busybox has none)
+printf '[General]\nEnableNetworkConfiguration=true\n\n[Network]\nNameResolvingService=resolvconf\n' > $TARGET/etc/iwd/main.conf
+[ -e $TARGET/sbin/resolvconf ] || ln -s /usr/libexec/llmos-resolvconf $TARGET/sbin/resolvconf
 
 # services (explicit for both targets; harmless where setup-disk already did it)
 chroot $TARGET sh -eu <<'EOF' >/dev/null 2>&1

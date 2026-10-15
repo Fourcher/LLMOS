@@ -1,0 +1,24 @@
+#!/bin/sh
+# resolvconf for iwd (Wi-Fi): iwd hands over the DNS servers its DHCP got ("-a IFACE" with "nameserver x" lines on
+# stdin) and takes them back ("-d IFACE"). They are kept per interface in /run and merged into /etc/resolv.conf.
+D=/run/llmos/resolv
+mkdir -p "$D"
+op=""; ifc=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -a|-d) op="$1"; shift; ifc="$1" ;;
+  esac
+  shift
+done
+ifc=$(printf '%s' "$ifc" | tr -c 'A-Za-z0-9._-' '_')
+[ -n "$ifc" ] || exit 0
+if [ "$op" = "-a" ]; then
+  cat > "$D/$ifc.tmp" && mv "$D/$ifc.tmp" "$D/$ifc"
+elif [ "$op" = "-d" ]; then
+  rm -f "$D/$ifc"
+fi
+out=$(cat "$D"/* 2>/dev/null | grep -E '^(nameserver|search|domain|options)[[:space:]]' | awk '!seen[$0]++')
+if [ -n "$out" ]; then
+  printf '%s\n' "$out" > /etc/resolv.conf.llmos && mv /etc/resolv.conf.llmos /etc/resolv.conf
+fi
+exit 0
