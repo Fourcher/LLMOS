@@ -577,6 +577,12 @@ def install(base, m, key, log=print):
         r = subprocess.run(["apk", "add", "-q", p], capture_output=True, text=True, timeout=900)
         if r.returncode:
             return False, f"package {p} could not be installed: {r.stderr.strip()[:200]}"
+    if m.get("apk"):
+        try:
+            from . import watchdog
+            watchdog._sound_firmware()      # new audio firmware: the sound card appears now, not at the next boot
+        except Exception:
+            pass
     desk_was_up = os.path.exists("/run/llmos/desk.sock")
     me = os.path.join(ROOT, "usr/lib/llmos/llmos/ota.py")
 

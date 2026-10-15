@@ -95,9 +95,35 @@ def _log(msg):
     print(time.strftime("%H:%M:%S ") + "watchdog: " + msg, flush=True)
 
 
+def _sound_firmware():
+    """Intel laptops (SOF audio) find no sound card when their firmware arrived after the driver looked for it (an
+    update that installed sof-firmware): load the driver again once the firmware is there."""
+    try:
+        if "no soundcards" not in _read_text("/proc/asound/cards") or not os.path.isdir("/lib/firmware/intel/sof"):
+            return
+        mods = _read_text("/proc/modules")
+        for m in ("snd_sof_pci_intel_tgl", "snd_sof_pci_intel_mtl", "snd_sof_pci_intel_cnl", "snd_sof_pci_intel_icl",
+                  "snd_sof_pci_intel_apl"):
+            if m + " " in mods:
+                subprocess.run(["modprobe", "-r", m], capture_output=True, timeout=30)
+                subprocess.run(["modprobe", m], capture_output=True, timeout=30)
+                _log(f"sound: loaded {m} again with its firmware")
+    except (OSError, subprocess.SubprocessError) as e:
+        _log(f"sound check failed: {e}")
+
+
+def _read_text(path):
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return ""
+
+
 def run():
     down_since = None
     wifi_kicked = False
+    _sound_firmware()
     while True:
         try:
             if _has_service("iwd") and _wifi_present() and not _running("iwd"):
