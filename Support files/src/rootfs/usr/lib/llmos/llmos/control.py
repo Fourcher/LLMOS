@@ -350,7 +350,9 @@ _KEYNAMES = {"enter": "Return", "return": "Return", "tab": "Tab", "esc": "Escape
              "backspace": "BackSpace", "delete": "Delete", "del": "Delete", "space": "space", "up": "Up",
              "down": "Down", "left": "Left", "right": "Right", "home": "Home", "end": "End", "pageup": "Prior",
              "pagedown": "Next", "page up": "Prior", "page down": "Next", "f5": "F5", "f11": "F11", "f12": "F12",
-             "+": "plus", "plus": "plus", "-": "minus", "minus": "minus"}
+             "+": "plus", "plus": "plus", "-": "minus", "minus": "minus",
+             # the Windows key on its own (it brings the desk back): wtype needs the real key name
+             "super": "Super_L", "win": "Super_L", "windows": "Super_L", "logo": "Super_L", "meta": "Super_L"}
 _MODS = {"ctrl": "ctrl", "control": "ctrl", "alt": "alt", "shift": "shift", "super": "logo", "win": "logo",
          "windows": "logo", "cmd": "ctrl", "command": "ctrl", "logo": "logo"}
 
