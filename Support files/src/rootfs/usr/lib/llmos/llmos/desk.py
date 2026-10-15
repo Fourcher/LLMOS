@@ -1514,7 +1514,34 @@ class Desk:
                 {"type": "buttons", "items": [{"label": T("d_live_install"), "say": "install llm os on this computer", "primary": True},
                                               {"label": T("d_live_keep"), "say": "close the live window"}]}]})
 
+    def _model_rewarm(self):
+        """The model server started again without the desk (an update, a model change, a crash): its prompt cache is
+        empty, so the static prefix is read again in the background, before the owner's next request needs it."""
+        if getattr(self, "_rewarm_on", False):
+            return
+        self._rewarm_on = True
+
+        def loop():
+            last = None
+            while True:
+                time.sleep(20)
+                try:
+                    pid = subprocess.run(["pgrep", "-f", "llama-server -m"], capture_output=True, text=True,
+                                         timeout=5).stdout.split()[:1]
+                    pid = pid[0] if pid else None
+                    if pid and last is None:
+                        last = pid                      # the one the desk's own start-up warmed
+                    elif pid and pid != last and llm.health():  # a new server, ready (still loading: next round)
+                        last = pid
+                        sys.stderr.write("desk: the model server started again: warming its prompt cache\n")
+                        agent.warm_up()
+                except Exception:
+                    pass
+        threading.Thread(target=loop, daemon=True).start()
+
     def _model_watch(self):
+        self._model_rewarm()
+
         def watch():
             if llm.health():
                 self.push_status()

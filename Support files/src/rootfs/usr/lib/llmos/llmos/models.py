@@ -286,16 +286,28 @@ def _perf_threads():
         return max(2, os.cpu_count() or 2)
 
 
+def _no_blas():
+    """Alpine's llama.cpp loads an OpenBLAS backend, which takes the prompt work from the graphics chip and is no
+    faster than the CPU itself (51 vs 55 tokens/s on an i7-1260P). It is set aside before the model starts (an
+    upgrade of the package puts it back; the next start sets it aside again)."""
+    for d in ("/usr/lib/llama.cpp", "/usr/lib"):
+        b = os.path.join(d, "libggml-blas.so")
+        if os.path.exists(b):
+            try:
+                os.replace(b, b + ".off")
+            except OSError:
+                pass
+
+
 def _gpu_offload(m):
-    """Layers for the graphics chip (-ngl): all of them on a discrete card with room, else 0 (the chip, when there is
-    one with a Vulkan driver, still reads the prompt)."""
+    """Layers for the graphics chip (-ngl): all of them when a real (not software) Vulkan device has room, else 0."""
     try:
         out = subprocess.run(["llama-server", "--list-devices"], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError):
         return 0
     for name, free in re.findall(r"Vulkan\d+:\s*(.+?)\s*\(\d+ MiB,\s*(\d+) MiB free\)", out):
-        discrete = re.search(r"NVIDIA|GeForce|RTX|Radeon RX|Radeon Pro|Arc\b", name, re.I)
-        if discrete and int(free) * 1024 ** 2 > m["size"] * 1.3:
+        # room for the weights and the conversation memory beside them (built-in graphics share the RAM)
+        if int(free) * 1024 ** 2 > m["size"] + 2.5 * 1024 ** 3 and not re.search(r"llvmpipe|lavapipe|software", name, re.I):
             return 99
     return 0
 
@@ -322,11 +334,12 @@ def serve_argv():
             # with memory to spare, earlier prompts are kept in RAM: a side job (a translation, a style, a decision) no
             # longer pushes out the main prompt, which a CPU would otherwise read again for minutes
             "--cache-ram", "4096" if spare > 10.0 else "2048" if spare > 7.0 else "1024" if spare > 4.0 else "512" if spare > 3.0 else "0"]
-    # the graphics chip: on a real graphics card with room for the weights the whole model runs there; on built-in
-    # graphics (Intel Iris Xe, AMD APUs) the weights stay on the CPU, which writes faster there, and the chip only reads
-    # the prompt, about 4.5x faster than the CPU (measured on an i7-1260P: 227 vs 51 tokens/s; writing 16 vs 15 tokens/s)
+    # the graphics chip, when it has a Vulkan driver and room for the weights: the whole model runs there. Measured on
+    # an i7-1260P with Iris Xe at the ~9k-token context every turn has (the tool list): writing 8.1 tokens/s on the
+    # chip vs 3.3 on the CPU; a short prompt reads 4.5x faster too (227 vs 51 tokens/s)
+    _no_blas()
     gpu = _gpu_offload(m)
-    argv += ["-ngl", str(gpu)]
+    argv += ["-ngl", str(gpu)] + (["-fa", "on"] if gpu else [])
     if m.get("chat_kwargs"):                     # e.g. a model that thinks before answering by default: off, for CPU speed
         argv += ["--chat-template-kwargs", json.dumps(m["chat_kwargs"], separators=(",", ":"))]  # no spaces: exec $argv word-splits
     d = draft_path(m)
