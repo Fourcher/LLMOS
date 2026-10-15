@@ -120,9 +120,18 @@ def _read_text(path):
         return ""
 
 
+def _mem_avail_pct():
+    try:
+        mi = dict(re.findall(r"^(\w+):\s+(\d+)", _read_text("/proc/meminfo"), re.M))
+        return 100.0 * int(mi["MemAvailable"]) / max(1, int(mi["MemTotal"]))
+    except (KeyError, ValueError):
+        return 100.0
+
+
 def run():
     down_since = None
     wifi_kicked = False
+    low_since, model_kicked = None, False
     _sound_firmware()
     while True:
         try:
@@ -133,6 +142,20 @@ def run():
                     _repair_iwd()
             if config.settings.get("devlink") or config.settings.get("stay_awake"):
                 _wifi_awake()            # a test computer answers at once, also when idle
+            # memory nearly gone (a model too big for this machine, a crash that left graphics memory behind): the
+            # computer swaps until nothing answers. The model server is started again first; on a test computer that
+            # cannot be reached otherwise, a restart follows if that did not help.
+            if _mem_avail_pct() < 3:
+                low_since = low_since or time.time()
+                if time.time() - low_since > 90 and not model_kicked:
+                    _log(f"memory nearly gone ({_mem_avail_pct():.1f}% free): starting the model server again")
+                    _rc("llmos-model", "restart", timeout=120)
+                    model_kicked = True
+                elif time.time() - low_since > 300 and model_kicked and config.settings.get("devlink"):
+                    _log("memory still nearly gone after 5 minutes on a test computer: restarting it")
+                    subprocess.run(["reboot"], timeout=30)
+            else:
+                low_since, model_kicked = None, False
             if config.settings.get("ota") and _has_service("llmos-ota") and not _running("llmos-ota"):
                 _log("the update service was stopped: starting it")
                 _rc("llmos-ota", "start")

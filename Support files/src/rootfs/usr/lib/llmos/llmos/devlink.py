@@ -30,7 +30,7 @@ def enabled():
 
 def _verify(raw, sig, key):
     from . import ota
-    return ota.verify_manifest(raw, sig, key, NAMESPACE)
+    return ota.verify_manifest(raw, sig, key, NAMESPACE, timeout=120)
 
 
 def _post(base, body):
@@ -112,7 +112,12 @@ def run():
         cid = str(cmd.get("id", ""))
         if not re.fullmatch(r"[A-Za-z0-9-]{8,64}", cid):
             continue
-        if not _verify(raw, sig, o["key"]):
+        ok_sig = _verify(raw, sig, o["key"])
+        if ok_sig is None:
+            _post_safe(base, {"id": cid, "ok": False, "out": "busy: the signature check did not finish (the computer is short "
+                                                             "of memory or very busy); try again"})
+            continue
+        if not ok_sig:
             _post_safe(base, {"id": cid, "ok": False, "out": "refused: the signature does not match the paired key"})
             continue
         if abs(time.time() - float(cmd.get("ts", 0))) > 120 or cid in _seen or cmd.get("host") not in (host, "*"):

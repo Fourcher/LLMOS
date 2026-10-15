@@ -1876,6 +1876,27 @@ def _everyday2(text):
     if m:
         body = m.group("b").strip().strip("'\"")
         return ("mail_reply", {"id": "latest", "body": body[:1].upper() + body[1:]})
+    # "send an email to a@b.com with subject Test and say hello" / "... with the subject X saying Y"
+    m = re.match(r"^(?:please\s+)?(?:send|write)\s+(?:an?\s+)?e-?mail\s+to\s+(?P<to>[\w.+-]+@[\w.-]+)\s+(?:with\s+)?(?:the\s+)?subject\s+(?P<s>.+?)"
+                 r"\s+(?:and\s+)?(?:say(?:ing)?|that\s+says|with\s+the\s+(?:text|message|body))\s+(?P<b>.+)$", t, re.I)
+    if m:
+        body = m.group("b").strip().strip("'\"")
+        body = body[:1].upper() + body[1:]
+        return ("mail_send", {"to": m.group("to"), "subject": m.group("s").strip().strip("'\""),
+                              "body": body if re.search(r"[.!?]$", body) else body + "."})
+    # "reply to it saying ...", "reply saying ...": the email last opened (the one on screen)
+    m = re.match(r"^(?:please\s+)?(?:reply|respond|answer)(?:\s+to\s+(?:it|this|that|this\s+(?:one|e-?mail)|that\s+(?:one|e-?mail)|him|her|them))?,?\s+"
+                 r"(?:saying|with|that\s+says|to\s+say|and\s+say)\s+(?P<b>.+)$", t, re.I)
+    if m:
+        body = m.group("b").strip().strip("'\"")
+        return ("mail_reply", {"id": "it", "body": body[:1].upper() + body[1:]})
+    # "delete the first email", "read the second message", "archive the last email"
+    m = re.match(r"^(?:please\s+)?(?P<v>read|open|show|delete|trash|remove|archive)\s+(?:the\s+|my\s+)?(?P<o>first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|last|latest|newest)\s+(?:e-?mail|mail|message)$", low)
+    if m:
+        o = {"last": "latest", "newest": "latest"}.get(m.group("o"), m.group("o"))
+        if m.group("v") in ("read", "open", "show"):
+            return ("mail_read", {"id": o})
+        return ("mail_archive" if m.group("v") == "archive" else "mail_delete", {"ids": o})
     m = re.match(r"^(?:please\s+)?(?:e-?mail|send)\s+(?:my\s+|the\s+)?(?P<f>[\w .'-]+?)\s+to\s+(?P<to>[\w.+-]+@[\w.-]+)$", t, re.I)
     if m and not re.search(r"\b(?:saying|that|about)\b", t, re.I):
         f = m.group("f").strip()

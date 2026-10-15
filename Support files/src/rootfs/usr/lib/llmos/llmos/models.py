@@ -299,9 +299,45 @@ def _no_blas():
                 pass
 
 
+GPU_OFF = "/var/lib/llmos/gpu-off"
+
+
+def _gpu_crashed():
+    """The graphics chip crashed the model server (Intel's driver reset it: "DeviceLost"): after two such crashes in
+    a row the model stays on the CPU, slower but steady, instead of crashing and restarting over and over (which on a
+    16 GB laptop left graphics memory behind until nothing answered). Remembered across restarts in GPU_OFF."""
+    if os.path.exists(GPU_OFF):
+        return True
+    try:
+        with open("/run/llmos/model.log", errors="replace") as f:
+            tail = f.read()[-6000:]                 # the end of the previous run (the log is appended to)
+    except OSError:
+        tail = ""
+    count_file = "/run/llmos/gpu-crashes"
+    try:
+        n = int(open(count_file).read().strip() or 0)
+    except (OSError, ValueError):
+        n = 0
+    n = n + 1 if "DeviceLost" in tail else 0
+    try:
+        with open(count_file, "w") as f:
+            f.write(str(n))
+    except OSError:
+        pass
+    if n >= 2:
+        try:
+            with open(GPU_OFF, "w") as f:
+                f.write("the model server crashed twice on the graphics chip (DeviceLost); delete this file to try it again\n")
+        except OSError:
+            pass
+    return n >= 2
+
+
 def _gpu_offload(m):
     """(layers for the graphics chip (-ngl), its name): all of them when a real (not software) Vulkan device has room,
     else 0."""
+    if _gpu_crashed():
+        return 0, ""
     try:
         out = subprocess.run(["llama-server", "--list-devices"], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.SubprocessError):
@@ -345,6 +381,10 @@ def serve_argv():
         # Intel's driver resets a GPU job that runs too long ("GPU HANG", the model server then dies mid-answer):
         # reading the prompt in 256-token pieces keeps each job short (a 9.6k-token prompt read cleanly, 76 tokens/s)
         argv += ["-ub", "256", "-b", "256"]
+        if not big:
+            # built-in graphics use the same RAM: a mapped file kept the weights twice (once mapped, once on the
+            # chip), 11 GB for a 9B model on a 16 GB laptop, which then swapped until nothing answered
+            argv += ["--no-mmap"]
     if m.get("chat_kwargs"):                     # e.g. a model that thinks before answering by default: off, for CPU speed
         argv += ["--chat-template-kwargs", json.dumps(m["chat_kwargs"], separators=(",", ":"))]  # no spaces: exec $argv word-splits
     d = draft_path(m)

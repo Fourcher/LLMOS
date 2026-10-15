@@ -1420,6 +1420,10 @@ def execute(ctx, name, arguments):
             args = {"value": args}
     except ValueError:
         return f"error: could not parse arguments for {name}"
+    if name == "run_command" and re.match(r"\s*(?:echo\b.*\|\s*)?(?:sendmail|mail|mailx|mutt|ssmtp|msmtp)\b", str(args.get("command") or "")):
+        # a shell mail command only drops the message in a local queue that nothing sends: the owner was told
+        # "sent" for mail that never left. Email goes through the mail tools, which report real delivery errors.
+        return "error: email is sent with mail_send (or mail_reply), never with a shell mail command"
     if name == "run_command":
         # the model deleting one of the owner's files or folders with rm ("delete the HW Test folder" once became
         # "rm -rf ~/Documents/HW Test", which also failed on the space): it goes to the trash, through the same checks

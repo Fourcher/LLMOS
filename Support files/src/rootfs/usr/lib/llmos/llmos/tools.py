@@ -1952,10 +1952,21 @@ def mail_inbox(a, ctx):
             + mail.format_list(items))
 
 
+_LAST_MAIL = []          # the message the owner last opened: "reply to it", "delete this one"
+_ORDINAL = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5}
+
+
 def _mail_ref(a):
-    """Accept a message id or a sender/subject fragment ('latest' = the newest message)."""
+    """Accept a message id or a sender/subject fragment ('latest' = the newest message, 'it' = the one last opened,
+    'first'/'second'... = that place in the inbox list, newest first)."""
     ref = str(a.get("id", "")).strip()
-    if ref.lower() in ("latest", "newest", "last", "most recent", "new"):
+    if ref.lower() in ("it", "this", "that", "this one", "that one", "current", "this email", "that email") and _LAST_MAIL:
+        return _LAST_MAIL[-1]
+    if ref.lower() in _ORDINAL:
+        items = mail.unread(limit=_ORDINAL[ref.lower()])
+        if len(items) >= _ORDINAL[ref.lower()]:
+            return "INBOX", items[_ORDINAL[ref.lower()] - 1]["uid"]
+    if ref.lower() in ("latest", "newest", "last", "most recent", "new", "it", "this", "that"):
         items = mail.unread(limit=1)
         if items:
             return "INBOX", items[0]["uid"]
@@ -1979,6 +1990,7 @@ def mail_read(a, ctx):
         m = mail.read(uid, folder)
     except mail.MailError as e:
         return f"error: {e}"
+    _LAST_MAIL[:] = [(folder, uid)]
     text = f"From: {m['from']}\nDate: {m['date']}\nSubject: {m['subject']}\n\n{m['text']}"
     sender = _sender_name(m["from"])
     show(ctx, {"title": m["subject"][:70] or f"Message [{m['uid']}]", "size": "l", "blocks": [
@@ -2070,7 +2082,8 @@ def _ids(v):
       {"ids": STR}, ["ids"], risk=CHANGE, network=True, available=lambda: mail.account() is not None)
 def mail_archive(a, ctx):
     try:
-        done, dest = mail.move(_ids(a.get("ids", "")), "archive")
+        ids = [x if x.isdigit() else str(_mail_ref({"id": x})[1]) for x in _ids(a.get("ids", ""))]
+        done, dest = mail.move(ids, "archive")
     except mail.MailError as e:
         return f"error: {e}"
     return f"archived {len(done)} message(s) to {dest}"
@@ -2080,7 +2093,8 @@ def mail_archive(a, ctx):
       {"ids": STR}, ["ids"], risk=DESTRUCTIVE, network=True, available=lambda: mail.account() is not None)
 def mail_delete(a, ctx):
     try:
-        done, dest = mail.move(_ids(a.get("ids", "")), "trash")
+        ids = [x if x.isdigit() else str(_mail_ref({"id": x})[1]) for x in _ids(a.get("ids", ""))]
+        done, dest = mail.move(ids, "trash")
     except mail.MailError as e:
         return f"error: {e}"
     return f"moved {len(done)} message(s) to {dest}"

@@ -194,8 +194,9 @@ def current_version():
         return "?"
 
 
-def verify_manifest(raw, sig, key, namespace=None):
-    """True when sig is a valid signature of raw by key (the pinned public key)."""
+def verify_manifest(raw, sig, key, namespace=None, timeout=30):
+    """True when sig is a valid signature of raw by key (the pinned public key); None when the check itself could
+    not finish in time (a machine short of memory), which is not the same as a bad signature."""
     NS = namespace or NAMESPACE
     with tempfile.TemporaryDirectory() as d:
         signers, sigf = os.path.join(d, "signers"), os.path.join(d, "m.sig")
@@ -205,7 +206,9 @@ def verify_manifest(raw, sig, key, namespace=None):
             f.write(sig)
         try:
             p = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", signers, "-I", NS, "-n", NS,
-                                "-s", sigf], input=raw, capture_output=True, timeout=30)
+                                "-s", sigf], input=raw, capture_output=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return None
         except (OSError, subprocess.SubprocessError):
             return False
         return p.returncode == 0
@@ -648,7 +651,11 @@ def client():
         try:
             raw = _get(f"{base}/ota/manifest-{uid}.json", timeout=20)
             sig = _get(f"{base}/ota/manifest-{uid}.json.sig", timeout=20)
-            if not verify_manifest(raw, sig, o["key"]):
+            ok_sig = verify_manifest(raw, sig, o["key"], timeout=120)
+            if ok_sig is None:                    # the check could not finish (short of memory): try again later
+                time.sleep(60)
+                continue
+            if not ok_sig:
                 print("ota: refused an update whose signature does not match the paired key", flush=True)
                 _report(base, {"host": socket.gethostname(), "id": uid, "ok": False, "detail": "bad signature: refused"})
                 st["failed"] = (st.get("failed", []) + [uid])[-20:]
