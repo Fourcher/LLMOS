@@ -194,16 +194,17 @@ def current_version():
         return "?"
 
 
-def verify_manifest(raw, sig, key):
+def verify_manifest(raw, sig, key, namespace=None):
     """True when sig is a valid signature of raw by key (the pinned public key)."""
+    NS = namespace or NAMESPACE
     with tempfile.TemporaryDirectory() as d:
         signers, sigf = os.path.join(d, "signers"), os.path.join(d, "m.sig")
         with open(signers, "w") as f:
-            f.write(f"{NAMESPACE} {key}\n")
+            f.write(f"{NS} {key}\n")
         with open(sigf, "wb") as f:
             f.write(sig)
         try:
-            p = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", signers, "-I", NAMESPACE, "-n", NAMESPACE,
+            p = subprocess.run(["ssh-keygen", "-Y", "verify", "-f", signers, "-I", NS, "-n", NS,
                                 "-s", sigf], input=raw, capture_output=True, timeout=30)
         except (OSError, subprocess.SubprocessError):
             return False
@@ -220,6 +221,9 @@ def check_manifest(m):
         raise ValueError("bad update name")
     if not re.fullmatch(r"[0-9a-f]{64}", m["sha256"]):
         raise ValueError("bad checksum")
+    for f in m.get("enable", []) + m.get("disable", []):
+        if f not in ("devlink",):
+            raise ValueError(f"bad switch {f!r}")
     for s in m.get("restart", []):
         if s != "desk" and not SERVICES.fullmatch(s):
             raise ValueError(f"bad service {s!r}")
@@ -595,6 +599,12 @@ def client():
             restart_desk()
     except Exception as e:
         print(f"ota: could not restart the desk: {e}", flush=True)
+    try:
+        import threading
+        from . import devlink
+        threading.Thread(target=devlink.run, daemon=True).start()     # remote testing (idle unless turned on)
+    except Exception as e:
+        print(f"ota: remote testing not started: {e}", flush=True)
     while True:
         o = paired()
         if not o:
@@ -650,6 +660,12 @@ def client():
         if ok:      # before a restart of this program below, so it is not cut short (at most ~2 min, once per update)
             _report(base, {"host": socket.gethostname(), "kind": "probe", "version": m["version"], "ok": True,
                            "detail": "browser check", **_browser_probe()})
+        if ok and ("devlink" in m.get("enable", []) or "devlink" in m.get("disable", [])):
+            on = "devlink" in m.get("enable", [])
+            config.settings.set("devlink", on)
+            _notify("Remote testing " + ("on" if on else "off"),
+                    (f"{o['name']} can now test this computer: look at the screen, click and type. Say “stop remote "
+                     "testing” to turn it off.") if on else "Remote testing is off.")
         if ok:
             _notify("Updated", f"LLM OS {m['version']} from {o['name']} is installed."
                     + (" This is the live USB, so it lasts until restart." if live else ""))

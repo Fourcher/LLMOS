@@ -3799,6 +3799,15 @@ def write_document(a, ctx):
     return f"{text}\n\nSaved as {shown}."
 
 
+@tool("remote_testing", "Turn remote testing from the owner's update computer off (or back on): 'stop remote testing'.",
+      {"on": {"type": "boolean"}}, ["on"], risk=CHANGE)
+def remote_testing(a, ctx):
+    on = bool(a.get("on"))
+    config.settings.set("devlink", on)
+    return ("Remote testing is on: your update computer can look at the screen, click and type." if on else
+            "Remote testing is off. Your update computer can no longer look at or control this screen.")
+
+
 @tool("notes_show", "Show one of the owner's lists (shopping, to-do, notes …) or, with no list, everything, as a window.",
       {"list": STR}, [], risk=READ)
 def notes_show(a, ctx):

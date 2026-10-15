@@ -1766,6 +1766,12 @@ def _everyday2(text):
             u = "minutes" if u == "hours" else u
         length = f"{n} {u[:-1] if n.strip() == '1' and u.endswith('s') else u}"      # "1 minute", not "1 minutes"
         return ("schedule_task", {"when": f"in {length}", "task": length + (f" ({m.group('what')})" if m.group("what") else ""), "kind": "timer"})
+    # remote testing from the update computer (development): off / on
+    m = re.match(r"^(?:please\s+)?(?P<v>stop|end|turn\s+off|disable|switch\s+off|start|turn\s+on|enable|switch\s+on)\s+"
+                 r"(?:the\s+)?remote\s+(?:testing|control|viewing|session)\s*[.!]?$", low)
+    if m:
+        return ("remote_testing", {"on": m.group("v").split()[0] in ("start", "turn", "enable", "switch")
+                                   and not m.group("v").endswith("off")})
     # "write a thank-you note to my neighbour and save it as thanks.txt": the text is written, then saved by the OS
     m = re.match(r"^(?:please\s+)?(?:write|draft|compose|make|create)\s+(?:me\s+)?(?P<w>.+?)\s+and\s+(?:save|put|store|keep)\s+it\s+"
                  r"(?:as|in|to|into|under)\s+(?:a\s+file\s+(?:called|named)\s+)?(?P<f>[\w .'-]+?\.(?:txt|md))\s*[.!]?$", low)

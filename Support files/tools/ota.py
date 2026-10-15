@@ -34,6 +34,8 @@ KEYDIR = os.path.join(PROJECT, "ota-keys")
 KEY = os.path.join(KEYDIR, "ota_ed25519")
 FEED = os.path.join(PROJECT, "run", "ota", "feed")
 REPORTS = os.path.join(PROJECT, "run", "ota", "reports.jsonl")
+DEVQ = os.path.join(PROJECT, "run", "ota", "dev", "queue")       # remote testing: signed commands waiting
+DEVR = os.path.join(PROJECT, "run", "ota", "dev", "results")     # and what they did
 SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "rootfs")  # this tree's source
 PORT = 8781
 NAMESPACE = "llmos-ota"
@@ -130,7 +132,9 @@ def cmd_publish(a):
     m = {"format": 1, "id": uid, "version": version, "payload": f"payload-{uid}.tar", "sha256": digest,
          "size": len(data), "files": n, "created": int(time.time()), "from": socket.gethostname(),
          "restart": [s for s in (a.restart or "llmos-rootd,llmos-scheduler,desk").split(",") if s],
-         "apk": [p for p in (a.apk or "").split(",") if p], "note": a.note or ""}
+         "apk": [p for p in (a.apk or "").split(",") if p], "note": a.note or "",
+         "enable": [p for p in (getattr(a, "enable", None) or "").split(",") if p],
+         "disable": [p for p in (getattr(a, "disable", None) or "").split(",") if p]}
     mpath = os.path.join(FEED, f"manifest-{uid}.json")
     with open(mpath, "w") as f:
         json.dump(m, f, indent=1)
@@ -235,6 +239,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if u.path == "/ota/hello":
             key = pubkey()
             return self._send(200, json.dumps({"name": socket.gethostname(), "key": key, "fp": fingerprint(key)}).encode())
+        if u.path == "/dev/next":           # remote testing: the device waits here for the next signed command
+            end = time.time() + 50
+            while time.time() < end:
+                q = sorted(fn for fn in os.listdir(DEVQ) if fn.endswith(".json")) if os.path.isdir(DEVQ) else []
+                if q:
+                    path = os.path.join(DEVQ, q[0])
+                    try:
+                        body = open(path, "rb").read()
+                        os.unlink(path)
+                    except OSError:
+                        continue
+                    return self._send(200, body)
+                time.sleep(0.2)
+            return self._send(200, b"{}")
         if u.path == "/ota/wait":
             have = urllib.parse.parse_qs(u.query).get("have", [""])[0]
             end = time.time() + 50
@@ -253,6 +271,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self._send(404, b"{}")
 
     def do_POST(self):
+        if self.path == "/dev/result":       # remote testing: what a command did (a screenshot can be a few MB)
+            n = min(int(self.headers.get("Content-Length", 0) or 0), 64 * 1024 * 1024)
+            try:
+                body = json.loads(self.rfile.read(n))
+                cid = str(body.get("id", ""))
+                if not re.fullmatch(r"[A-Za-z0-9-]{8,64}", cid):
+                    raise ValueError
+            except ValueError:
+                return self._send(400, b"{}")
+            os.makedirs(DEVR, exist_ok=True)
+            with open(os.path.join(DEVR, cid + ".tmp"), "w") as f:
+                json.dump(body, f)
+            os.replace(os.path.join(DEVR, cid + ".tmp"), os.path.join(DEVR, cid + ".json"))
+            return self._send(200, b"{}")
         if self.path != "/ota/report":
             return self._send(404, b"{}")
         n = min(int(self.headers.get("Content-Length", 0) or 0), 16384)
@@ -321,6 +353,8 @@ def main():
     p.add_argument("--restart")
     p.add_argument("--apk")
     p.add_argument("--note")
+    p.add_argument("--enable", help="switch on, e.g. devlink (remote testing)")
+    p.add_argument("--disable", help="switch off, e.g. devlink")
     sub.add_parser("info")
     r = sub.add_parser("reports")
     r.add_argument("-n", type=int, default=10)
