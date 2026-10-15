@@ -56,7 +56,8 @@ def ensure(log=print):
         except OSError as e:
             log(f"netfix: resolv.conf not written: {e}")
     if changed_iwd:
-        # iwd reads its settings at start; the Wi-Fi reconnects by itself within seconds
-        subprocess.run(["rc-service", "iwd", "restart"], capture_output=True, timeout=60)
-        log("netfix: Wi-Fi now writes the DNS servers it is given")
+        # iwd reads this at its next start (the next boot). It is never restarted from here: the update service
+        # depends on the network, so restarting Wi-Fi stopped this very service halfway and left Wi-Fi off
+        # (1.8.9.2 on the spare computer, 2026-10-14). The resolver written above works until then.
+        log("netfix: Wi-Fi will write the DNS servers it is given from the next start")
     return changed_iwd
