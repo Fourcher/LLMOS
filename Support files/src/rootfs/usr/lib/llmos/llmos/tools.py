@@ -1247,7 +1247,7 @@ _VIDEO = re.compile(r"\b(?:video|videos|watch|clip|trailer|movie|film|episode|sh
       available=lambda: shutil.which("mpv") is not None)
 def play_media(a, ctx):
     q = str(a.get("query", ""))
-    if a.get("audio_only") is None and _MUSIC.search(q) and not _VIDEO.search(q) and not re.match(r"https?://", q):
+    if not a.get("audio_only") and _MUSIC.search(q) and not _VIDEO.search(q) and not re.match(r"https?://", q):
         a = dict(a, audio_only=True)          # music is listened to: no picture window, the card has the controls
     ctx.status("looking for: " + q)
     try:
