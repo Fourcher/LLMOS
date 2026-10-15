@@ -347,6 +347,29 @@ def _desk_app():
     return None
 
 
+def _labwc_env():
+    """(environ, uid, gid) of the running compositor, or None."""
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            with open(f"/proc/{d}/comm") as f:
+                if f.read().strip() != "labwc":
+                    continue
+            with open(f"/proc/{d}/environ", "rb") as f:
+                env = dict(kv.split(b"=", 1) for kv in f.read().split(b"\0") if b"=" in kv)
+            st = os.stat(f"/proc/{d}")
+            return {k.decode(): v.decode() for k, v in env.items()}, st.st_uid, st.st_gid
+        except (OSError, ValueError):
+            continue
+    return None
+
+
+def desk_missing():
+    """The compositor runs but the desk program inside it doesn't."""
+    return _labwc_env() is not None and _desk_app() is None
+
+
 def _fullscreen_desk(env):
     """Make sure the new desk window fills the screen (the compositor ignored the desk's own first request when
     it was started again outside the compositor's start-up)."""
@@ -402,6 +425,20 @@ def restart_desk():
                 os.setuid(uid)
         subprocess.Popen(["/usr/bin/llmos", "desk-app"], env=env, cwd=env.get("HOME", "/"), stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=become, close_fds=True)
+        _fullscreen_desk(env)
+        return
+    # the compositor is up but the desk program is gone (killed when memory ran out): start it inside that session,
+    # with the compositor's environment (the update was rolled back as "the desk did not start" before)
+    lab = _labwc_env()
+    if lab:
+        env, uid, gid = lab
+        env.setdefault("WAYLAND_DISPLAY", "wayland-0")
+        try:
+            os.unlink("/run/llmos/desk.sock")
+        except OSError:
+            pass
+        subprocess.Popen(["/usr/bin/llmos", "desk-app"], env=env, cwd=env.get("HOME", "/"), stdin=subprocess.DEVNULL,
+                         stdout=open("/run/llmos/desk.log", "a"), stderr=subprocess.STDOUT, start_new_session=True)
         _fullscreen_desk(env)
         return
     # no desk program running at all (a test shell, or the desk was closed): start the whole desk session

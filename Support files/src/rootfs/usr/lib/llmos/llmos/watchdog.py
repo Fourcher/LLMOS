@@ -132,6 +132,7 @@ def run():
     down_since = None
     wifi_kicked = False
     low_since, model_kicked = None, False
+    desk_gone = None
     _sound_firmware()
     while True:
         try:
@@ -156,6 +157,16 @@ def run():
                     subprocess.run(["reboot"], timeout=30)
             else:
                 low_since, model_kicked = None, False
+            # the screen session is up but the desk program died (out of memory, a crash): start it again
+            from . import ota
+            if ota.desk_missing():
+                desk_gone = desk_gone or time.time()
+                if time.time() - desk_gone > 60:
+                    _log("the desk was gone for a minute: starting it again")
+                    ota.restart_desk()
+                    desk_gone = None
+            else:
+                desk_gone = None
             if config.settings.get("ota") and _has_service("llmos-ota") and not _running("llmos-ota"):
                 _log("the update service was stopped: starting it")
                 _rc("llmos-ota", "start")

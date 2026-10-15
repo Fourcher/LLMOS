@@ -399,8 +399,12 @@ def press(keys):
 
 
 def scroll(direction="down", amount=3):
-    dy = 15 * int(amount or 3) * (-1 if str(direction).lower().startswith("u") else 1)
-    r = _run(["wlrctl", "pointer", "scroll", str(dy), "0"], timeout=5)
+    """Scroll with the keyboard (arrow keys, three lines per step) where the pointer is. Never with wlrctl's virtual
+    wheel: its scroll never says it stopped, and the desk's GTK/WebKit then kept scrolling and grew by ~700 MB every
+    3 s until the computer ran out of memory (found on a 16 GB laptop, 2026-10-15)."""
+    key = "Up" if str(direction).lower().startswith("u") else "Down"
+    n = max(1, min(60, 3 * int(amount or 3)))
+    r = _run(["wtype"] + ["-k", key] * n, timeout=20)
     return r.returncode == 0
 
 
