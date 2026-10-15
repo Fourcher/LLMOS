@@ -1248,6 +1248,7 @@ _WALLPAPER = re.compile(r"^\s*(?:please\s+)?(?:(?:use|set|put|make|show)\s+(?:a|
 _WALLPAPER_BACK = re.compile(r"^\s*(?:please\s+)?(?:(?:put|change|set|turn|switch|bring)\s+(?:my\s+|the\s+)?(?:wallpaper|background|desktop(?:\s+background)?)"
                              r"\s+back(?:\s+to\s+(?:how\s+it\s+was|normal|the\s+(?:original|default|old|usual)(?:\s+one)?|what\s+it\s+was))?"
                              r"|(?:reset|restore|undo)\s+(?:my\s+|the\s+)?(?:wallpaper|background|desktop(?:\s+background)?)"
+                             r"|(?:put|bring|set|change)\s+(?:back\s+)?(?:my\s+|the\s+)?(?:old|previous|last|earlier)\s+(?:[\w-]+\s+){0,3}?(?:wallpaper|background)(?:\s+back)?"
                              r"|(?:set|change|put)\s+(?:my\s+|the\s+)?(?:wallpaper|background)\s+(?:back\s+)?to\s+(?:the\s+)?(?:default|original|normal|usual)(?:\s+one)?)\s*[.!]?\s*$", re.I)
 
 

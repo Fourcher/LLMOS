@@ -403,6 +403,10 @@ def _nothing_open_reply(text):
 # --------------------------------------------------------------- ctx
 
 
+# tools whose windows are not rebuilt by running them again: each run does something new
+_NO_REFRESH = {"screenshot", "show_image", "play_media", "web_answer", "web_search", "browse", "record_screen", "speed_test",
+               "make_list", "write_document", "weather"}
+
 def _stay_awake():
     """The computer never sleeps by itself (the screen may still turn off): a test or demo computer with remote
     testing on must stay reachable, or the owner set "stay_awake"."""
@@ -684,8 +688,11 @@ class DeskCtx:
 
     def show_ui(self, spec):
         cur = getattr(self, "_cur_tool", None)
-        if cur and cur[2] in (tools.READ, tools.SAFE) and isinstance(spec, dict) and spec.get("id") and cur[0]:
-            self.d.note_window_source(spec["id"], cur[0], cur[1])    # rebuilt by re-running this tool when things change
+        # rebuilt by re-running this tool when things change; never a tool that does something each time it runs
+        # ("take a screenshot" took a new one after every picture edit) or a picture window
+        if cur and cur[2] in (tools.READ, tools.SAFE) and isinstance(spec, dict) and spec.get("id") and cur[0] \
+                and cur[0] not in _NO_REFRESH and spec.get("kind") != "image":
+            self.d.note_window_source(spec["id"], cur[0], cur[1])
         return self.d.open_window(spec)
 
     def close_ui(self, wid):

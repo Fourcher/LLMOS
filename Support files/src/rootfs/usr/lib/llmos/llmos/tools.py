@@ -1053,12 +1053,14 @@ def read_webpage(a, ctx):
 def show_image(a, ctx):
     try:
         info = web.wikimedia_image(str(a.get("subject", "")))
-        fd, path = tempfile.mkstemp(suffix=".img", prefix="llmos-img-")
+        ext = os.path.splitext(str(info.get("url", "")).split("?")[0])[1].lower()
+        fd, path = tempfile.mkstemp(suffix=ext if ext in _IMAGE_EXT else ".jpg", prefix="llmos-img-")
         os.close(fd)
         web.fetch(info["url"], dest=path)
     except (web.WebError, OSError) as e:
         return f"no photo found: {e}"
     credit = ", ".join(x for x in (info["author"], info["license"]) if x)
+    _LAST_PICTURE[:] = [path]                   # "use this picture as my wallpaper" means this photo
     if getattr(ctx, "is_desk", False):
         subject = str(a.get("subject", "")).strip()
         ctx.show_ui({"id": "image-" + re.sub(r"\W+", "-", subject.lower())[:40], "replace": True,
@@ -3436,6 +3438,10 @@ def edit_image(a, ctx):
         return f"could not change it: {err[:200]}"
     home = config.home().rstrip("/")
     shown = "~" + dest[len(home):] if dest.startswith(home) else dest
+    if os.path.splitext(dest)[1].lower() in _IMAGE_EXT:
+        # the result on screen (it is then "it" for the next step)
+        show(ctx, {"id": "file:" + dest, "replace": True, "title": os.path.basename(dest), "kind": "image", "size": "l",
+                   "blocks": [{"type": "image", "src": dest, "caption": f"{shown} · {', '.join(done) or 'copy'}"}]})
     return (f"saved {shown} ({_human_size(os.path.getsize(dest))}) with: {', '.join(done) or 'no changes'}" +
             (f"; not understood (left out): {', '.join(unknown)}" if unknown else "") + "; the original is unchanged "
             f"[path for a next step: {dest}].")
