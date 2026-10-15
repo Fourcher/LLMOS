@@ -579,9 +579,15 @@ def install(base, m, key, log=print):
             return False, f"package {p} could not be installed: {r.stderr.strip()[:200]}"
     desk_was_up = os.path.exists("/run/llmos/desk.sock")
     me = os.path.join(ROOT, "usr/lib/llmos/llmos/ota.py")
-    before = _sha(me)
+
+    def _code():
+        # this service's code is every module it loads (remote testing, screen control, the watchdog's helpers...):
+        # any of them changed means it starts again on the new code
+        d = os.path.dirname(me)
+        return "".join(_sha(os.path.join(d, f)) for f in sorted(os.listdir(d)) if f.endswith(".py"))
+    before = _code()
     rec = apply_files(payload, os.path.join(STATE_DIR, f"backup-{m['id']}.tar"))
-    install.files_at, install.self_changed = time.time(), _sha(me) != before
+    install.files_at, install.self_changed = time.time(), _code() != before
     if _restart(m.get("restart", ["desk"]), desk_was_up):
         _stamp_release(m["version"])      # only once it is kept: a rolled-back update leaves the stamp as it was
         return True, f"{len(rec['names'])} files"
