@@ -188,5 +188,25 @@ open(w, "w").write("x")
 out = agent.execute(ctx(), "delete_file", {"path": "where.txt"})
 check("delete reply names the folder", "from ~/Documents" in out, out)
 
+# 15. real laptop: "delete the HW Test folder" goes to the trash; the model's "rm -rf" of the owner's folder does too;
+#     "write a short shopping list into notes.txt" composes a list instead of adding those words
+check("folder delete by name", intent.match("delete the HW Test folder") == ("delete_file", {"path": "HW Test"}))
+check("not 'the'", intent.match("remove the folder .") is None, intent.match("remove the folder ."))
+f2 = os.path.join(HOME, "Documents", "HW Test")
+os.makedirs(f2, exist_ok=True)
+open(os.path.join(f2, "list.txt"), "w").write("x")
+out = agent.execute(ctx(), "run_command", {"command": "rm -rf ~/Documents/HW Test"})
+check("rm -rf of an owner folder went to the trash", not os.path.exists(f2) and "trash" in out.lower(), out)
+_answers2 = iter(["Milk\nEggs\nBread"])
+L.chat = lambda *a, **k: {"content": next(_answers2)}
+open(os.path.join(HOME, "Documents", "shop.txt"), "w").write("old line\n")
+D.said = None
+try:
+    everyday.handle(D(), "write a short shopping list into shop.txt")
+finally:
+    L.chat = _real_chat
+txt = open(os.path.join(HOME, "Documents", "shop.txt")).read()
+check("described text is composed and added", txt.startswith("old line\n") and "Milk" in txt and "a short shopping list" not in txt, txt)
+
 print("all good" if not fails else f"{len(fails)} failed")
 sys.exit(1 if fails else 0)

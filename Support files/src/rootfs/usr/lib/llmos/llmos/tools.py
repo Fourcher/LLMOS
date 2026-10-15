@@ -2356,9 +2356,8 @@ def show_files(a, ctx):
             acts = [{"label": i18n.t("d_restore"), "say": f"restore {n} from the trash", "primary": True},
                     {"label": i18n.t("d_delete_forever"), "say": f"delete the file {p}", "danger": True}]
         else:
-            acts = [{"label": i18n.t("d_open"), "say": f"show my files in {p}" if isdir else f"open the file {p}"}]
-            if not isdir:
-                acts.append({"label": i18n.t("d_delete"), "say": f"delete the file {p}", "danger": True})
+            acts = [{"label": i18n.t("d_open"), "say": f"show my files in {p}" if isdir else f"open the file {p}"},
+                    {"label": i18n.t("d_delete"), "say": f"delete the {'folder' if isdir else 'file'} {p}", "danger": True}]
         items.append({"title": ("📁 " + n) if isdir else n, "subtitle": when if isdir else f"{_human_size(st.st_size)} · {when}",
                       "actions": acts})
     home = config.home().rstrip("/")
@@ -3761,7 +3760,8 @@ def make_list(a, ctx):
 
 
 @tool("write_document", "Write a letter, note, poem or other text the owner asked for and save it as a file: 'write a thank-you "
-      "note to my neighbour and save it as thanks.txt'.", {"request": STR, "name": STR}, ["request", "name"], risk=CHANGE)
+      "note to my neighbour and save it as thanks.txt'; append=true adds it to the end of an existing file.",
+      {"request": STR, "name": STR, "append": {"type": "boolean"}}, ["request", "name"], risk=CHANGE)
 def write_document(a, ctx):
     """The text is the model's; the saving is done here, so a reply can never say "saved" for a file that isn't there."""
     req, name = str(a.get("request") or "").strip(), str(a.get("name") or "").strip().strip("'\"")
@@ -3796,7 +3796,10 @@ def write_document(a, ctx):
         return "error: no text came back; try again"
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        add = bool(a.get("append")) and os.path.exists(path) and os.path.getsize(path) > 0
+        with open(path, "a" if add else "w", encoding="utf-8") as f:
+            if add and not open(path, "rb").read()[-1:] == b"\n":
+                f.write("\n")
             f.write(text + "\n")
     except OSError as e:
         return f"error: {e.strerror}: {path}"
@@ -3804,7 +3807,7 @@ def write_document(a, ctx):
     shown = "~" + path[len(home):] if path.startswith(home) else path
     if hasattr(ctx, "status"):
         ctx.status(f"saved {shown}")          # the "writing …" line ends
-    return f"{text}\n\nSaved as {shown}."
+    return f"{text}\n\n{'Added to' if a.get('append') else 'Saved as'} {shown}."
 
 
 @tool("remote_testing", "Turn remote testing from the owner's update computer off (or back on): 'stop remote testing'.",

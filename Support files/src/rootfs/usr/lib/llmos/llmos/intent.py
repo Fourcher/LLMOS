@@ -1165,6 +1165,10 @@ def _files(text):
     if m:
         p = m.group("p")
         return ("delete_file", {"path": p})          # a bare name is found in the owner's folders (agent.execute)
+    # "delete the HW Test folder", "trash my old stuff folder", "delete the folder HW Test": always to the trash
+    m = re.match(r"^\s*(?:please\s+)?(?:delete|remove|trash|bin|get rid of)\s+(?:the\s+|my\s+)?(?:(?:folder|directory)\s+(?:called\s+|named\s+)?(?P<a>(?!(?:the|my|this|that|a|an)\b)[\w][\w .'-]*?)|(?P<b>(?!(?:the|my|this|that|a|an)\b)[\w][\w .'-]*?)\s+(?:folder|directory))\s*[.!]?\s*$", text, re.I)
+    if m:
+        return ("delete_file", {"path": (m.group("a") or m.group("b")).strip()})
     # "delete thanks.txt", "trash my notes.txt": a file name with its ending
     m = re.match(r"^\s*(?:please\s+)?(?:delete|remove|trash|bin)\s+(?:the\s+|my\s+)?(?P<p>[\w][\w .'-]*\.[A-Za-z0-9]{1,5})\s*[.!]?\s*$", text, re.I)
     if m:

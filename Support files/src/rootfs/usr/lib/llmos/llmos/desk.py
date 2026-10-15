@@ -1850,6 +1850,7 @@ class Desk:
                    {"type": "buttons", "items": [{"label": t["title"], "say": f"make a {t['id']} app"} for t in apps.templates()]},
                    {"type": "text", "text": T("d_apps_hint"), "dim": True},
                    {"type": "buttons", "items": [{"label": T("d_apps_connectors"), "say": "connectors"}]}]
+        self.note_window_source("apps", "call", "show_apps")       # installing or removing a program refreshes it
         self.open_window({"id": "apps", "replace": True, "title": T("d_myapps"), "size": "m", "slot": "side", "blocks": blocks})
 
     def note_window_source(self, wid, tool, args):

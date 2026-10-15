@@ -1420,6 +1420,17 @@ def execute(ctx, name, arguments):
             args = {"value": args}
     except ValueError:
         return f"error: could not parse arguments for {name}"
+    if name == "run_command":
+        # the model deleting one of the owner's files or folders with rm ("delete the HW Test folder" once became
+        # "rm -rf ~/Documents/HW Test", which also failed on the space): it goes to the trash, through the same checks
+        # as any delete
+        cmd = str(args.get("command") or "").strip()
+        mm = re.fullmatch(r"rm\s+(?:-[a-zA-Z]+\s+)*(?P<t>.+)", cmd)
+        if mm and not re.search(r"[;&|<>`$*?]", cmd):
+            whole = mm.group("t").strip().strip("'\"")
+            home = config.home().rstrip("/")
+            if tools._path(whole).startswith(home + "/") and os.path.lexists(tools._path(whole)):
+                name, tool, args = "delete_file", tools.REGISTRY["delete_file"], {"path": whole}
 
     risk = tool.risk_for(args)
     network = tool.network_for(args)

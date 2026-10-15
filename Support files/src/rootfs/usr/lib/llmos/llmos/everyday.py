@@ -1660,6 +1660,15 @@ def net_and_dates(desk, line, low):
     m = re.fullmatch(r"(?:add|append|write|put)\s+(?P<t>.+?)\s+(?:to|in|into|at the end of)\s+(?:my\s+|the\s+)?(?P<f>[\w .-]+\.(?:txt|md|csv|log))", q)
     if m and re.search(r"\b(?:and|save|saved|as|then|called|named)\b", m.group("f")):
         m = None        # "write a note to my neighbour and save it as thanks.txt": compose, not "append to a file"
+    if m and re.match(r"(?:a|an|some|my|the)\s+(?:\w+\s+){0,4}(?:list|note|poem|story|letter|summary|paragraph|recipe|plan|"
+                      r"email|message|joke|reminder|to-?do|agenda|schedule|description|bio|haiku|toast|speech)s?\b", m.group("t")):
+        # "write a short shopping list into notes.txt": that describes text to write, not the words to add
+        from . import tools
+        name = line.strip().rstrip("?.!")[m.start("f"):m.end("f")]
+        hits = [h for h in tools.find_paths(name) if os.path.basename(h).lower() == name.lower()]
+        out = tools.write_document({"request": line.strip().rstrip("?.!")[m.start("t"):m.end("t")], "name": hits[0] if hits else name,
+                                    "append": True}, desk.ctx if hasattr(desk, "ctx") else desk)
+        return _say(desk, line, out[7:] if out.startswith("error: ") else out)
     if m:
         from . import tools
         name = line.strip().rstrip("?.!")[m.start("f"):m.end("f")]
