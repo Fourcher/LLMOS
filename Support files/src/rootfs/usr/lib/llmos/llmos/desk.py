@@ -2434,8 +2434,14 @@ class Desk:
         if n.startswith("mail_"):
             what = n[5:]
             ref = a.get("id") or a.get("ids") or a.get("to") or a.get("address") or ""
-            return (f"{'Send' if what in ('send', 'reply') else what.capitalize()} email {ref}?".replace("  ", " ") if confirm
-                    else f"email: {what} {ref}".strip())
+            # the words a person uses, not the internal references ("it" = the open message, "first" = top of the list)
+            ref = {"it": "the open email", "latest": "the newest email", "first": "the first email", "second": "the second email",
+                   "third": "the third email"}.get(str(ref).lower(), ref)
+            what = {"reply": "reply to", "read": "read", "delete": "delete", "archive": "archive", "inbox": "check the inbox",
+                    "send": "send to"}.get(what, what)
+            if confirm:
+                return f"{'Send' if n[5:] in ('send', 'reply') else n[5:].capitalize()} email: {ref}?".replace("  ", " ")
+            return f"email: {what} {ref}".strip()
         if n in ("show_screen", "show_panel", "show_image", "real_quote", "calculate", "remember", "forget", "schedule_task"):
             key = next((k for k in ("panel", "subject", "who_or_topic", "expression", "fact", "what", "task", "title") if a.get(k)), None)
             return f"{n.replace('_', ' ')}: {str(a.get(key, ''))[:70]}" if key else n.replace("_", " ")
