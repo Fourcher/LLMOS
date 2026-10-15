@@ -2,6 +2,7 @@
 class the user's autonomy setting is checked against, and an implementation
 that returns plain text (the only thing the model ever gets back)."""
 import ast
+import glob
 import json
 import math
 import time
@@ -19,9 +20,16 @@ from . import apps, config, devices, programs, themes, i18n, llm, mail, media, m
 SAFE, READ, CHANGE, DESTRUCTIVE, SECURITY = "safe", "read", "change", "destructive", "security"
 
 
+_LAST_PICTURE = []       # the picture last shown on screen: "rotate it", "save it as a PDF"
+
+
 def show(ctx, spec):
     """Put a generated interface (a window spec, see uispec.py) on the owner's
     screen: a window on the desk, a framed box on the text console."""
+    if isinstance(spec, dict) and spec.get("kind") == "image":
+        src = next((b.get("src") for b in spec.get("blocks", []) if isinstance(b, dict) and b.get("type") == "image"), None)
+        if src and os.path.isfile(str(src)):
+            _LAST_PICTURE[:] = [str(src)]
     if hasattr(ctx, "show_ui"):
         return ctx.show_ui(spec)
     norm = uispec.normalize(spec)
@@ -1040,7 +1048,7 @@ def read_webpage(a, ctx):
 
 
 @tool("show_image", "Show the user a real photograph of something (Wikimedia Commons, credited).",
-      {"subject": {"type": "string", "description": "what to show, e.g. 'Eiffel Tower'"}}, ["subject"],
+      {"subject": {"type": "string", "description": "what to show, e.g. 'Eiffel Tower'"}, "drawn": {"type": "boolean"}}, ["subject"],
       risk=READ, network=True)
 def show_image(a, ctx):
     try:
@@ -1062,6 +1070,10 @@ def show_image(a, ctx):
         p = subprocess.run(["chafa", "--size", f"{w}x{h}", "--colors", "256", "--animate", "off",
                             "--symbols", "block+border+space-wide", path], capture_output=True, text=True)
         ctx.display(p.stdout)
+    if a.get("drawn"):
+        # "draw me a picture of a cat": nothing here can draw a new picture, and saying so beats a link to ASCII art
+        return (f"I can't draw new pictures on this computer, so here is a real photo instead: "
+                f"{info['title']} ({credit}).")
     return f"shown: {info['title']} ({credit}). Source: {info['page']}. Say one sentence at most; do not describe the photo."
 
 
@@ -1099,6 +1111,8 @@ def _keep_previous_wallpaper(dest, swap=False):
       {"subject": {"type": "string", "description": "what the photo should show, e.g. 'the Alps at dawn'; or the path of the owner's own picture (~/Pictures/beach.jpg); 'random' = a random one of the owner's pictures; 'none' or 'default' puts the default background back"}},
       ["subject"], risk=READ, network=lambda a: str(a.get("subject", "")).strip().lower() not in ("none", "remove", "off", "") and not re.match(r"^[~/]", str(a.get("subject", "")).strip()))
 def set_wallpaper(a, ctx):
+    if re.fullmatch(r"(?i)(?:this|that|the)\s+(?:picture|photo|image|pic)|it|this|that", str(a.get("subject") or "").strip()):
+        a = dict(a, subject=_picture_ref(a.get("subject")))       # "use this picture as my wallpaper": the one on screen
     subject = str(a.get("subject", "")).strip()
     req = getattr(ctx, "current_request", "") or ""
     if subject.lower() in ("default", "original", "normal", "standard", "the default"):
@@ -3340,6 +3354,24 @@ def _image_step(step, w, h):
     return None
 
 
+def _picture_ref(ref):
+    """'it' / 'this picture' = the picture on screen; 'my last screenshot' = the newest one; else the name or path."""
+    r = str(ref or "").strip().lower()
+    if r in ("it", "this", "that") or re.fullmatch(r"(?:this|that|the)\s+(?:picture|photo|image|pic)", r):
+        if _LAST_PICTURE:
+            return _LAST_PICTURE[-1]
+    if re.search(r"\bscreenshot\b", r) and not re.search(r"\.\w{3,4}$", r):
+        shots = sorted(glob.glob(os.path.join(config.home(), "Pictures", "screenshot-*.png")), key=os.path.getmtime)
+        if shots:
+            return shots[-1]
+    if r in ("it", "this", "that") or re.fullmatch(r"(?:this|that|the)\s+(?:picture|photo|image|pic)", r):
+        pics = sorted((p for p in glob.glob(os.path.join(config.home(), "Pictures", "*")) if p.lower().endswith(_IMAGE_EXT)),
+                      key=os.path.getmtime)
+        if pics:
+            return pics[-1]
+    return ref
+
+
 @tool("edit_image", "Edit a picture and/or save it as another format (save_as 'x.pdf' makes a PDF): steps in order such as flip, "
       "rotate, resize, crop, add text, black and white. A new file; the original stays.",
       {"path": STR, "steps": {"type": "array", "items": {"type": "string"}, "description": _STEP_HELP},
@@ -3347,6 +3379,10 @@ def _image_step(step, w, h):
        "save_as": {"type": "string", "description": "the new file's name or path, e.g. 'Happy Birthday.pdf' (default: next to the original)"}},
       ["path"], risk=CHANGE)
 def edit_image(a, ctx):
+    a = dict(a, path=_picture_ref(a.get("path", "")))
+    sv = str(a.get("save_as") or "").strip().lower().lstrip(".")
+    if sv in ("pdf", "png", "jpg", "jpeg", "webp"):          # "save it as a PDF": the same name, that format
+        a["save_as"] = os.path.splitext(os.path.basename(str(a["path"])))[0] + "." + sv
     path = os.path.abspath(_path(a.get("path", "")))
     if not os.path.isfile(path) and a.get("path"):
         hits = [h for h in find_paths(a.get("path", "")) if h.lower().endswith(_IMAGE_EXT)]
@@ -4827,6 +4863,12 @@ def which_file(a, ctx):
         if ok:
             return (f"opened the print window of {prog}: choose the printer and press Print" if verb.group(1).lower() == "print"
                     else f"pressed Save in {prog}") + ". Done: if the request asked for more, do the next step now; otherwise reply in one sentence."
+    pic = re.search(r"\b(?:rotate|flip|mirror|crop|black\s+and\s+white|grey|gray|pdf|png|jpe?g|webp)\b", req, re.I)
+    if pic and _LAST_PICTURE and os.path.isfile(_LAST_PICTURE[-1]):
+        # "save it as png", "convert this to jpg" with a picture on screen: that picture
+        fmt = re.search(r"\b(pdf|png|jpe?g|webp)\b", req, re.I)
+        steps = [] if fmt and not re.search(r"rotate|flip|mirror|crop|black|grey|gray", req, re.I) else [req]
+        return edit_image({"path": _LAST_PICTURE[-1], "steps": steps, **({"save_as": fmt.group(1).lower()} if fmt else {})}, ctx)
     if re.search(r"wallpaper|background", req, re.I):
         return ("which picture? Open it first (say 'show my photos' and press Set as wallpaper on it), or say "
                 "'use a photo of the sea as my wallpaper' for a new one")

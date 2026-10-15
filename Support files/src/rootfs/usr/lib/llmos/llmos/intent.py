@@ -1240,6 +1240,8 @@ _PHOTO = re.compile(r"^\s*(?:please\s+)?(?:show|find|get|pull up|bring up|displa
 _WALLPAPER = re.compile(r"^\s*(?:please\s+)?(?:(?:use|set|put|make|show)\s+(?:a|an|the)?\s*(?:real\s+)?(?:photo(?:graph)?|picture|image)\s+of\s+(?P<what>.+?)\s+"
                         r"as\s+(?:my|the)\s+(?:wallpaper|desktop|background(?:\s+picture|\s+image)?)"
                         r"|(?:set|change|make)\s+(?:my|the)\s+(?:wallpaper|desktop background|background picture)\s+to\s+(?:a\s+)?(?:photo\s+of\s+)?(?P<what2>.+?)"
+                        r"|(?:make|let|have)\s+(?:my|the)\s+(?:wallpaper|background|desktop(?:\s+background)?)\s+(?:be\s+)?(?P<what3>(?!to\b).+?)"
+                        r"|use\s+(?P<what4>.+?)\s+as\s+(?:my|the)\s+(?:wallpaper|background|desktop(?:\s+background)?)"
                         r"|(?P<none>remove|clear|turn off|no)\s+(?:my\s+|the\s+)?wallpaper)\s*[.!]?\s*$", re.I)
 
 
@@ -1279,7 +1281,11 @@ def _photo(text):
     if m:
         if m.group("none"):
             return ("set_wallpaper", {"subject": "none"})
-        what = (m.group("what") or m.group("what2")).strip()
+        what = (m.group("what") or m.group("what2") or m.group("what3") or m.group("what4")).strip()
+        if m.group("what3") and re.fullmatch(r"(?i)\w+er|dark|light|black|white|grey|gray|plain|default|normal", what):
+            return None                          # "make the background darker": a look, not a picture search
+        if (m.group("what3") or m.group("what4")) and not re.fullmatch(r"(?i)(?:this|that|the)\s+(?:picture|photo|image|pic)", what):
+            what = re.sub(r"(?i)^(?:a|an|some)\s+", "", what)           # "a sunset" -> "sunset" ("the Alps" keeps its "the")
         # "a picture of mountains": the search is for mountains, not for the words "picture of"
         what = re.sub(r"(?i)^(?:a\s+|an\s+|some\s+)?(?:nice\s+|beautiful\s+|pretty\s+)?(?:picture|photo|photograph|image|pic|shot)s?\s+of\s+(?:a\s+|an\s+|the\s+|some\s+)?", "", what) or what
         return ("set_wallpaper", {"subject": what})
@@ -1787,6 +1793,27 @@ def _everyday2(text):
     if m:
         return ("remote_testing", {"on": m.group("v").split()[0] in ("start", "turn", "enable", "switch")
                                    and not m.group("v").endswith("off")})
+    # "draw me a picture of a cat": no image generator here; a real photo, said plainly
+    m = re.match(r"^(?:please\s+)?(?:draw|paint|sketch|generate|create|make)\s+(?:me\s+)?(?:a\s+|an\s+)?(?:picture|image|drawing|painting|illustration|art)\s+of\s+"
+                 r"(?:a\s+|an\s+|the\s+|some\s+)?(?P<w>.+?)\s*[.!]?$", t, re.I)
+    if m:
+        return ("show_image", {"subject": m.group("w"), "drawn": True})
+    # picture edits on the picture on screen ("it"), a named one, or the last screenshot: never a new screenshot
+    _PIC = (r"(?P<t>(?:this|that|the)\s+(?:picture|photo|image|pic)|it|this|that|my\s+(?:last\s+|latest\s+|newest\s+)?screenshot(?:\s+from\s+today)?"
+            r"|the\s+(?:last\s+)?screenshot|[\w][\w .'-]*\.(?:png|jpe?g|webp|gif|bmp))")
+    m = re.match(r"^(?:please\s+)?(?P<v>rotate|flip|mirror|crop|resize|shrink|enlarge)\s+" + _PIC + r"(?P<r>\s+.+)?\s*[.!]?$", t, re.I)
+    if m:
+        step = (m.group("v") + (m.group("r") or "")).strip().lower()
+        return ("edit_image", {"path": m.group("t"), "steps": [step]})
+    m = re.match(r"^(?:please\s+)?(?:make|turn)\s+" + _PIC + r"\s+(?P<r>black\s+and\s+white|grey(?:scale)?|gray(?:scale)?|smaller|bigger|"
+                 r"larger|brighter|darker|sharper|blurry|sepia)\s*[.!]?$", t, re.I)
+    if m:
+        return ("edit_image", {"path": m.group("t"), "steps": [m.group("r").lower()]})
+    m = re.match(r"^(?:please\s+)?(?:save|convert|turn|export|make)\s+" + _PIC + r"\s+(?:as|to|into)\s+(?:a\s+|an\s+)?(?P<f>pdf|png|jpe?g|webp)(?:\s+file)?\s*[.!]?$", t, re.I)
+    # (other formats with a file name, and "it"/"this", are the existing rules: which_file uses the picture on screen)
+    if m and (m.group("f").lower() == "pdf" or "screenshot" in m.group("t").lower()) and \
+            not re.fullmatch(r"(?i)it|this|that|(?:this|that|the)\s+(?:picture|photo|image|pic)", m.group("t")):
+        return ("edit_image", {"path": m.group("t"), "steps": [], "save_as": m.group("f").lower()})
     # "reset the accent colour" (it once replied "accent green" and changed nothing)
     if re.match(r"^(?:please\s+)?(?:reset|restore|clear|undo)\s+(?:the\s+|my\s+)?(?:accent|highlight)\s+colou?r(?:\s+(?:back\s+)?to\s+(?:the\s+)?default)?\s*[.!]?$|"
                 r"^(?:please\s+)?(?:change|set|put|turn)\s+(?:the\s+|my\s+)?(?:accent|highlight)\s+colou?r\s+back(?:\s+to\s+(?:the\s+)?(?:default|normal|original))?\s*[.!]?$", low):
