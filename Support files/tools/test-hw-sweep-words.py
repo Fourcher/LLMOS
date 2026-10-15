@@ -50,6 +50,58 @@ check(r == "Reminder set in 20 minutes (04:00): call mum.", f"reminder within th
 s = everyday._first_sentences("Paris[b] is the capital and largest city of France.[4] It has 2 million people [citation needed].")
 check("[" not in s and s.startswith("Paris is the capital"), f"snippet without footnote marks: {s!r}")
 
+# round 19 (real laptop): folders by the names people use, episode renames, a budget sheet, memory, convert words
+from llmos import tools, config  # noqa: E402
+home = config.home().rstrip("/")
+os.makedirs(os.path.join(home, "Videos", "test19"), exist_ok=True)
+for i in (1, 2, 3):
+    open(os.path.join(home, "Videos", "test19", f"Show s01 e0{i} raw.mp4"), "w").write(str(i))
+open(os.path.join(home, "Videos", "test19", "copy1.mp4"), "w").write("x")
+want = os.path.join(home, "Videos", "test19")
+for name in ("videos/test19", "Videos/test19", "my test19 folder", "test19", "the test19 folder"):
+    check(tools._dir(name) == want, f"folder {name!r} -> Videos/test19")
+tools._LAST_FOLDER = want
+check(tools._dir("this folder") == want, "'this folder' is the one on screen")
+
+
+class _C:
+    headless = True
+
+    def show_box(self, *a):
+        pass
+
+    def display(self, *a):
+        pass
+
+    def status(self, *a):
+        pass
+
+
+tools.rename_series({"name": "Show - S01E01", "kind": "videos", "folder": "videos/test19"}, _C())
+got = sorted(os.listdir(want))
+check(got == ["Show - S01E01.mp4", "Show - S01E02.mp4", "Show - S01E03.mp4", "copy1.mp4"], f"episodes renamed by their own numbers, the stray copy left: {got}")
+check(M("rename the episodes in Videos/test19 so they are named like Show - S01E01") ==
+      ("rename_series", {"name": "Show - S01E01", "kind": "videos", "folder": "videos/test19"}), "rename '... named like Show - S01E01'")
+check(M("rename these photos to Holiday 1, 2, 3") == ("rename_series", {"name": "Holiday", "kind": "photos"}), "rename to Holiday 1, 2, 3 still")
+r = M("make a spreadsheet for a monthly budget with rent, food and transport")
+check(r and r[0] == "make_spreadsheet" and [x[0] for x in r[1]["rows"]] == ["Item", "Rent", "Food", "Transport", "Total"],
+      f"budget spreadsheet with those rows and a total: {r}")
+for fact, req, ok in [("Jordan prefers Kokoro voice models", "what models can I use?", False),
+                      ("Today is Wednesday, 2026-10-14", "what day is it", False),
+                      ("OS is Alpine Linux with no GUI", "what resolution is my screen", False),
+                      ("owner likes jazz", "remember that I like jazz", True),
+                      ("owner prefers dark mode", "I prefer dark mode", True),
+                      ("owner's dog is called Rex", "my dog is called Rex", True)]:
+    check((tools._not_memory(fact, req) is None) == ok, f"memory {'kept' if ok else 'refused'}: {fact!r} after {req!r}")
+check(W("convert_media", {}, "converted 1 file(s) to mp3: copy1.mp3. Done: reply in one sentence.") == "Made copy1.mp3; the original is kept.",
+      "convert reply: made, original kept")
+src = open(os.path.join(_ROOT, "usr/lib/llmos/llmos/desk.py"), encoding="utf-8").read()
+import re as _re  # noqa: E402
+ns = {}
+exec("import re\n" + "\n".join(l for l in src.splitlines() if l.startswith(("_VOICES_Q = ", "_MODELS_Q = "))), ns)
+check(bool(ns["_VOICES_Q"].fullmatch("which voices can you speak with")), "'which voices can you speak with' answered here")
+check(bool(ns["_MODELS_Q"].fullmatch("what models can i use")), "'what models can I use' opens the models")
+
 if fails:
     print(f"{fails} FAILED")
     sys.exit(1)

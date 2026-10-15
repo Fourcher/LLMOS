@@ -560,6 +560,7 @@
     const spec = m.spec, id = m.id;
     let w = wins.get(id);
     noteLaunch(id);
+    if (w && m.quiet) { w.el.querySelector(".title").textContent = spec.title || ""; renderBody(w.el.querySelector(".body"), spec); w.spec = spec; return; }   // a background refresh: same place, same layer
     if (w) { w.el.querySelector(".title").textContent = spec.title || ""; renderBody(w.el.querySelector(".body"), spec); w.min = false; w.el.classList.remove("hidden"); raise(w.el); dock(); overlaps(); if (cur) cur.opened = true; return; }
     const win = el("div", "win kind-" + (spec.kind || "panel") + " " + (spec.size || (spec.kind === "image" ? "l" : spec.kind === "media" ? "s" : "m")));
     win.dataset.id = id;

@@ -52,6 +52,8 @@ _MEDIUM_Q = re.compile(r"\b(?:(?:is|am)\s+(?:this|it|i|llm\s*os)\s+(?:running|bo
                        r"(?:is|was)\s+(?:it|this|llm\s*os)\s+installed|did\s+it\s+install|will\s+(?:my\s+)?(?:stuff|files|things|changes|settings|work|data)\s+(?:be\s+)?(?:saved|kept)|"
                        r"(?:can|what happens if)\s+i\s+(?:unplug|remove|take\s+out)\s+(?:the\s+)?(?:usb|stick|flash\s*drive)|"
                        r"how\s+(?:do|can)\s+i\s+keep\s+(?:this|it|everything|llm\s*os|my\s+(?:stuff|files|things))(?:\s+going)?\s+(?:without|after\s+(?:removing|unplugging))\s+(?:the\s+)?(?:usb|stick|flash\s*drive))", re.I)
+_VOICES_Q = re.compile(r"(?:which|what) voices? (?:can|do|could) you (?:speak|talk|read)(?: with| in)?|(?:which|what) voices? (?:do you have|are there|can i (?:use|pick|choose))|what voice do you (?:use|have)|list (?:the |your )?(?:speaking )?voices|show (?:me )?(?:the |your )?(?:speaking )?voices")
+_MODELS_Q = re.compile(r"(?:which|what) (?:ai |language |llm )?models? (?:can i (?:use|pick|choose|run|switch to)|do i have|are (?:there|available|installed|on (?:this|my) (?:computer|laptop|pc)))|(?:list|show) (?:me )?(?:the |all |my )?(?:ai |available |installed )?models|what model are you(?: using)?|which model (?:are you|is this)(?: using)?")
 _TIME_Q = re.compile(r"(?:what(?:'s| is) the (?:time|date)(?: (?:now|today))?|what time is it(?: now)?|whats the (?:time|date)|whats today(?:'?s date)?|what(?:'s| is) today(?:'s date)?|"
                      r"what day is (?:it|today)|what(?:'s| is) the day today|what is the date today|time|date|today)[?.!]*")
 _BATTERY_Q = re.compile(r"(?:how much|what(?:'s| is)(?: my| the)?) battery(?: (?:do i have|is left|level|life|left|percentage))?[?.!]*|"
@@ -1823,7 +1825,10 @@ class Desk:
                 wid = f"w{self.win_seq}"
         spec["id"] = wid
         self.windows[wid] = spec
-        self.emit({"t": "window", "id": wid, "spec": spec})
+        # a window rebuilt in the background (refresh_windows) keeps its place: it does not come to the front
+        # (a refreshed Pictures window covered the "Open now" list just asked for) nor out of the dock
+        quiet = threading.current_thread() is getattr(self, "_refresh_thread", None)
+        self.emit({"t": "window", "id": wid, "spec": spec, **({"quiet": True} if quiet else {})})
         return wid
 
     def close_window(self, wid):
@@ -1950,9 +1955,8 @@ class Desk:
         self.open_window({"id": "panel-sound", "replace": True, "title": T("d_sound"), "size": "s", "slot": "side", "blocks": blocks})
 
     def power_panel(self):
-        items = []
-        if config.settings.get("vault"):
-            items.append({"label": T("d_lock"), "say": "lock"})
+        # Lock is always there (without a passphrase the screen still locks and says how to protect it)
+        items = [{"label": T("d_lock"), "say": "lock"}]
         items += [{"label": T("d_sleep"), "say": "sleep"}, {"label": T("d_restart"), "say": "restart"},
                   {"label": T("d_shutdown"), "say": "shut down", "danger": True}]
         b = _battery()
@@ -1993,6 +1997,8 @@ class Desk:
 
         def run():
             self._refreshing = True
+            self._refresh_thread = threading.current_thread()
+            last_folder = tools._LAST_FOLDER        # ("this folder" stays the one the owner last opened, not the last refreshed)
             try:
                 quiet = _QuietCtx(self)
                 for wid, (tool, args) in src.items():
@@ -2010,6 +2016,7 @@ class Desk:
                     except Exception as e:
                         sys.stderr.write(f"desk: refreshing {wid} failed: {e}\n")
             finally:
+                tools._LAST_FOLDER = last_folder
                 self._refreshing = False
         threading.Thread(target=run, daemon=True).start()
 
@@ -2417,6 +2424,25 @@ class Desk:
             sys.stderr.write(f"desk: autolock check failed: {e}\n")
         return True
 
+    def _folders_changed(self):
+        """A folder window follows its folder: files added or removed by a program, a download or a command show
+        within 5 s (a deleted test folder stayed listed)."""
+        changed = False
+        seen = self.__dict__.setdefault("_dir_mt", {})
+        for wid, (tool, args) in list(self.__dict__.get("_win_src", {}).items()):
+            if tool != "show_files" or wid not in self.windows:
+                seen.pop(wid, None)
+                continue
+            try:
+                mt = os.stat(tools._dir((args or {}).get("path") or "~")).st_mtime_ns
+            except OSError:
+                mt = -1
+            if seen.get(wid) not in (None, mt):
+                changed = True
+            seen[wid] = mt
+        if changed:
+            self.refresh_windows()
+
     def _alarm_waiting(self):
         """A timer or reminder has gone off and not rung yet (it rings even while an answer is being written)."""
         try:
@@ -2432,6 +2458,8 @@ class Desk:
         while busy; and if another session (the text console) finished onboarding or unlocked the vault while
         this screen was waiting, move on."""
         try:
+            if self.screen == "desk" and not self.busy:
+                self._folders_changed()
             if self.screen == "desk" and (not self.busy or self._alarm_waiting()):
                 self.show_away()
             elif self.screen == "wizard" and config.settings.get("onboarded"):
@@ -2654,7 +2682,7 @@ class Desk:
             return False                  # several steps that build on each other: the model does them together
         if self._app_question(low) is not None:
             return True                   # close or read an open app of the OS's own: done now, even while the model works
-        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or everyday.MATCH.search(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|(?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android))\b|\brepo(?:sitory)?\b|\b(?:reset|factory|like new|erase everything)\b|\b(?:lock|encrypt|password|protect|secure)\b.*\bfolder\b|^(?:unlock|decrypt) \w|\b(?:lock|encrypt|password[- ]?protect) (?:my )?(?:documents|pictures|photos|music|videos|downloads|desktop)\b|\bbookmarks?\b|\bblur\b|\b(?:users?|accounts?|profile|login|guest)\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or re.fullmatch(r"(?:it says )?(?:(?:the )?(?:wi-?fi|network) )?connected(?: to (?:the |my )?(?:wi-?fi|network|internet))?,? (?:but|yet|and)(?: (?:there'?s|there is|it'?s|it is|nothing))? (?:no internet|not online|nothing loads)", low.rstrip("?.!")) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or \
+        if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or everyday.MATCH.search(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|(?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android))\b|\brepo(?:sitory)?\b|\b(?:reset|factory|like new|erase everything)\b|\b(?:lock|encrypt|password|protect|secure)\b.*\bfolder\b|^(?:unlock|decrypt) \w|\b(?:lock|encrypt|password[- ]?protect) (?:my )?(?:documents|pictures|photos|music|videos|downloads|desktop)\b|\bbookmarks?\b|\bblur\b|\b(?:users?|accounts?|profile|login|guest)\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or re.fullmatch(r"(?:it says )?(?:(?:the )?(?:wi-?fi|network) )?connected(?: to (?:the |my )?(?:wi-?fi|network|internet))?,? (?:but|yet|and)(?: (?:there'?s|there is|it'?s|it is|nothing))? (?:no internet|not online|nothing loads)", low.rstrip("?.!")) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or _VOICES_Q.fullmatch(low.rstrip("?.! ")) or _MODELS_Q.fullmatch(low.rstrip("?.! ")) or \
                 any(rx.fullmatch(low) for rx, _ in self._SYS) or any(rx.fullmatch(low.rstrip("?.!")) for rx, _ in self._CANON) or \
                 any(rx.fullmatch(low.rstrip("?.!")) for rx in (self._ROTATE, self._RES, self._EJECT, self._DESKTOP, self._TILE, self._TILE2)) or (shutil.which("wlrctl") and self._WIN.fullmatch(low.rstrip(".!?"))) or re.fullmatch(r"(?:end process \d+|(?:open|eject) drive /dev/\S+|"
                                                                             r"(?:extend|mirror) the displays|use only the main display|use only the (?:projector|tv|second (?:screen|display))|projector only|"
@@ -3405,6 +3433,18 @@ class Desk:
             return True
         if _BATTERY_Q.fullmatch(low):
             return everyday.hardware(self, line, "how much battery")      # charging, full or on battery, said exactly
+        if _VOICES_Q.fullmatch(low.rstrip("?.! ")):
+            # what this computer itself has (the model once searched the web for 2.5 minutes and listed online voices)
+            listen = voice.active_voice()
+            on = bool(config.settings.get("speak_replies"))
+            self.instant_reply(line, f"I speak with one voice: the computer's built-in eSpeak voice, in {config.llm_language()}. "
+                                     + ("Reading replies aloud is on." if on else "Say \u201cread your replies aloud\u201d to hear it.")
+                                     + (f" For listening I use the {listen.get('name') or listen.get('id')} speech model; say \u201cshow the voice models\u201d for the others." if listen else ""))
+            return True
+        if _MODELS_Q.fullmatch(low.rstrip("?.! ")):
+            self.open_panel("models")
+            self.instant_reply(line, "These are the AI models this computer can use: the one in use is marked; press Use on another to switch.")
+            return True
         if _TIME_Q.fullmatch(low):
             now = time.localtime()
             self.instant_reply(line, time.strftime("It's %-I:%M %p on %A, %B %-d, %Y.", now))

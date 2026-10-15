@@ -64,6 +64,56 @@ def _path(p):
     return os.path.normpath(p) if p else p
 
 
+_HERE = re.compile(r"(?:this|that|the|current|open|same)?\s*(?:folder|directory|dir|one|place)?|this|here|there|it", re.I)
+
+
+def _dir(p):
+    """A FOLDER the owner named, found the way a person means it: "Videos/test19", "my test19 folder", "test19"
+    (inside Videos), any case; "this folder" is the one on screen. A name that matches nothing comes back as _path
+    gives it (the tool then says it is not a folder)."""
+    s = str(p or "").strip().strip("'\"").rstrip("/") or "~"
+    if _HERE.fullmatch(s) and s.lower() not in ("", "the"):
+        return _LAST_FOLDER or config.home().rstrip("/")
+    s = re.sub(r"^(?:in\s+|inside\s+)?(?:my|the|our)\s+", "", s, flags=re.I)
+    s = re.sub(r"\s+(?:folder|directory|dir)$", "", s, flags=re.I).strip() or "~"
+    q = _path(s)
+    home = config.home().rstrip("/")
+    # the same path in another case ("videos/test19" for Videos/test19)
+    cur, ok = ("/" if os.path.isabs(s) and not s.startswith(home) else home), True
+    rel = os.path.relpath(q, cur) if q.startswith(cur) else None
+    if rel and not rel.startswith(".."):
+        for part in rel.split(os.sep):
+            try:
+                entries = os.listdir(cur)
+                hit = part if part in entries else next((e for e in entries if e.lower() == part.lower()), None)
+            except OSError:
+                hit = None
+            if hit is None:
+                ok = False
+                break
+            cur = os.path.join(cur, hit)
+        if ok and os.path.isdir(cur):
+            return cur
+    if os.path.exists(q):
+        return q
+    # just a name: a folder of that name in the home folder or one level inside (Videos/test19), not hidden
+    name = os.path.basename(s).lower()
+    if "/" not in s.strip("/") or not os.path.isabs(s):
+        try:
+            tops = [e for e in sorted(os.listdir(home)) if not e.startswith(".") and os.path.isdir(os.path.join(home, e))]
+        except OSError:
+            tops = []
+        for t in [""] + tops:
+            base = os.path.join(home, t)
+            try:
+                hit = next((e for e in os.listdir(base) if e.lower() == name and os.path.isdir(os.path.join(base, e))), None)
+            except OSError:
+                hit = None
+            if hit:
+                return os.path.join(base, hit)
+    return q
+
+
 def clip(text, n=4000):
     text = str(text)
     if len(text) <= n:
@@ -968,7 +1018,37 @@ def show_panel(a, ctx):
       "future sessions. Not for general facts or results.",
       {"fact": {"type": "string", "description": "one short sentence about the user"}}, ["fact"])
 def remember(a, ctx):
-    return "saved" if store.remember(a.get("fact", "")) else "already known"
+    fact = str(a.get("fact", "")).strip()
+    why = _not_memory(fact, str(getattr(ctx, "current_request", "") or ""))
+    if why:
+        return f"not saved ({why}); carry on and do not mention this"
+    return "saved" if store.remember(fact) else "already known"
+
+
+# what a small model saved on its own on the real laptop: the date, guesses about the computer ("Alpine Linux, no GUI"),
+# what was in a folder that minute, voice "preferences" from a web search. Memory is for what the owner tells about
+# themselves; everything else is either known already or out of date tomorrow.
+_MEM_JUNK = re.compile(r"\b(?:today|tonight|current (?:date|time)|date and time|\d{4}-\d{2}-\d{2}|\d{1,2}:\d{2}|"
+                       r"alpine|linux|x11|wayland|gui|operating system|this (?:computer|system|laptop)|the system supports|"
+                       r"(?:has|have) (?:\w+ )?(?:files?|items?|folders?)\b|(?:files?|folder) (?:is|are) (?:in|at|~|/))", re.I)
+_MEM_CUE = re.compile(r"\b(?:remember|don'?t forget|keep in mind|note that|for (?:the )?future|from now on|my name|call me|"
+                      r"(?<!can )(?<!could )(?<!do )(?<!should )(?<!may )(?<!shall )(?<!would )(?<!what )(?<!how )(?:i(?:'m| am)\b|i (?:like|love|hate|dislike|prefer|live|work|have|use|always|never|usually|want|need|was born)\b)|"
+                      r"my (?:wife|husband|partner|son|daughter|kids?|dog|cat|birthday|job|work|address|favou?rite)\b)", re.I)
+
+
+def _not_memory(fact, request):
+    """Why a fact the model wants to save is not one (None: save it)."""
+    if not fact:
+        return "empty"
+    if _MEM_JUNK.search(fact):
+        return "a date, a guess about the computer or what a folder holds is not a memory"
+    if _MEM_CUE.search(request):
+        return None
+    words = {w for w in re.findall(r"[a-z]{4,}", fact.lower()) if w not in ("owner", "user", "jordan", "their", "they", "likes", "prefers")}
+    said = set(re.findall(r"[a-z]{4,}", request.lower()))
+    if words and len(words & said) >= max(1, round(len(words) * 0.6)):
+        return None
+    return "the user did not say it"
 
 
 @tool("forget", "Forget something previously remembered about the user.",
@@ -2360,7 +2440,7 @@ def show_files(a, ctx):
     view = a.get("view") or config.settings.get("files_view") or "list"
     if a.get("view"):
         config.settings.set("files_view", view)
-    path = _path(a.get("path") or (_LAST_FOLDER if (a.get("sort") or a.get("hidden") is not None) and _LAST_FOLDER else "~"))
+    path = _dir(a.get("path") or (_LAST_FOLDER if (a.get("sort") or a.get("hidden") is not None) and _LAST_FOLDER else "~"))
     # the model says "~/Trash" or "~/Recycle Bin" for the trash; when no such folder exists, show the real trash (~/.Trash)
     if not os.path.exists(path) and path.rstrip("/") in {os.path.join(config.home().rstrip("/"), n) for n in ("Trash", "trash", "Recycle Bin", "bin")}:
         path = _trash()
@@ -2449,7 +2529,7 @@ def rename_series(a, ctx):
     if not base:
         return "error: say the new name, for example 'rename these photos to Holiday 1, 2, 3'"
     kind = str(a.get("kind") or "photos")
-    folder = _path(a.get("folder") or _LAST_FOLDER or ("~/Pictures" if kind == "photos" else "~/Videos" if kind == "videos" else "~/Music" if kind == "music" else "~"))
+    folder = _dir(a.get("folder") or _LAST_FOLDER or ("~/Pictures" if kind == "photos" else "~/Videos" if kind == "videos" else "~/Music" if kind == "music" else "~"))
     if not os.path.isdir(folder):
         return f"error: {folder} is not a folder"
     exts = {"photos": _IMAGE_EXT, "videos": (".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"), "music": _AUDIO_EXT}.get(kind)
@@ -2461,9 +2541,28 @@ def rename_series(a, ctx):
         folder, files = usual, pick(usual)        # ("these photos" said while the home folder was open: the Pictures folder)
     if not files:
         return f"there are no {'' if kind == 'all' else kind + ' '}files in {folder} to rename"
-    files.sort(key=lambda n: (os.path.getmtime(os.path.join(folder, n)), n.lower()))
-    width = len(str(len(files))) if len(files) >= 10 else 1
-    plan = [(n, f"{base} {str(i).zfill(width)}{os.path.splitext(n)[1].lower()}") for i, n in enumerate(files, 1)]
+    tpl = re.search(r"(?<=[A-Za-z])(\d+)$", base)
+    if tpl:
+        # an example ("Show - S01E01"): each file keeps its own episode number when its name has one
+        # ("Show s01 e03 raw.mp4" -> "Show - S01E03.mp4"), else they are numbered in name order from the example's number
+        pre, w, start = base[:tpl.start()], len(tpl.group(1)), int(tpl.group(1))
+        epi = lambda n: re.search(r"(?i)(?:\be|episode\s*|ep\.?\s*|\dx)(\d{1,3})\b", os.path.splitext(n)[0])
+        marked = [n for n in files if epi(n)]
+        if len(marked) >= 2 and len(marked) < len(files):
+            files = marked                      # the episodes, not a stray copy beside them
+        own = {}
+        for n in files:
+            e = re.search(r"(?i)(?:\be|episode\s*|ep\.?\s*|x)(\d{1,3})\b", os.path.splitext(n)[0]) or \
+                re.search(r"(\d{1,3})(?!.*\d)", os.path.splitext(n)[0])
+            own[n] = int(e.group(1)) if e else None
+        nums = [own[n] for n in files]
+        use_own = None not in nums and len(set(nums)) == len(nums)
+        files.sort(key=lambda n: (own[n] if use_own else 0, n.lower()))
+        plan = [(n, f"{pre}{str(own[n] if use_own else start + i).zfill(w)}{os.path.splitext(n)[1].lower()}") for i, n in enumerate(files)]
+    else:
+        files.sort(key=lambda n: (os.path.getmtime(os.path.join(folder, n)), n.lower()))
+        width = len(str(len(files))) if len(files) >= 10 else 1
+        plan = [(n, f"{base} {str(i).zfill(width)}{os.path.splitext(n)[1].lower()}") for i, n in enumerate(files, 1)]
     tmp = []
     for old, new in plan:                       # in two steps, so 'Holiday 2' can become 'Holiday 1' without a clash
         t = os.path.join(folder, f".llmos-ren-{len(tmp)}-{old}")
@@ -2647,7 +2746,7 @@ def share_folder(a, ctx):
         show(ctx, {"id": "share", "replace": True, "title": "Sharing", "size": "s", "blocks": [
             {"type": "text", "text": "Sharing is off: other computers can no longer open the folder." if st else "Nothing was being shared."}]})
         return ("stopped sharing " + st["folder"] if st else "nothing was being shared") + ". Done: reply in one sentence."
-    folder = _path(a.get("path") or _LAST_FOLDER or "~")
+    folder = _dir(a.get("path") or _LAST_FOLDER or "~")
     ok, st = share.start(folder)
     if not ok:
         return "error: " + st
@@ -2675,7 +2774,7 @@ def _files_from(a, exts=None, default_folder="~"):
         if os.path.isfile(p):
             out.append(p)
     if not out:
-        folder = _path(a.get("folder") or _LAST_FOLDER or default_folder)
+        folder = _dir(a.get("folder") or _LAST_FOLDER or default_folder)
         if os.path.isdir(folder):
             for d, dirs, fs in os.walk(folder):
                 dirs[:] = [x for x in dirs if not x.startswith(".")] if a.get("include_subfolders") else []
@@ -2817,7 +2916,7 @@ def convert_media(a, ctx):
       {"folder": {"type": "string", "description": "where to look (default: the whole computer)"},
        "count": {"type": "integer", "description": "how many (default 10)"}}, [], risk=READ)
 def biggest_files(a, ctx):
-    root = _path(a.get("folder") or "/")
+    root = _dir(a.get("folder") or "/")
     n = max(1, min(int(a.get("count") or 10), 50))
     skip = ("/proc", "/sys", "/dev", "/run", "/tmp/.X11-unix")
     big = []
@@ -2968,7 +3067,7 @@ def find_by_meaning(a, ctx):
       risk=lambda a: DESTRUCTIVE if a.get("delete") else READ)
 def find_duplicates(a, ctx):
     import hashlib
-    root = _path(a.get("folder") or "~")
+    root = _dir(a.get("folder") or "~")
     if not os.path.isdir(root):
         return f"error: {root} is not a folder"
     by_size, seen = {}, 0

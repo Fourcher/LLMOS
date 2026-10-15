@@ -1248,6 +1248,13 @@ def _shortcut_words(name, args, out):
         return _cap(out.split(". Say")[0]) + "." if low.startswith(("now playing", "opened ")) else out
     if name == "delete_file":
         return _cap(out.split(" (")[0]) + "." if low.startswith(("moved ", "deleted ")) else out
+    if name == "convert_media" and low.startswith("converted "):
+        # (the model said "copy1.mp4 is now copy1.mp3" while the original was kept)
+        m = re.match(r"converted (\d+) file\(s\) to (\w+): ([^;]+?)(?:; (\d+) original\(s\) moved to the trash)?(?:; failed: ([^.]+))?\. Done", out)
+        if m:
+            n, names, gone = int(m.group(1)), m.group(3).strip(), m.group(4)
+            return (f"Made {names}" + ("; the originals are in the trash" if gone else "; the original is kept" if n == 1 else "; the originals are kept")
+                    + (f". These failed: {m.group(5)}" if m.group(5) else "") + ".")
     if name == "manage_tasks" and args.get("action", "list") == "list":
         # the ids are for the model (to cancel one); a person reads what and when
         rows = [re.sub(r"^\[\w+\]\s*", "", ln) for ln in str(out).splitlines() if ln.startswith("[")]

@@ -869,6 +869,20 @@ def _notes(text):
         return ("restore_file", {"name": (m.group("name") or m.group("file")).strip()})
     # "make a packing list with socks, charger and toothbrush": exactly those items, in the list's window (the model
     # answered in the chat bubble and added things nobody asked for)
+    # "make a spreadsheet for a monthly budget with rent, food and transport": those rows, an amount column and a total
+    # (the model opened an empty spreadsheet program and said the budget was made)
+    m = re.match(r"^\s*(?:please\s+)?(?:make|create|start|set up|build)\s+(?:me\s+)?(?:a|an)\s+(?:simple\s+|new\s+)?(?:spreadsheet|sheet|table)"
+                 r"\s+(?:for|of|about)\s+(?:a\s+|an\s+|my\s+|the\s+)?(?P<what>.+?)\s+(?:with|for|listing|containing)\s+(?P<items>.+?)\s*[.!]?\s*$", text, re.I)
+    if m:
+        from .tools import split_items
+        items = [re.sub(r"^(?:and|&)\s+", "", x).strip() for x in split_items(m.group("items"), "shopping") if x.strip()]
+        if 1 <= len(items) <= 40:
+            what = m.group("what").strip()
+            money = re.search(r"budget|expense|cost|spend|bill|money|price|income|saving", what, re.I)
+            rows = [["Item", "Amount" if money else "Value"]] + [[x[:1].upper() + x[1:], ""] for x in items]
+            if money:
+                rows.append(["Total", f"=SUM(B2:B{len(items) + 1})"])
+            return ("make_spreadsheet", {"name": what[:1].upper() + what[1:60], "rows": rows})
     m = _LIST_WITH.match(text)
     if m:
         return ("note_add", {"text": m.group("items").strip(), "list": (m.group("l") or m.group("l2")).strip().lower()})
@@ -2108,11 +2122,16 @@ def _everyday2(text):
         return ("show_files", {"hidden": True})
     if re.match(r"^(?:hide|stop showing)\s+(?:the\s+)?(?:hidden|dot)\s*files?(?:\s+again)?$", low):
         return ("show_files", {"hidden": False})
-    m = re.match(r"^(?:rename|name)\s+(?:all\s+)?(?:of\s+)?(?:these|the|my|those|all)?\s*(?:the\s+)?(?P<k>photos|pictures|pics|images|videos|songs|music|files)"
-                 r"(?:\s+in\s+(?P<f>.+?))?\s+(?:to|as)\s+(?P<b>.+?)(?:\s*\d+\s*(?:,\s*\d+\s*)*(?:,?\s*(?:\.\.\.|…|etc\.?|and so on))?)?$", low)
+    m = re.match(r"^(?:rename|name)\s+(?:all\s+)?(?:of\s+)?(?:these|the|my|those|all)?\s*(?:the\s+)?(?P<k>photos|pictures|pics|images|videos|songs|music|files|episodes)"
+                 r"(?:\s+in\s+(?P<f>.+?))?\s+(?:to|as|so (?:that )?they(?:'re| are) (?:named|called)(?: like)?|to be (?:named|called)(?: like)?|(?:named|called) like|like)\s+"
+                 r"(?P<b>.+?)(?:\s*\d+\s*(?:,\s*\d+\s*)*)?(?:,\s*.*|\s+(?:\.\.\.|…|etc\.?|and so on))?\s*[.!]?$", low)
     if m and m.group("b").strip(" ,'\"") and not re.search(r"lower ?case|upper ?case|capitals|caps|dash|hyphen|underscore|title case|spaces", m.group("b")):
-        k = {"photos": "photos", "pictures": "photos", "pics": "photos", "images": "photos", "videos": "videos", "songs": "music", "music": "music"}.get(m.group("k"), "all")
+        k = {"photos": "photos", "pictures": "photos", "pics": "photos", "images": "photos", "videos": "videos", "episodes": "videos", "songs": "music", "music": "music"}.get(m.group("k"), "all")
         b = t[m.start("b"):m.start("b") + len(m.group("b"))].strip(" ,'\"")     # (the owner's own capitals)
+        # an example name with its number run into it ("Show - S01E01"): the whole example is the pattern
+        ex = re.split(r"\s*,|\s+(?:\.\.\.|…|etc\.?|and so on)\b", t[m.start("b"):])[0].strip(" ,'\".!")
+        if re.search(r"[A-Za-z]\d+$", ex) and ex.lower().startswith(b.lower()):
+            b = ex
         args = {"name": b, "kind": k}
         if m.group("f"):
             args["folder"] = m.group("f")

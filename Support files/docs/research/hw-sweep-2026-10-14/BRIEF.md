@@ -22,6 +22,10 @@ Work in `/Volumes/Files/Claude Work Area/LLMOS/Support files`. Run commands ther
   file exist, did the setting change, what the hardware reports). Never use it to do the task: a person can't. Never
   run anything that waits for input or keeps running.
 
+- In `vm`/`sh` checks write paths as /root/... (never ~/...: a project hook refuses those).
+- Screenshots cannot show night light or brightness (they change the screen's output, not the picture): check
+  them with a command (e.g. `ps | grep wlsunset`, `cat /sys/class/backlight/*/brightness`), not by colours.
+
 ## Rules
 - Do it the way a person would: asking, clicking and typing on the screen. Try the obvious way first; if it fails,
   try one or two other natural ways before calling it a failure.
