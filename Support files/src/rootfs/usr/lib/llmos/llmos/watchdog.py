@@ -95,6 +95,20 @@ def _log(msg):
     print(time.strftime("%H:%M:%S ") + "watchdog: " + msg, flush=True)
 
 
+def _reboot(why):
+    """Restart the computer, keeping why on disk (the watchdog's own log is in /run and goes with the restart)."""
+    _log(why)
+    try:
+        os.makedirs("/var/lib/llmos", exist_ok=True)
+        with open("/var/lib/llmos/watchdog-restarts.log", "a") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + why + f" (memory free {_mem_avail_pct():.1f}%)\n")
+            f.flush()
+            os.fsync(f.fileno())
+    except OSError:
+        pass
+    subprocess.run(["reboot"], timeout=30)
+
+
 def _sound_firmware():
     """Intel laptops (SOF audio) find no sound card when their firmware arrived after the driver looked for it (an
     update that installed sof-firmware): load the driver again once the firmware is there."""
@@ -153,8 +167,7 @@ def run():
                     _rc("llmos-model", "restart", timeout=120)
                     model_kicked = True
                 elif time.time() - low_since > 300 and model_kicked and config.settings.get("devlink"):
-                    _log("memory still nearly gone after 5 minutes on a test computer: restarting it")
-                    subprocess.run(["reboot"], timeout=30)
+                    _reboot("memory still nearly gone after 5 minutes on a test computer: restarting it")
             else:
                 low_since, model_kicked = None, False
             # the screen session is up but the desk program died (out of memory, a crash): start it again
@@ -186,8 +199,7 @@ def run():
                     _rc("llmos-ota", "start")
                     wifi_kicked = True
                 if gone > REBOOT_AFTER and config.settings.get("devlink"):
-                    _log("still no network after 25 minutes on a test computer: restarting it")
-                    subprocess.run(["reboot"], timeout=30)
+                    _reboot("still no network after 25 minutes on a test computer: restarting it")
         except Exception as e:
             _log(f"check failed: {e}")
         time.sleep(CHECK)
