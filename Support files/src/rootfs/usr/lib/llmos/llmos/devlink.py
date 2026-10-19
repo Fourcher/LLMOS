@@ -78,6 +78,14 @@ def do(cmd):
     if op == "say":
         rc, out = _run(["llmos", "say", str(cmd["text"])], timeout=int(cmd.get("timeout", 600)))
         return rc == 0, out, None
+    if op == "sshkey":         # the owner's development key: direct access (devaccess.py) from now on
+        key = str(cmd.get("key", "")).strip()
+        if not re.fullmatch(r"ssh-ed25519 [A-Za-z0-9+/=]{60,100}( \S+)?", key):
+            return False, "refused: not an ed25519 public key", None
+        config.settings.set("devssh_key", key)
+        from . import devaccess
+        ok = devaccess.ensure(lambda m: None)
+        return ok, "direct access " + ("ready (ssh root@" + socket.gethostname() + ".local)" if ok else "not ready"), None
     if op == "state":
         rc, out = _run(["llmos", "desk-state"], timeout=30)
         return rc == 0, out, None

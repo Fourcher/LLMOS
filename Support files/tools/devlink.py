@@ -167,6 +167,8 @@ def main(a):
         r = send({"op": "state"}, 40)
     elif op == "sh":
         r = send({"op": "sh", "cmd": " ".join(rest), "timeout": 300}, 330)
+    elif op == "sshkey":               # direct access: tools/devssh.py setup sends this Mac's development key
+        r = send({"op": "sshkey", "key": " ".join(rest)}, 400)
     else:
         sys.exit(f"unknown command {op}\n" + __doc__)
     print(r.get("out", ""))

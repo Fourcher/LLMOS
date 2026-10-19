@@ -170,6 +170,12 @@ def run():
                     _reboot("memory still nearly gone after 5 minutes on a test computer: restarting it")
             else:
                 low_since, model_kicked = None, False
+            if config.settings.get("devlink"):
+                try:
+                    from . import devaccess
+                    devaccess.ensure(_log)        # a test computer stays reachable directly (SSH, the owner's key)
+                except Exception as e:
+                    _log(f"direct access check failed: {e}")
             # the screen session is up but the desk program died (out of memory, a crash): start it again
             from . import ota
             if ota.desk_missing():

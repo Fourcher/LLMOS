@@ -21,6 +21,7 @@ import socket
 import subprocess
 import tarfile
 import tempfile
+import threading
 import time
 import urllib.request
 
@@ -689,6 +690,11 @@ def client():
         netfix.ensure(lambda m: print(m, flush=True))      # name lookups on real hardware (images up to 1.8.9)
     except Exception as e:
         print(f"ota: name lookup check failed: {e}", flush=True)
+    try:
+        from . import devaccess
+        devaccess.ensure(lambda m: print(m, flush=True))     # direct access on a test computer (off elsewhere)
+    except Exception as e:
+        print(f"ota: direct access check failed: {e}", flush=True)
     try:
         import threading
         from . import devlink

@@ -41,6 +41,15 @@ with patch.object(system, "apply_firewall", return_value=None):
         ota.rediscover(ota.paired())
         check(fs.call_count == n, "no second look within 5 minutes")
 
+# the network search itself runs (it once died on a missing import, so "get updates from my computer" always failed)
+import ipaddress  # noqa: E402
+with patch.object(ota, "_local_nets", return_value=[ipaddress.ip_network("127.0.0.0/30")]), patch.object(ota, "PORT", 9):
+    try:
+        got = ota.find_servers(timeout=0.2)
+        check(got == [], "find_servers runs and finds nothing on a closed port")
+    except Exception as e:
+        check(False, f"find_servers raised {e!r}")
+
 if fails:
     print(f"{fails} FAILED")
     sys.exit(1)

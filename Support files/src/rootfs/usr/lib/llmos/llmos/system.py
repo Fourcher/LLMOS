@@ -95,6 +95,11 @@ def firewall_rules(internet, tor=False, firewall=True):
     # its answers go back even with the internet off (to local addresses, from that port only)
     share_out = (f"    ip daddr {{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 }} tcp sport {int(shared['port'])} accept\n" if shared else "")
     via_tor = f"    meta skuid {tor_uid} accept\n" if tor_uid is not None else ""
+    # a test computer with remote testing on: the owner's own computer may log in (SSH, key only) and ping it, from the
+    # local network only (devaccess.py); nothing of this on any other machine
+    devssh = ("    ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } tcp dport 22 accept\n"
+              "    ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } icmp type echo-request accept\n"
+              if config.settings.get("devlink") and config.settings.get("devssh_key") else "")
     if firewall:
         in_policy = "drop"
         inbound = f"""    iif lo accept
@@ -105,7 +110,7 @@ def firewall_rules(internet, tor=False, firewall=True):
     # printers and other devices announce themselves on the local network (mDNS): answers from local addresses only
     ip saddr {{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }} udp dport 5353 accept
     ip6 saddr fe80::/10 udp dport 5353 accept
-{sharing}"""
+{sharing}{devssh}"""
     else:
         # the owner switched the firewall off: inbound is open; the output chain below is the same either way
         in_policy = "accept"
