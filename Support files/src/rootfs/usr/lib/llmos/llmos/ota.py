@@ -129,6 +129,34 @@ def pair(server):
     return server
 
 
+_LAST_LOOK = [0.0]
+
+
+def rediscover(o):
+    """The paired computer moved to another address (its network gave it a new one after it slept): look for the
+    server with the SAME key on the local networks and follow it. Safe: everything it sends must still be signed
+    with that key. At most every 5 minutes; True when the address changed."""
+    if time.time() - _LAST_LOOK[0] < 300:
+        return False
+    _LAST_LOOK[0] = time.time()
+    try:
+        for srv in find_servers():
+            if srv.get("key", "").strip() == o.get("key", "").strip() and srv["url"] != o["url"]:
+                cur = dict(config.settings.get("ota") or {})
+                cur["url"] = srv["url"]
+                config.settings.set("ota", cur)
+                print(f"ota: the update computer moved to {srv['url']}: following it", flush=True)
+                try:
+                    from . import system
+                    system.apply_firewall()     # (the firewall lets the paired address through)
+                except Exception:
+                    pass
+                return True
+    except Exception as e:
+        print(f"ota: looking for the update computer failed: {e}", flush=True)
+    return False
+
+
 def unpair():
     o = paired()
     config.settings.set("ota", {})
@@ -667,6 +695,7 @@ def client():
         threading.Thread(target=devlink.run, daemon=True).start()     # remote testing (idle unless turned on)
     except Exception as e:
         print(f"ota: remote testing not started: {e}", flush=True)
+    misses = 0
     while True:
         o = paired()
         if not o:
@@ -676,7 +705,12 @@ def client():
         base = o["url"]
         try:
             ans = json.loads(_get(f"{base}/ota/wait?have={st.get('id', '')}", timeout=70) or b"{}")
+            misses = 0
         except Exception:
+            misses += 1
+            if misses >= 3 and rediscover(o):      # three misses in a row (about a minute): has it moved?
+                misses = 0
+                continue
             time.sleep(15)
             continue
         uid = ans.get("id") if isinstance(ans, dict) else None

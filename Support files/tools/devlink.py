@@ -35,6 +35,9 @@ PROJECT = os.path.dirname(HERE)
 KEY = os.path.join(PROJECT, "ota-keys", "ota_ed25519")
 DEVQ = os.path.join(PROJECT, "run", "ota", "dev", "queue")
 DEVR = os.path.join(PROJECT, "run", "ota", "dev", "results")
+if os.environ.get("DEVLINK_TARGET") == "vm":          # the test VM, through the test update server (run/tmp/testota.py, 8782)
+    DEVQ = os.path.join(PROJECT, "run", "ota", "testdev", "queue")
+    DEVR = os.path.join(PROJECT, "run", "ota", "testdev", "results")
 SHOTS = os.path.join(PROJECT, "run", "sweep", "shots")
 
 

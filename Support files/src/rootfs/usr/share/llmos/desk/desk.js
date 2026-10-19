@@ -561,7 +561,7 @@
     let w = wins.get(id);
     noteLaunch(id);
     if (w && m.quiet) { w.el.querySelector(".title").textContent = spec.title || ""; renderBody(w.el.querySelector(".body"), spec); w.spec = spec; return; }   // a background refresh: same place, same layer
-    if (w) { w.el.querySelector(".title").textContent = spec.title || ""; renderBody(w.el.querySelector(".body"), spec); w.min = false; w.el.classList.remove("hidden"); raise(w.el); dock(); overlaps(); if (cur) cur.opened = true; return; }
+    if (w) { w.el.querySelector(".title").textContent = spec.title || ""; renderBody(w.el.querySelector(".body"), spec); w.min = false; w.el.classList.remove("hidden"); raise(w.el, !cur); dock(); overlaps(); if (cur) cur.opened = true; return; }
     const win = el("div", "win kind-" + (spec.kind || "panel") + " " + (spec.size || (spec.kind === "image" ? "l" : spec.kind === "media" ? "s" : "m")));
     win.dataset.id = id;
     const head = el("div", "head", `<i class="dot"></i><span class="title">${esc(spec.title || "")}</span>
@@ -595,7 +595,13 @@
     wins.set(id, { el: win, spec, min: false, max: false });
     if (cur) cur.opened = true;
     if (busy && !motionOff()) handoff(win);
-    raise(win); idle(); overlaps();
+    raise(win, !cur); idle(); overlaps();
+    // at most two of the system's own windows open at once: a third tucks the oldest into the dock (four stacked
+    // in one corner hid each other and the answer)
+    if (isSystem(id, spec)) {
+      const others = [...wins].filter(([oid, ow]) => oid !== id && isSystem(oid, ow.spec) && !ow.min);
+      if (others.length >= 2) minimize(others.sort((p, q) => (parseInt(p[1].el.style.zIndex) || 0) - (parseInt(q[1].el.style.zIndex) || 0))[0][0]);
+    }
     head.querySelector(".x").onclick = (e) => { e.stopPropagation(); closeWindow(id, true); };
     head.querySelector(".min").onclick = (e) => { e.stopPropagation(); minimize(id); };
     head.querySelector(".max").onclick = (e) => { e.stopPropagation(); maximize(id); };
@@ -647,7 +653,8 @@
     win.style.top = Math.min(Math.max(0, top), Math.max(0, H - 44)) + "px";
     if (win.offsetHeight > H - (parseFloat(win.style.top) || 0)) win.style.maxHeight = Math.max(160, H - (parseFloat(win.style.top) || 0) - 12) + "px";
   }
-  function raise(win) { win.style.zIndex = ++z; if (focused) focused.classList.remove("focus"); focused = win; win.classList.add("focus"); winFront(true); if (!busy && !cur) collapseReply(); }
+  // front=false: a window the computer opens while answering stays under the answer card (a Sources window covered it)
+  function raise(win, front = true) { win.style.zIndex = ++z; if (focused) focused.classList.remove("focus"); focused = win; win.classList.add("focus"); if (front) winFront(true); if (!busy && !cur) collapseReply(); }
   // the window in use goes in front of the input bar; the bar comes back to the front when it is wanted
   function winFront(on) { $("desk").classList.toggle("winfront", !!on && [...wins.values()].some(w => !w.min)); }
   // room kept free at the bottom of the window area so a new window opens above the input bar (moving, resizing and
@@ -915,7 +922,9 @@
   // a one-line answer ("Done — animations off.") steps aside by itself so the windows stay in view;
   // anything longer waits for the owner (Esc / Close), and the pointer over the card keeps it
   function replyEnd(m) {
-    if (!cur) return; cur.text = m.text || cur.text; $("reply-text").innerHTML = md(cur.text); paintQueued = false;
+    if (!cur) return; cur.text = m.text || cur.text;
+    // nothing to say (a window opened and is the answer): no empty "LLM OS" card left above the bar
+    if (!String(cur.text || "").trim()) { cur = null; histPos = -1; $("reply-progress").classList.add("hidden"); $("reply").classList.remove("writing"); orb("idle", ""); hideReply(); return; } $("reply-text").innerHTML = md(cur.text); paintQueued = false;
     // questions, failures and "no" answers stay until the owner moves on: they need reading, maybe an answer
     const needs = /\?\s*$|\b(?:not|no|can'?t|cannot|couldn'?t|didn'?t|failed|isn'?t|error|unable)\b/i.test(cur.text);
     const short = cur.text.length < 90 && !cur.text.includes("\n") && !needs, opened = !!cur.opened;

@@ -1230,7 +1230,12 @@ def _shortcut_words(name, args, out):
             where = m.group(2).rstrip("/")
             return ("Your home folder is empty." if where == "~" else
                     f"Your {where.rsplit('/', 1)[-1]} folder is empty." if where.count("/") == 1 else f"{where} is empty.")
-        return (f"{m.group(1)} item{'' if m.group(1) == '1' else 's'} in {m.group(2)}." if m else out.split(";")[0])
+        if m:
+            # the folder in words ("your home folder", "Pictures", "Videos/test21"), never "~" or "/root/…"
+            where = m.group(2).rstrip("/")
+            where = ("your home folder" if where == "~" else where[2:] if where.startswith("~/") else where)
+            return f"{m.group(1)} item{'' if m.group(1) == '1' else 's'} in {where}."
+        return out.split(";")[0]
     if name == "find_files":
         m = re.match(r"(\d+) file", out)
         if m:
@@ -1279,7 +1284,8 @@ def _shortcut_words(name, args, out):
             return f"Made {shown}." if mm.group(1) == "0" else f"Saved {shown}."
         return out
     if name == "web_answer":
-        return out.strip()                       # the sourced answer, as written
+        # the sourced answer, with the site named but not its long address (the Sources window has the link)
+        return re.sub(r"\(Source: ([^,()]+), https?://[^)\s]+\)", r"(Source: \1)", out.strip())
     if name == "mail_inbox":
         if low.startswith("no unread"):
             return "No unread email."

@@ -2055,10 +2055,10 @@ class Desk:
                 acts.append({"label": T("d_download", size=f"{m['size'] / 1e9:.1f}"), "say": f"download the model {m['id']}"})
             if installed and not active:
                 acts.append({"label": T("d_remove"), "say": f"remove the model {m['id']}", "danger": True})
+            slow = m["ram_gb"] > models.ram_gb() - 1
+            # (its speed class, or "runs from disk, slow" on this computer: "fast · runs from disk, slow" said both)
             sub = " · ".join(x for x in [m["maker"], m.get("license", ""), f"{m['size'] / 1e9:.1f} GB",
-                                         f"{m['ram_gb']} GB RAM", m.get("speed", "")] if x)
-            if m["ram_gb"] > models.ram_gb() - 1:
-                sub += " · " + T("w_model_slow")
+                                         f"{m['ram_gb']} GB RAM", T("w_model_slow") if slow else m.get("speed", "")] if x)
             local.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
                           "meta": T("active") if active else (T("installed") if installed else ""), "actions": acts})
 
@@ -2310,7 +2310,10 @@ class Desk:
         un = store.unseen()
         if not un:
             return
-        items = [{"title": m["title"], "detail": ui.strip(m["text"])[:1200]} for m in un[-8:]]
+        # a reminder's heading is its own text: said once ("Reminder: take out the bins" stood there twice)
+        same = lambda t, d: d.strip().rstrip(".").lower().startswith(t.strip().rstrip(".…").lower()) and len(d) <= len(t) + 3
+        items = [{"title": m["title"], **({} if same(m["title"], ui.strip(m["text"])) else {"detail": ui.strip(m["text"])[:1200]})}
+                 for m in un[-8:]]
         self.open_window({"id": "away", "replace": True, "title": T("while_away"), "size": "m", "slot": "cascade",
                           "blocks": [{"type": "list", "items": items}]})
         self.away_ids = [m["id"] for m in un]          # marked seen when the owner closes the card
@@ -3447,7 +3450,7 @@ class Desk:
             return True
         if _MODELS_Q.fullmatch(low.rstrip("?.! ")):
             self.open_panel("models")
-            self.instant_reply(line, "These are the AI models this computer can use: the one in use is marked; press Use on another to switch.")
+            self.instant_reply(line, "Here are the models; the one in use is marked.")
             return True
         if _TIME_Q.fullmatch(low):
             now = time.localtime()
@@ -4932,6 +4935,28 @@ class Desk:
                             for w in self.windows.values()],
                 "apps": [a["name"] for a in self.apps.values()]}
 
+    def _eval_page(self, script, timeout=30):
+        """The value of a script run in the desk's page (main thread), as text; None if it did not finish."""
+        done, box = threading.Event(), {}
+
+        def finish(view, res, _data=None):
+            try:
+                box["v"] = view.evaluate_javascript_finish(res).to_string()
+            except Exception as e:
+                box["v"] = json.dumps({"error": str(e)})
+            done.set()
+
+        def start():
+            try:
+                self.webview.evaluate_javascript(script, -1, None, None, None, finish, None)
+            except Exception as e:
+                box["v"] = json.dumps({"error": str(e)})
+                done.set()
+            return False
+        self.GLib.idle_add(start)
+        done.wait(timeout)
+        return box.get("v")
+
     def _control_conn(self, conn):
         try:
             conn.settimeout(900)
@@ -4987,6 +5012,8 @@ class Desk:
             elif cmd == "cancel":
                 self.stop_all()
                 out = {"ok": True}
+            elif cmd == "evaljs":          # development: run a script file in the page, its value back ("llmos ui-audit")
+                out = {"result": self._eval_page(open(arg, encoding="utf-8").read())}
             elif cmd == "close":
                 self.close_window(arg)
                 out = {"ok": True}

@@ -35,7 +35,7 @@
   "note": "steerable and does what you ask, with few refusals",
   "speed": "fast",
   "good_at": [
-   "does what the owner asks, rarely refuses",
+   "does what you ask, rarely refuses",
    "function calling"
   ],
   "limits": [
@@ -159,7 +159,7 @@
   "note": "the most willing: does not impose its own ethics on you",
   "speed": "medium",
   "good_at": [
-   "answers anything the owner asks",
+   "answers anything you ask",
    "function calling"
   ],
   "limits": [
@@ -181,7 +181,7 @@
   "note": "uncensored: its refusals were removed (abliterated); newer and smarter than Dolphin",
   "speed": "slow",
   "good_at": [
-   "answers anything the owner asks",
+   "answers anything you ask",
    "stronger reasoning than the 3B and 8B models",
    "recommended by users of local models (2026)"
   ],

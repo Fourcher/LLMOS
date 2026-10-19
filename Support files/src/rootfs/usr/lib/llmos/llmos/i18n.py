@@ -10,7 +10,7 @@ from . import config
 
 EN = {
     "d_myapps": "Apps", "d_apps_none": "No apps yet.", "d_apps_make": "Make one",
-    "d_apps_hint": "Or ask for any app in words: \"make me a habit tracker\", \"a pink timer with big buttons\".",
+    "d_apps_hint": "Or ask for any app in words: “make me a habit tracker”, “a pink timer with big buttons”.",
     "d_saved_to": "Saved to {path}", "d_live_title": "Running from the USB stick",
     "d_live_text": "LLM OS is running from the stick, in memory. Everything you do here is forgotten when the computer turns off. Install it on this computer to keep it: the plan is shown before anything is written, and Windows or macOS can stay.",
     "d_fresh": "Fresh start. What came before is still in History.", "d_sidechat": "Side chat", "d_resumed": "Back to: {title}",
@@ -60,7 +60,7 @@ EN = {
     "lock_failed": "The vault could not be closed (a file in it is still in use); the screen is locked anyway.",
     "d_set_passphrase": "Set the passphrase", "vault_exists": "There is already a vault.", "passphrase_empty": "The passphrase is empty.", "vault_made": "Your data is now protected by the passphrase.",
     "d_trash": "Trash", "d_empty_trash": "Empty the trash", 
-    "d_lists": "Lists", "d_undo": "Undo", "d_restore": "Restore", "d_delete_forever": "Delete for good", "s_autolock": "Auto-lock", "s_screen_off": "Screen off after", "v_never": "never", "v_minutes": "{n} min", "d_empty_list": "(nothing on this list)", "d_timer_up": "Time's up: your {what} timer is done.",
+    "d_lists": "Lists", "d_undo": "Undo", "d_restore": "Restore", "d_delete_forever": "Delete for good", "s_autolock": "Auto-lock", "s_screen_off": "Screen off after", "v_never": "never", "v_minutes": "{n} min", "d_empty_list": "Nothing on this list yet.", "d_timer_up": "Time's up: your {what} timer is done.",
     "d_morning": "Good morning", "d_afternoon": "Good afternoon", "d_evening": "Good evening", "d_idle_hint": "Tell me what you want, or try one of these.",
     "d_thinking": "thinking…", "d_writing": "writing…", "d_listening": "listening…", "d_speaking": "speaking…", "d_waiting": "needs your answer", "s_motion": "Animations", "v_motion_full": "Full", "v_motion_reduced": "Reduced", "v_motion_off": "Off",
     "d_home": "Home", "d_empty_folder": "(empty folder)",

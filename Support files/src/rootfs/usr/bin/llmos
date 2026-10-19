@@ -23,6 +23,9 @@ if __name__ == "__main__":
             pass
         from llmos import desk
         desk.main()
+    elif arg == "ui-audit":                   # development: measure the desk as drawn now (contrast, clipping, sizes)
+        from llmos import desk
+        desk.control(["evaljs", "/usr/share/llmos/desk/uiaudit.js"])
     elif arg in ("say", "desk-state", "desk-ctl"):   # talk to the running desk
         from llmos import desk
         words = sys.argv[2:]

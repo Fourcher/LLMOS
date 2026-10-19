@@ -2409,6 +2409,7 @@ def _human_size(n):
 
 
 _LAST_FOLDER = None
+_STANDARD_DIRS = {"Apps", "Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos", "Templates", "Public"}
 _LAST_MADE = {"path": "", "at": 0.0}
 _SHOW_HIDDEN = False
 
@@ -2484,16 +2485,19 @@ def show_files(a, ctx):
             acts = [{"label": i18n.t("d_restore"), "say": f"restore {n} from the trash", "primary": True},
                     {"label": i18n.t("d_delete_forever"), "say": f"delete the file {p}", "danger": True}]
         else:
-            acts = [{"label": i18n.t("d_open"), "say": f"show my files in {p}" if isdir else f"open the file {p}"},
-                    {"label": i18n.t("d_delete"), "say": f"delete the {'folder' if isdir else 'file'} {p}", "danger": True}]
+            acts = [{"label": i18n.t("d_open"), "say": f"show my files in {p}" if isdir else f"open the file {p}"}]
+            # the standard folders of the home folder have no Delete next to them (a red button on Pictures and Documents)
+            if not (isdir and os.path.dirname(p.rstrip("/")) == config.home().rstrip("/") and n in _STANDARD_DIRS):
+                acts.append({"label": i18n.t("d_delete"), "say": f"delete the {'folder' if isdir else 'file'} {p}", "danger": True})
         items.append({"title": ("📁 " + n) if isdir else n, "subtitle": when if isdir else f"{_human_size(st.st_size)} · {when}",
                       "actions": acts})
     home = config.home().rstrip("/")
     shown = "~" + path[len(home):] if path.startswith(home) else path
-    title = i18n.t("d_home") if path.rstrip("/") == home else (i18n.t("d_trash") if is_trash else shown)
+    # the window's title in words: "Pictures", "Videos/test21" (not "~/Pictures")
+    title = i18n.t("d_home") if path.rstrip("/") == home else (i18n.t("d_trash") if is_trash else (shown[2:] if shown.startswith("~/") else shown))
     parent = os.path.dirname(path.rstrip("/")) or "/"
     up = i18n.t("d_home") if parent == home else (os.path.basename(parent) or "/")
-    nav = ([{"label": "↑ " + up, "say": f"show my files in {parent}"}] if path.rstrip("/") not in ("", "/") else []) + \
+    nav = ([{"label": "↑ " + up, "say": f"show my files in {parent}"}] if path.rstrip("/") not in ("", "/", home) else []) + \
         ([{"label": "Open in Files", "say": f"open {path} in files"}] if shutil.which("thunar") and not is_trash else []) + \
         [{"label": lab, "say": f"sort by {o}", "primary": str(a.get("sort") or "name") == o}
          for lab, o in (("A–Z", "name"), ("Newest", "date"), ("Biggest", "size"))] + \
@@ -3855,7 +3859,8 @@ def _notes_window(ctx, lst=None):
         items.append({"title": n["text"], "done": n["done"], "meta": n["list"] if lst is None and len(names) > 1 else "",
                       "subtitle": _when(n["added"]) if n["list"] == "notes" else "", "actions": acts})
     title = (lst or i18n.t("d_lists")).capitalize() if lst not in (None, "notes") else (i18n.t("d_lists") if lst is None else "Notes")
-    blocks = [{"type": "list", "items": items}] if items else [{"type": "text", "text": i18n.t("d_empty_list"), "dim": True}]
+    empty = i18n.t("d_empty_list") if lst is not None else "No lists yet. Say “add milk to my shopping list” to start one."
+    blocks = [{"type": "list", "items": items}] if items else [{"type": "text", "text": empty, "dim": True}]
     # one window for all lists (it is re-used, never piled up): the other lists are a row of buttons
     others = [n for n in names if n != lst]
     if others or lst is not None:
