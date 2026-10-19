@@ -245,6 +245,14 @@
     const now = new Date();
     try { $("clock").textContent = now.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", hour12: clock24 === null ? undefined : !clock24 }) + "   " + now.toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" }); }
     catch (e) { $("clock").textContent = now.toLocaleTimeString(); }
+    // the lock screen's own large clock and date (as on a phone or a Mac: the time is what a locked screen is for)
+    const lc = $("lock-clock");
+    if (lc && !$("screen-lock").classList.contains("hidden")) {
+      try {
+        lc.querySelector(".t").textContent = now.toLocaleTimeString(lang, { hour: "numeric", minute: "2-digit", hour12: clock24 === null ? undefined : !clock24 });
+        lc.querySelector(".d").textContent = now.toLocaleDateString(lang, { weekday: "long", day: "numeric", month: "long" });
+      } catch (e) { lc.querySelector(".t").textContent = now.toLocaleTimeString(); }
+    }
   }
   setInterval(clock, 1000);
   $("clock").style.cursor = "pointer"; $("clock").title = t("d_clock_title", "Clock & calendar");

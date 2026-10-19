@@ -25,6 +25,8 @@
   /* the accent as TEXT (links, "You", "in use"): lifted toward the text colour so it reads (4.5:1) on the cards;
      the plain accent stays for fills (buttons, switches, the orb) */
   --accent-text: color-mix(in srgb, var(--accent) 62%, var(--fg));
+  /* red as TEXT: toward the text colour, so "Delete" and errors read on light and dark cards alike */
+  --danger-text: color-mix(in srgb, var(--danger) 60%, var(--fg));
   --shadow: 0 18px 50px rgba(0,0,0,.45);
   --font: Inter, "Noto Sans", "Noto Sans CJK SC", "Noto Sans Arabic", "Noto Sans Hebrew", "Noto Sans Devanagari", "Noto Sans Thai", system-ui, sans-serif;
   --mono: "JetBrains Mono", "Noto Sans Mono", monospace;
@@ -46,7 +48,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 .hidden { display: none !important; }
 .dim { color: var(--dim); }
-.error { color: var(--danger); min-height: 1.4em; margin-top: 8px; font-size: 14px; }
+.error { color: var(--danger-text); min-height: 1.4em; margin-top: 8px; font-size: 14px; }
 code { font-family: var(--mono); font-size: .92em; background: color-mix(in srgb, var(--fg) 9%, var(--bg)); padding: 1px 6px; border-radius: 6px; }
 pre { font-family: var(--mono); font-size: 13.5px; background: color-mix(in srgb, var(--fg) 7%, var(--bg)); padding: 12px 14px; border-radius: var(--radius-sm); overflow: auto; white-space: pre-wrap; margin: 6px 0; }
 a { color: var(--accent-text); text-decoration: none; }
@@ -183,7 +185,7 @@ a:hover { text-decoration: underline; }
 .btn.big { width: 100%; min-height: 48px; font-size: 16.5px; }
 .wizard .how { color: var(--dim); font-size: 15px; margin: 10px 0 6px; }
 .wizard .note { min-height: 1.4em; font-size: 15px; margin: 4px 0 10px; color: var(--fg); }
-.wizard .note.ok { color: var(--ok); font-weight: 600; } .wizard .note.bad { color: var(--danger); }
+.wizard .note.ok { color: var(--ok); font-weight: 600; } .wizard .note.bad { color: var(--danger-text); }
 .wizard details.paste { margin-top: 6px; color: var(--dim); font-size: 15px; }
 .wizard details.paste summary { cursor: pointer; } .wizard details.paste .pwrow { margin-top: 8px; }
 .orb.small { width: 18px; height: 18px; box-shadow: 0 0 0 0 var(--glow); animation: none; }
@@ -218,7 +220,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .btn.primary { background: var(--accent); color: var(--on-accent, #fff); border-color: transparent; }
 .btn.primary:hover { filter: brightness(1.08); }
 .btn.ghost { background: transparent; }
-.btn.danger { color: var(--danger); }
+.btn.danger { color: var(--danger-text); }
 .btn.small { padding: 6px 10px; font-size: 13px; min-height: 30px; }
 .btn:focus-visible, .chip:focus-visible, .choice:focus-visible, .opt:focus-visible, .sw:focus-visible, .tzitem:focus-visible, .win .head button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn:disabled { opacity: .6; cursor: default; }
@@ -277,7 +279,7 @@ body.light #desk.wall::before { background: linear-gradient(180deg, rgba(255,255
   color: #eef0f5; box-shadow: 0 1px 0 rgba(255,255,255,.06); }
 #desk.wall #top .chip { background: rgba(255,255,255,.09); color: #eef0f5; }
 #desk.wall #top .chip:hover { background: rgba(255,255,255,.16); }
-#desk.wall #top .brand.small, #desk.wall #greet { color: rgba(238,240,245,.88); }
+#desk.wall #top .brand.small, #desk.wall #greet { color: rgba(238,240,245,.95); }
 /* the greeting and the hint over a photo: lighter text with a soft dark halo, so bright snow or sky never swallows it */
 #desk.wall #idle p { color: rgba(255,255,255,.92); text-shadow: 0 1px 2px rgba(0,0,0,.55), 0 0 18px rgba(0,0,0,.45); }
 #desk.wall .hint { color: rgba(255,255,255,.86); text-shadow: 0 1px 2px rgba(0,0,0,.7), 0 0 12px rgba(0,0,0,.6); }
@@ -456,7 +458,7 @@ table.tbl tr:last-child td { border-bottom: 0; }
 #reply .text { margin-top: 6px; }
 #reply .text p { margin: 0 0 8px; }
 #reply .text ul, #reply .text ol { margin: 4px 0 8px 20px; padding: 0; }
-#reply .text.err { color: var(--danger); animation: shake calc(.4s * var(--dur)) ease-in-out; }
+#reply .text.err { color: var(--danger-text); animation: shake calc(.4s * var(--dur)) ease-in-out; }
 /* while it thinks: three waving dots; while it writes: a soft caret at the end */
 .think { display: inline-flex; gap: 4px; align-items: center; height: 1.5em; }
 .think i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: wave calc(1.2s * var(--dur)) steps(1) infinite; }
@@ -492,7 +494,7 @@ table.tbl tr:last-child td { border-bottom: 0; }
 .dlg h3 { margin: 0 0 8px; font-size: 17px; display: flex; align-items: center; gap: 10px; }
 .dlg .body { color: var(--dim); white-space: pre-wrap; font-size: 14.5px; max-height: 40vh; overflow: auto; }
 .dlg .body.mono { font-family: var(--mono); font-size: 13.5px; }
-.dlg.danger h3 { color: var(--danger); }
+.dlg.danger h3 { color: var(--danger-text); }
 .hist .turn { padding: 10px 0; border-bottom: 1px solid var(--line); }
 .hist .q { color: var(--accent); font-weight: 600; font-size: 14px; }
 .hist .a { white-space: pre-wrap; margin-top: 4px; }
@@ -519,7 +521,7 @@ table.tbl tr:last-child td { border-bottom: 0; }
 .chatlog .msg.me { align-self: flex-end; background: var(--accent); color: var(--on-accent, #fff); border-bottom-right-radius: 4px; }
 .chatlog .msg.ai { align-self: flex-start; background: var(--card2); border-bottom-left-radius: 4px; }
 .chatlog .msg.ai p { margin: 0 0 6px; } .chatlog .msg.ai p:last-child { margin: 0; }
-.chatlog .msg.err { color: var(--danger); }
+.chatlog .msg.err { color: var(--danger-text); }
 .chatlog .msg .act { color: var(--dim); font-size: 13px; margin-top: 4px; }
 .chatlog .hint2 { color: var(--dim); text-align: center; margin: auto; }
 .chatin { display: flex; gap: 8px; padding: 10px 12px; border-top: var(--border-w) var(--border-style) var(--line); }
@@ -576,7 +578,24 @@ input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-
 /* option labels start with a capital ("Yes", "Full trust: …"), whatever the setting's own word is */
 .choice > span > div:first-child::first-letter { text-transform: uppercase; }
 /* in lists, Delete/Remove are quiet until pointed at: one red button per row made every list look alarming */
-.item .acts .btn.danger { background: transparent; border-color: transparent; color: color-mix(in srgb, var(--danger) 80%, var(--fg)); }
+.item .acts .btn.danger { background: transparent; border-color: transparent; color: var(--danger-text); }
 .item .acts .btn.danger:hover, .item .acts .btn.danger:focus-visible { background: color-mix(in srgb, var(--danger) 18%, transparent); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
 /* a name that opens its file: a taller hit area (it was 22 px) without moving the row's layout */
 .item .t.opens { padding: 4px 0; margin: -4px 0; }
+
+/* lock screen: a large clock and the date, then a compact card (it was one big card with empty space below) */
+.lockwrap { display: flex; flex-direction: column; align-items: center; gap: 28px; }
+#lock-clock { text-align: center; color: var(--fg); user-select: none; }
+#lock-clock .t { font-size: 84px; font-weight: 300; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+#lock-clock .d { font-size: 18px; color: var(--dim); margin-top: 10px; }
+.lockcard { width: min(92vw, 400px); padding: 24px 28px 20px; }
+.lockcard .orb.big { width: 56px; height: 56px; margin: 0 auto 10px; }
+.lockcard .brand { font-size: 20px; }
+.lockcard .sub { margin-top: 4px; font-size: 15px; }
+.lockcard input { margin-top: 16px; }
+.lockcard .error:empty { min-height: 0; margin: 0; }
+#lock-note.note:empty { min-height: 0; margin: 0; }
+/* the greeting's line over a photo sits on a frosted pill: white text on bright snow or clouds was unreadable */
+#desk.wall #idle p { display: inline-block; padding: 4px 14px; border-radius: 999px; background: rgba(10, 12, 18, .42);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); text-shadow: none; }
+#desk.wall #idle h1 { text-shadow: 0 1px 3px rgba(0,0,0,.55), 0 2px 18px rgba(0,0,0,.5); }

@@ -82,7 +82,15 @@
     const rad = parseFloat(cs.borderTopLeftRadius); if (rad > 0 && rad < 999) bump("radius", Math.round(rad));
     if (!own) continue;
     const fs = parseFloat(cs.fontSize), fw = parseInt(cs.fontWeight) || 400;
-    texts.push({ el, r, w: win(el) });
+    // the letters' own box (not the element's padding) for the overlap check
+    let g = null;
+    for (const n of el.childNodes) {
+      if (n.nodeType !== 3 || !n.textContent.trim()) continue;
+      const rg = document.createRange(); rg.selectNodeContents(n); const b = rg.getBoundingClientRect();
+      if (b.width && b.height) g = g ? { left: Math.min(g.left, b.left), top: Math.min(g.top, b.top), right: Math.max(g.right, b.right), bottom: Math.max(g.bottom, b.bottom) } : { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+    }
+    if (g) { g.width = g.right - g.left; g.height = g.bottom - g.top; }
+    texts.push({ el, r: g || r, w: win(el) });
     bump("size", fs.toFixed(1)); bump("weight", fw); bump("family", cs.fontFamily.split(",")[0].replace(/["']/g, "").trim());
     bump("line", (parseFloat(cs.lineHeight) / fs || 1.2).toFixed(2));
     const fg = parse(cs.color); if (!fg) continue;

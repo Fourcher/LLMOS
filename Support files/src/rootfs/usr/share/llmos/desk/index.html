@@ -15,6 +15,8 @@
 
 <!-- vault unlock -->
 <section id="screen-lock" class="screen hidden">
+  <div class="lockwrap">
+  <div id="lock-clock" aria-live="off"><div class="t"></div><div class="d"></div></div>
   <div class="center card lockcard" id="lock-card">
     <div class="orb big" id="lock-orb"><i class="halo"></i></div>
     <div class="brand">LLM OS</div>
@@ -24,6 +26,7 @@
     <div class="row"><button id="lock-go" class="btn primary" data-s="d_unlock"></button></div>
     <div id="lock-error" class="error"></div>
     <div id="lock-busy" class="dim hidden" data-s="unlocking"></div>
+  </div>
   </div>
 </section>
 

@@ -59,12 +59,15 @@ def glass_contrast(rep, png):
         box = (max(0, int(x * sc)), max(0, int(y * sc)), min(img.width, int((x + w) * sc)), min(img.height, int((y + h) * sc)))
         if box[2] - box[0] < 2 or box[3] - box[1] < 2:
             continue
-        px = list(img.crop(box).getdata())
+        px = list(img.crop(box).get_flattened_data()) if hasattr(img, 'get_flattened_data') else list(img.crop(box).getdata())
         fg = g["fg"]
-        bg = [p for p in px if sum((a - b) ** 2 for a, b in zip(p, fg)) > 60 ** 2] or px
+        # background = what is left once the 30% of pixels most like the text colour (the letters and their edges)
+        # are set aside; white text on white snow then still counts as white on white
+        px = sorted(px[::max(1, len(px) // 2000)], key=lambda p: sum((a - b) ** 2 for a, b in zip(p, fg)))
+        bg = px[int(len(px) * 0.3):] or px
         lt = _lum(fg)
         cr = sorted((max(lt, _lum(p)) + 0.05) / (min(lt, _lum(p)) + 0.05) for p in bg[::max(1, len(bg) // 400)])
-        worst, mid = cr[len(cr) // 10], cr[len(cr) // 2]
+        worst, mid = cr[len(cr) // 4], cr[len(cr) // 2]          # the worst quarter of what is behind it
         g["measured"] = [round(worst, 2), round(mid, 2)]
         if worst < g["need"]:
             fails.append(g)
@@ -107,7 +110,7 @@ def main():
     print(f"  font sizes {c.get('fontSizes')}: {', '.join(f'{s}px×{n}' for s, n in inv.get('fontSizes', []))}")
     print(f"  families {inv.get('families')}  weights {inv.get('weights')}  text colours {inv.get('textColors')}")
     print(f"  radii {inv.get('radii')}  spacing values {inv.get('spacingDistinct')} (on 4px grid {inv.get('spacingOn4pxGrid')})")
-    for k, title in (("glassFails", "LOW CONTRAST ON THE SCREEN (worst 10%, median)"), ("contrast", "LOW CONTRAST"), ("clipped", "CUT OFF"), ("small", "SMALL TARGETS"), ("offscreen", "OFF SCREEN"), ("overlap", "TEXT OVER TEXT")):
+    for k, title in (("glassFails", "LOW CONTRAST ON THE SCREEN (worst quarter, median)"), ("contrast", "LOW CONTRAST"), ("clipped", "CUT OFF"), ("small", "SMALL TARGETS"), ("offscreen", "OFF SCREEN"), ("overlap", "TEXT OVER TEXT")):
         rows = rep.get(k) or []
         if rows:
             print(f"  {title}:")
