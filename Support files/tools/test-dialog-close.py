@@ -99,7 +99,7 @@ check(d2.requests.empty() and d2._req_pending == 0, "stop_all drops the queued r
 # ---- (3) "install the updates" refreshes the Updates panel with asked=True ----
 install_if = None
 for node in ast.walk(desk_cls):
-    if isinstance(node, ast.If) and ast.unparse(node.test).startswith("re.fullmatch('install (?:the"):
+    if isinstance(node, ast.If) and ast.unparse(node.test).startswith("_UPD_INSTALL.fullmatch("):
         install_if = node
         break
 check(install_if is not None, "desk.py has the 'install the updates' route")
@@ -129,7 +129,10 @@ class FakeThread:                       # runs the target at once so the refresh
 
 
 stub_sys = types.SimpleNamespace(updates_apply=updates_apply, updates_panel=updates_panel)
-ns_route = {"re": re, "syspanels": stub_sys, "threading": types.SimpleNamespace(Thread=FakeThread)}
+_dsrc = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src/rootfs/usr/lib/llmos/llmos/desk.py"), encoding="utf-8").read()
+_uns = {}
+exec("import re\n" + _dsrc[_dsrc.index("_UPD_AUTO = "):_dsrc.index("_TIME_Q = re.compile(")], _uns)
+ns_route = {"re": re, "syspanels": stub_sys, "threading": types.SimpleNamespace(Thread=FakeThread), "_UPD_INSTALL": _uns["_UPD_INSTALL"]}
 exec(route_src, ns_route)
 
 

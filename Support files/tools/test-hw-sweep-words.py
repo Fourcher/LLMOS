@@ -116,6 +116,20 @@ _now = _dt.datetime(2026, 10, 15, 4, 0)
 check(store.parse_when("2 minutes", _now)[0] == _dt.datetime(2026, 10, 15, 4, 2), "a bare '2 minutes' is from now (was 00:02 tomorrow)")
 check(store.parse_when("two hours from now", _now)[0] == _dt.datetime(2026, 10, 15, 6, 0), "'two hours from now'")
 
+# 2026-10-19 (the laptop): every everyday update phrasing reaches the real updater or the Updates window
+ns2 = {}
+exec("import re\n" + src[src.index("_UPD_AUTO = "):src.index("_TIME_Q = re.compile(")], ns2)
+UA, US, UI = ns2["_UPD_AUTO"], ns2["_UPD_SHOW"], ns2["_UPD_INSTALL"]
+kind = lambda q: "auto" if UA.fullmatch(q) else "show" if (US.fullmatch(q) and not UI.fullmatch(q)) else "install" if UI.fullmatch(q) else None
+for q in ("install update", "install updates", "update the computer", "get updates", "install the latest update", "upgrade", "update llm os"):
+    check(kind(q) == "install", f"{q!r} installs")
+for q in ("update", "updates", "check for updates", "show me update settings", "update settings", "open updates", "software update",
+          "is my computer up to date", "are there any updates"):
+    check(kind(q) == "show", f"{q!r} shows the Updates window")
+for q in ("turn on automatic updates", "turn off auto updates", "update automatically"):
+    check(kind(q) == "auto", f"{q!r} switches automatic updates")
+check(kind("get updates from my computer") is None, "'get updates from my computer' is the pairing request, not an install")
+
 if fails:
     print(f"{fails} FAILED")
     sys.exit(1)

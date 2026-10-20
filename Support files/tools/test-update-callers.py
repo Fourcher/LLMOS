@@ -65,7 +65,7 @@ with mock.patch.object(system, "apk_update", return_value=(124, "", "timed out a
 # ---- updates_panel still renders from updates_check
 with mock.patch.object(system, "apk_update", return_value=(1, "", "")):
     p = syspanels.updates_panel()
-    check(p["blocks"][0]["text"] == "could not reach the update server (is the internet on?)",
+    check([b["text"] for b in p["blocks"] if b.get("type") == "text"][0] == "could not reach the update server (is the internet on?)",
           "updates_panel shows the update-server text on failure")
 
 # ---- updates_apply

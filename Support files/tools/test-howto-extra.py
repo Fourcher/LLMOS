@@ -40,10 +40,11 @@ def answer(q):
 
 
 # the update shortcut: the one string constant that holds the install-updates / update-system pattern
-UPDATE = None
-for node in ast.walk(tree):
-    if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.startswith("install (?:the |all (?:the )?)?updates"):
-        UPDATE = re.compile(node.value)
+# (the install-updates words are desk._UPD_INSTALL now, one pattern for every everyday phrasing)
+_src = open(SRC, encoding="utf-8").read() if "SRC" in globals() else ast.unparse(tree)
+_ns = {}
+exec("import re\n" + _src[_src.index("_UPD_AUTO = "):_src.index("_TIME_Q = re.compile(")], _ns)
+UPDATE = _ns["_UPD_INSTALL"]
 assert UPDATE, "update pattern not found in desk.py"
 
 print("account phrases (new)")

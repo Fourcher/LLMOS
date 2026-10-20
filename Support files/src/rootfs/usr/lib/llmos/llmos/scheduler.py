@@ -6,6 +6,7 @@ the OS 'does things on its own' -- the promise from the brief that you can say
 It runs as root but only starts working once the vault (if any) is unlocked,
 because tasks and their results live inside it."""
 import json
+import os
 import re
 import sys
 import time
@@ -135,12 +136,39 @@ def run_task(t):
     return result
 
 
+_AUTO_STAMP = "/var/lib/llmos/auto-updates.last"
+
+
+def _auto_updates():
+    """"Install updates automatically" on: the programs are updated once a day (in the background; a note says so)."""
+    if not config.settings.get("auto_updates") or config.settings.get("internet") == "no":
+        return
+    try:
+        last = os.path.getmtime(_AUTO_STAMP)
+    except OSError:
+        last = 0
+    if time.time() - last < 86400:
+        return
+    try:
+        os.makedirs(os.path.dirname(_AUTO_STAMP), exist_ok=True)
+        open(_AUTO_STAMP, "w").close()
+        from . import syspanels
+        ok, note = syspanels.updates_apply()
+        if ok and "restart" in note:
+            store.notify("Updated", "Program updates are installed; restart to use the new system kernel.")
+        elif not ok:
+            store.notify("Updates not installed", note[:200])
+    except Exception as e:
+        print(f"scheduler: automatic updates failed: {e}", flush=True)
+
+
 def tick():
     system.apply_timezone_env()  # the owner may have changed the zone since we started
     if config.settings.get("vault") and not vault.unlocked():
         return  # tasks live in the vault; wait until it's open
     if system.focus_tick():
         store.notify("Focus mode ended", "Social media and feeds are reachable again.")
+    _auto_updates()
     for t in store.due():
         try:
             if t.get("kind") in ("timer", "reminder"):

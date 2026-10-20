@@ -83,7 +83,7 @@ def panel_run(internet, **kw):
 
 p, upd, upg = panel_run("ask", asked=True)
 texts = [b.get("text", "") for b in p["blocks"] if b.get("type") == "text"]
-check(upd.called and upg.called and p["id"] == "panel-updates" and "1 update(s) available." in texts,
+check(upd.called and upg.called and p["id"] == "panel-updates" and "1 update available." in texts,
       f"ask with updates_panel(asked=True): apk runs and the normal panel: {texts!r}")
 
 p, upd, upg = panel_run("ask")
@@ -166,7 +166,7 @@ check(upd.called and upg.called, "desk 'check for updates' under ask: apk runs (
 check(r.opened and r.opened[0]["id"] == "panel-updates", "desk 'check for updates' under ask: the Updates panel opens")
 
 r, upd, upg = run_route("updates", "no")
-check(calls == [{"asked": True}] and not upd.called and r.opened and r.opened[0]["blocks"][0]["text"] == OFF,
+check(calls == [{"asked": True}] and not upd.called and r.opened and [b["text"] for b in r.opened[0]["blocks"] if b.get("type") == "text"][0] == OFF,
       f"desk 'updates' under no: still no apk call, the switched-off text: {r.opened[0]['blocks'][0]['text'] if r.opened else None!r}")
 
 print("all good" if fails == 0 else f"{fails} FAILED")

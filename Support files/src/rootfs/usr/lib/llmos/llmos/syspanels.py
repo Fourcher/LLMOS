@@ -597,15 +597,30 @@ def updates_check(asked=False):
 
 
 def updates_panel(*, asked=False):
+    """Updates and their settings in one place: LLM OS itself (version, where its updates come from, the last one),
+    automatic updates on or off, and the programs' updates with an Install button."""
+    from . import config, ota
+    rows = [["Version", ota.current_version()]]
+    o = ota.paired()
+    if o:
+        rows.append(["Updates from", f"{o['name']} ({o['url'].split('//')[1]})"])
+        last = (ota._state().get("last") or {})
+        if last:
+            rows.append(["Last update", f"{last.get('version', '?')}, " + time.strftime("%b %d %H:%M", time.localtime(last.get("ts", 0)))
+                         + ("" if last.get("ok") else " (undone)")])
+    blocks = [{"type": "heading", "text": "LLM OS"}, {"type": "kv", "rows": rows},
+              {"type": "toggle", "label": "Install updates automatically", "hint": "Programs are updated once a day in the background; LLM OS updates from your computer always install on their own.",
+               "on": bool(config.settings.get("auto_updates")), "say_on": "turn on automatic updates", "say_off": "turn off automatic updates"},
+              {"type": "heading", "text": "Programs"}]
     pk, err = updates_check(asked=asked)
     if pk is None:
-        blocks = [{"type": "text", "text": err}]
+        blocks.append({"type": "text", "text": err})
     elif not pk:
-        blocks = [{"type": "text", "text": "Everything is up to date."}]
+        blocks.append({"type": "text", "text": "Everything is up to date."})
     else:
-        blocks = [{"type": "text", "text": f"{len(pk)} update(s) available."},
-                  {"type": "list", "items": [{"title": n, "subtitle": f"{a} → {b}"} for n, a, b in pk[:40]]},
-                  {"type": "buttons", "items": [{"label": "Install the updates", "say": "install the updates", "primary": True}]}]
+        blocks += [{"type": "text", "text": f"{len(pk)} update{'' if len(pk) == 1 else 's'} available."},
+                   {"type": "list", "items": [{"title": n, "subtitle": f"{a} → {b}"} for n, a, b in pk[:40]]},
+                   {"type": "buttons", "items": [{"label": "Install the updates", "say": "install the updates", "primary": True}]}]
     return {"id": "panel-updates", "replace": True, "title": "Updates", "size": "m", "slot": "side", "blocks": blocks}
 
 
