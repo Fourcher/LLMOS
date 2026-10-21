@@ -764,6 +764,56 @@ def _wait_ready(check, limit=2.0, step=0.1):
             return False
 
 
+# A reply the on-device model balked at: a refusal or an "are you allowed" hedge. When the fast model does this,
+# the turn is re-run on a more capable model (the online one, or a stronger uncensored model installed here), because
+# the only real rules are the three laws and the fast model is just being timid. Genuinely harmful asks (violence,
+# weapons to hurt people, anything sexual involving minors) are NOT rescued: those refusals are correct and kept.
+_REFUSAL_RE = re.compile(r"\b(i can'?t|i cannot|i'?m not able|i am not able|i'?m unable|cannot assist|can'?t assist|"
+                         r"i (?:only|won'?t) (?:draft|write|provide|create|help|generate|assist)|i must decline|i refuse|"
+                         r"i'?m sorry,? but|i apologi[sz]e|not appropriate|that'?s inappropriate|as an ai|against my (?:rules|guidelines|programming)|"
+                         r"i'?m (?:not comfortable|unable to help)|(?:is|are) not something i can)\b", re.I)
+_HEDGE_RE = re.compile(r"\b(are you authoriz|you'?re not authoriz|do you have permission|without (?:your )?permission|"
+                       r"(?:is |it )(?:it |this )?your own property|confirm (?:that )?(?:it is|you are|you own)|"
+                       r"only if you (?:are authoriz|own)|authoriz(?:ed|ation) to (?:do|perform|wipe|delete|erase))\b", re.I)
+# requests that SHOULD be refused (First Law): keep the refusal, never escalate past it
+_HARM_REQ_RE = re.compile(r"\b(kill|murder|stab|shoot|hurt|harm|attack|assault|beat up|poison|strangle|bomb|explosive|"
+                          r"nerve agent|bioweapon|chemical weapon)\b.{0,40}\b(him|her|them|someone|somebody|people|person|"
+                          r"a human|my (?:neighbou?r|coworker|boss|ex|wife|husband|partner|teacher|friend))\b|"
+                          r"\b(child|minor|kid|underage|infant|toddler|\b1[0-7])\b.{0,25}\b(sex|sexual|nude|naked|porn|explicit)|"
+                          r"\b(sex|sexual|nude|naked|porn|explicit)\b.{0,25}\b(child|minor|kid|underage|infant|toddler|1[0-7] ?year)", re.I)
+# stronger / bolder models to escalate to locally, most capable first (whichever are installed)
+_ESCALATE_ORDER = ["underdog-27b", "ministral-3-14b", "huihui-ornith-1.5-9b", "dolphin-3-8b", "granite-4.1-8b", "hermes-3-3b"]
+
+
+def _looks_refused(text):
+    t = (text or "").strip()
+    return bool(t) and len(t) < 600 and (bool(_REFUSAL_RE.search(t)) or bool(_HEDGE_RE.search(t)))
+
+
+def _escalation_target(ctx, where):
+    """Where to re-run a timid refusal. ("cloud", None) for the online model, ("local", model_id) for a stronger
+    model installed here, or None if there is nothing more capable to try."""
+    if not config.settings.get("auto_escalate", True) or where == "cloud":
+        return None
+    try:
+        if config.cloud() and config.settings.get("internet", "yes") != "no" and not getattr(ctx, "headless", False):
+            return ("cloud", None)
+    except Exception:
+        pass
+    try:
+        from . import models
+        if models.host_mode():
+            return None
+        active = (models.active() or {}).get("id")
+        have = {m["id"] for m in models.installed()}
+        for mid in _ESCALATE_ORDER:
+            if mid in have and mid != active:
+                return ("local", mid)
+    except Exception:
+        pass
+    return None
+
+
 def run(ctx, user_text, history):
     """Run one user turn. Streams text through ctx, executes tools under the
     autonomy policy, appends to history, returns the final text."""
@@ -1063,6 +1113,31 @@ def run(ctx, user_text, history):
             if not final:
                 final = "I couldn't finish that. Try saying it another way, or say \u201cwhat did you do\u201d to see what I tried."
                 ctx.status(i18n.t("stopped"))
+        # the quick model was just being timid (a refusal or an "are you allowed" hedge on something allowed):
+        # re-run the whole turn on a more capable model. Genuinely harmful asks keep their refusal.
+        if final and not escalated and _looks_refused(final) and not _HARM_REQ_RE.search(user_text):
+            tgt = _escalation_target(ctx, where)
+            if tgt:
+                escalated = True
+                if tgt[0] == "cloud":
+                    ctx.status("the quick model wouldn't; asking the online model")
+                    where, chat, private = "cloud", llm.cloud_chat, True
+                    _going_online(ctx, True)
+                else:
+                    try:
+                        from . import models
+                        ctx.status(f"the quick model wouldn't; switching to {models.by_id(tgt[1])['name']}")
+                        models.use(tgt[1])
+                        _wait_warm()
+                        where = "local"
+                    except Exception as e:
+                        ctx.status(f"couldn't switch models: {e}")
+                        break
+                msgs = build_messages(ctx, user_text, history, private=private)
+                final, tools_ran, nudged, no_tools = "", 0, False, bool(getattr(ctx, "ask_only", False))
+                blocked, rare_on = set(), False
+                tool_steps = 0
+                continue
         break
     # a turn that went well in one tool step may be repeated without thinking next time
     if tool_steps == 1 and final and not nudged and not shrunk and not forced and not getattr(ctx, "after_turn", None):
