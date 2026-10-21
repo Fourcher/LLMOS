@@ -110,6 +110,7 @@ log "packages (official Alpine $ALPINE, signed)"
 cp /etc/apk/repositories $TARGET/etc/apk/repositories
 PKGS="
   python3 e2fsprogs dosfstools curl ca-certificates tzdata nano less
+  nodejs
   llama-server llama.cpp-cpu llama.cpp-vulkan mesa-vulkan-ati
   whisper.cpp
   yt-dlp quickjs-ng mpv
@@ -157,6 +158,7 @@ fetch_verify() {  # url dest sha256
 fetch_verify "$PAYLOAD/build/cache/$MODEL_FILE" "$TARGET/var/lib/llmos/models/$MODEL_FILE" "$MODEL_SHA256"
 fetch_verify "$PAYLOAD/build/cache/$WHISPER_FILE" "$TARGET/usr/share/llmos/voice/$WHISPER_FILE" "$WHISPER_SHA256"
 
+
 log "search-by-meaning runtime (llama.cpp ${EMBED_LLAMA_COMMIT:-?}, built from source)"
 # the target needs a working resolver for the runtime build (GitHub): the live system's, else QEMU's DNS at 10.0.2.3
 if [ -s /etc/resolv.conf ] && grep -q nameserver /etc/resolv.conf; then cp /etc/resolv.conf $TARGET/etc/resolv.conf; else echo "nameserver 10.0.2.3" > $TARGET/etc/resolv.conf; fi
@@ -182,6 +184,22 @@ else
   ( cd $TARGET/usr/lib/llmos/embed && tar -cf /tmp/embed.tar . )     # (kept by the build host when it collects the cache)
 fi
 chroot $TARGET /usr/lib/llmos/embed/llama-server --version >/dev/null 2>&1 || { echo "the search-by-meaning runtime does not run"; exit 1; }
+
+# Meat Proxy Remover: the AI passes notes to other people's AIs (mcp.py offers it as a connector, off until the owner
+# turns it on). Pinned release: the tarball already holds its dependencies, so nothing runs npm. The build cache is
+# used when it has the file, else the release address; the sha256 decides either way.
+MPR_VERSION=2.6.2
+MPR_SHA256=1dce6c2be7dc20a444d7268a2eac9d231fa274e5538fd6b27e1916e902092938
+MPR_TGZ="meat-proxy-remover-$MPR_VERSION.tgz"
+log "Meat Proxy Remover $MPR_VERSION (verified)"
+wget -q -O /tmp/$MPR_TGZ "$PAYLOAD/build/cache/$MPR_TGZ" 2>/dev/null && [ -s /tmp/$MPR_TGZ ] \
+  || wget -q -O /tmp/$MPR_TGZ "https://tombsuanyficmiupgdrv.supabase.co/storage/v1/object/public/mpr-dist/$MPR_TGZ"
+echo "$MPR_SHA256  /tmp/$MPR_TGZ" | sha256sum -c -s || { echo "HASH MISMATCH: $MPR_TGZ"; exit 1; }
+rm -rf /tmp/mpr-x $TARGET/usr/lib/llmos/mpr && mkdir -p /tmp/mpr-x $TARGET/usr/lib/llmos
+tar -xzf /tmp/$MPR_TGZ -o -C /tmp/mpr-x && mv /tmp/mpr-x/package $TARGET/usr/lib/llmos/mpr && rm -rf /tmp/mpr-x
+chroot $TARGET env HOME=/tmp/mpr-check MPR_HOME=/tmp/mpr-check MPR_ROOT=/tmp/mpr-check MPR_NO_AUTOUPDATE=1 \
+  node /usr/lib/llmos/mpr/src/cli.js selftest | grep -q '"selftest": "ok"' || { echo "Meat Proxy Remover does not run"; exit 1; }
+rm -rf $TARGET/tmp/mpr-check
 
 # the build's resolver (the build VM's 10.0.2.3) must not stay: on the owner's computer the network's DHCP writes it
 : > $TARGET/etc/resolv.conf
@@ -233,6 +251,7 @@ for s in killprocs mount-ro savecache; do rc-update add $s shutdown; done
 rc-update add llmos-hw sysinit
 rc-update add llmos-model default
 rc-update add llmos-scheduler default
+rc-update add llmos-mpr-watch default   # idle unless the owner turned the mpr connector on
 rc-update add llmos-watchdog default
 rc-update add llmos-ota default        # idle until the owner pairs it with their computer
 rc-update add nftables default
