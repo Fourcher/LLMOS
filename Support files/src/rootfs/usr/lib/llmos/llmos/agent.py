@@ -244,6 +244,10 @@ def route_for(ctx, user_text, forced=None):
     want = forced or brain
     if want == "local":
         return "local"
+    if llm.cloud_is_home():
+        # the owner's own computer on their network: not the internet, nothing to ask about. Used while it
+        # answers; when it doesn't (asleep, switched off) the model here answers without a word about it.
+        return "cloud" if llm.home_up() else "local"
     if config.settings.get("internet") == "no":
         if want == "cloud":
             ctx.status("the internet is off, so the online model can't be reached; answering here")
@@ -268,7 +272,7 @@ def _ctx(ctx, method, *args, default=None):
 def _going_online(ctx, private):
     label = llm.cloud_label() or "the online model"
     _ctx(ctx, "brain", True, label)
-    ctx.status(i18n.t("d_online_using", model=label))
+    ctx.status(i18n.t("d_home_using" if llm.cloud_is_home() else "d_online_using", model=label))
     store.audit("online_model", {"model": label, "shared": "request, recent conversation, tool results" +
                                  ("" if private else ", memory and name")}, "sent", who="agent")
 
@@ -276,7 +280,8 @@ def _going_online(ctx, private):
 def _can_escalate(ctx):
     """Under 'ask', a request the on-device model could not finish may be offered to the online model."""
     return (config.settings.get("brain", "local") == "ask" and config.cloud() is not None
-            and config.settings.get("internet") != "no" and not getattr(ctx, "headless", False))
+            and (llm.home_up() if llm.cloud_is_home() else config.settings.get("internet") != "no")
+            and not getattr(ctx, "headless", False))
 
 
 # ---- how long things take. The model's own timings (llama-server reports them with every answer) give
@@ -414,7 +419,8 @@ def _replay(ctx, user_text, rt):
     msgs += [{"role": "tool", "tool_call_id": f"call_r{i}", "content": o} for i, (_, _, o) in enumerate(outs)]
     msgs.append({"role": "user", "content": "Answer the request above from these results, in a sentence or two of plain "
                  "words for a person. Never copy the raw output; give only the numbers or names that answer it."})
-    online = config.settings.get("brain", "local") == "cloud" and config.cloud() is not None and config.settings.get("internet") != "no"
+    online = config.settings.get("brain", "local") == "cloud" and config.cloud() is not None and (
+        llm.home_up() if llm.cloud_is_home() else config.settings.get("internet") != "no")
     if online:
         _going_online(ctx, True)
     chat = llm.cloud_chat if online else llm.chat
@@ -796,7 +802,8 @@ def _escalation_target(ctx, where):
     if not config.settings.get("auto_escalate", True) or where == "cloud":
         return None
     try:
-        if config.cloud() and config.settings.get("internet", "yes") != "no" and not getattr(ctx, "headless", False):
+        if config.cloud() and not getattr(ctx, "headless", False) and (
+                llm.home_up() if llm.cloud_is_home() else config.settings.get("internet", "yes") != "no"):
             return ("cloud", None)
     except Exception:
         pass
@@ -1002,13 +1009,16 @@ def run(ctx, user_text, history):
             t0 = time.time()
             try:
                 watch = getattr(ctx, "watch", None) if where != "cloud" else None
-                result = chat(msgs, tools=None if no_tools else (tools.schemas() if where == "cloud" else tool_schemas(user_text, sticky=rare_on)),
+                result = chat(msgs, tools=None if no_tools else (tools.schemas() if where == "cloud" and not llm.cloud_is_home()
+                                                                    else tool_schemas(user_text, sticky=rare_on)),
                               on_text=lambda t: ctx.on_text(stream, t), **({"watch": watch} if callable(watch) else {}))
             except llm.CloudError as e:
                 # the online model did not answer: say so and carry on here with the same messages
                 ctx.end_stream(stream)
                 _ctx(ctx, "brain", False, "")
-                ctx.status(f"the online model did not answer ({e}); answering here")
+                ctx.status("your other computer stopped answering; answering here" if llm.cloud_is_home()
+                           else f"the online model did not answer ({e}); answering here")
+                llm._HOME_UP[:] = [time.time(), False]
                 where, chat, escalated = "local", llm.chat, True
                 continue
             except llm.ModelError as e:

@@ -50,7 +50,7 @@ snippet = textwrap.dedent(src[start:end])
 
 def answer(brain, cloud, label="Claude"):
     cfg = types.SimpleNamespace(cloud=lambda: cloud)
-    llm = types.SimpleNamespace(cloud_label=lambda c=None: label)
+    llm = types.SimpleNamespace(cloud_label=lambda c=None: label, cloud_is_home=lambda c=None: False)
     ns = {"config": cfg, "llm": llm, "s_": {"brain": brain} if brain else {}}
     exec(snippet, ns)
     return ns["brain"]

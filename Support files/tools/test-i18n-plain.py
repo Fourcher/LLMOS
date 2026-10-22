@@ -73,14 +73,16 @@ ALLOWED_EDITS = {"q_brain_2",
                  # plain-words rewording of the connector and cloud texts (test-plain-connectors.py)
                  "d_conduct_hint", "d_connectors_intro", "d_conn_tools", "d_connector_form_intro",
                  "d_connector_form_hint", "w_cloud_text"}
+# keys with a placeholder, added to every block: the status while a computer on the owner's network answers (test-home-brain.py)
+PLACEHOLDER_KEYS = {"d_home_using"}
 for b in BLOCKS:
     if b in old:
-        check(set(new[b]) == set(old[b]) | NEW_KEYS | ADDED_KEYS,
+        check(set(new[b]) == set(old[b]) | NEW_KEYS | ADDED_KEYS | PLACEHOLDER_KEYS,
               f"{b}: key set = {REF} + new keys + model-size words ({len(new[b])} keys)")
         check(all(isinstance(new[b].get(k), str) and "{" not in new[b][k] for k in NEW_KEYS | ADDED_KEYS),
               f"{b}: new keys and model-size words present, no placeholder braces")
         if b != "EN":
-            skip = NEW_KEYS | ADDED_KEYS | ALLOWED_EDITS
+            skip = NEW_KEYS | ADDED_KEYS | ALLOWED_EDITS | PLACEHOLDER_KEYS
             check({k: v for k, v in new[b].items() if k not in skip}
                   == {k: v for k, v in old[b].items() if k not in skip},
                   f"{b}: values unchanged apart from no_model, the model-size words and q_brain_2 (non-English not edited)")

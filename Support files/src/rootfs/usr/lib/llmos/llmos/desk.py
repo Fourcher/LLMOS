@@ -3339,6 +3339,8 @@ class Desk:
                 s_.get("internet", "yes"), "Something goes online only when a request needs it: a web search, a page or a video you asked for, a download, a model or app you asked to install. It also sets the clock each time the computer starts.")
             svc_ = llm.cloud_label()
             brain = ("Your requests are answered by the model on this computer." if s_.get("brain", "local") == "local" or not config.cloud()
+                     else f"Your requests are answered by {svc_}, over your own network, while that computer is on; otherwise by the model here. "
+                          "None of it goes online." if llm.cloud_is_home()
                      else f"With the online assistant on, each request goes to {svc_} with the recent chat, anything I look at to answer it (files, mail, web pages, the screen), and your name and saved memory. "
                           "What I don't look at stays here. Say “ask me before going online” to keep things here unless you agree." if s_.get("brain") == "cloud"
                      else "Requests you send to the online model (Claude/ChatGPT) go to that company; everything else stays here.")

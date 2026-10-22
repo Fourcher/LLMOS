@@ -381,7 +381,40 @@ CLOUD_PROVIDERS = {
     "openai": {"name": "Other (OpenAI-compatible)", "url": "https://api.openai.com/v1", "key_hint": "sk-…", "console": "",
                "note": "OpenAI, Mistral, Groq, OpenRouter, or your own server — anything speaking the OpenAI API",
                "models": []},
+    # a bigger computer of the owner's lending its model over their own network (tools/brain.py on a Mac): it
+    # forwards this computer's 127.0.0.1:8090 to its model, so nothing here goes online and the internet setting
+    # does not apply. Used while it answers; the model here takes over the moment it doesn't (asleep, switched off).
+    "home": {"name": "Computer on my network", "url": "http://127.0.0.1:8090/v1", "key_hint": "", "console": "",
+             "note": "another computer of yours lending its model over your own network", "models": []},
 }
+
+
+def cloud_is_home(c=None):
+    """True when the online model is the owner's own computer on their network, not an online service."""
+    c = c if c is not None else config.cloud()
+    return bool(c) and c.get("provider") == "home"
+
+
+_HOME_UP = [0.0, False]
+
+
+def home_up(c=None):
+    """Whether the home computer's model is answering right now: a quick connect (instant on this computer's
+    loopback forward), remembered for 10 seconds so a turn's steps don't each ask."""
+    c = c if c is not None else config.cloud()
+    if not cloud_is_home(c):
+        return False
+    now = time.time()
+    if now - _HOME_UP[0] < 10:
+        return _HOME_UP[1]
+    u = urllib.parse.urlparse(c.get("url") or CLOUD_PROVIDERS["home"]["url"])
+    try:
+        socket.create_connection((u.hostname or "127.0.0.1", u.port or 80), timeout=0.8).close()
+        ok = True
+    except OSError:
+        ok = False
+    _HOME_UP[:] = [now, ok]
+    return ok
 
 
 def _get_json(url, headers, timeout=30):
@@ -461,6 +494,8 @@ def cloud_label(c=None):
     c = c or config.cloud()
     if not c:
         return ""
+    if c.get("label"):
+        return c["label"]
     prov = CLOUD_PROVIDERS.get(c.get("provider"), {})
     for m in prov.get("models", []):
         if m["id"] == c.get("model"):
