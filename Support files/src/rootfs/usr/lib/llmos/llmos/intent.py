@@ -668,13 +668,14 @@ def _models_discover(text):
 
 # connecting an account without typing a key: "sign in to Claude", "log in to ChatGPT", "connect claude"
 _SIGNIN = re.compile(r"^\s*(?:please\s+)?(?:(?:sign|log)\s*(?:in\s+(?:to|with)|into)|connect(?:\s+to)?)\s+(?:my\s+)?"
-                     r"(?P<p>claude|anthropic|chatgpt|chat\s*gpt|openai|abliteration)(?:\s*\([^)]*\))?(?:\s+account)?\s*[.!]?\s*$", re.I)
+                     r"(?P<p>claude|anthropic|chatgpt|chat\s*gpt|openai|abliteration|open\s*router)(?:\s*\([^)]*\))?(?:\s+account)?\s*[.!]?\s*$", re.I)
 _OTHER_ONLINE = re.compile(r"^\s*(?:please\s+)?connect\s+(?:another|a\s+different|some\s+other|an?\s+other)\s+online\s+"
                            r"(?:service|model|account)\s*[.!]?\s*$", re.I)
 
 
 def _signin_pid(p):
-    return "claude" if p in ("claude", "anthropic") else "abliteration" if p == "abliteration" else "chatgpt"
+    return ("claude" if p in ("claude", "anthropic") else "abliteration" if p == "abliteration"
+            else "openrouter" if p == "openrouter" else "chatgpt")
 
 
 def _online_model(text):
@@ -686,7 +687,7 @@ def _online_model(text):
     if m:
         p = m.group("p").lower().replace(" ", "")
         return ("online_model", {"action": "sign in", "provider": _signin_pid(p)})
-    m = re.match(r"^\s*(?:please\s+)?use\s+my\s+(claude|anthropic|chatgpt|chat\s*gpt|openai|abliteration)\s+account\s*[.!]?\s*$", text, re.I)
+    m = re.match(r"^\s*(?:please\s+)?use\s+my\s+(claude|anthropic|chatgpt|chat\s*gpt|openai|abliteration|open\s*router)\s+account\s*[.!]?\s*$", text, re.I)
     if m:                                     # same return shape as the _SIGNIN route above
         p = m.group(1).lower().replace(" ", "")
         return ("online_model", {"action": "sign in", "provider": _signin_pid(p)})

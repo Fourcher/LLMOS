@@ -799,13 +799,15 @@ def _looks_refused(text):
     return bool(t) and len(t) < 600 and (bool(_REFUSAL_RE.search(t)) or bool(_HEDGE_RE.search(t)))
 
 
-def _escalation_target(ctx, where):
+def _escalation_target(ctx, where, tried=()):
     """Where to re-run a timid refusal. ("cloud", None) for the online model, ("local", model_id) for a stronger
-    model installed here, or None if there is nothing more capable to try."""
-    if not config.settings.get("auto_escalate", True) or where == "cloud":
+    model installed here, or None if there is nothing more capable to try. tried: what this turn already ran on
+    ("cloud", model ids), so a refusal online (a free model can be as timid) still falls through to a stronger
+    uncensored model here, and nothing is asked twice."""
+    if not config.settings.get("auto_escalate", True):
         return None
     try:
-        if config.cloud() and not getattr(ctx, "headless", False) and (
+        if where != "cloud" and "cloud" not in tried and config.cloud() and not getattr(ctx, "headless", False) and (
                 llm.home_up() if llm.cloud_is_home() else config.settings.get("internet", "yes") != "no"):
             return ("cloud", None)
     except Exception:
@@ -817,7 +819,7 @@ def _escalation_target(ctx, where):
         active = (models.active() or {}).get("id")
         have = {m["id"] for m in models.installed()}
         for mid in _ESCALATE_ORDER:
-            if mid in have and mid != active:
+            if mid in have and mid != active and mid not in tried:
                 return ("local", mid)
     except Exception:
         pass
@@ -989,6 +991,7 @@ def run(ctx, user_text, history):
     nudged = False
     shrunk = 0
     escalated = False
+    tried = set()                                # where this turn already ran: "cloud", stronger local models
     first_calls = []           # the step-0 tool calls, kept as a routine when the turn goes well
     tool_steps = 0
     blocked, no_tools = set(), False             # calls a guard refused; once one comes back, the model answers in words
@@ -1023,6 +1026,7 @@ def run(ctx, user_text, history):
                            else f"the online model did not answer ({e}); answering here")
                 llm._HOME_UP[:] = [time.time(), False]
                 where, chat, escalated = "local", llm.chat, True
+                tried.add("cloud")
                 continue
             except llm.ModelError as e:
                 ctx.end_stream(stream)
@@ -1119,6 +1123,7 @@ def run(ctx, user_text, history):
             # under 'ask', a request this computer could not finish may go to the online model -- with a yes
             if not final and not escalated and where == "local" and _can_escalate(ctx) and _ctx(ctx, "confirm_online", user_text, "failed", default=False):
                 escalated, where = True, "cloud"
+                tried.add("cloud")
                 _going_online(ctx, True)
                 msgs = build_messages(ctx, user_text, history, private=True)
                 tools_ran, nudged = 0, False
@@ -1128,10 +1133,11 @@ def run(ctx, user_text, history):
                 ctx.status(i18n.t("stopped"))
         # the quick model was just being timid (a refusal or an "are you allowed" hedge on something allowed):
         # re-run the whole turn on a more capable model. Genuinely harmful asks keep their refusal.
-        if final and not escalated and _looks_refused(final) and not _HARM_REQ_RE.search(user_text):
-            tgt = _escalation_target(ctx, where)
+        if final and len(tried) < 2 and _looks_refused(final) and not _HARM_REQ_RE.search(user_text):
+            tgt = _escalation_target(ctx, where, tried)
             if tgt:
                 escalated = True
+                tried.add(tgt[0] if tgt[0] == "cloud" else tgt[1])
                 if tgt[0] == "cloud":
                     ctx.status("the quick model wouldn't; asking the online model")
                     where, chat, private = "cloud", llm.cloud_chat, True
@@ -1139,7 +1145,8 @@ def run(ctx, user_text, history):
                 else:
                     try:
                         from . import models
-                        ctx.status(f"the quick model wouldn't; switching to {models.by_id(tgt[1])['name']}")
+                        ctx.status(("the online model wouldn't either" if "cloud" in tried else "the quick model wouldn't")
+                                   + f"; switching to {models.by_id(tgt[1])['name']}")
                         models.use(tgt[1])
                         _wait_warm()
                         where = "local"

@@ -386,6 +386,14 @@ CLOUD_PROVIDERS = {
     # does not apply. Used while it answers; the model here takes over the moment it doesn't (asleep, switched off).
     "home": {"name": "Computer on my network", "url": "http://127.0.0.1:8090/v1", "key_hint": "", "console": "", "hidden": True,
              "note": "another computer of yours lending its model over your own network", "models": []},
+    # free models online with a free account (no card): OpenRouter's ':free' models. The strongest free one that can
+    # call tools is chosen at sign-in (_pick_openrouter_free: the free list changes from month to month). About 50
+    # requests a day (1,000 after a one-time $10), so it suits the turns the model here would not do, not every turn.
+    "openrouter": {"name": "OpenRouter (free models)", "url": "https://openrouter.ai/api/v1", "key_hint": "sk-or-v1-…",
+                   "console": "openrouter.ai", "signin": "https://openrouter.ai/settings/keys",
+                   "key_re": r"sk-or-v1-[A-Za-z0-9]{40,}", "auto_model": "free",
+                   "note": "free models with a free account: about 50 requests a day; the companies serving free models "
+                           "may keep what is sent to them", "models": []},
     # uncensored models online (abliterated: the refusal removed), OpenAI-compatible with tool calling. One free try with
     # a new account, then billed per use by Abliteration from prepaid credit.
     "abliteration": {"name": "Abliteration (uncensored)", "url": "https://api.abliteration.ai/v1", "key_hint": "ak_…",
@@ -463,6 +471,26 @@ def _get_json(url, headers, timeout=30):
         msg = (doc.get("error") or {}).get("message") if isinstance(doc.get("error"), dict) else doc.get("error")
         raise CloudError(msg or r.stderr.decode("utf-8", "replace").strip() or "the service refused the request")
     return doc
+
+
+# the free models to prefer, strongest first (any other free model that calls tools comes after, longest context first)
+_FREE_PREF = ("nemotron-3-ultra", "inkling:free", "gemma-4-31b", "nemotron-3-super-120b", "gemma-4-26b", "inkling-small",
+              "nemotron-3.5-super")
+
+
+def _pick_openrouter_free(models):
+    """(id, name) of the strongest free model in OpenRouter's list that can call tools, or ("", "")."""
+    free = [m for m in models if isinstance(m, dict) and str(m.get("id", "")).endswith(":free")
+            and "tools" in (m.get("supported_parameters") or [])]
+    if not free:
+        return "", ""
+
+    def rank(m):
+        mid = m["id"]
+        pref = next((i for i, p in enumerate(_FREE_PREF) if p in mid), len(_FREE_PREF))
+        return (pref, -(m.get("context_length") or 0))
+    best = min(free, key=rank)
+    return best["id"], str(best.get("name") or best["id"])
 
 
 def _pick_openai_model(ids):
@@ -778,7 +806,10 @@ def cloud_setup(fields, adopt=True):
             doc = _get_json(c["url"].rstrip("/") + "/models", {"Authorization": "Bearer " + c["key"]})
         except CloudError as e:
             return False, f"the account did not work: {e}"
-        c["model"] = _pick_openai_model([str(m.get("id", "")) for m in doc.get("data", []) if isinstance(m, dict)])
+        if prov.get("auto_model") == "free":
+            c["model"], c["label"] = _pick_openrouter_free(doc.get("data", []))
+        else:
+            c["model"] = _pick_openai_model([str(m.get("id", "")) for m in doc.get("data", []) if isinstance(m, dict)])
         if not c["model"]:
             return False, "the account offers no chat model this can use"
     if not c["model"]:
