@@ -74,6 +74,15 @@ check(c.said == [], f"... without a word about it: {c.said}")
 check(agent._escalation_target(c, "local") != ("cloud", None), "no escalation to a computer that isn't answering")
 
 check(i18n.t("d_home_using", model="X") == "asking X on your other computer", "status says 'your other computer', not 'online'")
+class Said(Ctx):
+    def brain(self, on, label):
+        self.badge = (on, label)
+cs = Said()
+config.save_cloud(dict(config.cloud(), label="Ministral 3B on Jordans-Mac-Mini"))
+agent._going_online(cs, False)
+check(cs.said == ["asking Ministral 3B on your other computer"], f"the step names the computer once: {cs.said}")
+js = open(os.path.join(_ROOT, "usr/share/llmos/desk/desk.js"), encoding="utf-8").read()
+check('m.home ? (m.label || "")' in js, "the answer's badge has no 'online' for a home computer")
 src = open(os.path.join(_ROOT, "usr/lib/llmos/llmos/agent.py"), encoding="utf-8").read()
 check('where == "cloud" and not llm.cloud_is_home()' in src, "the home model gets the short word-gated tool list")
 dsk = open(os.path.join(_ROOT, "usr/lib/llmos/llmos/desk.py"), encoding="utf-8").read()

@@ -590,7 +590,7 @@ class DeskCtx:
                            "danger": False, "yes": T("d_online_yes", model=label), "no": T("d_online_no")}, consent=True)
 
     def brain(self, online, label):
-        self.d.emit({"t": "reply.brain", "online": bool(online), "label": label})
+        self.d.emit({"t": "reply.brain", "online": bool(online), "label": label, "home": bool(online) and llm.cloud_is_home()})
 
     def expect(self, seconds, step):
         self.d.emit({"t": "reply.eta", "seconds": float(seconds), "step": int(step)})

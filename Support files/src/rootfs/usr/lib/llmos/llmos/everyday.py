@@ -1735,6 +1735,23 @@ def _first_sentences(text, n=2, cap=300):
     return out
 
 
+_ASK_WORDS = {"what", "which", "where", "when", "who", "whom", "whose", "does", "is", "are", "was", "were", "the", "of",
+              "a", "an", "in", "on", "for", "to", "how", "many", "much", "tell", "me", "please", "and", "do", "did"}
+
+
+def _best_result(question, res):
+    """Of the top three results, the one whose shown sentences hold most of the question's words ('capital', 'italy'):
+    the first result about Rome may only tell its history. Ties keep the higher result."""
+    want = {w for w in re.findall(r"[a-z0-9]+", question.lower()) if w not in _ASK_WORDS and len(w) > 2}
+    best, score = (res[0] if res else {}), -1
+    for r in res[:3]:
+        have = set(re.findall(r"[a-z0-9]+", _first_sentences(r.get("snippet")).lower()))
+        n = len(want & have)
+        if n > score:
+            best, score = r, n
+    return best
+
+
 def live_lookup(desk, line, low):
     """A question about a live service or opening hours: a search, answered from its results in one line (no model turn)."""
     m = _LIVE_STATUS.fullmatch(low)
@@ -1766,7 +1783,7 @@ def live_lookup(desk, line, low):
             res = web.search(line.strip(), n=3)
         except Exception:
             return _say(desk, line, "I couldn't search for the result just now. Try again in a minute.")
-        top = res[0] if res else {}
+        top = _best_result(line, res)
         snippet = _first_sentences(top.get("snippet"))
         if not snippet:
             return _say(desk, line, "I couldn't find that result.")

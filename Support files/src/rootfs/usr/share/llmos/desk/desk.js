@@ -146,7 +146,7 @@
   setInterval(() => { if (cur && cur.t0 && lastLabel) { const st = $("reply-state"); if (st) st.textContent = stateText(); } }, 1000);
   function replyBrain(m) {
     online = !!m.online;
-    const e = $("reply-brain"); e.textContent = online ? fmt("d_online_tag", { model: m.label || "" }) : ""; e.classList.toggle("hidden", !online);
+    const e = $("reply-brain"); e.textContent = online ? (m.home ? (m.label || "") : fmt("d_online_tag", { model: m.label || "" })) : ""; e.classList.toggle("hidden", !online);
     for (const id of ["orb", "reply-orb"]) $(id).classList.toggle("online", online && $(id).className.indexOf("thinking") >= 0);
   }
   // the empty desk belongs to the computer: greeting, presence, three suggestions

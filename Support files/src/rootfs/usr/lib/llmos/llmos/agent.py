@@ -272,7 +272,10 @@ def _ctx(ctx, method, *args, default=None):
 def _going_online(ctx, private):
     label = llm.cloud_label() or "the online model"
     _ctx(ctx, "brain", True, label)
-    ctx.status(i18n.t("d_home_using" if llm.cloud_is_home() else "d_online_using", model=label))
+    if llm.cloud_is_home():
+        ctx.status(i18n.t("d_home_using", model=label.split(" on ")[0]))     # the label names the computer already
+    else:
+        ctx.status(i18n.t("d_online_using", model=label))
     store.audit("online_model", {"model": label, "shared": "request, recent conversation, tool results" +
                                  ("" if private else ", memory and name")}, "sent", who="agent")
 

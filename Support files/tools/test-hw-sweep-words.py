@@ -62,6 +62,13 @@ for raw, title, want in [(">Rome - Wikipedia 2 weeks ago - Eventually, the city 
     got = web._clean_snippet(raw, title)
     check(got == want, f"snippet cleaned: {got[:50]!r}")
 
+rome = [{"snippet": "Eventually, the city successively became the capital of the Roman Kingdom, the Roman Republic and the Roman Empire.", "url": "https://en.wikipedia.org/wiki/Rome"},
+        {"snippet": "As the capital of Italy, Rome has most of the country's political institutions.", "url": "https://example.org/rome"}]
+check(everyday._best_result("what is the capital of Italy", rome)["url"] == "https://example.org/rome", "the snippet that answers the question is chosen")
+paris = [{"snippet": "Paris is the capital and largest city of France.", "url": "https://en.wikipedia.org/wiki/Paris"},
+         {"snippet": "The capital and largest city of France is Paris.", "url": "https://britannica.com"}]
+check(everyday._best_result("what is the capital of France", paris)["url"].startswith("https://en.wikipedia"), "a tie keeps the top result")
+
 # round 19 (real laptop): folders by the names people use, episode renames, a budget sheet, memory, convert words
 from llmos import tools, config  # noqa: E402
 home = config.home().rstrip("/")
