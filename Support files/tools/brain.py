@@ -67,9 +67,10 @@ def free_pct():
 
 
 def need_pct(model):
-    """The share of this Mac's memory the model takes: its weights plus an 8-bit cache for the whole context."""
+    """The share of this Mac's memory the model takes: its weights plus an 8-bit cache for the whole context, times
+    1.25 (measured 2026-10-22: Ministral 3B, estimated 21%, took 25 points of free memory with its Metal buffers)."""
     kv = 1.2 * 2 ** 30 * CTX / 16384
-    return round(100 * (os.path.getsize(model) + kv) / TOTAL)
+    return round(125 * (os.path.getsize(model) + kv) / TOTAL)
 
 
 def pick(free=None):
@@ -167,12 +168,12 @@ sys.path.insert(0, "/usr/lib/llmos")
 from llmos import llm, config
 cur = config.cloud()
 if cur and cur.get("provider") != "home":
-    print("SETUP False the laptop already has an online account (%s); not replacing it" % llm.cloud_label(cur))
+    print("SETUP False the laptop already has an online account (" + llm.cloud_label(cur) + "); not replacing it")
     raise SystemExit
-ok, note = llm.cloud_setup({"provider": "home", "url": "http://127.0.0.1:%d/v1", "model": %r, "key": %r}, adopt=False)
+ok, note = llm.cloud_setup({"provider": "home", "url": "http://127.0.0.1:@PORT@/v1", "model": @MODEL@, "key": @KEY@}, adopt=False)
 if ok:
     c = config.cloud()
-    c["label"] = %r
+    c["label"] = @LABEL@
     config.save_cloud(c)
     config.settings.set("brain", "cloud")
 print("SETUP", ok, note)
@@ -180,8 +181,13 @@ print("SETUP", ok, note)
 
 
 def configure_laptop(ip, model_id, label):
-    p = subprocess.run(ssh_argv(ip) + ["python3 -"], input=SETUP % (LAPTOP_PORT, model_id, key(), label),
-                       text=True, capture_output=True, timeout=90)
+    script = (SETUP.replace("@PORT@", str(LAPTOP_PORT)).replace("@MODEL@", repr(model_id))
+              .replace("@KEY@", repr(key())).replace("@LABEL@", repr(label)))
+    try:
+        p = subprocess.run(ssh_argv(ip) + ["python3 -"], input=script, text=True, capture_output=True, timeout=90)
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"laptop: setup did not run ({e}); trying again with the next tunnel")
+        return False
     out = (p.stdout + p.stderr).strip()
     log("laptop: " + (out.splitlines()[-1] if out else f"ssh exit {p.returncode}"))
     return "SETUP True" in out

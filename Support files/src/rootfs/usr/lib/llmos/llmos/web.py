@@ -110,8 +110,24 @@ def _search_ddg(query):
             q = urllib.parse.parse_qs(urllib.parse.urlparse("https:" + href).query)
             href = q.get("uddg", [href])[0]
         sn = re.search(r'class="result__snippet"[^>]*>(.*?)</a>', block, re.S)
-        out.append({"title": _text(m.group(2)), "url": href, "snippet": _text(sn.group(1)) if sn else ""})
+        out.append({"title": _text(m.group(2)), "url": href, "snippet": _clean_snippet(_text(sn.group(1)), _text(m.group(2))) if sn else ""})
     return out
+
+
+_AGE = re.compile(r"(?:\d+\s+(?:second|minute|hour|day|week|month|year)s?\s+ago|"
+                  r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},\s+\d{4})\s+[-\u2013\u2014]\s+")
+
+
+def _clean_snippet(desc, title=""):
+    """A result's description alone: Brave's markup leaves the title element's tail ('>Rome - Wikipedia') and the
+    age ('2 weeks ago - ') in front of it."""
+    d = str(desc or "").lstrip("> \t")
+    m = _AGE.search(d[:240])
+    if m and (m.start() == 0 or (title and d.startswith(title[:12]) and not re.search(r"[.!?]\s", d[:m.start()]))):
+        d = d[m.end():]
+    elif title and d.startswith(title) and re.search(r" [-|\u2013\u2014] |: ", title):
+        d = d[len(title):].lstrip(" -\u2013\u2014|:")
+    return d.strip()
 
 
 def _search_brave(query):
@@ -129,7 +145,8 @@ def _search_brave(query):
             continue
         rest = block[t.end():]
         desc = _text(re.sub(r"<cite.*?</cite>", "", rest))[:300]
-        out.append({"title": html.unescape(t.group(1)), "url": m.group(1), "snippet": desc})
+        title = html.unescape(t.group(1))
+        out.append({"title": title, "url": m.group(1), "snippet": _clean_snippet(desc, title)})
     return out
 
 

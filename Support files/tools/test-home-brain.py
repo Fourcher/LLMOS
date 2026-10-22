@@ -83,6 +83,16 @@ config.save_cloud({"provider": "anthropic", "model": "claude-opus-5-5", "key": "
 check(not llm.cloud_is_home(), "an online account is not 'home'")
 config.settings.set("internet", "no")
 check(agent.route_for(Ctx(), "write me a letter") == "local", "an online account still stops when the internet is off")
+# tools/brain.py's laptop set-up script fills in and compiles (a stray % once crashed the supervisor)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import brain  # noqa: E402
+script = (brain.SETUP.replace("@PORT@", "8090").replace("@MODEL@", repr("huihui-ornith-1.5-9b"))
+          .replace("@KEY@", repr("k%s'\"")).replace("@LABEL@", repr("Huihui 9B on Mac")))
+try:
+    compile(script, "setup", "exec")
+    check("@" not in script, "brain.py's laptop set-up script fills in and compiles, quotes and % in the key included")
+except SyntaxError as e:
+    check(False, f"brain.py's set-up script: {e}")
 if fails:
     print(f"{fails} FAILED")
     sys.exit(1)

@@ -50,6 +50,18 @@ check(r == "Reminder set in 20 minutes (04:00): call mum.", f"reminder within th
 s = everyday._first_sentences("Paris[b] is the capital and largest city of France.[4] It has 2 million people [citation needed].")
 check("[" not in s and s.startswith("Paris is the capital"), f"snippet without footnote marks: {s!r}")
 
+# 2026-10-22 (the laptop): Brave's snippets came with the title's tail and the age in front ('>Rome - Wikipedia 2 weeks ago - ')
+from llmos import web  # noqa: E402
+for raw, title, want in [(">Rome - Wikipedia 2 weeks ago - Eventually, the city became the capital.", "Rome - Wikipedia", "Eventually, the city became the capital."),
+                         (">Paris - Wikipedia 1 week ago - Paris is the capital and largest city of France.", "Paris - Wikipedia", "Paris is the capital and largest city of France."),
+                         (">France | History, Maps, Flag, Population, Cities, Capital, & Facts | Britannica 19 hours ago - The capital and largest city is Paris.",
+                          "France | History, Maps, Flag, Population, Cities, Capital, & Facts", "The capital and largest city is Paris."),
+                         (">Spain, Capital and largest cities | viviTravels Seville is a city in Spain.", "Spain, Capital and largest cities | viviTravels", "Seville is a city in Spain."),
+                         ("Oct 3, 2025 - The bridge opened in 1937.", "Golden Gate", "The bridge opened in 1937."),
+                         ("Madrid is the capital of Spain. It grew 3 years ago - fast.", "Madrid", "Madrid is the capital of Spain. It grew 3 years ago - fast.")]:
+    got = web._clean_snippet(raw, title)
+    check(got == want, f"snippet cleaned: {got[:50]!r}")
+
 # round 19 (real laptop): folders by the names people use, episode renames, a budget sheet, memory, convert words
 from llmos import tools, config  # noqa: E402
 home = config.home().rstrip("/")
