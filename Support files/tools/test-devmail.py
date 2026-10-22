@@ -85,6 +85,11 @@ with mock.patch.object(devmail, "_api", side_effect=seq):
 check(addr.endswith("@ex.test") and addr.startswith("site-") and devmail.address() == addr, f"provision picks an active domain and keeps it: {addr}")
 devmail.forget(delete=False)
 check(devmail.account() is None, "forget clears the stored mailbox")
+
+# the desk runs these straight from the words (not through the small model), so they are reliable
+dsk = open(os.path.join(_ROOT, "usr/lib/llmos/llmos/desk.py"), encoding="utf-8").read()
+check('m[0] in ("email_make", "email_address", "email_code", "email_confirm", "email_forget")' in dsk,
+      "the desk dispatches the email phrases to the tool directly")
 devmail.forget(delete=False)  # no crash with none
 
 if fails:

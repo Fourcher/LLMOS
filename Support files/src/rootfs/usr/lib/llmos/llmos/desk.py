@@ -3638,6 +3638,12 @@ class Desk:
         if line.startswith("!"):
             self.run_in_terminal(line[1:].strip() or "sh")
             return True
+        # the computer's own email (devmail): make one, read the code a sign-up sent, confirm, forget -- run straight
+        # from the words, never through the model, so it is reliable on a small model
+        m = intent.match(line)
+        if m and m[0] in ("email_make", "email_address", "email_code", "email_confirm", "email_forget"):
+            self._said = str(agent.execute(self.ctx, m[0], m[1]))
+            return True
         return False
 
     # ---- conversations (conversation.py): the main one never needs clearing; side chats beside it
