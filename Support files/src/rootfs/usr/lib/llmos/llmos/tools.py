@@ -1430,9 +1430,9 @@ def _norm_brain(v):
 
 @tool("online_model", "Set up, switch or remove the optional online model (Claude, ChatGPT, or any OpenAI-compatible "
       "service) that can answer instead of the on-device one; the 'brain' setting decides when it is used (change_setting brain "
-      "local|ask|cloud). action 'sign in' with provider 'claude' or 'chatgpt': opens that service's key page in a window on the "
+      "local|ask|cloud). action 'sign in' with provider 'claude', 'chatgpt' or 'abliteration' (uncensored): opens that service's key page in a window on the "
       "desk; the key the owner copies there is taken in and checked automatically (nothing to type). 'set up': keep an "
-      "account directly when the owner gives provider/model/url/key in chat (provider 'claude', 'chatgpt' or 'openai' for "
+      "account directly when the owner gives provider/model/url/key in chat (provider 'claude', 'chatgpt', 'abliteration' or 'openai' for "
       "another compatible service), otherwise opens the connect panel on the desk (provider 'other': the form for another "
       "compatible service); 'use' with model switches to another of the "
       "account's models, keeping the key (e.g. model 'claude-opus-5-5'); 'forget' removes the account; 'status' says what "

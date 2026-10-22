@@ -384,8 +384,24 @@ CLOUD_PROVIDERS = {
     # a bigger computer of the owner's lending its model over their own network (tools/brain.py on a Mac): it
     # forwards this computer's 127.0.0.1:8090 to its model, so nothing here goes online and the internet setting
     # does not apply. Used while it answers; the model here takes over the moment it doesn't (asleep, switched off).
-    "home": {"name": "Computer on my network", "url": "http://127.0.0.1:8090/v1", "key_hint": "", "console": "",
+    "home": {"name": "Computer on my network", "url": "http://127.0.0.1:8090/v1", "key_hint": "", "console": "", "hidden": True,
              "note": "another computer of yours lending its model over your own network", "models": []},
+    # uncensored models online (abliterated: the refusal removed), OpenAI-compatible with tool calling. One free try with
+    # a new account, then billed per use by Abliteration from prepaid credit.
+    "abliteration": {"name": "Abliteration (uncensored)", "url": "https://api.abliteration.ai/v1", "key_hint": "ak_…",
+                     "console": "abliteration.ai", "signin": "https://abliteration.ai/console/keys",
+                     "key_re": r"ak_[A-Za-z0-9_\-]{16,}",
+                     "note": "uncensored models online; one free try, then billed per use by Abliteration",
+                     "models": [{"id": "abliterated-model-large-v2", "name": "Abliterated Large v2 (GLM-5.3)",
+                                 "note": "frontier-scale and uncensored; the usual choice", "speed": "moderate", "cost": "moderate",
+                                 "good_at": ["hard reasoning, long code and agent work", "requests other models refuse"],
+                                 "limits": ["text only", "$3 in / $5 out per million tokens"]},
+                                {"id": "abliterated-model-large", "name": "Abliterated Large", "note": "the earlier large model",
+                                 "speed": "moderate", "cost": "moderate", "good_at": ["hard reasoning", "requests other models refuse"],
+                                 "limits": ["text only", "$3 in / $5 out per million tokens"]},
+                                {"id": "abliterated-model", "name": "Abliterated", "note": "everyday, cheaper, reads pictures",
+                                 "speed": "fast", "cost": "low", "good_at": ["everyday requests", "pictures"],
+                                 "limits": ["less capable than Large", "$1 in / $3 out per million tokens"]}]},
 }
 
 

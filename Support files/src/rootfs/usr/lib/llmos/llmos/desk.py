@@ -653,7 +653,7 @@ class DeskCtx:
         pid = "openai"
         self.d.open_window({"id": "cloud-form", "replace": True, "title": T("s_online_model", area="settings"), "size": "s", "slot": "cascade", "blocks": [
             {"type": "text", "text": T("d_cloud_intro")},
-            {"type": "form", "fields": [{"name": "provider", "label": T("d_cloud_provider"), "options": [p["name"] for p in prov.values()], "value": prov[pid]["name"]},
+            {"type": "form", "fields": [{"name": "provider", "label": T("d_cloud_provider"), "options": [p["name"] for p in prov.values() if not p.get("hidden")], "value": prov[pid]["name"]},
                                         {"name": "model", "label": T("d_cloud_model"), "value": prov[pid]["models"][0]["id"] if prov[pid]["models"] else ""},
                                         {"name": "url", "label": T("d_cloud_url"), "placeholder": T("d_cloud_url_hint")},
                                         {"name": "key", "label": T("d_cloud_key"), "kind": "password", "placeholder": prov[pid]["key_hint"]},
@@ -1550,7 +1550,7 @@ class Desk:
                 "all_models": {"on": _model_all(True), "off": _model_all(False)},
                 "recommend": {"on": _recommend(sysinfo, tiers_on), "off": _recommend(sysinfo, tiers_off)},
                 "cloud_providers": [{"id": k, "name": p["name"], "key_hint": p["key_hint"], "console": p["console"], "models": p["models"],
-                                     "signin": bool(p.get("signin"))} for k, p in llm.CLOUD_PROVIDERS.items()]}
+                                     "signin": bool(p.get("signin"))} for k, p in llm.CLOUD_PROVIDERS.items() if not p.get("hidden")]}
 
     def set_screen(self, name, data=None):
         self.screen = name
@@ -2596,7 +2596,8 @@ class Desk:
             return "Remove the app " + str(a.get("name", "")) + "?" if confirm and a.get("action") == "remove" else f"apps: {a.get('action', 'list')}"
         if n == "online_model":
             act = str(a.get("action", "")).lower()
-            who = {"claude": "Claude", "anthropic": "Claude", "chatgpt": "ChatGPT", "openai": "ChatGPT"}.get(str(a.get("provider", "")).lower(), "")
+            who = {"claude": "Claude", "anthropic": "Claude", "chatgpt": "ChatGPT", "openai": "ChatGPT",
+                   "abliteration": "Abliteration"}.get(str(a.get("provider", "")).lower(), "")
             if act in ("sign in", "signin", "log in", "login"):
                 return f"sign in to {who or 'an online model'}"
             if act == "forget":
