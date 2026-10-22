@@ -35,7 +35,19 @@ srv = socket.socket()
 srv.bind(("127.0.0.1", 0))
 srv.listen(8)
 port = srv.getsockname()[1]
-threading.Thread(target=lambda: [srv.accept()[0].close() for _ in iter(int, 1)], daemon=True).start()
+def _answer():
+    while True:
+        cl = srv.accept()[0]
+        cl.recv(1000)
+        cl.sendall(b"HTTP/1.0 200 OK\r\nContent-Type: application/json\r\n\r\n{\"status\":\"ok\"}")
+        cl.close()
+
+
+threading.Thread(target=_answer, daemon=True).start()
+dead = socket.socket()                         # a forward with nothing behind it: accepts, then hangs up
+dead.bind(("127.0.0.1", 0))
+dead.listen(8)
+threading.Thread(target=lambda: [dead.accept()[0].close() for _ in iter(int, 1)], daemon=True).start()
 
 config.save_cloud({"provider": "home", "url": f"http://127.0.0.1:{port}/v1", "model": "huihui-ornith-1.5-9b", "key": "k",
                    "label": "Huihui Ornith 1.5 9B on Mac"})
@@ -51,6 +63,9 @@ check(agent.route_for(c, "write me a letter") == "cloud", "the internet being of
 check(agent._escalation_target(c, "local") == ("cloud", None), "a timid refusal here escalates to it")
 config.settings.set("internet", "yes")
 
+config.save_cloud(dict(config.cloud(), url=f"http://127.0.0.1:{dead.getsockname()[1]}/v1"))
+llm._HOME_UP[:] = [0, False]
+check(agent.route_for(Ctx(), "write me a letter") == "local", "a forward that accepts but has no model behind it counts as down")
 config.save_cloud(dict(config.cloud(), url="http://127.0.0.1:1/v1"))
 llm._HOME_UP[:] = [0, False]
 c = Ctx()

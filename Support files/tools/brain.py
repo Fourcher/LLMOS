@@ -7,8 +7,11 @@ own address can change) and forwards the laptop's 127.0.0.1:8090 to the model. O
 online model (llm.CLOUD_PROVIDERS["home"]): used while it answers; the laptop's own model takes over the moment it
 doesn't (this Mac asleep, this stopped, the tunnel down), with no question and no error.
 
-This Mac's memory comes first (two VMs at once crashed it): the server starts only while macOS reports normal
-memory pressure with room for the model, and stops itself when pressure turns critical or stays at warning.
+This Mac's memory comes first (two VMs at once crashed it): the server starts only when 15% of memory stays free with
+the model loaded, and stops itself when free memory falls below 15% or macOS reports critical pressure.
+
+Without --model it lends the most capable model here that fits, and only one more capable than the laptop's own
+(never a downgrade): BRAINS, best first.
 
 Run:  python3 tools/brain.py start [--model FILE.gguf]   (background; log in run/logs/brain.log)
       python3 tools/brain.py stop | status"""
@@ -32,7 +35,9 @@ import devssh  # noqa: E402
 LLAMA = "/opt/homebrew/bin/llama-server"
 PORT, LAPTOP_PORT = 8081, 8090
 CTX = 16384
-DEFAULT_MODEL = os.path.join(PROJECT, "models", "Huihui-Ornith-1.5-9B-abliterated.Q4_K_M.gguf")
+MODELS = os.path.join(PROJECT, "models")
+BRAINS = ["huihui-ornith-1.5-9b", "dolphin-3-8b"]       # catalog ids, best first; the laptop's default is Dolphin 8B
+KEEP_FREE = 15
 CATALOG = os.path.join(PROJECT, "src/rootfs/usr/share/llmos/catalog.json")
 KEYF = os.path.join(PROJECT, "ota-keys", "brain-key")             # ota-keys/ is never in git
 PIDF = os.path.join(PROJECT, "run", "brain.pid")
@@ -64,6 +69,22 @@ def need_pct(model):
     """The share of this Mac's memory the model takes: its weights plus an 8-bit cache for the whole context."""
     kv = 1.2 * 2 ** 30 * CTX / 16384
     return round(100 * (os.path.getsize(model) + kv) / TOTAL)
+
+
+def pick(free=None):
+    """The best of BRAINS present in models/ that fits in the free memory (all of them when free is None)."""
+    cat = json.load(open(CATALOG))
+    files = {m.get("id"): os.path.join(MODELS, os.path.basename(m.get("file") or m.get("filename") or ""))
+             for m in (cat if isinstance(cat, list) else cat.get("models", [])) if isinstance(m, dict)}
+    for mid in BRAINS:
+        f = files.get(mid)
+        if not f or not os.path.isfile(f):
+            hits = [os.path.join(MODELS, n) for n in os.listdir(MODELS) if n.endswith(".gguf") and catalog_entry(os.path.join(MODELS, n)) and
+                    catalog_entry(os.path.join(MODELS, n)).get("id") == mid]
+            f = hits[0] if hits else None
+        if f and (free is None or free >= need_pct(f) + KEEP_FREE):
+            return f
+    return None
 
 
 def catalog_entry(model):
@@ -161,8 +182,14 @@ def configure_laptop(ip, model_id, label):
     return "SETUP True" in out
 
 
+def clear_tunnels():
+    """Ends any tunnel to the laptop left by an earlier run (its forward would accept connections with no model behind)."""
+    subprocess.run(["pkill", "-f", f"127.0.0.1:{LAPTOP_PORT}:127.0.0.1:{PORT}"], capture_output=True)
+
+
 def serve(model):
     """The supervisor (runs in the background): model, tunnel, laptop setup, memory guard."""
+    clear_tunnels()
     stop = []
     signal.signal(signal.SIGTERM, lambda *a: stop.append(1))
     signal.signal(signal.SIGINT, lambda *a: stop.append(1))
@@ -181,16 +208,16 @@ def serve(model):
         srv.terminate()
         return
     log(f"model up: {label} (pressure {pressure()}, {free_pct()}% free)")
-    tunnel, configured, warn_since = None, False, None
+    tunnel, configured, low_since = None, False, None
     try:
         while not stop:
-            lvl = pressure()
+            lvl, free = pressure(), free_pct()
             if lvl >= 4:
                 log("memory pressure is critical: stopping to protect this Mac")
                 break
-            warn_since = (warn_since or time.time()) if lvl >= 2 else None
-            if warn_since and time.time() - warn_since > 60:
-                log("memory pressure stayed at warning for a minute: stopping to protect this Mac")
+            low_since = (low_since or time.time()) if free < KEEP_FREE else None
+            if low_since and time.time() - low_since > 20:
+                log(f"only {free}% of memory is free: stopping to protect this Mac")
                 break
             if srv.poll() is not None:
                 log(f"the model stopped (exit {srv.returncode}); see {MODEL_LOG}")
@@ -223,9 +250,10 @@ def serve(model):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["start", "stop", "status", "_serve"])
-    ap.add_argument("--model", default=DEFAULT_MODEL)
+    ap.add_argument("--model")
     a = ap.parse_args()
     if a.cmd == "_serve":
+        a.model = a.model or pick()
         open(PIDF, "w").write(str(os.getpid()))
         try:
             serve(a.model)
@@ -240,6 +268,7 @@ def main():
     if a.cmd == "stop":
         pid = running()
         if not pid:
+            clear_tunnels()
             print("brain server: already stopped")
             return 0
         os.kill(pid, signal.SIGTERM)
@@ -247,18 +276,28 @@ def main():
             if not running():
                 break
             time.sleep(1)
+        clear_tunnels()
         print("brain server: stopped")
         return 0
     if running():
         print("brain server: already running")
         return 0
+    lvl, free = pressure(), free_pct()
+    if not a.model:
+        a.model = pick(free)
+        if not a.model:
+            best = pick(100)
+            print(f"not starting: this Mac needs room first ({free}% free; " +
+                  (f"{os.path.basename(best)} takes about {need_pct(best)}% and {KEEP_FREE}% must stay free)." if best
+                   else f"no model better than the laptop's own is in {MODELS}).") + " The laptop keeps answering with its own model.")
+            return 2
     if not os.path.exists(a.model):
         print(f"no model file at {a.model}")
         return 1
-    lvl, free, need = pressure(), free_pct(), need_pct(a.model)
-    if lvl != 1 or free < need + 15:
+    need = need_pct(a.model)
+    if lvl >= 4 or free < need + KEEP_FREE:
         print(f"not starting: this Mac needs room first (memory pressure {lvl}, {free}% free; the model takes about {need}% "
-              f"and 15% must stay free). The laptop keeps answering with its own model.")
+              f"and {KEEP_FREE}% must stay free). The laptop keeps answering with its own model.")
         return 2
     if not verified(a.model):
         return 1

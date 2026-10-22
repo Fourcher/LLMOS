@@ -216,7 +216,7 @@
     fullTrust = m.autonomy === "hands-off";
     box.append(chip(esc({ "hands-off": t("q_autonomy_0_s"), "balanced": t("q_autonomy_1_s"), "hands-on": t("q_autonomy_2_s") }[m.autonomy] || m.autonomy), "settings", t("settings")));
     if (m.internet !== "yes") box.append(chip(esc(m.internet === "no" ? "offline" : "internet: ask"), "settings"));
-    if (m.brain && m.brain !== "local") { const c = chip(`<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M6.5 20a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 17.7 9.1 4 4 0 0 1 18 17h-.5v3h-11z"/></svg> ${esc(m.brain === "cloud" ? (m.cloud || t("v_not_set_up")) : t("d_brain_chip_ask"))}`, "settings", t("s_brain")); c.classList.add("online"); box.append(c); }
+    if (m.brain && m.brain !== "local") { const c = chip(`<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="${m.home ? "M3 5h18v11H3zM9 18h6v2H9z" : "M6.5 20a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 17.7 9.1 4 4 0 0 1 18 17h-.5v3h-11z"}"/></svg> ${esc(m.brain === "cloud" ? (m.cloud || t("v_not_set_up")) : t("d_brain_chip_ask"))}`, "settings", t("s_brain")); c.classList.add("online"); box.append(c); }
     if (m.tor) box.append(chip("Tor", "settings"));
     if (m.focus) box.append(chip("focus", "turn off focus mode"));
     if (m.vault !== "off") box.append(chip(`<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M17 9V7a5 5 0 0 0-10 0v2H5v12h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7z"/></svg>${m.vault === "on" ? "" : " " + esc(t("locked_short"))}`, m.vault === "on" ? "lock" : null, t("d_lock_tip")));

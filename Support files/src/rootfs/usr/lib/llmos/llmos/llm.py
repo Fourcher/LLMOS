@@ -399,8 +399,9 @@ _HOME_UP = [0.0, False]
 
 
 def home_up(c=None):
-    """Whether the home computer's model is answering right now: a quick connect (instant on this computer's
-    loopback forward), remembered for 10 seconds so a turn's steps don't each ask."""
+    """Whether the home computer's model is answering right now: its /health says ok within a second and a half
+    (a forward whose far end has no model still accepts connections, so connecting is not enough). Remembered for
+    10 seconds so a turn's steps don't each ask."""
     c = c if c is not None else config.cloud()
     if not cloud_is_home(c):
         return False
@@ -409,9 +410,12 @@ def home_up(c=None):
         return _HOME_UP[1]
     u = urllib.parse.urlparse(c.get("url") or CLOUD_PROVIDERS["home"]["url"])
     try:
-        socket.create_connection((u.hostname or "127.0.0.1", u.port or 80), timeout=0.8).close()
-        ok = True
-    except OSError:
+        h = http.client.HTTPConnection(u.hostname or "127.0.0.1", u.port or 80, timeout=1.5)
+        h.request("GET", "/health")
+        r = h.getresponse()
+        ok = r.status == 200 and b"ok" in r.read(200)
+        h.close()
+    except (OSError, http.client.HTTPException):
         ok = False
     _HOME_UP[:] = [now, ok]
     return ok
@@ -769,6 +773,8 @@ def cloud_setup(fields, adopt=True):
     if not ok:
         return False, f"the account did not work: {note}"
     config.save_cloud(c)
+    if pid == "home":
+        return True, f"{cloud_label(c)} on your other computer is set up; it answers while that computer is on"
     note = f"{cloud_label(c)} is set up as the online model"
     if adopt and config.settings.get("brain", "local") == "local":
         config.settings.set("brain", "ask")

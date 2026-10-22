@@ -1767,7 +1767,7 @@ class Desk:
         m = models.active()
         self.emit({"t": "status", "model": m["name"] if m else "", "model_ok": llm.health(),
                    "autonomy": s.get("autonomy", "balanced"), "host_gpu": models.host_mode(),
-                   "brain": s.get("brain", "local"), "cloud": llm.cloud_label() if vault.unlocked() or not s.get("vault") else "",
+                   "brain": s.get("brain", "local"), "cloud": llm.cloud_label() if vault.unlocked() or not s.get("vault") else "", "home": llm.cloud_is_home(),
                    "tor": bool(s.get("tor")), "internet": s.get("internet", "yes"),
                    "vault": ("locked" if not vault.unlocked() else "on") if s.get("vault") else "off",
                    "focus": bool(s.get("focus", {}).get("on")), "name": config.Profile().get("name", ""),
