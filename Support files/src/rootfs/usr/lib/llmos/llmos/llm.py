@@ -772,6 +772,11 @@ def cloud_setup(fields, adopt=True):
     ok, note = cloud_check(c)
     if not ok:
         return False, f"the account did not work: {note}"
+    prev = config.cloud()
+    if pid == "home":
+        c["brain_before"] = (prev or {}).get("brain_before") if cloud_is_home(prev) else config.settings.get("brain", "local")
+    else:
+        config.leave_home_brain()
     config.save_cloud(c)
     if pid == "home":
         return True, f"{cloud_label(c)} on your other computer is set up; it answers while that computer is on"

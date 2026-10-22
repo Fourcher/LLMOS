@@ -152,7 +152,7 @@ def _search_brave(query):
     return out
 
 
-_WIKI_UA = "LLM-OS/1.8 (personal computer assistant; https://github.com/Fourcher)"
+_WIKI_UA = "LLM-OS/1.8 (personal computer assistant)"    # Wikipedia asks programs to say what they are
 _WIKI_LANG = {"english": "en", "chinese": "zh", "中文": "zh", "spanish": "es", "español": "es", "french": "fr", "français": "fr",
               "german": "de", "deutsch": "de", "japanese": "ja", "日本語": "ja"}
 
@@ -167,8 +167,13 @@ def _search_wikipedia(query, timeout=8):
     except Exception:
         lang = "en"
     base = f"https://{lang}.wikipedia.org"
+    try:
+        from . import config
+        ua = None if config.settings.get("tor") else _WIKI_UA        # over Tor: the common browser name, nothing that stands out
+    except Exception:
+        ua = None
     status, _, _, body = fetch(base + "/w/api.php?" + urllib.parse.urlencode(
-        {"action": "query", "list": "search", "srsearch": query, "srlimit": 5, "format": "json", "utf8": 1}), timeout=timeout, ua=_WIKI_UA)
+        {"action": "query", "list": "search", "srsearch": query, "srlimit": 5, "format": "json", "utf8": 1}), timeout=timeout, ua=ua)
     if status != 200:
         raise WebError(_status_msg("Wikipedia", status), status)
     try:
@@ -184,7 +189,7 @@ def _search_wikipedia(query, timeout=8):
     def summary(r):
         try:
             st, _, _, sb = fetch(base + "/api/rest_v1/page/summary/" + urllib.parse.quote(r["_t"].replace(" ", "_"), safe=""),
-                                 timeout=timeout, ua=_WIKI_UA)
+                                 timeout=timeout, ua=ua)
             if st == 200:
                 r["snippet"] = json.loads(sb.decode("utf-8", "replace")).get("extract") or r["snippet"]
         except (WebError, ValueError, OSError):

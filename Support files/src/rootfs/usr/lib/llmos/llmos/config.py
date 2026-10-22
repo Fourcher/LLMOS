@@ -402,7 +402,17 @@ def save_cloud(c):
     save_json(data("cloud.json"), c)
 
 
+def leave_home_brain():
+    """A home computer's account is going (forgotten, or replaced by an online one): the brain setting goes back to what
+    it was before that computer was set up (tools/brain.py set it to 'cloud'), so an online account added later does not
+    silently get every request with the owner's name and memory."""
+    c = load_json(data("cloud.json"), None)
+    if isinstance(c, dict) and c.get("provider") == "home" and settings.get("brain", "local") == "cloud":
+        settings.set("brain", c.get("brain_before") or "local")
+
+
 def forget_cloud():
+    leave_home_brain()
     try:
         os.unlink(data("cloud.json"))
     except OSError:
