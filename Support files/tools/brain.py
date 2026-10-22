@@ -8,7 +8,7 @@ online model (llm.CLOUD_PROVIDERS["home"]): used while it answers; the laptop's 
 doesn't (this Mac asleep, this stopped, the tunnel down), with no question and no error.
 
 This Mac's memory comes first (two VMs at once crashed it): the server starts only when 15% of memory stays free with
-the model loaded, and stops itself when free memory falls below 15% or macOS reports critical pressure.
+the model loaded, and stops itself when free memory stays below 8% or macOS reports critical pressure.
 
 Without --model it lends the most capable model here that fits, and only one more capable than the laptop's own
 (never a downgrade): BRAINS, best first.
@@ -37,7 +37,8 @@ PORT, LAPTOP_PORT = 8081, 8090
 CTX = 16384
 MODELS = os.path.join(PROJECT, "models")
 BRAINS = ["huihui-ornith-1.5-9b", "dolphin-3-8b"]       # catalog ids, best first; the laptop's default is Dolphin 8B
-KEEP_FREE = 15
+KEEP_FREE = 15                    # % of memory that must stay free with the model loaded, to start
+STOP_FREE = 8                     # % below which a running server stops (lower than the start bar, so it doesn't flap)
 CATALOG = os.path.join(PROJECT, "src/rootfs/usr/share/llmos/catalog.json")
 KEYF = os.path.join(PROJECT, "ota-keys", "brain-key")             # ota-keys/ is never in git
 PIDF = os.path.join(PROJECT, "run", "brain.pid")
@@ -164,6 +165,10 @@ SETUP = r'''
 import sys
 sys.path.insert(0, "/usr/lib/llmos")
 from llmos import llm, config
+cur = config.cloud()
+if cur and cur.get("provider") != "home":
+    print("SETUP False the laptop already has an online account (%s); not replacing it" % llm.cloud_label(cur))
+    raise SystemExit
 ok, note = llm.cloud_setup({"provider": "home", "url": "http://127.0.0.1:%d/v1", "model": %r, "key": %r}, adopt=False)
 if ok:
     c = config.cloud()
@@ -215,7 +220,7 @@ def serve(model):
             if lvl >= 4:
                 log("memory pressure is critical: stopping to protect this Mac")
                 break
-            low_since = (low_since or time.time()) if free < KEEP_FREE else None
+            low_since = (low_since or time.time()) if free < STOP_FREE else None
             if low_since and time.time() - low_since > 20:
                 log(f"only {free}% of memory is free: stopping to protect this Mac")
                 break

@@ -109,7 +109,7 @@ def _wallpaper():
 
 
 # strings the page needs (everything else is rendered in Python)
-_PAGE_KEYS = ("hint", "d_muted", "d_show_task", "d_queue_next", "d_queue_remove", "d_mode_do", "d_mode_ask", "d_mode_do_tip", "d_mode_ask_tip", "while_away", "passphrase", "wrong_passphrase", "unlocking", "locked", "welcome",
+_PAGE_KEYS = ("hint", "d_home_off", "d_muted", "d_show_task", "d_queue_next", "d_queue_remove", "d_mode_do", "d_mode_ask", "d_mode_do_tip", "d_mode_ask_tip", "while_away", "passphrase", "wrong_passphrase", "unlocking", "locked", "welcome",
               "ask_language", "ask_name", "ask_timezone", "ask_autonomy", "ask_internet", "ask_tor",
               "ask_passphrase", "ask_passphrase_again", "passphrase_mismatch", "creating_vault", "onboard_done",
               "v_hands-off", "v_balanced", "v_hands-on", "v_yes", "v_no", "v_ask", "listening", "heard",
@@ -1597,9 +1597,18 @@ class Desk:
         self._rewarm_on = True
 
         def loop():
-            last = None
+            last, home = None, None
             while True:
                 time.sleep(20)
+                try:
+                    # the home computer came or went (asleep, its brain stopped): the top bar says which model answers
+                    now = llm.cloud_is_home() and llm.home_up()
+                    if now != home:
+                        if home is not None:
+                            self.push_status()
+                        home = now
+                except Exception:
+                    pass
                 try:
                     pid = subprocess.run(["pgrep", "-f", "llama-server -m"], capture_output=True, text=True,
                                          timeout=5).stdout.split()[:1]
@@ -1768,6 +1777,7 @@ class Desk:
         self.emit({"t": "status", "model": m["name"] if m else "", "model_ok": llm.health(),
                    "autonomy": s.get("autonomy", "balanced"), "host_gpu": models.host_mode(),
                    "brain": s.get("brain", "local"), "cloud": llm.cloud_label() if vault.unlocked() or not s.get("vault") else "", "home": llm.cloud_is_home(),
+                   "home_up": llm.cloud_is_home() and llm.home_up(),
                    "tor": bool(s.get("tor")), "internet": s.get("internet", "yes"),
                    "vault": ("locked" if not vault.unlocked() else "on") if s.get("vault") else "off",
                    "focus": bool(s.get("focus", {}).get("on")), "name": config.Profile().get("name", ""),

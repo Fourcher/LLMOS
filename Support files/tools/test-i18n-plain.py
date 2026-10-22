@@ -74,7 +74,7 @@ ALLOWED_EDITS = {"q_brain_2",
                  "d_conduct_hint", "d_connectors_intro", "d_conn_tools", "d_connector_form_intro",
                  "d_connector_form_hint", "w_cloud_text"}
 # keys with a placeholder, added to every block: the status while a computer on the owner's network answers (test-home-brain.py)
-PLACEHOLDER_KEYS = {"d_home_using"}
+PLACEHOLDER_KEYS = {"d_home_using", "d_home_off"}
 for b in BLOCKS:
     if b in old:
         check(set(new[b]) == set(old[b]) | NEW_KEYS | ADDED_KEYS | PLACEHOLDER_KEYS,
