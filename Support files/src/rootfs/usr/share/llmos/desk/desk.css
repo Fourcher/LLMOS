@@ -140,10 +140,11 @@ a:hover { text-decoration: underline; }
 :root[data-layout="mac"] #startmenu { bottom: auto; top: 36px; left: 10px; }
 :root[data-layout="mac"] #desk:not(.wall) { background: linear-gradient(160deg, #3a2c5a 0%, #8a4a4a 45%, #e0a060 100%); }
 :root[data-layout="mac"] .win .head .dot { display: none; }
-:root[data-layout="mac"] .win .head button { width: 13px; height: 13px; color: transparent; font-size: 0; margin-right: 1px; }
-:root[data-layout="mac"] .win .head .x { order: -3; background: #ff5f57; }
-:root[data-layout="mac"] .win .head .min { order: -2; background: #febc2e; }
-:root[data-layout="mac"] .win .head .max { order: -1; background: #28c840; margin-right: 8px; }
+/* a 13 px dot drawn in a 24 px button: the look of the Mac's, a target a finger or a shaky hand can hit (WCAG 2.5.8) */
+:root[data-layout="mac"] .win .head button { width: 24px; height: 24px; color: transparent; font-size: 0; margin: 0 -2px; }
+:root[data-layout="mac"] .win .head .x { order: -3; background: radial-gradient(circle, #ff5f57 6.5px, transparent 7px); }
+:root[data-layout="mac"] .win .head .min { order: -2; background: radial-gradient(circle, #febc2e 6.5px, transparent 7px); }
+:root[data-layout="mac"] .win .head .max { order: -1; background: radial-gradient(circle, #28c840 6.5px, transparent 7px); margin-right: 4px; }
 :root[data-layout="mac"] .win .head button:hover { filter: brightness(1.15); color: transparent; }
 /* set-up, the settings step: one card per setting, its choices as buttons, what the chosen one means under them.
    Three across on a laptop screen (all six visible at once), two on a small one, one on a phone. */
