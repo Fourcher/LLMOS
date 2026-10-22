@@ -32,6 +32,7 @@ CASES = [
     ("Pick one: https://x.com/u?a=1 or https://acct.site/confirm-email?k=ZZ", "", "", "confirm"),
     ("Welcome! Your temporary PIN is 0421 for first login.", "", "0421", None),
     ("Use code 12 34 56", "", "", None),
+    ("Your order 48213 is confirmed and ships today. Track: https://shop.test/orders/48213", "", "", None),
 ]
 for text, html, want_code, want_link in CASES:
     msg = {"text": text, "html": html}
@@ -42,6 +43,17 @@ for text, html, want_code, want_link in CASES:
     check(cok and lok, f"extract {text[:40] or html[:40]!r} -> code {code!r}, link {(links[0] if links else None)}")
 check(not devmail._code_shape("2026") and devmail._code_shape("739204") and not devmail._code_shape("hello")
       and devmail._code_shape("A1B2C3") and not devmail._code_shape("123"), "code-shape: not a year, not a word, not too short")
+
+# the confirm link: a verify link, never an unsubscribe / "this wasn't me" / cancel link
+both = {"text": "Confirm: https://site.test/verify?token=abc  —  not you? https://site.test/unsubscribe?u=9", "html": ""}
+check(devmail.confirm_link(both) == "https://site.test/verify?token=abc", "confirm_link takes the verify link over the unsubscribe link")
+unsub = {"text": "Thanks for subscribing! Manage at https://site.test/preferences or https://site.test/unsubscribe?u=9", "html": ""}
+check(devmail.confirm_link(unsub) == "", "an email with only unsubscribe/preferences links has no confirm link")
+welcome = {"text": "Welcome aboard! Visit https://site.test/home and https://site.test/unsubscribe to leave.", "html": ""}
+check(devmail.confirm_link(welcome) == "", "a welcome email with only footer links is not treated as a confirmation")
+notme = {"text": "Didn't sign up? https://site.test/not-me?x=1  Confirm instead: https://site.test/activate/abc", "html": ""}
+check(devmail.confirm_link(notme) == "https://site.test/activate/abc" and "not-me" not in devmail.confirm_link(notme),
+      "a 'this wasn't me' link is never the confirm link")
 
 # --- the phrases reach the right tool, and never the owner's own mail set-up ---
 PHRASES = {"make yourself an email": "email_make", "create an email address": "email_make",
@@ -90,6 +102,7 @@ check(devmail.account() is None, "forget clears the stored mailbox")
 dsk = open(os.path.join(_ROOT, "usr/lib/llmos/llmos/desk.py"), encoding="utf-8").read()
 check('m[0] in ("email_make", "email_address", "email_code", "email_confirm", "email_forget")' in dsk,
       "the desk dispatches the email phrases to the tool directly")
+check('copy this:' in dsk and 'clip.copy' in dsk, "the Copy button is wired to the real clipboard")
 devmail.forget(delete=False)  # no crash with none
 
 if fails:

@@ -3638,6 +3638,11 @@ class Desk:
         if line.startswith("!"):
             self.run_in_terminal(line[1:].strip() or "sh")
             return True
+        mcopy = re.match(r"(?:please\s+)?copy this:\s*(.+)$", line, re.I)   # a Copy button in a window (e.g. the computer's email address)
+        if mcopy:
+            from . import clip
+            self._said = ("Copied: " + mcopy.group(1).strip()) if clip.copy(mcopy.group(1).strip()) else "I couldn't reach the clipboard."
+            return True
         # the computer's own email (devmail): make one, read the code a sign-up sent, confirm, forget -- run straight
         # from the words, never through the model, so it is reliable on a small model
         m = intent.match(line)

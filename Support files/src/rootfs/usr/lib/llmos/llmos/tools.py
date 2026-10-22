@@ -5151,7 +5151,7 @@ def email_make(a, ctx):
         return f"error: {e}. The free email service didn't answer; say so and suggest trying again in a minute."
     _devmail_panel(ctx, "The computer's email", [f"This computer now has its own address:", addr,
                    "It can sign things up with this and read the codes they send back. Say “what's the code” after a sign-up."],
-                   [{"label": "Copy the address", "say": f"copy {addr}"}])
+                   [{"label": "Copy the address", "say": f"copy this: {addr}"}])
     return f"The computer's email address is now {addr}. It can receive sign-up codes and confirmation links here."
 
 
@@ -5160,7 +5160,7 @@ def email_make(a, ctx):
 def email_address(a, ctx):
     addr = devmail.address()
     _devmail_panel(ctx, "The computer's email", ["This computer's own email address:", addr],
-                   [{"label": "Copy the address", "say": f"copy {addr}"}])
+                   [{"label": "Copy the address", "say": f"copy this: {addr}"}])
     return f"This computer's email address is {addr}."
 
 
@@ -5174,34 +5174,31 @@ def email_code(a, ctx):
         for m in devmail.messages():                       # anything already in the box: newest first
             full = devmail.read(m["id"])
             code = devmail.extract_code(full)
-            links = devmail.extract_links(full)
-            if code or links:
-                return _email_code_reply(ctx, code, links, full)
+            link = devmail.confirm_link(full)
+            if code or link:
+                return _email_code_reply(ctx, code, link, full)
         if a.get("wait"):
             hit = devmail.wait_for_code(timeout=90)
             if hit:
-                return _email_code_reply(ctx, hit["code"], hit.get("links") or ([hit["link"]] if hit.get("link") else []),
-                                         {"from": hit["from"], "subject": hit["subject"]})
+                return _email_code_reply(ctx, hit["code"], hit.get("link", ""), {"from": hit["from"], "subject": hit["subject"]})
     except devmail.DevMailError as e:
         return f"error: {e}"
     return "No code has arrived yet. Sign up with the computer's address first, then ask again (or say 'wait for the code')."
 
 
-def _email_code_reply(ctx, code, links, full):
+def _email_code_reply(ctx, code, link, full):
     rows = [f"From {full.get('from', '')}: {full.get('subject', '')}"]
     if code:
         rows.append(f"Code: {code}")
-    if links:
-        rows.append(f"Confirm link: {links[0]}")
-    buttons = []
-    if links:
-        buttons.append({"label": "Open the confirm link", "say": "open the email confirmation link"})
-    _devmail_panel(ctx, "From the computer's mailbox", rows, buttons or None)
-    if code and links:
+    if link:
+        rows.append(f"Confirm link: {link}")
+    buttons = [{"label": "Open the confirm link", "say": "open the email confirmation link"}] if link else None
+    _devmail_panel(ctx, "From the computer's mailbox", rows, buttons)
+    if code and link:
         return f"The code is {code}. There is also a confirmation link; say 'open the confirmation link' to follow it."
     if code:
         return f"The code is {code}."
-    return f"No code, but a confirmation link arrived: {links[0]}. Say 'open the confirmation link' to follow it."
+    return f"A confirmation link arrived: {link}. Say 'open the confirmation link' to follow it."
 
 
 @tool("email_confirm", "Open the confirmation/verify link from the newest email in the computer's mailbox (the 'click to "
@@ -5212,16 +5209,18 @@ def email_confirm(a, ctx):
         return "not done: a confirmation link is only opened when someone is at the computer, never on a background task."
     try:
         for m in devmail.messages():
-            links = devmail.extract_links(devmail.read(m["id"]))
-            if links:
-                status, _ctype, final, _body = web.fetch(links[0], timeout=20)
+            link = devmail.confirm_link(devmail.read(m["id"]))
+            if link:
+                status, _ctype, _final, _body = web.fetch(link, timeout=20)
                 ok = 200 <= status < 400
-                _devmail_panel(ctx, "Confirmation", [("Opened" if ok else f"Tried ({status})") + " the confirmation link:", links[0]])
-                return (f"Opened the confirmation link (the page answered {status}). The sign-up should be confirmed."
-                        if ok else f"The confirmation link answered {status}; it may have already been used or expired.")
+                _devmail_panel(ctx, "Confirmation", [("Opened" if ok else f"Tried ({status})") + " the confirmation link:", link])
+                # a 200 means the page loaded, not that the sign-up is done (some need a button or run JavaScript): say only what happened
+                return (f"Opened the confirmation link; the page answered {status}. If the sign-up still isn't confirmed, "
+                        f"it may need a button pressed on that page." if ok
+                        else f"The confirmation link answered {status}; it may have already been used or expired.")
     except devmail.DevMailError as e:
         return f"error: {e}"
-    return "No confirmation link has arrived in the computer's mailbox yet."
+    return "No confirmation link has arrived in the computer's mailbox yet (only links that confirm a sign-up are followed)."
 
 
 @tool("email_forget", "Delete the email address this computer made for itself.", {}, [], risk=CHANGE,

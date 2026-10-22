@@ -140,13 +140,16 @@ def read(mid):
 # ---- pulling the useful thing out of a verification email: the code, or the link to click.
 
 _CODE_WORD = re.compile(r"\b(?:code|passcode|otp|pin)\b", re.I)
-_HINT = re.compile(r"\b(code|passcode|verif\w*|otp|one[\s-]*time|2fa|pin|password|confirm\w*)\b", re.I)
+_HINT = re.compile(r"\b(code|passcode|verif\w*|otp|one[\s-]*time|2fa|pin|password)\b", re.I)  # not "confirm": "order is confirmed" is not a code
 _TOKEN = re.compile(r"[0-9A-Za-z]{4,8}")
 _STANDALONE = re.compile(r"(?<![0-9A-Za-z])[0-9A-Za-z]{4,8}(?![0-9A-Za-z])")
 _HTMLTAG = re.compile(r"<[^>]+>")
 _LINK = re.compile(r"https?://[^\s\"'<>)\]]+")
-_LINK_WORDS = ("verify", "confirm", "activate", "validate", "verification", "confirmation", "signup", "sign-up",
-               "magic", "login", "signin", "token", "code", "auth", "activate-account", "email")
+# a link that confirms/verifies a sign-up -- the kind worth following
+_CONFIRM_LINK = re.compile(r"verif|confirm|activ|validat|magic|sign[-_]?up|register|token[=/]|/auth/|/activate", re.I)
+# a link that must NEVER be followed on the owner's behalf: it cancels, unsubscribes, or reports the sign-up
+_UNSAFE_LINK = re.compile(r"unsub|unsubscrib|opt[-_]?out|preferenc|not[-_]?(?:me|you)|wasn|report|cancel|reject|decline|"
+                          r"privacy|remove|/settings", re.I)
 
 
 def _plain(msg):
@@ -179,17 +182,32 @@ def extract_code(msg):
     return ""
 
 
-def extract_links(msg):
-    """The confirmation links in a message, the ones that look like a verify/confirm link first."""
+def _links(msg):
+    """Every link in a message, in order, de-duplicated and cleaned of trailing punctuation."""
     text = (msg.get("text") or "") + "\n" + (msg.get("html") or "")
     seen, links = set(), []
     for url in _LINK.findall(text):
         url = url.rstrip(".,);”\"'")
-        if url in seen:
-            continue
-        seen.add(url)
-        links.append(url)
-    links.sort(key=lambda u: 0 if any(w in u.lower() for w in _LINK_WORDS) else 1)
+        if url not in seen:
+            seen.add(url)
+            links.append(url)
+    return links
+
+
+def confirm_link(msg):
+    """The link that confirms a sign-up ("" when there is none): one that looks like a verify/confirm link and is not
+    an unsubscribe / "this wasn't me" / cancel link. Following the wrong one would undo the very sign-up."""
+    for url in _links(msg):
+        if _CONFIRM_LINK.search(url) and not _UNSAFE_LINK.search(url):
+            return url
+    return ""
+
+
+def extract_links(msg):
+    """Kept for callers that want to see links: the confirm link first, unsafe links never first."""
+    links = _links(msg)
+    links.sort(key=lambda u: (0 if _CONFIRM_LINK.search(u) and not _UNSAFE_LINK.search(u) else
+                              2 if _UNSAFE_LINK.search(u) else 1))
     return links
 
 
@@ -210,10 +228,9 @@ def wait_for_code(timeout=90, since=None):
                     continue
                 full = read(m["id"])
                 code = extract_code(full)
-                links = extract_links(full)
-                if code or links:
-                    return {"code": code, "link": links[0] if links else "", "links": links,
-                            "from": full["from"], "subject": full["subject"], "id": m["id"]}
+                link = confirm_link(full)
+                if code or link:
+                    return {"code": code, "link": link, "from": full["from"], "subject": full["subject"], "id": m["id"]}
                 seen.add(m["id"])
         except DevMailError:
             pass
