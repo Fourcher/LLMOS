@@ -200,7 +200,10 @@ def serve(model):
     signal.signal(signal.SIGINT, lambda *a: stop.append(1))
     ent = catalog_entry(model) or {}
     model_id = ent.get("id") or os.path.basename(model)
-    label = f"{ent.get('name', model_id).split(' (')[0]} on {os.uname().nodename.split('.')[0]}"
+    name = ent.get("name", model_id)
+    size = re.search(r"\b\d+(?:\.\d+)?B\b", name)
+    short = f"{name.split()[0]} {size.group(0)}" if size else name.split(" (")[0]      # "Huihui 9B": fits the top bar
+    label = f"{short} on {os.uname().nodename.split('.')[0]}"
     srv = subprocess.Popen([LLAMA, "-m", model, "--host", "127.0.0.1", "--port", str(PORT), "-ngl", "99", "-fa", "on",
                             "-c", str(CTX), "-np", "1", "-ctk", "q8_0", "-ctv", "q8_0", "--jinja", "--no-webui",
                             "--api-key", key()], stdout=open(MODEL_LOG, "a"), stderr=subprocess.STDOUT)

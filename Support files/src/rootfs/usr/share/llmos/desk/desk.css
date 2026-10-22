@@ -288,6 +288,7 @@ body.light #desk.wall::before { background: linear-gradient(180deg, rgba(255,255
 #top { position: absolute; top: 0; left: 0; right: 0; height: 46px; display: flex; align-items: center; justify-content: space-between;
   padding: 0 20px; font-size: 14px; color: var(--dim); z-index: 5; }
 #top .left, #top .right { display: flex; gap: 14px; align-items: center; }
+#top .chip { white-space: nowrap; flex-shrink: 0; }
 #top .clock { font-variant-numeric: tabular-nums; }
 .chip { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 12px; min-height: 30px; min-width: 34px; border-radius: 999px; border: 0; background: color-mix(in srgb, var(--fg) 8%, transparent); font-size: 14px;
 .chip:disabled { cursor: default; opacity: 1; }
