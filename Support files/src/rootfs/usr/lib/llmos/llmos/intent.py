@@ -678,6 +678,42 @@ def _signin_pid(p):
             else "openrouter" if p == "openrouter" else "chatgpt")
 
 
+_DM_MAKE = re.compile(r"^\s*(?:please\s+)?(?:make|create|set\s*up|generate|give|get)\s+(?:me\s+|us\s+)?"
+                     r"(?:(?:yourself|this\s+computer|the\s+computer|your\s+own)\s+)?(?:an?\s+|your\s+own\s+)?"
+                     r"(?:new\s+)?e[\s-]?mail(?:\s+(?:address|account))?\s*[.!]?\s*$", re.I)
+_DM_MAKE2 = re.compile(r"^\s*(?:please\s+)?(?:make|create|give)\s+(?:yourself|this\s+computer|the\s+computer)\s+"
+                      r"(?:an?\s+|your\s+own\s+)?e[\s-]?mail(?:\s+(?:address|account))?\s*[.!]?\s*$", re.I)
+_DM_ADDR = re.compile(r"^\s*(?:what(?:'s| is)|show|tell\s+me)\s+(?:your|the\s+computer(?:'s)?|this\s+computer(?:'s)?|"
+                     r"your\s+own)\s+e[\s-]?mail(?:\s+address)?\s*\??\s*$", re.I)
+_DM_CODE = re.compile(r"^\s*(?:please\s+)?(?:(?:what(?:'s| is)|read|get|check(?:\s+for)?|show\s+me|fetch)\s+)"
+                     r"(?:the\s+|my\s+|a\s+)?(?:verification\s+|sign[\s-]?up\s+|e[\s-]?mail\s+|security\s+|login\s+)?"
+                     r"code(?:\s+(?:they|it)\s+(?:sent|e?mailed))?\s*\??\s*$", re.I)
+_DM_CODE2 = re.compile(r"^\s*(?:did\s+(?:you|we)\s+get|is\s+there)\s+(?:a|the)\s+(?:verification\s+)?code\s*\??\s*$", re.I)
+_DM_WAIT = re.compile(r"^\s*(?:please\s+)?(?:wait|watch|listen)\s+for\s+(?:the|a|my)\s+(?:verification\s+)?code\s*[.!]?\s*$", re.I)
+_DM_CONFIRM = re.compile(r"^\s*(?:please\s+)?(?:open|click|follow|go\s+to)\s+(?:the|that)\s+(?:e?mail\s+)?"
+                        r"confirm(?:ation)?\s+link\s*[.!]?\s*$", re.I)
+_DM_FORGET = re.compile(r"^\s*(?:please\s+)?(?:delete|remove|forget|get\s+rid\s+of)\s+(?:your|the\s+computer(?:'s)?|"
+                       r"this\s+computer(?:'s)?)\s+e[\s-]?mail(?:\s+address)?\s*[.!]?\s*$", re.I)
+
+
+def _devmail(text):
+    """The computer's own email (devmail.py / the email_* tools): make one, read the code a sign-up sent, confirm, forget."""
+    t = str(text or "").strip()
+    if _DM_MAKE.match(t) or _DM_MAKE2.match(t):
+        return ("email_make", {})
+    if _DM_ADDR.match(t):
+        return ("email_address", {})
+    if _DM_WAIT.match(t):
+        return ("email_code", {"wait": True})
+    if _DM_CODE.match(t) or _DM_CODE2.match(t):
+        return ("email_code", {})
+    if _DM_CONFIRM.match(t):
+        return ("email_confirm", {})
+    if _DM_FORGET.match(t):
+        return ("email_forget", {})
+    return None
+
+
 def _online_model(text):
     if _BRAIN.match(text):
         return None
@@ -2429,6 +2465,9 @@ def _match(text):
     dm = _models_discover(t)
     if dm:
         return dm
+    dme = _devmail(t)
+    if dme:
+        return dme
     om = _online_model(t)
     if om:
         return om

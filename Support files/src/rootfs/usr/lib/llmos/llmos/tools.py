@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import threading
 
-from . import apps, config, devices, programs, themes, i18n, llm, mail, media, models, store, system, ui, uispec, web, waits
+from . import apps, config, devices, devmail, programs, themes, i18n, llm, mail, media, models, store, system, ui, uispec, web, waits
 
 SAFE, READ, CHANGE, DESTRUCTIVE, SECURITY = "safe", "read", "change", "destructive", "security"
 
@@ -5126,3 +5126,107 @@ def set_default_app(a, ctx):
         except Exception:
             pass
     return f"Done: {kind.capitalize()} now open in {name}."
+
+
+# ---- the computer's own email: it makes itself a mailbox (devmail.py) and reads the codes and confirmation links
+# that sign-ups send there, so the owner never copies a two-factor code again. See devmail.py for why the laptop
+# cannot be its own mail server and what the free service it uses can and cannot do.
+
+def _devmail_panel(ctx, title, rows, buttons=None):
+    blocks = [{"type": "list", "items": rows}] if rows and isinstance(rows[0], dict) else [{"type": "text", "text": r} for r in rows]
+    if buttons:
+        blocks.append({"type": "buttons", "items": buttons})
+    show(ctx, {"id": "devmail", "title": title, "size": "m", "blocks": blocks})
+
+
+@tool("email_make", "Make this computer its own email address so it can sign things up and read the codes they send "
+      "back, with no copying by the owner. Uses a free email service (the address is real and receives mail; some sites "
+      "turn such addresses away). Replaces any address the computer already made. Tell the owner the address afterwards.",
+      {"label": {"type": "string", "description": "optional word to start the address with, e.g. 'llmos' or the site's name"}},
+      [], risk=CHANGE, network=True)
+def email_make(a, ctx):
+    try:
+        addr = devmail.provision(str(a.get("label") or "llmos"))
+    except devmail.DevMailError as e:
+        return f"error: {e}. The free email service didn't answer; say so and suggest trying again in a minute."
+    _devmail_panel(ctx, "The computer's email", [f"This computer now has its own address:", addr,
+                   "It can sign things up with this and read the codes they send back. Say “what's the code” after a sign-up."],
+                   [{"label": "Copy the address", "say": f"copy {addr}"}])
+    return f"The computer's email address is now {addr}. It can receive sign-up codes and confirmation links here."
+
+
+@tool("email_address", "Tell the owner the email address this computer made for itself (email_make makes one).",
+      {}, [], risk=READ, available=lambda: devmail.account() is not None)
+def email_address(a, ctx):
+    addr = devmail.address()
+    _devmail_panel(ctx, "The computer's email", ["This computer's own email address:", addr],
+                   [{"label": "Copy the address", "say": f"copy {addr}"}])
+    return f"This computer's email address is {addr}."
+
+
+@tool("email_code", "Read the verification code (or confirmation link) just sent to the computer's own mailbox, for a "
+      "sign-up. Use right after signing something up with the computer's address. wait=true waits up to a minute and a "
+      "half for a code that hasn't arrived yet.",
+      {"wait": {"type": "boolean", "description": "wait for a code that has not arrived yet"}},
+      [], risk=READ, network=True, available=lambda: devmail.account() is not None)
+def email_code(a, ctx):
+    try:
+        for m in devmail.messages():                       # anything already in the box: newest first
+            full = devmail.read(m["id"])
+            code = devmail.extract_code(full)
+            links = devmail.extract_links(full)
+            if code or links:
+                return _email_code_reply(ctx, code, links, full)
+        if a.get("wait"):
+            hit = devmail.wait_for_code(timeout=90)
+            if hit:
+                return _email_code_reply(ctx, hit["code"], hit.get("links") or ([hit["link"]] if hit.get("link") else []),
+                                         {"from": hit["from"], "subject": hit["subject"]})
+    except devmail.DevMailError as e:
+        return f"error: {e}"
+    return "No code has arrived yet. Sign up with the computer's address first, then ask again (or say 'wait for the code')."
+
+
+def _email_code_reply(ctx, code, links, full):
+    rows = [f"From {full.get('from', '')}: {full.get('subject', '')}"]
+    if code:
+        rows.append(f"Code: {code}")
+    if links:
+        rows.append(f"Confirm link: {links[0]}")
+    buttons = []
+    if links:
+        buttons.append({"label": "Open the confirm link", "say": "open the email confirmation link"})
+    _devmail_panel(ctx, "From the computer's mailbox", rows, buttons or None)
+    if code and links:
+        return f"The code is {code}. There is also a confirmation link; say 'open the confirmation link' to follow it."
+    if code:
+        return f"The code is {code}."
+    return f"No code, but a confirmation link arrived: {links[0]}. Say 'open the confirmation link' to follow it."
+
+
+@tool("email_confirm", "Open the confirmation/verify link from the newest email in the computer's mailbox (the 'click to "
+      "confirm' step of a sign-up). Only follows a link the computer's own mailbox received.",
+      {}, [], risk=CHANGE, network=True, available=lambda: devmail.account() is not None)
+def email_confirm(a, ctx):
+    if getattr(ctx, "headless", False):
+        return "not done: a confirmation link is only opened when someone is at the computer, never on a background task."
+    try:
+        for m in devmail.messages():
+            links = devmail.extract_links(devmail.read(m["id"]))
+            if links:
+                status, _ctype, final, _body = web.fetch(links[0], timeout=20)
+                ok = 200 <= status < 400
+                _devmail_panel(ctx, "Confirmation", [("Opened" if ok else f"Tried ({status})") + " the confirmation link:", links[0]])
+                return (f"Opened the confirmation link (the page answered {status}). The sign-up should be confirmed."
+                        if ok else f"The confirmation link answered {status}; it may have already been used or expired.")
+    except devmail.DevMailError as e:
+        return f"error: {e}"
+    return "No confirmation link has arrived in the computer's mailbox yet."
+
+
+@tool("email_forget", "Delete the email address this computer made for itself.", {}, [], risk=CHANGE,
+      available=lambda: devmail.account() is not None)
+def email_forget(a, ctx):
+    addr = devmail.address()
+    devmail.forget(delete=True)
+    return f"Removed the computer's email address ({addr})."
