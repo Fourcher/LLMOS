@@ -12,7 +12,8 @@ _ROOT = os.path.join(os.path.dirname(tools_dir), "src/rootfs")
 sys.path.insert(0, os.path.join(_ROOT, "usr/lib/llmos"))
 os.environ.setdefault("LLMOS_SHARE", os.path.join(_ROOT, "usr/share/llmos"))
 
-from llmos import web  # noqa: E402
+from llmos import web
+web._search_wikipedia = lambda q, **k: []           # the fallback: never the real network in a host test  # noqa: E402
 
 fails = 0
 

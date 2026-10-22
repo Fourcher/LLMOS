@@ -69,6 +69,17 @@ paris = [{"snippet": "Paris is the capital and largest city of France.", "url": 
          {"snippet": "The capital and largest city of France is Paris.", "url": "https://britannica.com"}]
 check(everyday._best_result("what is the capital of France", paris)["url"].startswith("https://en.wikipedia"), "a tie keeps the top result")
 
+pp = [{"title": "Pride and Prejudice and Zombies (film) - Wikipedia", "snippet": "Pride and Prejudice and Zombies is a 2016 film; Burr Steers wrote it.", "url": "z"},
+      {"title": "Pride & Prejudice (2005 film) - Wikipedia", "snippet": "Pride & Prejudice is a 2005 period romance film.", "url": "f"},
+      {"title": "Pride and Prejudice - Wikipedia", "snippet": "Pride and Prejudice is a novel by English author Jane Austen.", "url": "n"}]
+check(everyday._best_result("who wrote pride and prejudice", pp)["url"] == "n", "the article the question names wins a tie (the novel, not the film)")
+
+kap = [{"title": "Das Kapital - Wikipedia", "snippet": "Capital: A Critique of Political Economy, also known as Das Kapital, is a foundational text.", "url": "k"}]
+check(not everyday._answers("what is the capital of France", everyday._best_result("what is the capital of France", kap)),
+      "a snippet missing what was asked ('France') is not read out as the answer")
+check(everyday._answers("what is the capital of Italy", rome[1]) and everyday._answers("who wrote pride and prejudice", pp[2]),
+      "a snippet holding every asked word (or its usual stand-in: wrote -> author) is the answer")
+
 # round 19 (real laptop): folders by the names people use, episode renames, a budget sheet, memory, convert words
 from llmos import tools, config  # noqa: E402
 home = config.home().rstrip("/")

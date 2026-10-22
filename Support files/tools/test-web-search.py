@@ -30,6 +30,7 @@ def fake(delay, result=None, exc=None):
 def run_search(ddg, brave):
     web._search_ddg = ddg
     web._search_brave = brave
+    web._search_wikipedia = lambda q, **k: []       # the fallback: never the real network in a host test
     t0 = time.monotonic()
     try:
         out = web.search("q")
@@ -103,3 +104,12 @@ os.environ.pop("LLMOS_SLOW", None)
 print(f"ok both slow -> {str(err)!r} in {dt:.2f}s")
 
 print("all good")
+
+# 5. both engines fail outright -> Wikipedia's API answers (the fallback); slow engines never wait for it
+WIKI = [{"title": "Rome - Wikipedia", "url": "https://en.wikipedia.org/wiki/Rome", "snippet": "Rome is the capital of Italy.", "fallback": True}]
+def _fail(q):
+    raise web.WebError("Brave is getting too many requests; try again in a minute", 429)
+web._search_ddg, web._search_brave, web._search_wikipedia = _fail, _fail, lambda q, **k: WIKI
+os.environ["LLMOS_SLOW"] = "1"
+assert web.search("capital of italy") == WIKI
+print("ok both engines refuse -> Wikipedia's API answers")

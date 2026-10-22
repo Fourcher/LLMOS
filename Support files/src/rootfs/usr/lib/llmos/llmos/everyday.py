@@ -1739,17 +1739,45 @@ _ASK_WORDS = {"what", "which", "where", "when", "who", "whom", "whose", "does", 
               "a", "an", "in", "on", "for", "to", "how", "many", "much", "tell", "me", "please", "and", "do", "did"}
 
 
+# a question's verb and the words an encyclopedia opens with instead ("who wrote X" -> "X is a novel by English author ...")
+_SAME = {"wrote": {"written", "author", "writer", "novel", "book"}, "write": {"written", "author", "writer"},
+         "painted": {"painting", "painter", "portrait"}, "directed": {"director", "film"}, "invented": {"inventor", "invention"},
+         "founded": {"founder", "established"}, "discovered": {"discovery", "discoverer"}, "built": {"constructed", "construction"},
+         "sang": {"singer", "song"}, "composed": {"composer", "composition"}, "tall": {"highest", "height", "metres", "meters", "feet"},
+         "big": {"largest", "area"}, "population": {"people", "inhabitants", "residents"}, "old": {"age", "born"}, "died": {"death", "died"}, "born": {"birth", "born"}}
+
+
+def _score(question, r):
+    """(words of the question the result's shown sentences hold, the article being the one the question names, how many
+    words the question has)."""
+    asked = set(re.findall(r"[a-z0-9]+", question.lower()))
+    want = {w for w in asked if w not in _ASK_WORDS and len(w) > 2}
+    have = set(re.findall(r"[a-z0-9]+", _first_sentences(r.get("snippet")).lower()))
+    title = re.sub(r"\s+-\s+Wikipedia$", "", str(r.get("title") or ""))
+    words = set(re.findall(r"[a-z0-9]+", title.lower()))
+    named = bool(words) and "(" not in title and words <= asked   # the article the question names ("Mount Everest", not "... (2005 film)")
+    hit = sum(1 for w in want if w in have or have & _SAME.get(w, set()))
+    return hit, named, len(want)
+
+
 def _best_result(question, res):
-    """Of the top three results, the one whose shown sentences hold most of the question's words ('capital', 'italy'):
+    """Of the top four results, the one whose shown sentences hold most of the question's words ('capital', 'italy'),
+    half a word more for the article the question names (it breaks ties, it does not outvote what the text says):
     the first result about Rome may only tell its history. Ties keep the higher result."""
-    want = {w for w in re.findall(r"[a-z0-9]+", question.lower()) if w not in _ASK_WORDS and len(w) > 2}
-    best, score = (res[0] if res else {}), -1
-    for r in res[:3]:
-        have = set(re.findall(r"[a-z0-9]+", _first_sentences(r.get("snippet")).lower()))
-        n = len(want & have)
-        if n > score:
-            best, score = r, n
+    best, score = (res[0] if res else {}), (-1, False)
+    for r in res[:4]:
+        hit, named, _ = _score(question, r)
+        if (hit + 0.5 * named, named) > score:
+            best, score = r, (hit + 0.5 * named, named)
     return best
+
+
+def _answers(question, r):
+    """The result's shown sentences hold every word the question asks about. Asked of Wikipedia's own search (the
+    fallback, whose ranking is by words, not meaning) before reading its result out: 'capital of France' once found
+    'Das Kapital'; otherwise the model takes the question."""
+    hit, _, n = _score(question, r)
+    return n > 0 and hit >= n
 
 
 def live_lookup(desk, line, low):
@@ -1787,6 +1815,8 @@ def live_lookup(desk, line, low):
         snippet = _first_sentences(top.get("snippet"))
         if not snippet:
             return _say(desk, line, "I couldn't find that result.")
+        if top.get("fallback") and not _answers(line, top):
+            return False                  # Wikipedia's own search found no article saying it plainly: the model looks into it
         src = urllib.parse.urlparse(str(top.get("url") or "")).netloc.lower().removeprefix("www.") or "the web"
         return _say(desk, line, f"{snippet} (source: {src})")
     if not (m or h):

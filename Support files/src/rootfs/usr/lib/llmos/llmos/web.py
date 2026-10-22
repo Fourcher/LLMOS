@@ -48,7 +48,7 @@ def _curl_base(timeout):
     return cmd
 
 
-def fetch(url, max_bytes=3_000_000, timeout=15,data=None, dest=None):
+def fetch(url, max_bytes=3_000_000, timeout=15,data=None, dest=None, ua=None):
     """GET/POST a URL. Returns (status, content_type, final_url, body_bytes)."""
     if not re.match(r"^https?://", url or ""):
         raise WebError("only http(s) URLs are supported")
@@ -64,6 +64,8 @@ def fetch(url, max_bytes=3_000_000, timeout=15,data=None, dest=None):
                                  "--max-filesize", str(max_bytes if dest is None else 4_000_000_000)]
     if data is not None:
         cmd += ["--data", urllib.parse.urlencode(data)]
+    if ua:
+        cmd += ["-A", ua]                 # a later -A wins over the browser one in _curl_base
     cmd.append(url)
     p = subprocess.run(cmd, capture_output=True, text=True)
     if p.returncode != 0 and not os.path.exists(tmp):
@@ -150,6 +152,54 @@ def _search_brave(query):
     return out
 
 
+_WIKI_UA = "LLM-OS/1.8 (personal computer assistant; https://github.com/Fourcher)"
+_WIKI_LANG = {"english": "en", "chinese": "zh", "中文": "zh", "spanish": "es", "español": "es", "french": "fr", "français": "fr",
+              "german": "de", "deutsch": "de", "japanese": "ja", "日本語": "ja"}
+
+
+def _search_wikipedia(query, timeout=8):
+    """Wikipedia's own search API: free, no key, meant for programs. The fallback when the general engines fail
+    or turn a computer away (DuckDuckGo's bot check, Brave's rate limit). Each of the top four hits carries its
+    article's opening sentences (its summary, fetched side by side), so they can be compared like with like."""
+    try:
+        from . import config
+        lang = _WIKI_LANG.get(str(config.llm_language() or "English").strip().lower(), "en")
+    except Exception:
+        lang = "en"
+    base = f"https://{lang}.wikipedia.org"
+    status, _, _, body = fetch(base + "/w/api.php?" + urllib.parse.urlencode(
+        {"action": "query", "list": "search", "srsearch": query, "srlimit": 5, "format": "json", "utf8": 1}), timeout=timeout, ua=_WIKI_UA)
+    if status != 200:
+        raise WebError(_status_msg("Wikipedia", status), status)
+    try:
+        hits = json.loads(body.decode("utf-8", "replace")).get("query", {}).get("search", [])
+    except ValueError:
+        raise WebError("Wikipedia didn't answer properly")
+    out = []
+    for h in hits:
+        title = str(h.get("title") or "")
+        out.append({"title": f"{title} - Wikipedia", "url": base + "/wiki/" + urllib.parse.quote(title.replace(" ", "_")),
+                    "snippet": _text(str(h.get("snippet") or "")) + "…", "_t": title, "fallback": True})
+
+    def summary(r):
+        try:
+            st, _, _, sb = fetch(base + "/api/rest_v1/page/summary/" + urllib.parse.quote(r["_t"].replace(" ", "_"), safe=""),
+                                 timeout=timeout, ua=_WIKI_UA)
+            if st == 200:
+                r["snippet"] = json.loads(sb.decode("utf-8", "replace")).get("extract") or r["snippet"]
+        except (WebError, ValueError, OSError):
+            pass
+
+    ts = [threading.Thread(target=summary, args=(r,), daemon=True) for r in out[:4]]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(timeout + 2)
+    for r in out:
+        r.pop("_t", None)
+    return out
+
+
 def _search_limit():
     try:
         slow = float(os.environ.get("LLMOS_SLOW", "1"))
@@ -200,6 +250,13 @@ def search(query, n=6):
                     seen.add(r["url"])
                     uniq.append(r)
             return uniq[:n]
+    if finished == len(engines):          # both answered, with an error or nothing (not slow): Wikipedia's API
+        try:
+            res = _search_wikipedia(query)
+            if res:
+                return res[:n]
+        except (WebError, OSError):
+            pass
     if finished < len(engines):
         raise WebError("the search took too long")
     if len(errors) == len(engines) and all(isinstance(errors[i], WebError) for i in errors):
