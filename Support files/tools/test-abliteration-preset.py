@@ -27,7 +27,8 @@ check(bool(re.fullmatch(p.get("key_re", "x"), "ak_" + "A1b2_-" * 6)) and not re.
       "its keys (ak_…) are recognised when pasted, others' are not")
 check([m["id"] for m in p.get("models", [])][:1] == ["abliterated-model-large-v2"], "the frontier GLM-5.3 model is the default")
 check("billed" in p.get("note", ""), "says it is paid after the free try")
-for q in ("sign in to abliteration", "connect abliteration", "use my abliteration account"):
+for q in ("sign in to abliteration", "connect abliteration", "use my abliteration account",
+          "sign in to Abliteration (uncensored)"):              # the connect panel's button says the name in full
     check(intent.match(q) == ("online_model", {"action": "sign in", "provider": "abliteration"}), f"{q!r} opens its sign-in")
 check(intent.match("sign in to claude")[1]["provider"] == "claude" and intent.match("log in to chatgpt")[1]["provider"] == "chatgpt",
       "Claude and ChatGPT sign-ins unchanged")

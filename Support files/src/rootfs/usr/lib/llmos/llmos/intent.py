@@ -668,7 +668,7 @@ def _models_discover(text):
 
 # connecting an account without typing a key: "sign in to Claude", "log in to ChatGPT", "connect claude"
 _SIGNIN = re.compile(r"^\s*(?:please\s+)?(?:(?:sign|log)\s*(?:in\s+(?:to|with)|into)|connect(?:\s+to)?)\s+(?:my\s+)?"
-                     r"(?P<p>claude|anthropic|chatgpt|chat\s*gpt|openai|abliteration)(?:\s+account)?\s*[.!]?\s*$", re.I)
+                     r"(?P<p>claude|anthropic|chatgpt|chat\s*gpt|openai|abliteration)(?:\s*\([^)]*\))?(?:\s+account)?\s*[.!]?\s*$", re.I)
 _OTHER_ONLINE = re.compile(r"^\s*(?:please\s+)?connect\s+(?:another|a\s+different|some\s+other|an?\s+other)\s+online\s+"
                            r"(?:service|model|account)\s*[.!]?\s*$", re.I)
 
