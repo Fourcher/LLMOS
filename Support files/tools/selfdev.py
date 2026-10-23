@@ -202,12 +202,16 @@ def run_tests():
     out = os.path.join(STAGE, "tests.txt")
     os.makedirs(os.path.join(ROOT, "run", "tmp"), exist_ok=True)
     env = dict(os.environ, TMPDIR=os.path.join(ROOT, "run", "tmp"))
-    subprocess.run(["sh", os.path.join(ROOT, "tools", "run-host-tests.sh")], cwd=ROOT,
+    sh = "bash" if __import__("shutil").which("bash") else "sh"   # run-host-tests.sh needs bash (arrays); ash silently errors
+    subprocess.run([sh, os.path.join(ROOT, "tools", "run-host-tests.sh")], cwd=ROOT,
                    stdout=open(out, "w"), stderr=subprocess.STDOUT, env=env, timeout=1800)
     lines = open(out, encoding="utf-8").read().splitlines()
-    tail = next((l for l in reversed(lines) if "host suites:" in l), lines[-1] if lines else "")
+    summary = next((l for l in reversed(lines) if re.search(r"host suites:\s*\d+\s*run", l)), "")
+    m = re.search(r"host suites:\s*(\d+)\s*run", summary)
+    ran = bool(m) and int(m.group(1)) > 0           # a real summary with tests actually executed
     fails = {l.split()[1] for l in lines if l.startswith("FAIL ")}
-    return tail.strip(), fails
+    tail = summary or (lines[-1] if lines else "(the suite produced no output)")
+    return tail.strip(), fails, ran
 
 
 _BASELINE = None
@@ -219,7 +223,10 @@ def baseline_fails():
     global _BASELINE
     if _BASELINE is None:
         print("[selfdev] measuring the baseline (which tests fail before any change)…", flush=True)
-        _, _BASELINE = run_tests()
+        tail, fails, ran = run_tests()
+        if not ran:
+            raise RuntimeError(f"the test suite could not run here ({tail}) -- refusing to stage anything untested")
+        _BASELINE = fails
         print(f"[selfdev] baseline: {len(_BASELINE)} env-specific failure(s) to ignore: {sorted(_BASELINE) or 'none'}", flush=True)
     return _BASELINE
 
@@ -236,6 +243,11 @@ def _unified(backups, newtext):
 
 def do_task(task):
     os.makedirs(STAGE, exist_ok=True)
+    try:
+        baseline_fails()
+    except RuntimeError as e:
+        print(f"[selfdev] {e}", flush=True)
+        return 2
     note = ""
     for rnd in range(1, MAX_ROUNDS + 1):
         print(f"[selfdev] round {rnd}: asking the model for a change…", flush=True)
@@ -255,19 +267,20 @@ def do_task(task):
         print(f"[selfdev] applied {applied} edit(s) to the live files (put back after the run); running the full test suite "
               f"(this is the seatbelt)…", flush=True)
         try:
-            tail, fails = run_tests()
+            tail, fails, ran = run_tests()
             new_fails = fails - base
             d = _unified(backups, newtext)
         finally:
             restore(backups)                     # the real source is edited ONLY during the run, always put back
-        if not new_fails:
+        if ran and not new_fails:
             open(os.path.join(STAGE, "staged.diff"), "w").write(d)
             json.dump({"task": task, "when": time.strftime("%Y-%m-%d %H:%M:%S"), "tests": tail, "round": rnd,
                        "files": newtext}, open(os.path.join(STAGE, "staged.json"), "w"))
             print(f"\n[selfdev] TESTS PASS ({tail}). The change is staged, NOT shipped. The live source is back as it was.\n"
                   f"[selfdev] A person reviews it:  tools/selfdev.py --show   then  --apply  (or --discard).\n", flush=True)
             return 0
-        note = f"the change broke tests that pass without it: {', '.join(sorted(new_fails))} ({tail})"
+        note = (f"the test suite did not run ({tail})" if not ran
+                else f"the change broke tests that pass without it: {', '.join(sorted(new_fails))} ({tail})")
         print(f"[selfdev] {note}", flush=True)
     print("[selfdev] gave up after %d rounds without a change that passes the tests." % MAX_ROUNDS, flush=True)
     return 1

@@ -59,10 +59,14 @@ do_task_src = ast.get_source_segment(src, funcs["do_task"])
 check("ota" not in do_task_src and "publish" not in do_task_src, "do_task never ships (no OTA / publish in it)")
 check("finally:" in do_task_src and "restore(backups)" in do_task_src,
       "do_task always restores the live source after the run (edited only transiently)")
-check("if not new_fails:" in do_task_src and 'json.dump' in do_task_src and "baseline_fails()" in do_task_src,
-      "a change is staged only when it adds no NEW failures beyond the clean-tree baseline")
+check("if ran and not new_fails:" in do_task_src and 'json.dump' in do_task_src,
+      "a change is staged only when the suite actually RAN and adds no new failures beyond baseline")
 rt = ast.get_source_segment(src, funcs["run_tests"])
 check('l.startswith("FAIL ")' in rt, "run_tests reports exactly which test files FAILED (for the baseline comparison)")
+check('host suites:' in rt and 'ran = ' in rt, "run_tests detects whether the suite ACTUALLY ran (a real N-run summary), not just absence of FAIL lines")
+check('"bash"' in rt, "the suite is run with bash (its arrays break under busybox ash -> a silent no-run)")
+bf = ast.get_source_segment(src, funcs["baseline_fails"])
+check("if not ran:" in bf and "raise RuntimeError" in bf, "if the suite can't run at all, the loop refuses to stage anything untested")
 check("def apply_staged" in src and 'json.load(open(sj)).get("files"' in ast.get_source_segment(src, funcs["apply_staged"]),
       "writing the tested change to the real source is a separate, explicit step")
 check("Never weaken a safety check" in src, "the model is told never to weaken a safeguard")
