@@ -75,7 +75,10 @@ _BLOCK = re.compile(r"===\s*FILE:\s*(?P<path>\S+)\s*\n<<<<<<<\s*SEARCH\s*\n(?P<s
 
 def gather_context(task, limit=6000):
     """The files most likely relevant to the task: ranked by how many of the task's words they contain."""
-    words = {w for w in re.findall(r"[a-z_]{4,}", task.lower())}
+    import math
+    _STOP = {"the", "that", "this", "with", "from", "into", "when", "what", "which", "your", "make", "code", "file",
+             "setting", "please", "want", "need", "should", "would", "llmos", "model"}
+    words = {w for w in re.findall(r"[a-z_]{4,}", task.lower()) if w not in _STOP}
     scored = []
     for name in sorted(os.listdir(PKG)):
         if not name.endswith(".py"):
@@ -84,9 +87,13 @@ def gather_context(task, limit=6000):
             text = open(os.path.join(PKG, name), encoding="utf-8").read()
         except OSError:
             continue
-        score = sum(text.lower().count(w) for w in words)
+        low = text.lower()
+        # density, not raw count: how much this file is ABOUT the task words (so a big file isn't picked just for size),
+        # plus a strong bonus for a word in the file's own name
+        score = sum(low.count(w) for w in words) / math.sqrt(max(len(text), 1))
+        score += 3 * sum(1 for w in words if w in name.lower())
         scored.append((score, name, text))
-    scored.sort(reverse=True)
+    scored.sort(key=lambda t: t[0], reverse=True)
     out, used = [], 0
     for score, name, text in scored[:3]:
         if score == 0:
