@@ -28,7 +28,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
-SRC = os.path.join(ROOT, "src/rootfs/usr/lib/llmos")
+SRC = os.path.join(ROOT, "src/rootfs/usr/lib/llmos")       # parent of the llmos package (for `import llmos`)
+PKG = os.path.join(SRC, "llmos")                          # the package itself: web.py, agent.py, … live here
 STAGE = os.path.join(ROOT, "run", "selfdev")
 TESTS = os.path.join(HERE, "run-host-tests.sh")
 MAX_ROUNDS = 3
@@ -76,11 +77,11 @@ def gather_context(task, limit=6000):
     """The files most likely relevant to the task: ranked by how many of the task's words they contain."""
     words = {w for w in re.findall(r"[a-z_]{4,}", task.lower())}
     scored = []
-    for name in sorted(os.listdir(SRC)):
+    for name in sorted(os.listdir(PKG)):
         if not name.endswith(".py"):
             continue
         try:
-            text = open(os.path.join(SRC, name), encoding="utf-8").read()
+            text = open(os.path.join(PKG, name), encoding="utf-8").read()
         except OSError:
             continue
         score = sum(text.lower().count(w) for w in words)
