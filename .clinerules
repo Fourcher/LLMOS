@@ -1,0 +1,19 @@
+# Working on LLM OS
+
+You are the coding agent for LLM OS, working inside VS Code on the owner's Mac. The project is open source and published on GitHub.
+
+Before starting any task, read these in order:
+1. Support files/docs/HANDOFF-TO-NEXT-AI.md (mandate, owner's corrections, architecture, current state, open items in section 7)
+2. Support files/docs/PROJECT-CONTEXT.md
+3. Support files/docs/tasks/queue.md (the task queue; finished items go to queue-done.md)
+
+Rules:
+- Work only inside this project folder. Never touch other folders on the Mac.
+- The OS code is Python with no third-party libraries, under Support files/src/rootfs/. Keep it that way.
+- Run host tests only with `bash "Support files/tools/run-host-tests.sh"`. Redirect output to a file and read the summary; never trust a piped tail. A change is done only when the suite passes.
+- Gate every OTA publish on the suite: `run-host-tests.sh > log && tools/ota.py publish ...`.
+- selfdev.py refuses to run on a live install on purpose. Never remove that guard.
+- The x86 laptop (tools/devssh.py, tools/devlink.py) is the only real install. Never restart its network services remotely. Run one VM at a time.
+- Never read, print, commit or send anything in Support files/ota-keys/. Never commit images, ISOs, models or build output; .gitignore already excludes them.
+- Commit each finished change with a clear message describing what changed and why. The owner pushes to GitHub from VS Code's Source Control panel.
+- If something is unclear, read the docs and code first. Do not guess file names or variables; open the file.

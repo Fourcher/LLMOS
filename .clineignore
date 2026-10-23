@@ -1,0 +1,16 @@
+# Large binaries and private material the agent should never read or send to a model
+Support files/ota-keys/
+Support files/build/
+Support files/run/
+Support files/delivered/
+Support files/models/
+Support files/dist/*.qcow2
+Support files/dist/*.iso
+Support files/dist/models/
+packages/
+*.gguf
+*.qcow2
+*.iso
+*.bin
+*.fd
+.claude/worktrees/
