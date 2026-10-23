@@ -95,16 +95,47 @@ def gather_context(task, limit=3000):
         score += 3 * sum(1 for w in words if w in name.lower())
         scored.append((score, name, text))
     scored.sort(key=lambda t: t[0], reverse=True)
+    # a file the task NAMES ("in web.py", a path) is the strongest signal -- always include it first
+    named = [n for n in re.findall(r"([a-z0-9_]+\.py)", task.lower())]
+    order = [t for t in scored if t[1] in named] + [t for t in scored if t[1] not in named]
     out, used = [], 0
-    for score, name, text in scored[:2]:
-        if score == 0:
+    for score, name, text in order[:2]:
+        if score == 0 and name not in named:
             break
-        excerpt = text[:limit]
-        out.append(f"--- src/rootfs/usr/lib/llmos/llmos/{name} (first {len(excerpt)} chars) ---\n{excerpt}")
-        used += len(excerpt)
+        rel = f"src/rootfs/usr/lib/llmos/llmos/{name}"
+        snip = _snippets(text, words, limit)
+        out.append(f"--- {rel} ---\n{snip}")
+        used += len(snip)
         if used >= limit * 2:         # ~2 files max; a big prompt makes the free endpoint truncate its reply
             break
     return "\n\n".join(out) or "(no obviously related file found; ask for the path)"
+
+
+def _snippets(text, words, limit, pad=5):
+    """The parts of a file ACTUALLY about the task words -- the lines that mention them, with a few lines around each,
+    merged -- so the model is shown (and must copy) the real code, not just the file's start. Falls back to the head."""
+    lines = text.splitlines()
+    low = [l.lower() for l in lines]
+    hits = [i for i, l in enumerate(low) if any(w in l for w in words)]
+    if not hits:
+        return text[:limit]
+    ranges, start, prev = [], hits[0], hits[0]
+    for i in hits[1:]:
+        if i - prev <= pad * 2:
+            prev = i
+        else:
+            ranges.append((start, prev))
+            start = prev = i
+    ranges.append((start, prev))
+    parts, used = [], 0
+    for a, b in ranges:
+        a, b = max(0, a - pad), min(len(lines), b + pad + 1)
+        chunk = "\n".join(lines[a:b])        # raw lines, no line-number prefix, so SEARCH text copied from here matches the file
+        if used + len(chunk) > limit * 2:
+            break
+        parts.append(chunk)
+        used += len(chunk)
+    return "\n   …\n".join(parts)
 
 
 def propose(task, note=""):
