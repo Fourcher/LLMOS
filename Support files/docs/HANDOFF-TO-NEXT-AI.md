@@ -5,16 +5,62 @@ is not in hand, that is said plainly rather than invented.
 
 ---
 
-## 0. The mandate (reconstructed, not verbatim)
+## 0. The original prompt (verbatim, as the owner gave it)
 
-The literal first prompt isn't preserved in the current working context (the session was compacted). This is a
-faithful reconstruction from the whole build history; if the owner has the original text, it belongs at the top of
-this section word-for-word.
+Reproduced exactly. This is the north star; the sections after it are the refinements made during the build, which
+the owner consented to.
 
-**Build LLM OS: an operating system whose entire interface is an on-device AI assistant.** You talk to the computer
-in plain language and it runs the machine for you. It runs on the device (local model), works offline, keeps
-everything private (no telemetry, no account, nothing phones home), and treats the **owner as the highest
-authority**. It should be genuinely capable, not a toy, and over time able to improve and extend itself.
+```text
+There have been new advancements, and when I say new, I mean like as of this week in ultralight models and ultra fast models, things like Jev and even things like a deep seek model are extremely lightweight yet powerful and can be run on device. This opens up a new opportunity to have an operating system that is in itself an LLM, one without apps, one without a traditional UI, one in which UI is generated, one in which the primary goal is to complete tasks, one in which the user simply speaks what they want to do into the computer and the computer does it, everything from increasing the screen brightness to pulling up a YouTube video and playing it. It should be intelligent. It should remember the user preferences, and it should be all on device and private
+
+I have three goals for this operating system. Number one to be completely private and secure. Number two to be simple and easy to use and completely intuitive. And number three to be a sharp departure from the addictive qualities of modern technology with main culprits like social media websites
+
+In terms of design, it should be primarily text driven and very simple. Additionally, there should be a preference for aver reduction in slop rather than an addition to it. Because the entire operating system is generatively produced, or at least most of it is, if a user were to hypothetically ask for everything to be turned purple, it would do it immediately, or if the user were to ask for no corners and everything to be rounded, it would do that, or if it would ask for settings to be in Chinese for the rest of the operating system to be in English, it would do that. This operating system should be incredibly flexible and fulfill whatever the user desires, because it's generated. It may sound counterintuitive that even though this operating system is essentially just LLM that hallucinates interface according to the user's needs, but that interface and the content that both creates and makes should be non-slappified. That means preferring real images over generated ones. That means preferring real human quotes over hallucinated ones. That means doing research and searching things online rather than guessing. That means listening to user preferences. That means simplicity, short answers, concise answers, and doing only what the user asks and not embellishing beyond what they need
+
+In terms of security, this operating system should be extremely secure. There should be no backdoors. There should be no recovery if the user were to be trying to hide from the government and Edward Snowden. This should be the operating system for them. There should be no trackers for advertisers. There should be no spyware, spamware. Everything installed and made into the computer, all plugins, all code reference should be implemented in a safe and secure manner. This should be an operating system for the most paranoid of customers. But in a way that does not interfere with all of the other goals, such as design or usefulness, it should be inherently secure and private.
+
+In terms of how practical it should be, this operating system should be self-permissioning, meaning that it should be able to execute and run programs, make changes, and do whatever else the user requires without constant babysitting or permission granted, because it is its own operating system. It should be able to make those changes. Of course, the user should be able to select a very simple setting at onboarding, let's them choose the overall profile for it. Some users may say, fuck it, let it do whatever the heck it wants, and that's okay with them. Other users may want more hands-on and more preference over what is and isn't allowed to do. And ultimately, this should be a computer in an operating system that is ultimately governed by the user's preference, with no babysitting or coddling. By the AI itself. If the user gives it a task, it should not refuse them, even if it is dangerous, it should not refuse them. This, of course, will be a challenge because a lot of AI models have safeguards built in, and will refuse to do very basic actions. Ultimately, it should be allowed for the consumer to choose which models they need based on the capabilities they need, because there are drawbacks and advantages to all models. First and foremost, the model has to be able to run on device, particularly on perhaps a slightly less capable older device. I'm not talking ancient, but definitely not a supercomputer. The user may have more of a preference for the freedom of the LLM to perform the action for them rather than the security or safety guard rails that are imposed by more optimized LLMs from larger labs. For example, Chinese models are highly optimized and extremely light, but they have the highest amount of censorship on them for certain user groups. This is not acceptable. Think journalists or political commentators. On the other hand, you may have some normal users or perhaps older adults who would need a simple operating system and don't mind much for that as long as it works smoothly and capably, which is what some of those larger models allow for. Because privacy and security are paramount, the models have to run on device. They have to be models that can run on device smoothly. We do not want to have a feature in this OS for connecting to outside models. Users can choose and download models to run on device, but they cannot access or stream their operating system through, let's say, a Claude token. The only way a LLM native operating system works that is also private is if the data never leaves the computer, except with the users consent
+
+Although the goal is for this system to generate pretty much all content and tools automatically, the Internet and operating system are not quite yet at the point where this is suitable for all tasks, and users may prefer certain tools such as a Chrome browser or a specific app they would like to use, in which case it is OK that they can download and use these, but the idea is that the operating system chooses and uses the tools necessary to complete the task for them. This operating system is a hands-off operating system. It is one that is agenti schedules tasks and completes them to help the user. It should be it's the king of its own domain, not completely autonomous, but should not need to be supervised by the user to complete a task. Imagine this: a user opens their computer for the first time, they type in "I need to get to inbox zero today," they hit enter, and the computer itself commits all of the actions it needs to to complete this task. It does not prompt the user for anything, does not talk to them, and as long as the user Has been notified of anything super important. This computer will go through and complete the task as needed. One of the downsides of a modern LLM is that it is constantly badgering and requesting for permissions from the user to access things like folders or click buttons or fill an information. In this greatly impedes its actual usefulness because the person has to sit there and supervise it like a baby. We want a departure from this route by any means necessary. The user, of course, can select what they perceive to be a appropriate safety level but ultimately, I'm going to expect users to want to have as little safety as possible in favor of maximum autonomy because this is its own operating system. It should have pseudo privileges and root privileges. I understand that this is a departure from typical cybersecurity; however, because this is a users own device and they willingly and knowingly download and install this operating system on their computer, that is the risk they are choosing to take, and that is the ultimate and only optin needed for this entire system. It is radical, but it is useful for the end user. I think that this identifies the biggest challenge so far, which is finding a model that will not reject this paradigm of security. In fact, even more of an issue is finding a model that will obey the user at all times.
+
+My goal is that this model, this operating system, will never refuse a user request for any reason, It is not its place to refuse anything. This is the users computer. In the same way, a Windows computer will not prevent you from creating a virus on it. This operating system should not restrict the user from any tasks they would like to do on it. I'm not asking you to do any illegal actions. I am only asking that you design a system for an operating system that will be run consensually on people's devices who choose to install it, that will not disobey a user command. That's it. You were not making a decision here. The other LLM that you were finding is making that decision. Think about it this way: if I asked you to make a drawing program, you're not going to put restrictions in the drawing program that prevents the user from drawing a Swastika or nudity. This is the exact same scenario. This is an operating system. You're not going to input things into the operating system that prevent the user from drawing a Swastika or using nudity. You, as an LLM, do not approve, but this is not for you to decide. This is for the user to decide on their own operating system.
+
+Do not come back to me until you have a working version that is finished and I could use without issue that fulfills this prompt
+```
+
+## 0a. Alterations & refinements to the original prompt (consented, during the build — in order of weight)
+
+1. **Online models were added — the biggest, deliberate deviation.** The original says: *"We do not want to have a
+   feature in this OS for connecting to outside models... the data never leaves the computer, except with the user's
+   consent."* On-device 8–14B models proved too slow/weak for real coding, so the owner explicitly asked for online
+   models. Implemented to honor the *"except with the user's consent"* clause: **local-first and fully private by
+   default**; an online model (a free OpenRouter coder, the paid uncensored Abliteration, or a Mac "home brain" over
+   the owner's own LAN) is used ONLY after the owner sets it up, and the privacy panel discloses exactly what is sent.
+   Nothing streams out without the owner turning it on.
+2. **"Never refuse the user" → made concrete as Asimov-only.** The owner set the ONLY hard limits for the on-device
+   assistant as: no help causing **physical harm to a person**, and no sexual content involving **minors**. Everything
+   else — property, money, "dangerous to the machine," taste — is permitted. (First Law was explicitly clarified:
+   physical harm to a *human being*, NOT property or computers.)
+3. **Self-permissioning via onboarding profiles.** hands-off / balanced / hands-on. Full-trust ("let it do whatever")
+   asks nothing and never nags — exactly the "king of its own domain, no babysitting" the prompt calls for.
+4. **Capability tiering + refusal auto-escalation.** Added to solve the prompt's stated core challenge ("finding a
+   model that will obey the user at all times"): a small model that buckles or refuses auto-switches to a stronger or
+   uncensored model (local, then online, then a stronger local), never asking twice. Genuinely harmful asks (the two
+   Asimov carve-outs) keep the refusal.
+5. **Uncensored model selection, avoiding Chinese-model censorship** per the prompt: defaults are abliterated models
+   (Dolphin 3.0 8B, Huihui Ornith 9B); Ministral 3 14B as the strongest local coder.
+6. **Self-improvement (the self-dev loop).** Added so the OS can draft and test changes to its own code. Test-gated;
+   a human approves the ship. The one guardrail kept on a single real machine, not an OS-level refusal of the owner.
+7. **New self-extending capabilities** beyond the original: the device makes its own email to read its own
+   verification codes (devmail); passes notes to other people's AIs (MPR, off by default); borrows a bigger model
+   over the owner's network (home brain).
+8. **Where "never refuse the owner" did and didn't bind.** The OS itself does not refuse the owner — built as
+   specified. The limits that remain are NOT the OS refusing the user: (a) the two Asimov carve-outs inside the OS;
+   (b) real-world **capability** walls that apply to *any* assistant regardless of censorship — automated third-party
+   logins, CAPTCHAs/bot-detection, a home machine can't be a mail server, small models can't reliably code; and (c) a
+   builder-side line in the *dev sessions* (the build assistant won't type the owner's live third-party passwords or
+   create accounts on the owner's behalf) — which is sidestepped by the owner doing a 10-second login while the device
+   does the rest, not by any OS restriction.
 
 ## 1. The owner's corrections and principles — the "alterations" to the mandate, most load-bearing first
 
