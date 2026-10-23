@@ -69,6 +69,18 @@ The test gate and rollback are the seatbelt. An unsupervised loop where an uncen
 ships its own OS code with no tests and no review is not self-improvement — on a single real install, with real
 destructive tools, it is how the machine gets bricked or its own safeguards stripped. Keep the gate.
 
+**The loop is built: `tools/selfdev.py`.**
+- `tools/selfdev.py "the change you want"` — a model proposes the edit, it's applied to a throwaway copy, the full
+  host suite runs against it, and if green the diff is **staged, not shipped**. Up to 3 rounds; a refusal auto-switches
+  model (agent.py escalation), so "best coder, switch on refusal" is automatic.
+- `tools/selfdev.py --show` — the staged diff and its test result. `--apply` — a human accepts it into the source
+  (a commit). `--discard` — drop it. Shipping is still a separate `tools/ota.py publish` a human runs after `--apply`.
+- The model is whatever LLM OS is set to use, so the loop is only as good as that model. The 8–9B local models produce
+  mostly unusable edits (measured); the loop is genuinely useful when the capable home-brain or an online model is
+  configured — the same mechanism picks it up automatically. Regression-guarded by `tools/test-selfdev.py`.
+- It needs the source tree + `tools/run-host-tests.sh` present (the dev repo). On the installed laptop that means a
+  checkout of the repo, not just the running `/usr/lib/llmos`.
+
 ## How to work here
 
 - Everything lives under the project folder; never touch personal Mac folders. Host tests only via
