@@ -146,9 +146,12 @@ These are the course-corrections the owner gave repeatedly. Treat them as bindin
   change what Google blocks.)
 - **The 8–14B local models can't reliably edit code** (measured: Huihui 9B ~3 min/turn, small coders fabricate and
   leak tool-call syntax). Route real code edits to a capable model (home brain or online).
-- **Running the full OS test suite ON the laptop is too heavy** — it froze the 16 GB machine during a self-dev run.
-  A self-dev loop is naturally a dev-machine job that ships results to the laptop via OTA; if it must run on the
-  laptop, give it a *lighter* gate (only tests touching the changed modules + a core subset), not the full 212.
+- **The host test suite is DESTRUCTIVE on a live install — never run it there.** Several tests reconfigure the real
+  machine: `test-firewall.py` / `test-rootd-firewall.py` apply the real firewall (one applies internet=off), and
+  `test-rootd-power.py` stops/restarts real services. Running the full suite on the live laptop once rebuilt its
+  firewall WITHOUT the dev-SSH rule and knocked out remote SSH (the machine was fine — 4 days uptime — but
+  unreachable until the firewall was reapplied via the devlink/OTA channel). `selfdev.py` now REFUSES to run on a
+  live install (`_is_live_install`). The gate belongs on a dev checkout or a VM; ship the result to the laptop via OTA.
 - **The agent's tools are real.** They delete files and touch the network. Test risky prompts only inside a VM, never
   the one real install.
 
@@ -166,8 +169,8 @@ These are the course-corrections the owner gave repeatedly. Treat them as bindin
 
 - Bring the laptop back online (it froze during a full-suite self-dev run) and confirm it's healthy — the installed
   OS was not modified (self-dev ran in a separate `/root/llmos-dev` checkout).
-- Give `selfdev.py` a lighter gate so it can run on the laptop without exhausting it.
-- Decide where self-dev lives long-term: dev machine → OTA to laptop (recommended) vs. on the laptop (slow).
+- Self-dev must run on a dev checkout or VM (its test gate reconfigures the real firewall + services), then ship to
+  the laptop via OTA. `selfdev.py` now refuses to run on a live install. Do NOT "fix" that by removing the guard.
 - Optional model follow-ups the owner raised: benchmark a local coder vs the online one; a durable (non-disposable)
   device email via a domain the owner owns.
 

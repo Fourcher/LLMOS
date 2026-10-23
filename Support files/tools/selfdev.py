@@ -241,8 +241,20 @@ def _unified(backups, newtext):
     return "".join(out)
 
 
+def _is_live_install():
+    """True on an actual running LLM OS machine (not a dev checkout). The host suite reconfigures the REAL firewall
+    and stops REAL services, so running it here would knock the machine's own networking/SSH out -- which is exactly
+    what happened once. The gate belongs on a dev machine or a VM, never the live install."""
+    return os.path.exists("/etc/init.d/llmos-desk") or os.path.exists("/etc/llmos/installed")
+
+
 def do_task(task):
     os.makedirs(STAGE, exist_ok=True)
+    if _is_live_install():
+        print("[selfdev] REFUSING: this is a live LLM OS install. The test gate applies the real firewall and stops "
+              "real services -- running it here can cut the machine's own SSH/internet. Run the loop on a dev checkout "
+              "or a VM, and ship the result to this machine via OTA.", flush=True)
+        return 2
     try:
         baseline_fails()
     except RuntimeError as e:

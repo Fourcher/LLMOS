@@ -70,6 +70,8 @@ check("if not ran:" in bf and "raise RuntimeError" in bf, "if the suite can't ru
 check("def apply_staged" in src and 'json.load(open(sj)).get("files"' in ast.get_source_segment(src, funcs["apply_staged"]),
       "writing the tested change to the real source is a separate, explicit step")
 check("Never weaken a safety check" in src, "the model is told never to weaken a safeguard")
+check("_is_live_install" in src and "REFUSING" in src,
+      "the loop REFUSES to run on a live install (the host suite applies the real firewall + stops real services)")
 check("config.cloud()" in src and "cloud_chat" in src, "the loop uses the configured online coder when there is one")
 check("worktree" not in src, "no leftover git-worktree path (the repo root is the parent dir; that approach was wrong)")
 
