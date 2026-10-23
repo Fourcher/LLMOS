@@ -78,8 +78,14 @@ destructive tools, it is how the machine gets bricked or its own safeguards stri
 - The model is whatever LLM OS is set to use, so the loop is only as good as that model. The 8–9B local models produce
   mostly unusable edits (measured); the loop is genuinely useful when the capable home-brain or an online model is
   configured — the same mechanism picks it up automatically. Regression-guarded by `tools/test-selfdev.py`.
-- It needs the source tree + `tools/run-host-tests.sh` present (the dev repo). On the installed laptop that means a
-  checkout of the repo, not just the running `/usr/lib/llmos`.
+- It needs the source tree + `tools/run-host-tests.sh` present (the dev repo). **It is deployed on the laptop** at
+  `/root/llmos-dev` (a git checkout of the source, 97 MB). Run it there:
+  `cd "/root/llmos-dev/Support files" && python3 tools/selfdev.py "the change you want"`. It uses the laptop's
+  configured online coder (Nemotron via OpenRouter) automatically.
+- The gate judges a change by the test failures it ADDS beyond a clean-tree baseline, so the ~handful of tests that
+  need `git` or a UI venv (absent on the laptop) don't block it. The full suite is slow on the laptop (minutes per
+  run, and the gate runs it at least twice), so a self-dev task there takes a while — that's the hardware, not a bug.
+  A dev loop is naturally happier on a fast dev machine that ships results to the laptop via OTA.
 
 ## How to work here
 
