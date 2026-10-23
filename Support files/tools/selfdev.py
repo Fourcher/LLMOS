@@ -57,23 +57,24 @@ def _chat(messages, **kw):
     return llm.chat(messages, **kw)
 
 
-EDIT_FORMAT = """Return ONLY changes, in this exact format, nothing else:
+EDIT_FORMAT = """Return ONLY changes, in this EXACT format. No markdown, no ```, no +/- diff lines, no explanation.
+Copy this layout literally:
 
-=== FILE: relative/path/from/repo/root.py
+=== FILE: src/rootfs/usr/lib/llmos/llmos/web.py
 <<<<<<< SEARCH
-(the exact lines to find, copied verbatim)
+_TIMEOUT = 10
 =======
-(the lines to replace them with)
+_TIMEOUT = 20
 >>>>>>> REPLACE
 
-Repeat the FILE/SEARCH/REPLACE block for each change. The SEARCH text must match the file exactly, including
-indentation. Keep each change small. Do not explain. Do not output anything outside the blocks."""
+Rules: the path is relative to the repo root. The SEARCH text is copied VERBATIM from the file shown to you, exact
+whitespace, enough lines to be unique. One block per change; repeat the whole block for more. Nothing outside blocks."""
 
 _BLOCK = re.compile(r"===\s*FILE:\s*(?P<path>\S+)\s*\n<<<<<<<\s*SEARCH\s*\n(?P<search>.*?)\n=======\s*\n"
                     r"(?P<replace>.*?)\n>>>>>>>\s*REPLACE", re.S)
 
 
-def gather_context(task, limit=6000):
+def gather_context(task, limit=3000):
     """The files most likely relevant to the task: ranked by how many of the task's words they contain."""
     import math
     _STOP = {"the", "that", "this", "with", "from", "into", "when", "what", "which", "your", "make", "code", "file",
@@ -95,13 +96,13 @@ def gather_context(task, limit=6000):
         scored.append((score, name, text))
     scored.sort(key=lambda t: t[0], reverse=True)
     out, used = [], 0
-    for score, name, text in scored[:3]:
+    for score, name, text in scored[:2]:
         if score == 0:
             break
         excerpt = text[:limit]
-        out.append(f"=== src/rootfs/usr/lib/llmos/llmos/{name} (first {len(excerpt)} chars) ===\n{excerpt}")
+        out.append(f"--- src/rootfs/usr/lib/llmos/llmos/{name} (first {len(excerpt)} chars) ---\n{excerpt}")
         used += len(excerpt)
-        if used > limit * 2:
+        if used >= limit * 2:         # ~2 files max; a big prompt makes the free endpoint truncate its reply
             break
     return "\n\n".join(out) or "(no obviously related file found; ask for the path)"
 
@@ -116,11 +117,12 @@ def propose(task, note=""):
     if note:
         user += f"\nThe last attempt did not work: {note}\n"
     user += f"\nRELEVANT FILES:\n{ctx}"
-    r = _chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}], max_tokens=2000, temperature=0.2)
+    r = _chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}], max_tokens=1200, temperature=0.1)
     return (r.get("content") or "").strip()
 
 
 def parse_edits(text):
+    text = text.replace("```", "")        # the model sometimes fences the blocks; the markers below are what matter
     edits = []
     for m in _BLOCK.finditer(text):
         edits.append({"path": m.group("path").strip(), "search": m.group("search"), "replace": m.group("replace")})
