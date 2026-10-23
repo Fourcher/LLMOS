@@ -84,7 +84,7 @@ def gather_context(task, limit=6000):
         if not name.endswith(".py"):
             continue
         try:
-            text = open(os.path.join(PKG, name), encoding="utf-8").read()
+            text = open(os.path.join(PKG, name), encoding="utf-8", errors="replace").read()
         except OSError:
             continue
         low = text.lower()
