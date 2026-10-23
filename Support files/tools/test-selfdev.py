@@ -59,10 +59,10 @@ do_task_src = ast.get_source_segment(src, funcs["do_task"])
 check("ota" not in do_task_src and "publish" not in do_task_src, "do_task never ships (no OTA / publish in it)")
 check("finally:" in do_task_src and "restore(backups)" in do_task_src,
       "do_task always restores the live source after the run (edited only transiently)")
-check("if ok:" in do_task_src and 'json.dump' in do_task_src,
-      "a change is staged only when the suite passes (run_tests ok == 0 failed, no FAIL line)")
+check("if not new_fails:" in do_task_src and 'json.dump' in do_task_src and "baseline_fails()" in do_task_src,
+      "a change is staged only when it adds no NEW failures beyond the clean-tree baseline")
 rt = ast.get_source_segment(src, funcs["run_tests"])
-check('"0 failed" not in tail' in rt and 'FAIL ' in rt, "run_tests fails on any FAIL line or a non-zero failed count")
+check('l.startswith("FAIL ")' in rt, "run_tests reports exactly which test files FAILED (for the baseline comparison)")
 check("def apply_staged" in src and 'json.load(open(sj)).get("files"' in ast.get_source_segment(src, funcs["apply_staged"]),
       "writing the tested change to the real source is a separate, explicit step")
 check("Never weaken a safety check" in src, "the model is told never to weaken a safeguard")

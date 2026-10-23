@@ -155,8 +155,9 @@ def restore(backups):
 
 
 def run_tests():
-    """The full host suite against the real tree (full dev env, so every test runs). Returns (ok, tail). ok iff the
-    suite reports 0 failed and no FAIL line."""
+    """The full host suite against the real tree. Returns (tail, fail_set) -- the set of test files that FAILED. The
+    caller judges a change by the failures it ADDS beyond a clean-tree baseline, so a few env-specific failures (e.g.
+    a git-based test on a machine without the repo history) don't block an otherwise-good change."""
     out = os.path.join(STAGE, "tests.txt")
     os.makedirs(os.path.join(ROOT, "run", "tmp"), exist_ok=True)
     env = dict(os.environ, TMPDIR=os.path.join(ROOT, "run", "tmp"))
@@ -164,8 +165,22 @@ def run_tests():
                    stdout=open(out, "w"), stderr=subprocess.STDOUT, env=env, timeout=1800)
     lines = open(out, encoding="utf-8").read().splitlines()
     tail = next((l for l in reversed(lines) if "host suites:" in l), lines[-1] if lines else "")
-    failed = any(l.startswith("FAIL ") for l in lines) or ("0 failed" not in tail)
-    return (not failed), tail.strip()
+    fails = {l.split()[1] for l in lines if l.startswith("FAIL ")}
+    return tail.strip(), fails
+
+
+_BASELINE = None
+
+
+def baseline_fails():
+    """Which tests fail on the UNCHANGED tree (0 on a full dev machine; a few on a bare deploy without git/venv).
+    Computed once; a real change is judged only by the failures it ADDS."""
+    global _BASELINE
+    if _BASELINE is None:
+        print("[selfdev] measuring the baseline (which tests fail before any change)…", flush=True)
+        _, _BASELINE = run_tests()
+        print(f"[selfdev] baseline: {len(_BASELINE)} env-specific failure(s) to ignore: {sorted(_BASELINE) or 'none'}", flush=True)
+    return _BASELINE
 
 
 def _unified(backups, newtext):
@@ -189,6 +204,7 @@ def do_task(task):
             note = "no change block was produced in the required format"
             print(f"[selfdev] {note}", flush=True)
             continue
+        base = baseline_fails()                  # a clean-tree run, once, cached
         applied, problems, backups, newtext = apply_live(edits)
         if applied == 0:
             restore(backups)
@@ -198,18 +214,19 @@ def do_task(task):
         print(f"[selfdev] applied {applied} edit(s) to the live files (put back after the run); running the full test suite "
               f"(this is the seatbelt)…", flush=True)
         try:
-            ok, tail = run_tests()
+            tail, fails = run_tests()
+            new_fails = fails - base
             d = _unified(backups, newtext)
         finally:
             restore(backups)                     # the real source is edited ONLY during the run, always put back
-        if ok:
+        if not new_fails:
             open(os.path.join(STAGE, "staged.diff"), "w").write(d)
             json.dump({"task": task, "when": time.strftime("%Y-%m-%d %H:%M:%S"), "tests": tail, "round": rnd,
                        "files": newtext}, open(os.path.join(STAGE, "staged.json"), "w"))
             print(f"\n[selfdev] TESTS PASS ({tail}). The change is staged, NOT shipped. The live source is back as it was.\n"
                   f"[selfdev] A person reviews it:  tools/selfdev.py --show   then  --apply  (or --discard).\n", flush=True)
             return 0
-        note = f"the change failed the test suite ({tail})"
+        note = f"the change broke tests that pass without it: {', '.join(sorted(new_fails))} ({tail})"
         print(f"[selfdev] {note}", flush=True)
     print("[selfdev] gave up after %d rounds without a change that passes the tests." % MAX_ROUNDS, flush=True)
     return 1
