@@ -71,8 +71,8 @@ LOW_MEM_KIB = 2 * 1024 * 1024
 #   test-guard-risk.py   turning off the web/email/file check is still a security change that asks first
 #   test-ask-gate.py     an action the owner did not ask for still asks (and is still refused when unattended)
 #   test-config-etc.py   settings are still written to the OS config directory, or through the root helper
-# test-intent.py is not in here: it is selected on its own when intent.py changes, and a file that already fails
-# cannot catch a further break (the gate compares files, not cases).
+# test-intent.py is not in here: a change to intent.py already selects it (about 39 tests), so the core stays
+# the safeguard cross-check rather than the whole router table.
 CORE_TESTS = (
     "tools/test-selfdev.py",
     "tools/test-risk.py",
