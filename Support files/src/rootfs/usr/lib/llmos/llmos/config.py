@@ -367,6 +367,9 @@ class Settings:
         node[parts[-1]] = value
         _write_etc("settings.json", json.dumps(cur, ensure_ascii=False, indent=1))
         _good_settings = copy.deepcopy(cur)
+        # "yes" and "ask" are the same length, and so are "balanced" and "hands-on". On a filesystem whose
+        # mtime does not move for that write, all() would keep serving the previous value.
+        Settings._cache = (None, None)
 
 
 settings = Settings()

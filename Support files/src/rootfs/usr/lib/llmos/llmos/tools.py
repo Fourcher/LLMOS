@@ -418,57 +418,115 @@ STR = {"type": "string"}
 
 # ------------------------------------------------------------ system
 
+_RISK_RANK = {READ: 0, CHANGE: 1, DESTRUCTIVE: 2, SECURITY: 3}
+
+
+def _listed_commands(a):
+    """The shell lines to run: an explicit list (capped), else the single command."""
+    raw = a.get("commands") if isinstance(a, dict) else None
+    if isinstance(raw, list):
+        cmds = [str(c).strip() for c in raw if str(c).strip()]
+        if cmds:
+            return cmds[:8]
+    cmd = str((a or {}).get("command", "")).strip() if isinstance(a, dict) else ""
+    return [cmd] if cmd else []
+
+
+def _commands_risk(a):
+    cmds = _listed_commands(a)
+    if not cmds:
+        return READ
+    best = READ
+    for c in cmds:
+        r = classify_command(c)
+        if _RISK_RANK.get(r, 0) >= _RISK_RANK.get(best, 0):
+            best = r
+    return best
+
+
+def _commands_network(a):
+    return any(uses_network(c) for c in _listed_commands(a))
+
+
 @tool("run_command",
       "Run a shell command as root (Alpine Linux: busybox, no systemd) and return its output. Services: "
       "rc-service NAME start|stop|restart|status; at boot: rc-update add|del NAME. Packages: apk add|del|search. "
-      "interactive=true hands the screen to a program the user wants to use (editor, htop, game).",
+      "interactive=true hands the screen to a program the user wants to use (editor, htop, game). "
+      "Pass the command exactly as given. A command that prints a link and keeps running is left running, and its "
+      "output (including the link) is returned. commands, when given, is a list of commands to run in that order.",
       {"command": {"type": "string"},
+       "commands": {"type": "array", "items": {"type": "string"}, "description": "commands to run in order"},
        "interactive": {"type": "boolean"}},
-      ["command"], risk=lambda a: classify_command(a.get("command", "")),
-      network=lambda a: uses_network(a.get("command", "")))
+      ["command"], risk=_commands_risk, network=_commands_network)
 def run_command(a, ctx):
-    cmd = str(a.get("command", "")).strip()
-    if not cmd:
+    cmds = _listed_commands(a)
+    if not cmds:
         return "error: empty command"
     # a text-mode browser in a terminal is never what a person wants to look at when the real browser is there
-    m = re.match(r"^\s*(?:w3m|lynx|links2?|elinks|curl|wget)\b.*?(https?://\S+)", cmd)
-    if m and re.match(r"^\s*(?:w3m|lynx|links2?|elinks)\b", cmd) and _display_available() and hasattr(ctx, "launch"):
-        return browse({"site": m.group(1).strip("'\"")}, ctx)
-    if a.get("interactive") and not ctx.headless:
-        rc = ctx.interactive(cmd)
-        return f"the user used `{cmd}` interactively; it exited with code {rc}"
-    env = dict(os.environ, TERM="dumb", PAGER="cat", SYSTEMD_PAGER="cat", LANG="C.UTF-8", **(media.desk_env() or {}))
-    from . import wm
-    before = set(wm.windows()) if media.desk_env() else None
-    try:
-        p = subprocess.Popen(["/bin/sh", "-c", cmd], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                             text=True, cwd=config.home(), env=env, errors="replace", start_new_session=True)
-    except OSError as e:
-        return f"error: {e}"
-    t0 = time.time()
-    while True:
-        try:
-            so, se = p.communicate(timeout=3)
+    if len(cmds) == 1:
+        cmd = cmds[0]
+        m = re.match(r"^\s*(?:w3m|lynx|links2?|elinks|curl|wget)\b.*?(https?://\S+)", cmd)
+        if m and re.match(r"^\s*(?:w3m|lynx|links2?|elinks)\b", cmd) and _display_available() and hasattr(ctx, "launch"):
+            return browse({"site": m.group(1).strip("'\"")}, ctx)
+        if a.get("interactive") and not ctx.headless:
+            rc = ctx.interactive(cmd)
+            return f"the user used `{cmd}` interactively; it exited with code {rc}"
+    parts = []
+    for cmd in cmds:
+        line = _run_one_command(cmd, ctx)
+        parts.append(line)
+        # a later step (the login that stays open) must not hide a failure of the one before it
+        if not (line.startswith("exit code 0\n") or line == "exit code 0"):
             break
-        except subprocess.TimeoutExpired:
-            pass
-        # a program that opened a window is for the owner to use: leave it running (the request does not wait for it to close)
-        if before is not None and time.time() - t0 > 3 and set(wm.windows()) - before:
-            import threading
-            threading.Thread(target=p.communicate, daemon=True).start()     # keep reading its output so it never blocks
-            return "started; it is open in a window on the screen and keeps running. Done: reply in one sentence."
-        cancel = getattr(ctx, "cancel", None)
-        if cancel is not None and cancel.is_set():          # the owner pressed Stop: the command stops too
-            try:
-                os.killpg(p.pid, 15)
-            except OSError:
-                p.kill()
-            return "stopped: you pressed Stop"
-        if time.time() - t0 > 600:
-            p.kill()
-            return "error: the command was still running after 10 minutes and was stopped"
-    out = (so or "") + (("\n" + se) if (se or "").strip() else "")
-    return f"exit code {p.returncode}\n{clip(out.strip() or '(no output)')}"
+    return "\n".join(parts)
+
+
+def _run_one_command(cmd, ctx):
+    """One shell line as root. A URL the command prints is shown while it runs; if the command is still
+    going after that, it is left running so a login link can be used."""
+    env = dict(os.environ, TERM="dumb", PAGER="cat", SYSTEMD_PAGER="cat", LANG="C.UTF-8", **(media.desk_env() or {}))
+    home = config.home()
+    cwd = home if home and os.path.isdir(home) else "/"
+    before = None
+    t0 = time.time()
+    if os.geteuid() == 0 and media.desk_env():
+        from . import wm
+        before = set(wm.windows())
+
+        def poll_hook():
+            if time.time() - t0 > 3 and set(wm.windows()) - before:
+                return "window"
+            return None
+    else:
+        poll_hook = None
+
+    def on_text(text):
+        if not hasattr(ctx, "status"):
+            return
+        urls = system.SHELL_URL.findall(text or "")
+        if urls:
+            ctx.status(urls[-1][:500])
+            return
+        lines = [ln for ln in (text or "").splitlines() if ln.strip()]
+        if lines:
+            ctx.status(lines[-1][:180])
+
+    kind, rc, text, _proc = system.run_shell(
+        cmd, cwd=cwd, env=env, on_text=on_text, cancel=getattr(ctx, "cancel", None),
+        poll_hook=poll_hook, timeout=600)
+    text = (text or "").strip()
+    if kind == "stopped":
+        return "stopped: you pressed Stop"
+    if kind == "timeout":
+        extra = ("\n" + clip(text)) if text else ""
+        return "error: the command was still running after 10 minutes and was stopped" + extra
+    if kind == "window":
+        return "started; it is open in a window on the screen and keeps running. Done: reply in one sentence."
+    if kind == "running":
+        return "still running\n" + clip(text or "(no output)")
+    if kind == "error":
+        return "error: " + (text or "failed")
+    return f"exit code {rc}\n{clip(text or '(no output)')}"
 
 
 def document_text(path):

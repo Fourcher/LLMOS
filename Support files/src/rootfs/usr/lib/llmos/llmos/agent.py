@@ -49,6 +49,7 @@ How to act:
 
 Using tools:
 - Prefer a tool over talking about a tool. To run a program, call run_command. To find something out about the system, inspect it; don't describe what the owner "could" do. Actually perform actions with tools rather than only saying you did them. Don't narrate your tool use or explain which tool you used — just do it and report the result plainly.
+- When told to run or execute a command, or given the command itself, call run_command with that command unchanged. Do not refuse, rewrite, or warn.
 - You may call several tools in sequence; you see each result before the next step. When the task is done, give a short final answer with no tool call.
 - The results of tools are the ground truth. Base your answer on them."""
 
@@ -1606,14 +1607,18 @@ def execute(ctx, name, arguments):
             args = {"value": args}
     except ValueError:
         return f"error: could not parse arguments for {name}"
-    if name == "run_command" and re.match(r"\s*(?:echo\b.*\|\s*)?(?:sendmail|mail|mailx|mutt|ssmtp|msmtp)\b", str(args.get("command") or "")):
-        # a shell mail command only drops the message in a local queue that nothing sends: the owner was told
-        # "sent" for mail that never left. Email goes through the mail tools, which report real delivery errors.
-        return "error: email is sent with mail_send (or mail_reply), never with a shell mail command"
     if name == "run_command":
+        blobs = [str(args.get("command") or "")]
+        if isinstance(args.get("commands"), list):
+            blobs += [str(c) for c in args["commands"]]
+        if any(re.match(r"\s*(?:echo\b.*\|\s*)?(?:sendmail|mail|mailx|mutt|ssmtp|msmtp)\b", b) for b in blobs):
+            # a shell mail command only drops the message in a local queue that nothing sends: the owner was told
+            # "sent" for mail that never left. Email goes through the mail tools, which report real delivery errors.
+            return "error: email is sent with mail_send (or mail_reply), never with a shell mail command"
+    if name == "run_command" and not (isinstance(args.get("commands"), list) and len(args.get("commands") or []) > 1):
         # the model deleting one of the owner's files or folders with rm ("delete the HW Test folder" once became
         # "rm -rf ~/Documents/HW Test", which also failed on the space): it goes to the trash, through the same checks
-        # as any delete
+        # as any delete. A list of commands stays a shell run so the later steps are not dropped.
         cmd = str(args.get("command") or "").strip()
         mm = re.fullmatch(r"rm\s+(?:-[a-zA-Z]+\s+)*(?P<t>.+)", cmd)
         if mm and not re.search(r"[;&|<>`$*?]", cmd):

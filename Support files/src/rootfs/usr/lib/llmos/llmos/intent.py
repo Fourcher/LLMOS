@@ -2398,9 +2398,88 @@ def _mail_send_direct(t):
     return ("mail_send", {"to": m.group("to"), "subject": subject, "body": body})
 
 
+# A line the person typed as a command: a flag, a pipe, or a shell substitution. Plain English
+# ("run the calculator", "install spotify") has none of these, so the app routes still get it.
+_SHELL_META = re.compile(r"[|&;<>`]|\$\(|(?:^|\s)-{1,2}[A-Za-z0-9]")
+_RUN_PREFIX = re.compile(
+    r"^\s*(?:please\s+)?(?:run|execute)(?:\s+(?:the\s+)?command)?\s+(?P<cmd>.+?)\s*$", re.I)
+_INSTALL_WITH_THEN = re.compile(
+    r"^\s*(?:please\s+)?install\s+\S+\s+with\s+(?P<cmd>.+?)\s+(?:and\s+)?then\s+(?:run|execute)\s+(?P<then>.+?)\s*$", re.I)
+_INSTALL_WITH = re.compile(
+    r"^\s*(?:please\s+)?install\s+\S+\s+with\s+(?P<cmd>.+?)\s*$", re.I)
+_THEN_RUN = re.compile(r"\s+(?:and\s+)?then\s+(?:run|execute)\s+", re.I)
+_BARE_CMD = re.compile(r"^[A-Za-z0-9_./+-]+(?:\s+\S+)+$")
+_QUESTION_START = re.compile(
+    r"^(?:what|how|why|who|when|where|can|could|would|should|is|are|do|does|did|please)\b", re.I)
+# Desk verbs and little words: "set my time zone", "install spotify", "open my files" are not shell lines.
+_NOT_BARE_CMD = frozenset({
+    "open", "launch", "start", "show", "play", "make", "create", "set", "turn", "change", "delete",
+    "remove", "install", "tell", "give", "find", "search", "remember", "note", "my", "the", "a",
+})
+
+
+def _shellish(cmd):
+    c = str(cmd or "").strip()
+    return 2 <= len(c) <= 8000 and "\n" not in c and "\x00" not in c and bool(_SHELL_META.search(c))
+
+
+def _shell_pieces(cmd):
+    """Split 'cmd then run next' into shell lines. None unless every piece is actually a command."""
+    parts = []
+    for p in _THEN_RUN.split(str(cmd or "")):
+        p = p.strip().strip("`").strip()
+        p = re.sub(r"[.!?]+$", "", p).strip()
+        if p:
+            parts.append(p)
+    if not parts or len(parts) > 8 or not all(_shellish(p) for p in parts):
+        return None
+    return parts
+
+
+def _bare_shell(t):
+    if not _BARE_CMD.match(t) or _QUESTION_START.match(t):
+        return None
+    if t.split(None, 1)[0].lower() in _NOT_BARE_CMD:
+        return None
+    return _shell_pieces(t)
+
+
+def _owner_shell(t):
+    """An explicit command ('run …', 'execute …', 'install X with <command>', or the command itself).
+
+    The whole line is one route, including 'then run', so the desk does not split it and the model
+    never gets a chance to refuse it. Returns None for anything that is not a shell line."""
+    t = str(t or "").strip()
+    if len(t) >= 2 and t[0] == t[-1] == "`":
+        t = t[1:-1].strip()
+    t = _TRAIL_FILLER.sub("", t).strip()
+    m = _INSTALL_WITH_THEN.match(t)
+    if m:
+        parts = _shell_pieces(m.group("cmd"))
+        rest = _shell_pieces(m.group("then"))
+        parts = (parts or []) + (rest or []) if parts and rest else None
+    else:
+        m = _INSTALL_WITH.match(t) or _RUN_PREFIX.match(t)
+        if m:
+            parts = _shell_pieces(m.group("cmd"))
+        else:
+            parts = _bare_shell(t)
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return ("run_command", {"command": parts[0]})
+    return ("run_command", {"command": parts[0], "commands": parts})
+
+
 def _match(text):
     text = plain(text)
     t = text.strip()
+    # Before the length cap and the chain check: a typed command can be long, and 'then run'
+    # must stay one action or the desk hands the pieces to the model.
+    if "\n" not in t and len(t) <= 8000:
+        sh = _owner_shell(t)
+        if sh:
+            return sh
     if len(t) > 400 or "\n" in t:
         return None
     ms = _mail_setup(t)

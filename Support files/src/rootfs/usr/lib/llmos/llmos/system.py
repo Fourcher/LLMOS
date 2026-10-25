@@ -1,11 +1,16 @@
 """System policies that are enforced by the OS, not just promised by the
 agent: the firewall (internet on/off), Tor routing, and focus mode."""
+import errno
 import json
 import os
+import pty
 import re
+import select
 import shutil
+import signal
 import subprocess
 import tempfile
+import threading
 import time
 import unicodedata
 
@@ -264,6 +269,12 @@ def set_shell(user, shell):
 
 def _apk_add_root(names, quiet=False, timeout=900):
     """Install packages with apk, as root. Returns (returncode, stdout, stderr)."""
+    # tailscale and other community packages are "no such package" while that repo line is commented out
+    try:
+        if ensure_community_repo():
+            _apk_update_root()
+    except OSError:
+        pass
     argv = ["apk", "add", "-q", *names] if quiet else ["apk", "add", "--no-progress", *names]
     try:
         p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
@@ -311,6 +322,293 @@ def apk_del(name, force=False, timeout=600):
 
 
 APK_CACHE = "/var/cache/apk"
+APK_REPOS = "/etc/apk/repositories"
+
+# One repositories line: optional comment, then a mirror ending in main, community, or testing.
+_APK_REPO_LINE = re.compile(r"^(#\s*)?(\S+/(main|community|testing))\s*$")
+# A URL a command prints and then waits on (tailscale up's login link).
+SHELL_URL = re.compile(r"https?://[^\s<>'\"]+")
+_SHELL_KEEP = 256 * 1024
+
+
+def ensure_community_repo(path=None):
+    """Turn on the Alpine community repo that matches the first enabled main mirror.
+
+    A commented or missing community line makes `apk add tailscale` fail. Only that one line is
+    changed: an edge mirror that is commented stays commented. A missing file, a symlink, or a
+    file that cannot be written is left alone (returns False) so a host test never touches /etc.
+    Returns True when the file was changed."""
+    path = APK_REPOS if path is None else path
+    try:
+        if os.path.islink(path) or not os.path.isfile(path):
+            return False
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return False
+    lines = text.splitlines()
+    parsed = [_APK_REPO_LINE.match(line.strip()) for line in lines]
+    if any(m and not m.group(1) and m.group(3) == "community" for m in parsed):
+        return False
+    main = next((m for m in parsed if m and not m.group(1) and m.group(3) == "main"), None)
+    if not main:
+        return False
+    want = main.group(2)[:-len("/main")] + "/community"
+    new, done = [], False
+    for line, m in zip(lines, parsed):
+        if not done and m and m.group(1) and m.group(2) == want:
+            new.append(want)
+            done = True
+        else:
+            new.append(line)
+    if not done:
+        new.append(want)
+    body = "\n".join(new)
+    if text.endswith("\n") or text == "":
+        body += "\n"
+    return _write_text_file(path, body)
+
+
+def _write_text_file(path, text):
+    """Replace a regular file in place. False on a symlink or any OSError (the original stays)."""
+    tmp = None
+    try:
+        if os.path.islink(path) or not os.path.isfile(path):
+            return False
+        st = os.stat(path)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or ".", prefix="." + os.path.basename(path) + ".")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(tmp, st.st_mode & 0o777)
+        try:
+            os.chown(tmp, st.st_uid, st.st_gid)
+        except OSError:
+            pass
+        os.replace(tmp, path)
+        tmp = None
+        return True
+    except OSError:
+        return False
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+def _signal_group(proc, sig):
+    try:
+        os.killpg(proc.pid, sig)
+    except OSError:
+        try:
+            proc.send_signal(sig)
+        except OSError:
+            pass
+
+
+def _read_pty(master):
+    """Bytes, b'' on EOF, None when the read would block."""
+    try:
+        return os.read(master, 65536)
+    except OSError as e:
+        if e.errno == errno.EAGAIN:
+            return None
+        return b""
+
+
+def _remember(buf, chunk):
+    """Keep the start (a login URL is printed first) and the recent end, so a noisy command stays bounded."""
+    buf += chunk
+    if len(buf) <= _SHELL_KEEP:
+        return
+    head = bytes(buf[: _SHELL_KEEP // 2])
+    tail = bytes(buf[-_SHELL_KEEP // 2:])
+    buf.clear()
+    buf += head + "\n…\n".encode() + tail
+
+
+def _shell_text(buf):
+    return bytes(buf).decode("utf-8", "replace").replace("\r", "")
+
+
+def _hold_pty(master, proc):
+    """Keep reading a command that was left running. Closing the pty master sends SIGHUP, so this holds it
+    until the command exits, then reaps it."""
+    try:
+        while proc.poll() is None:
+            try:
+                ready, _, _ = select.select([master], [], [], 1.0)
+            except (OSError, ValueError):
+                break
+            if not ready:
+                continue
+            chunk = _read_pty(master)
+            if chunk is None:
+                continue
+            if chunk == b"":
+                break
+    finally:
+        try:
+            os.close(master)
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=0.2)
+        except Exception:
+            pass
+
+
+def _run_shell_stream(cmd, cwd=None, env=None, on_text=None, cancel=None, poll_hook=None, timeout=600, url_hold=1.0):
+    """Run /bin/sh -c as the current user, with a pty for stdout so a program line-flushes its URL.
+
+    stdin stays closed. Returns (kind, rc, text, proc). kind is exit, running, window, stopped, timeout,
+    or error. A command that prints a URL and is still alive url_hold seconds later is left running
+    (kind 'running') and proc is that process; the same handoff happens when poll_hook returns 'window'.
+    A command that prints a URL and exits is 'exit', not 'running'."""
+    master = slave = None
+    proc = None
+    handed = False
+    buf = bytearray()
+    text = ""
+    url_at = None
+    kind, rc = "error", None
+
+    def publish():
+        nonlocal text
+        text = _shell_text(buf)
+        if on_text and text:
+            try:
+                on_text(text)
+            except Exception:
+                pass
+
+    try:
+        if env is None:
+            env = os.environ.copy()
+        master, slave = pty.openpty()
+        proc = subprocess.Popen(
+            ["/bin/sh", "-c", cmd],
+            stdin=subprocess.DEVNULL,
+            stdout=slave,
+            stderr=slave,
+            start_new_session=True,
+            cwd=cwd or "/",
+            env=env,
+            close_fds=True,
+        )
+        os.close(slave)
+        slave = None
+        os.set_blocking(master, False)
+        t0 = time.monotonic()
+        while True:
+            now = time.monotonic()
+            if cancel is not None and getattr(cancel, "is_set", None) and cancel.is_set():
+                _signal_group(proc, signal.SIGTERM)
+                kind, rc = "stopped", None
+                break
+            if now - t0 >= timeout:
+                _signal_group(proc, signal.SIGKILL)
+                kind, rc = "timeout", None
+                break
+            if poll_hook is not None:
+                try:
+                    if poll_hook() == "window":
+                        kind, rc = "window", None
+                        break
+                except Exception:
+                    pass
+            if url_at is not None and (now - url_at) >= url_hold and proc.poll() is None:
+                kind, rc = "running", None
+                break
+            try:
+                ready, _, _ = select.select([master], [], [], 0.1)
+            except (OSError, ValueError):
+                ready = []
+            if ready:
+                chunk = _read_pty(master)
+                if chunk:
+                    _remember(buf, chunk)
+                    publish()
+                    if url_at is None and SHELL_URL.search(text):
+                        url_at = time.monotonic()
+                elif chunk == b"":
+                    rc = proc.wait(timeout=2)
+                    kind = "exit"
+                    break
+            elif proc.poll() is not None:
+                while True:
+                    chunk = _read_pty(master)
+                    if not chunk:
+                        break
+                    _remember(buf, chunk)
+                publish()
+                rc = proc.wait(timeout=2)
+                kind = "exit"
+                break
+        if kind in ("timeout", "stopped"):
+            deadline = time.monotonic() + 0.2
+            while time.monotonic() < deadline:
+                chunk = _read_pty(master)
+                if not chunk:
+                    break
+                _remember(buf, chunk)
+            publish()
+        if kind in ("running", "window"):
+            handed = True
+            threading.Thread(target=_hold_pty, args=(master, proc), daemon=True).start()
+            master = None
+        return kind, rc, text, proc
+    except OSError as e:
+        return "error", None, str(e), None
+    finally:
+        if slave is not None:
+            try:
+                os.close(slave)
+            except OSError:
+                pass
+        if master is not None and not handed:
+            try:
+                os.close(master)
+            except OSError:
+                pass
+        if proc is not None and not handed and proc.poll() is None:
+            _signal_group(proc, signal.SIGKILL)
+            try:
+                proc.wait(timeout=1)
+            except Exception:
+                pass
+
+
+def _root_shell_env():
+    """The environment a root shell gets through rootd. Not the desk's environment: no display, no library path."""
+    path = os.environ.get("PATH") or "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    return {"PATH": path, "HOME": "/root", "TERM": "dumb", "LANG": "C.UTF-8", "PAGER": "cat"}
+
+
+def run_shell(cmd, cwd=None, env=None, on_text=None, cancel=None, poll_hook=None, timeout=600):
+    """Run a shell command as root. In this process when already root (so a window can still be noticed);
+    otherwise through rootd's run_shell verb. Returns (kind, rc, text, proc). proc is set only for the
+    in-process path. When rootd is down the kind is 'error' and nothing is run as the desk user."""
+    if os.geteuid() == 0:
+        return _run_shell_stream(cmd, cwd=cwd, env=env, on_text=on_text, cancel=cancel,
+                                 poll_hook=poll_hook, timeout=timeout)
+    try:
+        raw = rootd_client.call("run_shell", command=str(cmd), cwd=cwd or "/", timeout=int(timeout),
+                                _timeout=float(timeout) + 60)
+        parsed = json.loads(raw)
+        if not isinstance(parsed, list) or len(parsed) != 3:
+            return "error", None, "bad reply", None
+        kind, rc, out = parsed
+        out = out or ""
+        if on_text and out:
+            try:
+                on_text(out)
+            except Exception:
+                pass
+        return kind, rc, out, None
+    except (rootd_client.RootdError, ValueError, TypeError) as e:
+        return "error", None, str(e) or "bad reply", None
 
 
 def _apk_run_root(argv, timeout):

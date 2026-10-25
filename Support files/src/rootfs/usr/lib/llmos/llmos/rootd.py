@@ -626,6 +626,36 @@ def _is_shell_file(path):
     return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
+def run_shell(args):
+    """Run one shell command as root and return [kind, rc, output]. The command is the caller's, unchanged.
+    Output keeps its head and its tail so a login URL printed first is still there. No environment is
+    taken from the caller."""
+    args = _args_dict(args)
+    if set(args) - {"command", "cwd", "timeout"} or "command" not in args:
+        raise ValueError("bad args")
+    cmd = args.get("command")
+    if not isinstance(cmd, str) or "\x00" in cmd or "\n" in cmd:
+        raise ValueError("bad args: command")
+    cmd = cmd.strip()
+    if not cmd or len(cmd) > 8000:
+        raise ValueError("bad args: command")
+    cwd = args.get("cwd", "/")
+    if not isinstance(cwd, str) or "\x00" in cwd or "\n" in cwd or not cwd.startswith("/"):
+        raise ValueError("bad args: cwd")
+    if not os.path.isdir(cwd):
+        cwd = "/"
+    timeout = args.get("timeout", 600)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 1 <= timeout <= 600:
+        raise ValueError("bad args: timeout")
+    from . import system
+    kind, rc, out, _proc = system._run_shell_stream(
+        cmd, cwd=cwd, env=system._root_shell_env(), timeout=timeout)
+    out = out or ""
+    if len(out) > 20000:
+        out = out[:10000] + "\n…\n" + out[-10000:]
+    return json.dumps([kind, rc, out])
+
+
 def set_shell(args):
     """Change a login shell. Only root's line: the owner account's name is not recorded anywhere yet.
     The shell must be one of SHELL_CHOICES and installed; PASSWD and SHELLS must be plain files."""
@@ -670,6 +700,7 @@ VERBS = {
     "apk_upgrade": apk_upgrade,
     "clear_apk_cache": clear_apk_cache,
     "sync_time": sync_time,
+    "run_shell": run_shell,
 }
 
 
