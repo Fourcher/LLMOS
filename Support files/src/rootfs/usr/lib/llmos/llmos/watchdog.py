@@ -2,6 +2,9 @@
 
 It depends on nothing network-related (unlike llmos-ota), so it can repair what the others need:
   - Wi-Fi (iwd) stopped -> started again; the update service stopped -> started again;
+  - Tailscale (remote access) is started again when its service is not started. This loop never stops or
+    restarts tailscaled: a restart of Wi-Fi does not depend on it, and if something else stopped it
+    (the network service, which Tailscale's own init script needs) the next check starts it;
   - the paired update computer unreachable for 5 minutes while this machine has no working network -> Wi-Fi
     restarted (then the update service started again, since stopping Wi-Fi stops it);
   - on a test computer (remote testing on): still unreachable after 25 minutes -> restart the computer, which comes
@@ -34,6 +37,34 @@ def _running(svc):
 
 def _has_service(svc):
     return os.path.exists(f"/etc/init.d/{svc}")
+
+
+def _in_default(svc):
+    return os.path.exists(f"/etc/runlevels/default/{svc}")
+
+
+def _ensure_svc(svc):
+    """Start svc when its init script exists and OpenRC does not say it is started.
+    Add it to the default runlevel only when that entry is missing. Never stop or restart it."""
+    if not _has_service(svc):
+        return
+    if not _in_default(svc):
+        try:
+            subprocess.run(["rc-update", "add", svc, "default"], capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    if not _running(svc):
+        _rc(svc, "start")
+
+
+def _ensure_tailscale():
+    """Remote access comes back when it is down. A running tailscaled is left running."""
+    _ensure_svc("tailscale")
+
+
+def _ensure_crond():
+    """The 15-minute Tailscale check is a crond script. crond itself has to be in the default runlevel."""
+    _ensure_svc("crond")
 
 
 def _wifi_present():
@@ -148,8 +179,16 @@ def run():
     low_since, model_kicked = None, False
     desk_gone = None
     _sound_firmware()
+    if _has_service("tailscale"):
+        try:
+            from . import system
+            system.apply_firewall()      # once: Tailscale SSH on tailscale0, and direct WireGuard (UDP 41641)
+        except Exception as e:
+            _log(f"remote access firewall: {e}")
     while True:
         try:
+            _ensure_tailscale()
+            _ensure_crond()
             if _has_service("iwd") and _wifi_present() and not _running("iwd"):
                 _log("Wi-Fi was stopped: starting it")
                 _rc("iwd", "start")
@@ -202,6 +241,7 @@ def run():
                     _log("no network for 5 minutes: restarting Wi-Fi")
                     _rc("iwd", "restart")
                     time.sleep(10)
+                    _ensure_tailscale()       # Wi-Fi coming back must not leave remote access down
                     _rc("llmos-ota", "start")
                     wifi_kicked = True
                 if gone > REBOOT_AFTER and config.settings.get("devlink"):
@@ -212,7 +252,11 @@ def run():
 
 
 def ensure_service():
-    """Called by the update service: the watchdog is part of every boot from now on (added by an update)."""
+    """Called by the update service: the watchdog is part of every boot from now on (added by an update).
+    Remote access and crond are put back in the default runlevel when that entry is missing, and started
+    when they are not started. An entry that is already there is left as it is."""
+    _ensure_tailscale()
+    _ensure_crond()
     if not _has_service("llmos-watchdog"):
         return
     if not os.path.exists("/etc/runlevels/default/llmos-watchdog"):

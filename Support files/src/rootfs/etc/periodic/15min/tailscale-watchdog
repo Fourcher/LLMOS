@@ -1,0 +1,4 @@
+#!/bin/sh
+rc-update show default | grep -q tailscale || rc-update add tailscale default
+if ! tailscale status >/dev/null 2>&1; then rc-service tailscale restart >/dev/null 2>&1 || rc-service tailscale start; sleep 10; fi
+tailscale debug prefs 2>/dev/null | grep -q '"RunSSH": true' || tailscale set --ssh

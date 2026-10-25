@@ -344,7 +344,7 @@ def _first_sentence(text, n=110):
 # always fit; the owner's connectors come right after them. The order never changes, so the prompt cache holds.
 PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpage", "real_quote", "calculate", "remember", "forget",
             "show_screen", "schedule_task", "manage_tasks", "note_add", "notes_show", "note_done", "note_remove",
-            "set_appearance", "change_setting", "show_panel", "open_app", "play_media", "media_control", "set_volume",
+            "set_appearance", "change_setting", "show_panel", "remote_access", "open_app", "play_media", "media_control", "set_volume",
             "set_brightness", "show_files", "open_file", "delete_file", "restore_file", "empty_trash", "screenshot",
             "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program", "security_check", "scan_network", "web_security_scan", "capture_traffic",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
@@ -1006,11 +1006,49 @@ def restyle(a, ctx):
 
 
 @tool("show_panel", "Show one of the system's screens to the user.",
-      {"panel": {"type": "string", "enum": ["settings", "models", "connectors", "tasks", "memory", "audit", "help"]}},
+      {"panel": {"type": "string", "enum": ["settings", "models", "connectors", "tasks", "memory", "audit", "help", "remote"]}},
       ["panel"])
 def show_panel(a, ctx):
     ctx.show_panel(a.get("panel", "help"))
     return f"the {a.get('panel')} screen is now shown to the user; do not repeat its contents"
+
+
+def _remote_risk(a):
+    act = (a or {}).get("action")
+    if act == "ssh-on":
+        return SECURITY
+    if act in ("connect", "ssh-off"):
+        return CHANGE
+    return SAFE
+
+
+def _remote_net(a):
+    return (a or {}).get("action") == "connect"
+
+
+@tool("remote_access", "Tailscale remote access: show the Remote access screen, connect this computer to the "
+      "tailnet (tailscale up --ssh), or turn Tailscale SSH on or off.",
+      {"action": {"type": "string", "enum": ["show", "connect", "ssh-on", "ssh-off"]}},
+      ["action"], risk=_remote_risk, network=_remote_net)
+def remote_access(a, ctx):
+    from . import tailscale
+    action = a.get("action") or "show"
+    if action == "connect":
+        tailscale.note_pending()
+        if hasattr(ctx, "show_panel"):
+            ctx.show_panel("remote")
+        tailscale.connect()
+    elif action == "ssh-on":
+        tailscale.set_ssh(True)
+    elif action == "ssh-off":
+        tailscale.set_ssh(False)
+    if hasattr(ctx, "show_panel"):
+        ctx.show_panel("remote")
+    return {"show": "Remote access is on screen.",
+            "connect": "Connecting. The sign-in link is on the Remote access screen.",
+            "ssh-on": "Tailscale SSH is on.",
+            "ssh-off": "Tailscale SSH is off. It comes back on within 15 minutes."}.get(
+                action, "Remote access is on screen.")
 
 
 # ------------------------------------------------------------ memory

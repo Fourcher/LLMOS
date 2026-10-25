@@ -624,6 +624,44 @@ def updates_panel(*, asked=False):
     return {"id": "panel-updates", "replace": True, "title": "Updates", "size": "m", "slot": "side", "blocks": blocks}
 
 
+def remote_access():
+    """Settings > Remote access: status, the tailnet address, the SSH switch, and Connect.
+
+    Connect says `connect tailscale`, which runs `tailscale up --ssh` and puts the login link and its QR here.
+    SSH comes back on within 15 minutes (the periodic check) so a maintainer can still get in."""
+    from . import tailscale
+    snap = tailscale.snapshot()
+    url, qr, pending = tailscale.login_view()
+    if snap.get("status") == "Connected":
+        url, qr, pending = "", "", False
+    blocks = [{"type": "text", "dim": True,
+               "text": "Someone you invite on your tailnet can open a terminal on this computer. "
+                       "It does not open a door on the public internet."}]
+    if not snap.get("installed"):
+        blocks.append({"type": "text",
+                       "text": "Tailscale is not on this computer yet. An update adds it; after that, press Connect."})
+    else:
+        blocks.append({"type": "kv", "rows": [["Status", snap.get("status") or "Not running"],
+                                              ["Tailnet address", snap.get("ip") or "—"]]})
+        blocks.append({"type": "toggle", "label": "SSH", "on": bool(snap.get("ssh")),
+                       "say_on": "turn on tailscale ssh", "say_off": "turn off tailscale ssh",
+                       "hint": "With SSH on, a maintainer on your tailnet can open a terminal. "
+                               "Turning it off lasts until the next check: it comes back on within 15 minutes "
+                               "so they can still get in."})
+    blocks.append({"type": "buttons", "items": [{"label": "Connect", "say": "connect tailscale", "primary": True}]})
+    if pending and not url:
+        blocks.append({"type": "text", "text": "Signing in. The link will show here in a moment."})
+    if url:
+        blocks.append({"type": "heading", "text": "Sign in"})
+        blocks.append({"type": "text", "text": url})
+        if qr:
+            blocks.append({"type": "code", "text": qr, "lang": "qr"})
+        blocks.append({"type": "text", "dim": True,
+                       "text": "Or scan this with the phone that's signed in to your tailnet."})
+    return {"id": "panel-remote", "replace": True, "title": "Remote access", "size": "m", "slot": "side",
+            "blocks": blocks}
+
+
 def updates_apply():
     rc, out, err = system.apk_upgrade(simulate=False)
     if rc:

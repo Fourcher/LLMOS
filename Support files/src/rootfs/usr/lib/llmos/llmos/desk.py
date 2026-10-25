@@ -2202,7 +2202,8 @@ class Desk:
                                               {"label": "Displays", "say": "displays"}, {"label": "Keyboard and mouse", "say": "keyboard and mouse"},
                                               {"label": "Bluetooth", "say": "bluetooth"}, {"label": "Printers", "say": "printers"},
                                               {"label": "Drives", "say": "drives"}, {"label": "Storage", "say": "storage"},
-                                              {"label": "Updates", "say": "updates"}, {"label": T("d_power"), "say": "power"},
+                                              {"label": "Updates", "say": "updates"}, {"label": "Remote access", "say": "remote access"},
+                                              {"label": T("d_power"), "say": "power"},
                                               {"label": "What's running", "say": "task manager"}, {"label": T("d_myapps"), "say": "show my apps"},
                                               {"label": T("d_conversations"), "say": "conversations"}, {"label": "About this computer", "say": "about this computer"}]},
                 {"type": "heading", "text": L("s_autonomy")},
@@ -2297,6 +2298,8 @@ class Desk:
                 {"type": "text", "text": L("s_change_hint"), "dim": True},
             ]
             return {"title": L("settings"), "kind": "panel", "size": "m", "blocks": blocks}
+        if which == "remote":
+            return syspanels.remote_access()
         if which == "models":
             return self.models_panel()
         if which == "connectors":
@@ -2732,6 +2735,8 @@ class Desk:
         low = intent.plain(text).lower().strip()
         if intent.is_chain(low):
             return False                  # several steps that build on each other: the model does them together
+        if intent._remote(low):
+            return True                    # remote access: the panel, Connect, and the SSH switch, done here
         if self._app_question(low) is not None:
             return True                   # close or read an open app of the OS's own: done now, even while the model works
         if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or everyday.MATCH.search(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|(?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android))\b|\brepo(?:sitory)?\b|\b(?:reset|factory|like new|erase everything)\b|\b(?:lock|encrypt|password|protect|secure)\b.*\bfolder\b|^(?:unlock|decrypt) \w|\b(?:lock|encrypt|password[- ]?protect) (?:my )?(?:documents|pictures|photos|music|videos|downloads|desktop)\b|\bbookmarks?\b|\bblur\b|\b(?:users?|accounts?|profile|login|guest)\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or re.fullmatch(r"(?:it says )?(?:(?:the )?(?:wi-?fi|network) )?connected(?: to (?:the |my )?(?:wi-?fi|network|internet))?,? (?:but|yet|and)(?: (?:there'?s|there is|it'?s|it is|nothing))? (?:no internet|not online|nothing loads)", low.rstrip("?.!")) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or _UPD_AUTO.fullmatch(low.rstrip("?.! ")) or _UPD_SHOW.fullmatch(low.rstrip("?.! ")) or _UPD_INSTALL.fullmatch(low.rstrip("?.! ")) or _VOICES_Q.fullmatch(low.rstrip("?.! ")) or _MODELS_Q.fullmatch(low.rstrip("?.! ")) or \
@@ -3944,9 +3949,52 @@ class Desk:
                 return text
         return None
 
+    def _remote_shortcut(self, hit, line):
+        """Open Remote access, start `tailscale up --ssh`, or flip Tailscale SSH. The owner asked in words
+        or pressed the button, so this does not go through the model's confirm step."""
+        from . import tailscale
+        name, args = hit
+        if name == "show_panel":
+            self.open_panel("remote")
+            self._said = "Here's remote access."
+            return True
+        action = (args or {}).get("action")
+        if action == "connect":
+            tailscale.note_pending()
+            self.open_panel("remote")
+
+            def go():
+                try:
+                    tailscale.connect()
+                except Exception as e:
+                    self.emit({"t": "toast", "text": str(e), "long": True})
+                self.open_panel("remote")
+            threading.Thread(target=go, daemon=True).start()
+            self._said = "Connecting. The sign-in link will show in Remote access."
+            return True
+        if action in ("ssh-on", "ssh-off"):
+            on = action == "ssh-on"
+
+            def flip():
+                try:
+                    ok, note = tailscale.set_ssh(on)
+                except Exception as e:
+                    ok, note = False, str(e)
+                self.open_panel("remote")
+                if not ok:
+                    self.emit({"t": "toast", "text": note, "long": True})
+            threading.Thread(target=flip, daemon=True).start()
+            self._said = ("SSH is on." if on else
+                          "SSH is off. It comes back on within 15 minutes so a maintainer can still get in.")
+            return True
+        return False
+
     def _system_shortcut(self, low, line):
         """The system's own panels and their buttons (syspanels.py): no model, done at once."""
         low = low.rstrip("?.!")
+        hit = intent._remote(low)
+        if hit and self._remote_shortcut(hit, line):
+            return True
         for rx, canon in self._CANON:
             if rx.fullmatch(low):
                 if canon == "__bt__":
