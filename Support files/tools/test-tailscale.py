@@ -25,7 +25,7 @@ os.environ.update(LLMOS_HOME=HOME, LLMOS_ETC=os.path.join(HOME, "etc"),
                   LLMOS_OTA_DIR=os.path.join(HOME, "ota-state"))
 sys.path.insert(0, os.path.join(ROOTFS, "usr/lib/llmos"))
 
-from llmos import intent, ota, rootd, syspanels, system, tailscale, tools, uispec, watchdog  # noqa: E402
+from llmos import config, intent, ota, rootd, syspanels, system, tailscale, tools, uispec, watchdog  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("hostota", os.path.join(HERE, "ota.py"))
 host = importlib.util.module_from_spec(spec)
@@ -61,8 +61,8 @@ check("rc-update show default | grep -q tailscale || rc-update add tailscale def
       "watchdog puts tailscale back in the default runlevel")
 check("tailscale status" in body and "rc-service tailscale restart" in body and "rc-service tailscale start" in body,
       "watchdog restarts tailscale when status fails, and starts it if restart fails")
-check('"RunSSH": true' in body and "tailscale set --ssh" in body,
-      "watchdog turns RunSSH back on")
+check('"RunSSH": true' in body and "tailscale set --ssh" in body and "remote_ssh" in body,
+      "watchdog can turn RunSSH back on, and it reads the owner's remote_ssh setting first")
 
 pkg = os.path.join(ROOTFS, "usr/share/llmos/packages.txt")
 names = [ln.split("#", 1)[0].strip() for ln in open(pkg).read().splitlines()]
@@ -226,7 +226,19 @@ check(any(it.get("say") == "connect tailscale" for b in spec["blocks"] if b["typ
       "Connect says connect tailscale")
 norm = uispec.normalize(spec)
 ntog = next(b for b in norm["blocks"] if b["type"] == "toggle")
-check("15 minutes" in (ntog.get("hint") or ""), "the SSH hint survives the window normaliser")
+check("comes back on by itself" in (ntog.get("hint") or "") and "until you turn it back on" not in (ntog.get("hint") or ""),
+      "while SSH is left on, the hint says it comes back by itself")
+
+config.settings.set("remote_ssh", False)
+tailscale.snapshot = lambda: {"installed": True, "status": "Connected", "ip": "100.64.0.2", "ssh": False}
+spec = syspanels.remote_access()
+off = next(b for b in spec["blocks"] if b["type"] == "toggle")
+check(off["on"] is False and off["hint"] == "Remote maintenance access is off until you turn it back on.",
+      f"SSH off is the owner's choice and the panel says so: {off.get('hint')!r}")
+norm = uispec.normalize(spec)
+check(next(b for b in norm["blocks"] if b["type"] == "toggle")["hint"] == off["hint"],
+      "the off hint survives the window normaliser")
+config.settings.set("remote_ssh", True)
 
 tailscale.snapshot = lambda: {"installed": True, "status": "Not signed in", "ip": "—", "ssh": False}
 tailscale.login_view = lambda: ("https://login.tailscale.com/a/abc", "█▀▄\n▄█▀", False)
@@ -250,6 +262,75 @@ check(tool.risk_for({"action": "connect"}) == "change" and tool.network_for({"ac
 check(tool.risk_for({"action": "ssh-off"}) == "change" and tool.risk_for({"action": "show"}) == "safe",
       "ssh-off is a change and show is safe")
 check(tool.network_for({"action": "show"}) is False, "showing the panel does not use the network")
+
+# ---- the owner's SSH choice: the 15-minute check heals only while they still want it
+
+check(config.PUBLIC_DEFAULTS.get("remote_ssh") is True, "remote_ssh defaults to true")
+check(tailscale.owner_wants_ssh(None) is True, "no stored choice yet: SSH stays wanted")
+check(tailscale.owner_wants_ssh(True) is True and tailscale.owner_wants_ssh(False) is False,
+      "owner_wants_ssh follows an explicit true or false")
+saved_which = tailscale.shutil.which
+saved_run = tailscale.subprocess.run
+tailscale.shutil.which = lambda name: "/usr/bin/tailscale" if name == "tailscale" else saved_which(name)
+
+
+def fake_set(argv, **k):
+    class P:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+    return P()
+
+
+tailscale.subprocess.run = fake_set
+try:
+    ok, note = tailscale._set_ssh(False)
+    check(ok and config.settings.get("remote_ssh") is False, f"turning SSH off stores remote_ssh false: {ok} {note}")
+    ok, note = tailscale._set_ssh(True)
+    check(ok and config.settings.get("remote_ssh") is True, f"turning SSH on stores remote_ssh true: {ok} {note}")
+finally:
+    tailscale.shutil.which = saved_which
+    tailscale.subprocess.run = saved_run
+    config.settings.set("remote_ssh", True)
+
+
+def run_watch(settings, prefs='{"RunSSH": false}'):
+    """Run the real 15-minute script with stub commands. settings is written, or left missing when None."""
+    d = tempfile.mkdtemp(prefix="ts-watch-")
+    log = os.path.join(d, "log")
+    bindir = os.path.join(d, "bin")
+    etc = os.path.join(d, "etc")
+    os.makedirs(bindir)
+    os.makedirs(etc)
+    if settings is not None:
+        with open(os.path.join(etc, "settings.json"), "w") as f:
+            json.dump(settings, f)
+    open(os.path.join(bindir, "tailscale"), "w").write(
+        "#!/bin/sh\necho \"$*\" >> \"$TS_LOG\"\n"
+        "if [ \"$1\" = status ]; then exit 0; fi\n"
+        "if [ \"$1\" = debug ]; then printf '%s\\n' \"$TS_PREFS\"; exit 0; fi\n"
+        "exit 0\n")
+    open(os.path.join(bindir, "rc-update"), "w").write("#!/bin/sh\necho \"rc-update $*\" >> \"$TS_LOG\"\nexit 0\n")
+    open(os.path.join(bindir, "rc-service"), "w").write("#!/bin/sh\necho \"rc-service $*\" >> \"$TS_LOG\"\nexit 0\n")
+    for name in ("tailscale", "rc-update", "rc-service"):
+        os.chmod(os.path.join(bindir, name), 0o755)
+    env = dict(os.environ, PATH=bindir + os.pathsep + os.environ.get("PATH", ""), LLMOS_ETC=etc,
+               TS_LOG=log, TS_PREFS=prefs)
+    r = subprocess.run(["sh", watch], env=env, capture_output=True, text=True)
+    logged = open(log).read() if os.path.exists(log) else ""
+    return r.returncode, logged
+
+
+rc, logged = run_watch({"remote_ssh": True})
+check(rc == 0 and "\nset --ssh\n" in ("\n" + logged), f"remote_ssh true: RunSSH is put back\n{logged}")
+rc, logged = run_watch(None)
+check(rc == 0 and "\nset --ssh\n" in ("\n" + logged), f"no settings file: RunSSH is put back\n{logged}")
+rc, logged = run_watch({"language": "English"})
+check(rc == 0 and "\nset --ssh\n" in ("\n" + logged), f"settings without remote_ssh: RunSSH is put back\n{logged}")
+rc, logged = run_watch({"remote_ssh": False})
+check(rc == 0 and "set --ssh" not in logged, f"remote_ssh false: the check does not turn SSH back on\n{logged}")
+rc, logged = run_watch({"remote_ssh": True}, prefs='{"RunSSH": true}')
+check(rc == 0 and "set --ssh" not in logged, f"already on: the check does not set it again\n{logged}")
 
 print("all good" if not fails else f"{fails} failed")
 sys.exit(1 if fails else 0)

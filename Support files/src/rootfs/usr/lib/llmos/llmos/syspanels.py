@@ -628,9 +628,10 @@ def remote_access():
     """Settings > Remote access: status, the tailnet address, the SSH switch, and Connect.
 
     Connect says `connect tailscale`, which runs `tailscale up --ssh` and puts the login link and its QR here.
-    SSH comes back on within 15 minutes (the periodic check) so a maintainer can still get in."""
+    SSH stays off when the owner turns it off. While they leave it on, a crash or an update turns it back on."""
     from . import tailscale
     snap = tailscale.snapshot()
+    wants = tailscale.owner_wants_ssh()
     url, qr, pending = tailscale.login_view()
     if snap.get("status") == "Connected":
         url, qr, pending = "", "", False
@@ -643,11 +644,11 @@ def remote_access():
     else:
         blocks.append({"type": "kv", "rows": [["Status", snap.get("status") or "Not running"],
                                               ["Tailnet address", snap.get("ip") or "—"]]})
-        blocks.append({"type": "toggle", "label": "SSH", "on": bool(snap.get("ssh")),
+        blocks.append({"type": "toggle", "label": "SSH", "on": wants,
                        "say_on": "turn on tailscale ssh", "say_off": "turn off tailscale ssh",
-                       "hint": "With SSH on, a maintainer on your tailnet can open a terminal. "
-                               "Turning it off lasts until the next check: it comes back on within 15 minutes "
-                               "so they can still get in."})
+                       "hint": ("Remote maintenance access is off until you turn it back on." if not wants else
+                                "With SSH on, a maintainer on your tailnet can open a terminal. "
+                                "If it drops after a crash or an update, it comes back on by itself.")})
     blocks.append({"type": "buttons", "items": [{"label": "Connect", "say": "connect tailscale", "primary": True}]})
     if pending and not url:
         blocks.append({"type": "text", "text": "Signing in. The link will show here in a moment."})

@@ -3988,7 +3988,7 @@ class Desk:
                     self.emit({"t": "toast", "text": note, "long": True})
             threading.Thread(target=flip, daemon=True).start()
             self._said = ("SSH is on." if on else
-                          "SSH is off. It comes back on within 15 minutes so a maintainer can still get in.")
+                          "Remote maintenance access is off until you turn it back on.")
             return True
         return False
 

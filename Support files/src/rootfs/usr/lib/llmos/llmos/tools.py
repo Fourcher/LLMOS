@@ -1047,7 +1047,7 @@ def remote_access(a, ctx):
     return {"show": "Remote access is on screen.",
             "connect": "Connecting. The sign-in link is on the Remote access screen.",
             "ssh-on": "Tailscale SSH is on.",
-            "ssh-off": "Tailscale SSH is off. It comes back on within 15 minutes."}.get(
+            "ssh-off": "Remote maintenance access is off until you turn it back on."}.get(
                 action, "Remote access is on screen.")
 
 

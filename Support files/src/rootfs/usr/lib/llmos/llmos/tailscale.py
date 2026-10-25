@@ -72,6 +72,23 @@ def ssh_enabled(prefs):
     return '"RunSSH": true' in text or '"RunSSH":true' in text
 
 
+def owner_wants_ssh(value=None):
+    """True unless the owner has turned remote SSH off.
+
+    The settings key is `remote_ssh`. Absent, or any value other than false, means yes: the 15-minute
+    check puts RunSSH back after a crash, an update, or a prefs reset. False stays off."""
+    if value is None:
+        from . import config
+        value = config.settings.get("remote_ssh", True)
+    return value is not False
+
+
+def _remember_choice(on):
+    """Record the owner's SSH choice. The periodic check reads this and does not override it."""
+    from . import config
+    config.settings.set("remote_ssh", bool(on))
+
+
 def facts_from(status, prefs, installed=True):
     """Panel facts from `tailscale status --json` and `tailscale debug prefs`. No commands run here."""
     if not installed:
@@ -184,7 +201,13 @@ def _set_ssh(on):
         return False, str(e)
     if r.returncode:
         return False, (r.stderr or r.stdout or "could not change SSH").strip()[:200]
-    return True, "SSH is on." if on else "SSH is off."
+    try:
+        _remember_choice(on)
+    except Exception as e:
+        return False, f"SSH changed, but the choice was not saved ({e})"
+    if on:
+        return True, "SSH is on."
+    return True, "Remote maintenance access is off until you turn it back on."
 
 
 def dispatch(action):
