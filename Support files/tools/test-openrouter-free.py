@@ -50,6 +50,7 @@ check(ok and c.get("model") == "nvidia/nemotron-3-ultra-550b-a55b:free" and c.ge
 Ctx = type("C", (), {"headless": False})
 config.settings.set("internet", "yes")
 config.settings.set("auto_escalate", True)
+config.settings.set("brain", "ask")   # online is allowed; brain "local" must not send the turn out
 from llmos import models  # noqa: E402
 with mock.patch.object(models, "host_mode", return_value=False), \
         mock.patch.object(models, "active", return_value={"id": "dolphin-3-8b"}), \

@@ -250,13 +250,13 @@ screens ("make everything bigger" adds to that).
 
 Chosen at set‑up, changeable any time by asking (or in Settings):
 
-- **full trust** (hands‑off): does everything you say without asking first —
+- **full trust** (hands‑off, the default): does everything you say without asking first —
   sending and deleting email, deleting files, emptying the trash, installing
   and removing programs (system parts too), changing settings, running
   commands. You agree to that once, when you choose it (at set‑up, or by
   saying "full trust", which shows exactly this and asks you once).
-- **balanced** (default): asks before destructive or irreversible actions,
-  and always before email is sent or the trash is emptied.
+- **balanced**: asks before destructive or irreversible actions, and always
+  before email is sent or the trash is emptied.
 - **hands‑on**: asks before every change.
 
 In every mode, what an instruction *inside* a web page, an email or a file
@@ -314,8 +314,10 @@ requests, and the one boundary — is yours to edit. *Settings → Conduct* has
 **Edit** (a text box with the current wording) and **Reset to default**, or say
 "edit the conduct" / "pop the hood"; it is the plain‑text file
 `/etc/llmos/conduct.txt`, so you can edit it from a terminal too. Change it
-however you like — it is your machine. The OS ships a sensible default (the
-default keeps the no‑harm‑to‑others line) and never rewrites this itself; the
+however you like — it is your machine. The two hard stops stay in the prompt
+either way: no help causing physical harm to a person, and no sexual content
+involving anyone under 18. The OS ships a sensible default (the default keeps
+that line) and never rewrites your text itself; the
 assistant can show it to you but only you can change it, so it can't loosen its
 own rules behind your back. The *Guidance* setting picks between two built‑in
 defaults ("follows my instructions" or "standard caution") if you'd rather not
@@ -323,11 +325,14 @@ write your own.
 
 ## Models
 
-Ships with **Ministral 3 3B** (Mistral AI, Apache‑2.0, ~2.1 GB, Q4_K_M). The
-catalog (`models`) also offers Gemma 4 E2B/E4B/12B, Granite 4.1 3B/8B,
-Ministral 3 8B/14B and LFM2.5 8B‑A1B — all fetched from the original labs'
-official Hugging Face repos and checked against the published SHA‑256 before
-they are ever loaded. Pick by what your machine can hold (`models` shows RAM).
+Ships with **Ministral 3 3B** (Mistral AI, Apache‑2.0, ~2.1 GB, Q4_K_M). When
+no model has been chosen, the OS uses **Dolphin 3.0 8B** if it is installed and
+fits in memory, otherwise **Huihui Ornith 1.5 9B**, otherwise the first model
+that is installed. The catalog (`models`) also offers Gemma 4 E2B/E4B/12B,
+Granite 4.1 3B/8B, Ministral 3 8B/14B and LFM2.5 8B‑A1B — all fetched from the
+original labs' official Hugging Face repos and checked against the published
+SHA‑256 before they are ever loaded. Pick by what your machine can hold
+(`models` shows RAM).
 
 The **Models** screen is a manager for both on‑device and online models. Each
 one lists its maker, size, memory, licence, speed, what it is good at and its

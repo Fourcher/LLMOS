@@ -1697,8 +1697,9 @@ def edit_conduct(a, ctx):
     if hasattr(ctx, "edit_conduct"):
         return ctx.edit_conduct()
     return ("to change the conduct, edit the plain-text file /etc/llmos/conduct.txt — whatever is in it replaces the "
-            "built-in conduct section; delete it to go back to the default. (This is the one part of the system "
-            "prompt you control.)")
+            "built-in conduct section; the two hard stops stay in the prompt either way (no help causing physical harm "
+            "to a person, and no sexual content involving anyone under 18). Delete the file to go back to the default. "
+            "(This is the one part of the system prompt you control.)")
 
 
 def _guard_on(value):
