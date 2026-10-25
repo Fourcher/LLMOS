@@ -27,11 +27,12 @@ PALETTES = [
     (("dark", "night", "black", "midnight", "dim"), "#0b0d14", "#e8e9ef", "#7a52ff", ""),
 ]
 DEFAULT = ("#0b0d14", "#e8e9ef", "#7a52ff")
+# System faces only. Named fonts are used when the machine has them; nothing is fetched.
 FONTS = {
-    "sans": 'Inter, "Noto Sans", system-ui, sans-serif',
-    "serif": '"Noto Serif", Georgia, serif',
-    "mono": '"JetBrains Mono", "Noto Sans Mono", monospace',
-    "pixel": 'Terminus, "JetBrains Mono", monospace',
+    "sans": 'system-ui, "Noto Sans", sans-serif',
+    "serif": 'ui-serif, Georgia, "Noto Serif", serif',
+    "mono": 'ui-monospace, "Noto Sans Mono", monospace',
+    "pixel": 'Terminus, ui-monospace, monospace',
 }
 FONT_WORDS = {
     "mono": ("mono", "monospace", "monospaced", "code", "coding", "programmer", "typewriter", "jetbrains", "courier", "console"),

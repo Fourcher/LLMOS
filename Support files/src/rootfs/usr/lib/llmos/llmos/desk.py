@@ -832,8 +832,8 @@ class Desk:
             settings = WebKit.Settings(enable_developer_extras=False, enable_javascript=True, enable_media=True,
                                        enable_webgl=False, allow_file_access_from_file_urls=True,
                                        allow_universal_access_from_file_urls=True, enable_smooth_scrolling=True,
-                                       enable_page_cache=False, default_font_family="Inter",
-                                       monospace_font_family="JetBrains Mono", default_font_size=16)
+                                       enable_page_cache=False, default_font_family="sans-serif",
+                                       monospace_font_family="monospace", default_font_size=16)
             if _software_gpu():
                 try:
                     settings.set_hardware_acceleration_policy(WebKit.HardwareAccelerationPolicy.NEVER)
@@ -955,7 +955,7 @@ class Desk:
         try:
             os.makedirs(d, exist_ok=True)
             with open(os.path.join(d, "config"), "w") as f:
-                f.write(f"font=Inter 12\nbackground-color={bg}ee\ntext-color={fg}\nborder-color={acc}\nborder-size=2\n"
+                f.write(f"font=sans-serif 12\nbackground-color={bg}ee\ntext-color={fg}\nborder-color={acc}\nborder-size=2\n"
                         f"border-radius=12\npadding=12\nmargin=58,16,16,16\nwidth=360\ndefault-timeout=7000\nanchor=top-right\n"
                         f"max-visible=3\nlayer=overlay\n\n[mode=do-not-disturb]\ninvisible=1\n")
             subprocess.run(["pkill", "-x", "mako"], capture_output=True)
