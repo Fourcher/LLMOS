@@ -1653,6 +1653,31 @@ def _everyday(text):
     return None
 
 
+def _phrase_is_program(n):
+    """True when `n` is exactly an installed program or a known kind of program that is installed.
+    A longer phrase that only contains one of those words is not ("firefox by default", "terminal window
+    on the screen"), and neither is one word of a longer name ("settings" inside "File Manager Settings").
+    programs.find itself is wider on purpose: "firefox" means whatever browser is installed."""
+    import os
+    from . import programs
+    norm = re.sub(r"[^a-z0-9+ ]+", " ", str(n).lower())
+    norm = re.sub(r"\b(?:the|a|an|my|app|application|program|please|open|launch|start|run)\b", " ", norm)
+    norm = " ".join(norm.split())
+    if not norm:
+        return False
+    for says, _prefer, _cat in programs.KINDS.values():
+        if norm in says:
+            return programs.find(norm) is not None
+    p = programs.find(norm)
+    if not p:
+        return False
+    name = " ".join(re.sub(r"[^a-z0-9+ ]+", " ", (p.get("name") or "").lower()).split())
+    pid = (p.get("id") or "").lower()
+    exe = os.path.basename((p.get("exec") or "").split()[0]).lower() if p.get("exec") else ""
+    generic = " ".join(re.sub(r"[^a-z0-9+ ]+", " ", (p.get("generic") or "").lower()).split())
+    return norm in (name, pid, exe, generic)
+
+
 def _apps(text):
     if _UNDO_RE.match(text):
         return ("undo", {})
@@ -1723,8 +1748,13 @@ def _apps(text):
         from . import tools as _T
         if n.lower().removeprefix("my ").strip() in _T.FOLDERS or n.lower() in ("files", "my files", "file"):
             return None              # "show my files": the folder, not a program called something like Files
-        from . import programs
-        if apps.find(n) or (apps.match_template(n) and len(n.split()) <= 3) or programs.find(n):
+        # "open firefox" / "launch firefox" is the browser shortcut, and "open a terminal window on the
+        # screen" is the foot shortcut. Neither is "launch whatever .desktop file matched a word in the phrase"
+        # (on a dev machine that has Chrome or Xfce Terminal, that word would steal the shortcut).
+        bare = _TRAIL_FILLER.sub("", text).strip()
+        shortcut = (_OPEN_BROWSER.match(text) or _OPEN_BROWSER.match(bare)
+                    or _TERMINAL.match(text) or _TERMINAL.match(bare))
+        if not shortcut and (apps.find(n) or (apps.match_template(n) and len(n.split()) <= 3) or _phrase_is_program(n)):
             return ("open_app", {"command": n})
     # a bare name with no route above ("discord", "scientific calculator please"): nothing above matched, so no earlier result changes
     m = _BARE_APP.match(text)

@@ -442,11 +442,20 @@ CASES = {
 }
 
 bad = 0
-for text, want in CASES.items():
-    got = intent.match(text)
-    if got != want:
-        bad += 1
-        print(f"MISMATCH {text!r}\n   got    {got}\n   wanted {want}")
+# The table above is the no-program-menu behaviour: a loose "use X for Y" routes on the word shape alone.
+# The installed-app check (a real menu, only installed programs) is the block further down. A Linux dev
+# machine has /usr/share/applications, so point the menu at a directory that is not there for this table.
+from llmos import tools as _shortcut_tools
+_saved_app_dirs = _shortcut_tools.APP_DIRS
+_shortcut_tools.APP_DIRS = [os.path.join(os.path.dirname(__file__), "no-such-app-menu")]
+try:
+    for text, want in CASES.items():
+        got = intent.match(text)
+        if got != want:
+            bad += 1
+            print(f"MISMATCH {text!r}\n   got    {got}\n   wanted {want}")
+finally:
+    _shortcut_tools.APP_DIRS = _saved_app_dirs
 print(f"intent shortcuts: {len(CASES) - bad}/{len(CASES)} as expected")
 
 # an open app of the OS's own: close it, or read what it shows (the desk resolves the name to an installed app)
