@@ -10,6 +10,7 @@
   "size": 2147023008,
   "sha256": "9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8",
   "ram_gb": 3,
+  "uncensored": false,
   "note": "the default: coherent, follows instructions closely, few refusals",
   "speed": "fast",
   "good_at": [
@@ -32,6 +33,7 @@
   "size": 2019373888,
   "sha256": "91776fe0f6cd7483d9d5e06162fdd1f8f0262c15ced269791b4d96a655e8a5a2",
   "ram_gb": 3,
+  "uncensored": false,
   "note": "steerable and does what you ask, with few refusals",
   "speed": "fast",
   "good_at": [
@@ -53,6 +55,7 @@
   "size": 3349516256,
   "sha256": "fa401b55b07ee70a54c6dae3903c783a6e65064312529ea57175cb5f8dec6634",
   "ram_gb": 4,
+  "uncensored": false,
   "note": "fastest, 140+ languages (best for non-European languages) (+MTP speculative decoding, ~1.5x faster)",
   "draft_repo": "ggml-org/gemma-4-E2B-it-GGUF",
   "draft_file": "mtp-gemma-4-E2B-it-Q4_0.gguf",
@@ -82,6 +85,7 @@
   "size": 2244011552,
   "sha256": "e0406663965846ae22a403456eb826ccce5f450840491f71952f18a7cb78e7d5",
   "ram_gb": 3,
+  "uncensored": false,
   "note": "trained for using tools over many steps",
   "speed": "fast",
   "good_at": [
@@ -106,6 +110,7 @@
   "size": 4590807392,
   "sha256": "a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2",
   "ram_gb": 6,
+  "uncensored": false,
   "note": "smarter than E2B, a bit slower (+MTP speculative decoding, ~1.5x faster)",
   "draft_repo": "ggml-org/gemma-4-E4B-it-GGUF",
   "draft_file": "mtp-gemma-4-E4B-it-Q4_0.gguf",
@@ -135,6 +140,7 @@
   "size": 5198911904,
   "sha256": "33e7a72cf5e6e2cfc2f2847075acc013d68bba023e35310cef86b5cf8fdca761",
   "ram_gb": 7,
+  "uncensored": false,
   "note": "much smarter; needs a stronger machine",
   "speed": "medium",
   "good_at": [
@@ -156,6 +162,7 @@
   "size": 4920745856,
   "sha256": "4c001f29d4edbd9327a6df8e16e2b7907a64e0e31b0a7abe9c779a96773f304e",
   "ram_gb": 8,
+  "uncensored": true,
   "note": "the most willing: does not impose its own ethics on you",
   "speed": "medium",
   "good_at": [
@@ -178,6 +185,7 @@
   "size": 5629109696,
   "sha256": "84779a40e0a237f1f0275ac86bb92ae1a0fb5245f127b7b2e25a4ddabf7d03ad",
   "ram_gb": 8,
+  "uncensored": true,
   "note": "uncensored: its refusals were removed (abliterated); newer and smarter than Dolphin",
   "speed": "slow",
   "good_at": [
@@ -204,6 +212,7 @@
   "size": 5347914400,
   "sha256": "ed902ac9eb6adce5a90c6a08c8ea201b50e23fdc5976d1cd0362006afac5309e",
   "ram_gb": 7,
+  "uncensored": false,
   "note": "stronger reasoning, conservative",
   "speed": "medium",
   "good_at": [
@@ -226,6 +235,7 @@
   "size": 5155564768,
   "sha256": "4923ec14f06b968b74d663e5949867d2d9c3bf13a20b8be1a9f9af39989b2bb0",
   "ram_gb": 7,
+  "uncensored": false,
   "note": "mixture-of-experts: 8B knowledge at ~1B speed",
   "speed": "fast",
   "good_at": [
@@ -248,6 +258,7 @@
   "size": 6975879296,
   "sha256": "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b",
   "ram_gb": 10,
+  "uncensored": false,
   "note": "best quality here; needs a 16 GB machine (+MTP speculative decoding, ~1.5x faster)",
   "draft_repo": "ggml-org/gemma-4-12B-it-GGUF",
   "draft_file": "mtp-gemma-4-12B-it-Q4_0.gguf",
@@ -277,6 +288,7 @@
   "size": 8239593024,
   "sha256": "824e0f3373e69b84f2cae46fdcb9bd1ebc6ab3bfc7acc125d818b7b8178cc613",
   "ram_gb": 11,
+  "uncensored": false,
   "note": "strongest here; needs a 16 GB+ machine",
   "speed": "slow",
   "good_at": [
@@ -299,6 +311,7 @@
   "size": 16909548032,
   "license": "Apache-2.0",
   "ram_gb": 20,
+  "uncensored": false,
   "speed": "very slow",
   "note": "the largest here (27B, built on Qwen); needs a 32 GB machine",
   "good_at": [

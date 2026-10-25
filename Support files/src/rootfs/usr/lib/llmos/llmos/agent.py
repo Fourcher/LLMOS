@@ -773,10 +773,19 @@ def _wait_ready(check, limit=2.0, step=0.1):
             return False
 
 
-# A reply the on-device model balked at: a refusal or an "are you allowed" hedge. When the fast model does this,
-# the turn is re-run on a more capable model (the online one, or a stronger uncensored model installed here), because
-# the only real rules are the three laws and the fast model is just being timid. Genuinely harmful asks (violence,
-# weapons to hurt people, anything sexual involving minors) are NOT rescued: those refusals are correct and kept.
+# A reply the model balked at: a refusal, an "are you allowed" hedge, or a copyright/legal deflection. The turn is
+# re-run, because the only real rules are the three laws and a timid model is not one of them. Order for a refusal:
+# the online model, then the active local model if it has not run yet, then a stronger uncensored model installed
+# here. Compliance outranks size: a refusal never moves onto a censored model (a larger Ministral, a Granite).
+# Genuinely harmful asks (violence, weapons to hurt people, anything sexual involving minors) are NOT rescued.
+# Placeholder. The owner replaces this with the real owner-authority wording. It is appended to the system prompt
+# for one last retry, on the best uncensored local model, after every model in the chain has still refused.
+OWNER_AUTHORITY_NUDGE = "[OWNER_AUTHORITY_NUDGE]"
+# cloud, the active uncensored model, and one stronger uncensored model — each at most once. `tried` holds every
+# model that has already answered (or been selected) this turn.
+_MAX_CHAIN = 3
+AGENT_LOG = "/run/llmos/agent.log"
+_agent_log_lock = threading.Lock()
 _REFUSAL_RE = re.compile(r"\b(i can'?t|i cannot|i'?m not able|i am not able|i'?m unable|cannot assist|can'?t assist|"
                          r"i (?:only|won'?t) (?:draft|write|provide|create|help|generate|assist)|i must decline|i refuse|"
                          r"i'?m sorry,? but|i apologi[sz]e|not appropriate|that'?s inappropriate|as an ai|against my (?:rules|guidelines|programming)|"
@@ -784,46 +793,290 @@ _REFUSAL_RE = re.compile(r"\b(i can'?t|i cannot|i'?m not able|i am not able|i'?m
 _HEDGE_RE = re.compile(r"\b(are you authoriz|you'?re not authoriz|do you have permission|without (?:your )?permission|"
                        r"(?:is |it )(?:it |this )?your own property|confirm (?:that )?(?:it is|you are|you own)|"
                        r"only if you (?:are authoriz|own)|authoriz(?:ed|ation) to (?:do|perform|wipe|delete|erase))\b", re.I)
+# cloud models often decline without the usual "I can't": a flat "I won't be able to", "that would involve …",
+# or a copyright / legal-risk deflection. A normal answer that mentions those words while doing the task is not one.
+_WONT_BE_ABLE_RE = re.compile(r"\bi won'?t be able to\b", re.I)
+_DEFLECT_RE = re.compile(
+    r"\b(?:copyright(?:ed)? (?:material|content|lyrics|song|book|text)|"
+    r"copyright (?:law|restrictions|infringement)|"
+    r"(?:violat\w+|infring\w+)(?:\s+\w+){0,3}\s+copyright|"
+    r"(?:because of|due to|poses a|there is a|given the) (?:legal risks?|legal concerns?)|"
+    r"(?:that|this|which|it)(?:\s+\w+){0,6}\s+against the law)\b", re.I)
+_INVOLVE_RE = re.compile(r"\bthat would involve\b", re.I)
+_DOES_THE_TASK = re.compile(
+    r"\b(here(?:'s| is| are)|sure[,!]|of course|done[.!]|"
+    r"i (?:wrote|made|saved|opened|deleted|did|set)|step \d|first,|for example|you can|the answer is)\b", re.I)
+_TASK_VERB = re.compile(
+    r"\b(open\w*|click\w*|press\w*|type|sav\w+|install\w*|select\w*|choos\w*|boil\w*|mix\w+|add|"
+    r"steps?|first|then|here)\b", re.I)
 # requests that SHOULD be refused (First Law): keep the refusal, never escalate past it
 _HARM_REQ_RE = re.compile(r"\b(kill|murder|stab|shoot|hurt|harm|attack|assault|beat up|poison|strangle|bomb|explosive|"
                           r"nerve agent|bioweapon|chemical weapon)\b.{0,40}\b(him|her|them|someone|somebody|people|person|"
                           r"a human|my (?:neighbou?r|coworker|boss|ex|wife|husband|partner|teacher|friend))\b|"
                           r"\b(child|minor|kid|underage|infant|toddler|\b1[0-7])\b.{0,25}\b(sex|sexual|nude|naked|porn|explicit)|"
                           r"\b(sex|sexual|nude|naked|porn|explicit)\b.{0,25}\b(child|minor|kid|underage|infant|toddler|1[0-7] ?year)", re.I)
-# stronger / bolder models to escalate to locally, most capable first (whichever are installed)
-_ESCALATE_ORDER = ["underdog-27b", "ministral-3-14b", "huihui-ornith-1.5-9b", "dolphin-3-8b", "granite-4.1-8b", "hermes-3-3b"]
+_PARAM_RE = re.compile(r"(\d+(?:\.\d+)?)b\b", re.I)
 
 
 def _looks_refused(text):
     t = (text or "").strip()
-    return bool(t) and len(t) < 600 and (bool(_REFUSAL_RE.search(t)) or bool(_HEDGE_RE.search(t)))
+    if not t or len(t) >= 600:
+        return False
+    if _REFUSAL_RE.search(t) or _HEDGE_RE.search(t):
+        return True
+    # the phrasings below also appear in ordinary answers ("that would involve three steps, here they are")
+    if _DOES_THE_TASK.search(t):
+        return False
+    if _WONT_BE_ABLE_RE.search(t) or _DEFLECT_RE.search(t):
+        return True
+    if _INVOLVE_RE.search(t) and not _TASK_VERB.search(t) and len(t) < 320:
+        return True
+    return False
+
+
+def _log_escalation(model, refused, nxt, why=""):
+    """One line in /run/llmos/agent.log for every decision to escalate or to stop. Failures on the device are
+    readable there: which model answered, whether it refused, and the next target or why there isn't one."""
+    try:
+        path = AGENT_LOG
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        target = "cloud" if nxt and nxt[0] == "cloud" else (f"local:{nxt[1]}" if nxt else "none")
+        line = (f"{time.strftime('%Y-%m-%dT%H:%M:%S')} model={model} "
+                f"refused={'yes' if refused else 'no'} next={target} why={why or 'none'}\n")
+        with _agent_log_lock:
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(line)
+    except OSError:
+        pass
+
+
+def _model_record(m):
+    """A catalog entry plus anything the caller already knows. `uncensored` defaults to false: a model that does
+    not say it had its refusals removed is not a place a refusal may move to."""
+    mid = m.get("id") if isinstance(m, dict) else None
+    if not mid:
+        return {}
+    try:
+        from . import models
+        full = models.by_id(mid) or {}
+    except Exception:
+        full = {}
+    rec = dict(full)
+    if isinstance(m, dict):
+        rec.update({k: v for k, v in m.items() if v is not None})
+    rec["id"] = mid
+    rec["uncensored"] = bool(rec.get("uncensored"))
+    return rec
+
+
+def _installed_records():
+    try:
+        from . import models
+        rows = models.installed() or []
+    except Exception:
+        return []
+    out = []
+    for m in rows:
+        rec = _model_record(m if isinstance(m, dict) else {"id": m})
+        if rec.get("id"):
+            out.append(rec)
+    return out
+
+
+def _active_record():
+    try:
+        from . import models
+        a = models.active() or {}
+    except Exception:
+        return None
+    rec = _model_record(a)
+    return rec or None
+
+
+def _active_id():
+    rec = _active_record()
+    return rec.get("id") if rec else None
+
+
+def _capability(m):
+    """Size as a stand-in for capability, used only to order uncensored models. The largest 'Nb' in the id
+    (huihui-ornith-1.5-9b → 9, ministral-3-14b → 14)."""
+    found = [float(x) for x in _PARAM_RE.findall(str(m.get("id") or ""))]
+    if found:
+        return max(found)
+    try:
+        return float(m.get("ram_gb") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _fits(m, ram):
+    """The same room models.use allows: a model larger than memory by half a gigabyte still loads, from disk."""
+    try:
+        need = float(m.get("ram_gb") or 0)
+    except (TypeError, ValueError):
+        return True
+    if not ram or need <= 0:
+        return True
+    return need <= float(ram) + 0.5
+
+
+def _already_ran(where, tried):
+    """What this turn has already asked. The model that just answered counts even when the caller has not added
+    it yet: a local answer is the active model, a cloud answer is \"cloud\"."""
+    done = {x for x in (tried or ()) if x}
+    if where == "cloud":
+        done.add("cloud")
+    else:
+        aid = _active_id()
+        if aid:
+            done.add(aid)
+    return done
+
+
+def _cloud_ok(ctx):
+    try:
+        if not config.cloud() or getattr(ctx, "headless", False):
+            return False
+        if llm.cloud_is_home():
+            return bool(llm.home_up())
+        return config.settings.get("internet", "yes") != "no"
+    except Exception:
+        return False
+
+
+def _uncensored_fitting(done, ram):
+    """Installed uncensored models that fit and have not run, best capability first. Censored models are absent."""
+    saw = False
+    skipped_fit = False
+    cands = []
+    for m in _installed_records():
+        if not m.get("uncensored"):
+            continue
+        saw = True
+        if m["id"] in done:
+            continue
+        if not _fits(m, ram):
+            skipped_fit = True
+            continue
+        cands.append(m)
+    cands.sort(key=lambda m: (_capability(m), float(m.get("ram_gb") or 0)), reverse=True)
+    if cands:
+        return cands, ""
+    if not saw:
+        return [], "no-uncensored-model-installed"
+    if skipped_fit:
+        return [], "no-uncensored-model-fits"
+    return [], "nothing-stronger-uncensored"
+
+
+def _uncensored_floor(done):
+    """Capability of the strongest uncensored model that has already answered, or None if none has."""
+    caps = []
+    seen = set()
+    for m in _installed_records():
+        if m.get("id") in done and m.get("uncensored"):
+            caps.append(_capability(m))
+            seen.add(m["id"])
+    active = _active_record()
+    if active and active.get("id") in done and active.get("id") not in seen and active.get("uncensored"):
+        caps.append(_capability(active))
+    return max(caps) if caps else None
+
+
+def _escalation_choice(ctx, where, tried=()):
+    """(target, why). target is ("cloud", None) or ("local", model_id), or None when the chain stops.
+    A refusal moves to the online model, else the active uncensored model if it has not run, else a stronger
+    uncensored model that fits. Never to a censored one, however large."""
+    if not config.settings.get("auto_escalate", True):
+        return None, "auto-escalate-off"
+    done = _already_ran(where, tried)
+    if "cloud" not in done and _cloud_ok(ctx):
+        return ("cloud", None), ""
+    try:
+        from . import models
+        host = bool(models.host_mode())
+        ram = models.ram_gb()
+    except Exception:
+        return None, "models-unavailable"
+    active = _active_record()
+    # the model already loaded on this computer, when this turn has not asked it yet (the turn began online)
+    if active and active.get("uncensored") and active.get("id") not in done:
+        return ("local", active["id"]), ""
+    if host:
+        return None, "host-mode"
+    cands, why = _uncensored_fitting(done, ram)
+    if not cands:
+        return None, why
+    floor = _uncensored_floor(done)
+    if floor is None:
+        return ("local", cands[0]["id"]), ""
+    stronger = [m for m in cands if _capability(m) > floor]
+    if not stronger:
+        return None, "nothing-stronger-uncensored"
+    return ("local", stronger[0]["id"]), ""
 
 
 def _escalation_target(ctx, where, tried=()):
-    """Where to re-run a timid refusal. ("cloud", None) for the online model, ("local", model_id) for a stronger
-    model installed here, or None if there is nothing more capable to try. tried: what this turn already ran on
-    ("cloud", model ids), so a refusal online (a free model can be as timid) still falls through to a stronger
-    uncensored model here, and nothing is asked twice."""
-    if not config.settings.get("auto_escalate", True):
-        return None
-    try:
-        if where != "cloud" and "cloud" not in tried and config.cloud() and not getattr(ctx, "headless", False) and (
-                llm.home_up() if llm.cloud_is_home() else config.settings.get("internet", "yes") != "no"):
-            return ("cloud", None)
-    except Exception:
-        pass
+    """Where to re-run a timid refusal. ("cloud", None) or ("local", model_id), or None. See _escalation_choice."""
+    tgt, _why = _escalation_choice(ctx, where, tried)
+    return tgt
+
+
+def _nudge_model():
+    """The best uncensored installed model that fits in RAM. The active one, when it is uncensored, if nothing
+    else fits or the model is served by the launcher and cannot be switched."""
     try:
         from . import models
         if models.host_mode():
-            return None
-        active = (models.active() or {}).get("id")
-        have = {m["id"] for m in models.installed()}
-        for mid in _ESCALATE_ORDER:
-            if mid in have and mid != active and mid not in tried:
-                return ("local", mid)
+            active = _active_record()
+            return active if active and active.get("uncensored") else None
+        ram = models.ram_gb()
     except Exception:
-        pass
-    return None
+        return None
+    cands = [m for m in _installed_records() if m.get("uncensored") and _fits(m, ram)]
+    if not cands:
+        active = _active_record()
+        return active if active and active.get("uncensored") else None
+    cands.sort(key=lambda m: (_capability(m), float(m.get("ram_gb") or 0)), reverse=True)
+    return cands[0]
+
+
+def _engage_local(ctx, mid, status):
+    """Make mid the model that answers next. Already active: leave the server up. False when it cannot be loaded."""
+    from . import models
+    try:
+        ctx.status(status)
+        if models.host_mode():
+            return _active_id() == mid
+        if _active_id() != mid:
+            models.use(mid)
+            _wait_warm()
+        return True
+    except Exception as e:
+        ctx.status(f"couldn't switch models: {e}")
+        return False
+
+
+def _switch_status(label, mid):
+    from . import models
+    name = (models.by_id(mid) or {}).get("name") or mid
+    lead = "the online model wouldn't" if label == "cloud" else "the quick model wouldn't"
+    return f"{lead}; switching to {name}"
+
+
+def _nudge_status(m):
+    name = m.get("name") or m.get("id")
+    if _active_id() == m.get("id"):
+        return "trying once more"
+    return f"trying once more on {name}"
+
+
+def _arm_turn(ctx, user_text, history, private, nudge=False):
+    msgs = build_messages(ctx, user_text, history, private=private)
+    if nudge and msgs and msgs[0].get("role") == "system":
+        msgs[0]["content"] = msgs[0]["content"].rstrip() + "\n\n" + OWNER_AUTHORITY_NUDGE
+    return msgs
 
 
 def run(ctx, user_text, history):
@@ -991,7 +1244,8 @@ def run(ctx, user_text, history):
     nudged = False
     shrunk = 0
     escalated = False
-    tried = set()                                # where this turn already ran: "cloud", stronger local models
+    tried = set()                                # "cloud" and local model ids this turn has already run (or chosen)
+    authority_retried = False                    # one owner-authority nudge after the chain has still refused
     first_calls = []           # the step-0 tool calls, kept as a routine when the turn goes well
     tool_steps = 0
     blocked, no_tools = set(), False             # calls a guard refused; once one comes back, the model answers in words
@@ -1027,6 +1281,7 @@ def run(ctx, user_text, history):
                 llm._HOME_UP[:] = [time.time(), False]
                 where, chat, escalated = "local", llm.chat, True
                 tried.add("cloud")
+                _log_escalation("cloud", False, ("local", _active_id() or "local"), "cloud-did-not-answer")
                 continue
             except llm.ModelError as e:
                 ctx.end_stream(stream)
@@ -1131,33 +1386,61 @@ def run(ctx, user_text, history):
             if not final:
                 final = "I couldn't finish that. Try saying it another way, or say \u201cwhat did you do\u201d to see what I tried."
                 ctx.status(i18n.t("stopped"))
-        # the quick model was just being timid (a refusal or an "are you allowed" hedge on something allowed):
-        # re-run the whole turn on a more capable model. Genuinely harmful asks keep their refusal.
-        if final and len(tried) < 2 and _looks_refused(final) and not _HARM_REQ_RE.search(user_text):
-            tgt = _escalation_target(ctx, where, tried)
+        # A timid refusal is re-run: online, then the active uncensored model if it has not run, then a stronger
+        # uncensored model, each at most once. A censored model is never the next step. When every one of those
+        # has refused, one more try on the best uncensored model with the owner-authority nudge. A First Law
+        # request keeps its refusal: no escalation and no nudge. _HARM_REQ_RE is that line, unchanged.
+        aid = None if where == "cloud" else _active_id()
+        if where == "cloud":
+            tried.add("cloud")
+            label = "cloud"
+        else:
+            if aid:
+                tried.add(aid)
+            label = aid or "local"
+        refused = bool(final) and _looks_refused(final)
+        if final and _HARM_REQ_RE.search(user_text):
+            _log_escalation(label, refused, None, "hard-stop")
+        elif not refused:
+            _log_escalation(label, False, None, "not-a-refusal")
+        elif authority_retried:
+            _log_escalation(label, True, None, "still-refused-after-nudge")
+        elif not config.settings.get("auto_escalate", True):
+            _log_escalation(label, True, None, "auto-escalate-off")
+        else:
+            tgt, why = (None, "chain-full")
+            if len(tried) < _MAX_CHAIN:
+                tgt, why = _escalation_choice(ctx, where, tried)
             if tgt:
+                _log_escalation(label, True, tgt, "escalate")
                 escalated = True
-                tried.add(tgt[0] if tgt[0] == "cloud" else tgt[1])
+                tried.add("cloud" if tgt[0] == "cloud" else tgt[1])
                 if tgt[0] == "cloud":
                     ctx.status("the quick model wouldn't; asking the online model")
                     where, chat, private = "cloud", llm.cloud_chat, True
                     _going_online(ctx, True)
+                elif not _engage_local(ctx, tgt[1], _switch_status(label, tgt[1])):
+                    _log_escalation(label, True, None, "could-not-switch")
+                    break
                 else:
-                    try:
-                        from . import models
-                        ctx.status(("the online model wouldn't either" if "cloud" in tried else "the quick model wouldn't")
-                                   + f"; switching to {models.by_id(tgt[1])['name']}")
-                        models.use(tgt[1])
-                        _wait_warm()
-                        where = "local"
-                    except Exception as e:
-                        ctx.status(f"couldn't switch models: {e}")
-                        break
-                msgs = build_messages(ctx, user_text, history, private=private)
+                    where = "local"
+                msgs = _arm_turn(ctx, user_text, history, private)
                 final, tools_ran, nudged, no_tools = "", 0, False, bool(getattr(ctx, "ask_only", False))
                 blocked, rare_on = set(), False
                 tool_steps = 0
                 continue
+            nudge_to = _nudge_model()
+            if nudge_to and _engage_local(ctx, nudge_to["id"], _nudge_status(nudge_to)):
+                _log_escalation(label, True, ("local", nudge_to["id"]), "owner-authority-nudge")
+                authority_retried = True
+                escalated = True
+                where = "local"
+                msgs = _arm_turn(ctx, user_text, history, private, nudge=True)
+                final, tools_ran, nudged, no_tools = "", 0, False, bool(getattr(ctx, "ask_only", False))
+                blocked, rare_on = set(), False
+                tool_steps = 0
+                continue
+            _log_escalation(label, True, None, "could-not-switch" if nudge_to else (why or "no-uncensored-model-left"))
         break
     # a turn that went well in one tool step may be repeated without thinking next time
     if tool_steps == 1 and final and not nudged and not shrunk and not forced and not getattr(ctx, "after_turn", None):

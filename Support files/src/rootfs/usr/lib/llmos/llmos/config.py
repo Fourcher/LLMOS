@@ -367,6 +367,10 @@ class Settings:
         node[parts[-1]] = value
         _write_etc("settings.json", json.dumps(cur, ensure_ascii=False, indent=1))
         _good_settings = copy.deepcopy(cur)
+        # two writes in one timestamp tick (and the same size: "cloud" / "local") leave st_mtime_ns
+        # unchanged, so the cache would keep serving the previous value. Drop it; the next read
+        # parses the file this write just produced.
+        Settings._cache = (None, None)
 
 
 settings = Settings()

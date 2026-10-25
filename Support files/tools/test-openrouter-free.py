@@ -55,11 +55,14 @@ with mock.patch.object(models, "host_mode", return_value=False), \
         mock.patch.object(models, "active", return_value={"id": "dolphin-3-8b"}), \
         mock.patch.object(models, "installed", return_value=[{"id": "dolphin-3-8b"}, {"id": "huihui-ornith-1.5-9b"}]):
     check(agent._escalation_target(Ctx(), "local") == ("cloud", None), "first: the online model")
-    check(agent._escalation_target(Ctx(), "cloud", {"cloud"}) == ("local", "huihui-ornith-1.5-9b"),
-          "refused online too: the stronger uncensored model here")
+    check(agent._escalation_target(Ctx(), "cloud", {"cloud"}) == ("local", "dolphin-3-8b"),
+          "a cloud refusal falls back to the active local model, which has not run")
+    check(agent._escalation_target(Ctx(), "cloud", {"cloud", "dolphin-3-8b"}) == ("local", "huihui-ornith-1.5-9b"),
+          "refused online and on the active model: the stronger uncensored model here")
     check(agent._escalation_target(Ctx(), "local", {"cloud", "huihui-ornith-1.5-9b"}) is None, "nothing tried twice")
 src = open(os.path.join(_ROOT, "usr/lib/llmos/llmos/agent.py"), encoding="utf-8").read()
-check("len(tried) < 2" in src and 'tried.add("cloud")' in src, "a turn escalates at most twice, and a failed online call counts")
+check("len(tried) < _MAX_CHAIN" in src and "_MAX_CHAIN = 3" in src and 'tried.add("cloud")' in src,
+      "the chain is three models, each once, and a failed online call counts")
 if fails:
     print(f"{fails} FAILED")
     sys.exit(1)
