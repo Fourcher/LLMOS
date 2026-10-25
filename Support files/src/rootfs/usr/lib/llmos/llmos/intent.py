@@ -1852,9 +1852,43 @@ def _recent_saved(text):
     return None
 
 
+def _inbox_zero(low):
+    """'I need to get to inbox zero today' and the inbox button's 'get me to inbox zero': the mail triage,
+    not a shopping search. 'get me some batteries' does not match."""
+    s = re.sub(r"\s+", " ", str(low or "").strip().rstrip(".!?").strip())
+    if re.fullmatch(r"(?:please\s+)?(?:"
+                    r"i\s+need\s+to\s+get\s+to\s+inbox\s+zero(?:\s+today)?"
+                    r"|get\s+me\s+to\s+inbox\s+zero(?:\s+today)?"
+                    r"|inbox\s+zero"
+                    r"|clean\s+up\s+my\s+inbox"
+                    r")", s):
+        return ("mail_triage", {})
+    return None
+
+
+_QUOTE_FROM = re.compile(r"^(?:please\s+)?(?:a\s+)?real\s+quote\s+(?:from|by|of)\s+(?P<who>.+?)\s*[.!?]?$", re.I)
+_QUOTE_NAME = re.compile(r"^(?:please\s+)?quote\s+(?P<who>.+?)\s*[.!?]?$", re.I)
+
+
+def _real_quote(text):
+    """'quote Ada Lovelace' / 'a real quote from Ada Lovelace': a Wikiquote lookup, never a line the model writes.
+    Anything that is not asking for a quotation (a file, a price) is left alone."""
+    raw = str(text or "").strip()
+    m = _QUOTE_FROM.match(raw) or _QUOTE_NAME.match(raw)
+    if not m:
+        return None
+    who = raw[m.start("who"):m.end("who")].strip().strip("\"'")
+    if len(who) < 2 or re.search(r"\b(?:file|folder|price|prices|stock|code|this|that|it)\b", who, re.I):
+        return None
+    return ("real_quote", {"who_or_topic": who})
+
+
 def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
+    iz = _inbox_zero(low)
+    if iz:
+        return iz
     if re.fullmatch(r"where (?:did|has) (?:it|that|my file|the file|my download|the download) (?:get )?(?:save[d]?|go|gone|end up|ended up)|where(?:'s| is) (?:the|that) (?:file|thing|document) (?:you|i) (?:just )?(?:made|saved|downloaded|created)|where did (?:you|it) (?:just )?(?:save|put) (?:it|that)", low.rstrip("?.! ")):
         return ("last_saved", {})
     import urllib.parse as _u
@@ -2237,9 +2271,9 @@ def _everyday2(text):
             return ("browse", {"site": "https://www.openstreetmap.org/search?query=" + _u.quote(place)})
     if re.fullmatch(r"(?:please\s+)?(?:(?:open|go\s+to|launch)\s+)?youtube\s+music(?:\s+please)?", low.strip()):
         return ("browse", {"site": "https://music.youtube.com"})
-    m = re.match(r"^(?:give\s+me\s+|get\s+|show\s+me\s+)?(?:the\s+)?(?:directions|route|way)\s+(?:to|for)\s+(?P<p>.+)$|^how\s+do\s+i\s+get\s+to\s+(?P<p2>.+)$|^(?:navigate|drive)\s+to\s+(?P<p3>.+)$", low)
+    m = re.match(r"^(?:give\s+me\s+|get\s+|show\s+me\s+)?(?:the\s+)?(?:directions|route|way)\s+(?:to|for)\s+(?P<p>.+)$|^how\s+do\s+i\s+get\s+to\s+(?P<p2>.+)$|^(?:navigate|drive)\s+to\s+(?P<p3>.+)$|^get\s+me\s+to\s+(?P<p4>.+)$", low)
     if m:
-        place = (m.group("p") or m.group("p2") or m.group("p3")).strip()
+        place = (m.group("p") or m.group("p2") or m.group("p3") or m.group("p4")).strip()
         return ("browse", {"site": "https://www.google.com/maps/dir/?api=1&destination=" + _u.quote_plus(place)})
     if re.match(r"^(?:help\s+me\s+)?(?:apply\s+for|find|look\s+for|search\s+for)\s+(?:a\s+)?jobs?(?:\s+.*)?$|^job\s+search$", low):
         q = re.sub(r"^(?:help\s+me\s+)?(?:apply\s+for|find|look\s+for|search\s+for)\s+(?:a\s+)?jobs?\s*", "", low).strip()
@@ -2449,6 +2483,9 @@ def _match(text):
     rs = _recent_saved(t)
     if rs:
         return rs
+    rq = _real_quote(t)
+    if rq:
+        return rq
     ev2 = _everyday2(t)
     if ev2:
         return ev2

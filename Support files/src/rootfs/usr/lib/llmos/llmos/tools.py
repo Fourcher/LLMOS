@@ -2222,70 +2222,111 @@ _TRIAGE_SCHEMA = {"type": "object",
                   "required": ["category", "needs_reply", "urgent", "summary"]}
 
 
-@tool("mail_triage", "Get the inbox to zero: reads every unread email, archives newsletters, notifications and junk "
-      "on its own, and returns the short list of what actually needs the owner (with ids) so replies can follow. "
-      "Use for 'inbox zero', 'clean up my inbox', 'what needs my attention'.",
+_TRIAGE_CAP = 200
+_TRIAGE_BATCH = 40
+
+
+def _triage_line(noise, keep, left):
+    """What the owner reads after a triage: one sentence, then the urgent senders. Never 'ask again'."""
+    urgent = []
+    for m, d in keep:
+        if d.get("urgent"):
+            name = _sender_name(m["from"])
+            if name and name not in urgent:
+                urgent.append(name)
+    n_noise, n_keep = len(noise), len(keep)
+    if n_noise and n_keep:
+        line = f"Archived {n_noise}; {n_keep} still {'needs' if n_keep == 1 else 'need'} you."
+    elif n_noise:
+        line = f"Archived {n_noise}, and nothing left that needs you."
+    elif n_keep:
+        line = f"{n_keep} still {'needs' if n_keep == 1 else 'need'} you."
+    else:
+        line = "No unread mail is left."
+    if left:
+        line = line.rstrip(".") + f". {left} more unread were not sorted."
+    if urgent:
+        line = line.rstrip(".") + ". Urgent: " + ", ".join(urgent) + "."
+    elif not line.endswith("."):
+        line += "."
+    return line
+
+
+@tool("mail_triage", "Get the inbox to zero: reads unread email until none is left or 200 messages, archives "
+      "newsletters, notifications and junk on its own, and answers in one sentence naming what still needs the owner "
+      "and which senders are urgent. Nothing is sent. Use for 'inbox zero', 'clean up my inbox', 'what needs my attention'.",
       {"archive": {"type": "string", "enum": ["noise", "nothing"], "description": "what to archive automatically (default noise)"}},
       [], risk=CHANGE, network=True, available=lambda: mail.account() is not None)
 def mail_triage(a, ctx):
-    try:
-        items = mail.unread(limit=40)
-    except mail.MailError as e:
-        return f"error: {e}"
-    if not items:
-        return "no unread mail in the inbox: nothing new to sort"
+    """Sort unread mail until none is left or 200 messages have been sorted, whichever comes first.
+    Newsletters, notifications and junk are archived. Nothing is sent. The reply is one sentence plus urgent senders."""
+    archive_noise = (a.get("archive") or "noise") == "noise"
     facts = "; ".join(f["fact"] for f in store.facts()[-20:]) or "nothing known"
-    keep, noise = [], []
-    for m in items:
-        ctx.status(f"sorting: {m['subject'][:56]}")
+    seen, keep, noise = set(), [], []
+    while len(seen) < _TRIAGE_CAP:
         try:
-            d = llm.complete_json(
-                "You sort email for the owner of this computer. Classify one message. Newsletters, marketing, "
-                "automated notifications and junk are noise; messages from people who expect something are not.",
-                f"What is known about the owner: {facts}\nFrom: {m['from']}\nSubject: {m['subject']}\n"
-                f"Preview: {m['snippet']}\n\nReturn JSON with category (personal|work|newsletter|notification|junk), "
-                f"needs_reply, urgent, and a one-line summary.", _TRIAGE_SCHEMA, max_tokens=160)
-        except Exception:
-            d = {"category": "personal", "needs_reply": False, "urgent": False, "summary": m["subject"]}
-        if (a.get("archive") or "noise") == "noise" and d.get("category") in ("newsletter", "notification", "junk"):
-            noise.append((m, d))
-        else:
-            keep.append((m, d))
-    lines = []
-    if noise:
-        try:
-            done, dest = mail.move([m["uid"] for m, _ in noise], "archive")
-            lines.append(f"archived {len(done)} noise message(s) to {dest}: " +
-                         "; ".join(f"{m['subject'][:40]}" for m, _ in noise[:6]) + (" …" if len(noise) > 6 else ""))
+            batch = mail.unread(limit=min(_TRIAGE_BATCH, _TRIAGE_CAP - len(seen)) + len(seen))
         except mail.MailError as e:
-            lines.append(f"could not archive: {e}")
-    # what is really left: the sort looks at the newest 40 unread at a time, so say so rather than claim zero
-    try:
-        waiting = max(0, mail.count_unread() - len(keep))
-    except mail.MailError:
-        waiting = 0
-    if waiting:
-        lines.append(f"{waiting} more unread message(s) were not sorted this time; ask again to sort them.")
+            if not seen:
+                return f"error: {e}"
+            break
+        fresh = [m for m in batch if str(m.get("uid")) not in seen]
+        if not fresh:
+            break
+        fresh = fresh[:_TRIAGE_CAP - len(seen)]
+        batch_noise = []
+        for m in fresh:
+            seen.add(str(m.get("uid")))
+            ctx.status(f"sorting: {str(m.get('subject', ''))[:56]}")
+            try:
+                d = llm.complete_json(
+                    "You sort email for the owner of this computer. Classify one message. Newsletters, marketing, "
+                    "automated notifications and junk are noise; messages from people who expect something are not.",
+                    f"What is known about the owner: {facts}\nFrom: {m['from']}\nSubject: {m['subject']}\n"
+                    f"Preview: {m['snippet']}\n\nReturn JSON with category (personal|work|newsletter|notification|junk), "
+                    f"needs_reply, urgent, and a one-line summary.", _TRIAGE_SCHEMA, max_tokens=160)
+            except Exception:
+                d = {"category": "personal", "needs_reply": False, "urgent": False, "summary": m["subject"]}
+            if archive_noise and d.get("category") in ("newsletter", "notification", "junk"):
+                batch_noise.append((m, d))
+            else:
+                keep.append((m, d))
+        if batch_noise:
+            try:
+                mail.move([m["uid"] for m, _ in batch_noise], "archive")
+                noise.extend(batch_noise)
+            except mail.MailError as e:
+                keep.extend(batch_noise)
+                line = _triage_line(noise, keep, 0).rstrip(".") + f". Could not archive: {e}."
+                _triage_window(ctx, line, keep, noise)
+                return line
+    if not seen:
+        return "no unread mail in the inbox: nothing new to sort"
+    left = 0
+    if len(seen) >= _TRIAGE_CAP:
+        try:
+            left = max(0, mail.count_unread() - len(keep))
+        except mail.MailError:
+            left = 0
+    line = _triage_line(noise, keep, left)
+    _triage_window(ctx, line, keep, noise)
+    return line
+
+
+def _triage_window(ctx, line, keep, noise):
+    """The inbox panel. The spoken reply stays the one sentence from _triage_line."""
     if not keep:
-        lines.append("inbox zero: no unread mail is left." if not waiting else "nothing in this batch needs you.")
-        show(ctx, {"title": "Inbox zero" if not waiting else "Inbox", "size": "m", "blocks": [{"type": "text", "text": "\n".join(lines)}]})
-    else:
-        rows, items = [], []
-        for m, d in sorted(keep, key=lambda x: not x[1].get("urgent")):
-            rows.append(f"[{m['uid']}] {'URGENT · ' if d.get('urgent') else ''}{m['from'][:30]} — {m['subject'][:48]}")
-            rows.append(f"      {str(d.get('summary', ''))[:100]}" + (" (reply expected)" if d.get("needs_reply") else ""))
-            items.append({"id": m["uid"], "title": f"{_sender_name(m['from'])[:40]} — {m['subject'][:60]}",
-                          "subtitle": str(d.get("summary", ""))[:160] + (" · reply expected" if d.get("needs_reply") else ""),
-                          "meta": "urgent" if d.get("urgent") else "",
-                          "actions": [{"label": i18n.t("d_read"), "say": f"read email {m['uid']}"},
-                                      {"label": i18n.t("d_archive"), "say": f"archive email {m['uid']}"}]})
-        blocks = ([{"type": "text", "text": lines[0], "dim": True}] if noise else []) + [{"type": "list", "items": items}]
-        show(ctx, {"title": f"Needs you · {len(keep)}", "size": "l", "blocks": blocks})
-        lines.append(f"{len(keep)} message(s) need you and stay in the inbox (shown on screen as is):")
-        lines += rows
-        lines.append("The panel is already on screen: do not repeat it. Do NOT archive or delete "
-                     "these; reply (mail_reply) only when you say what to answer.")
-    return "\n".join(lines)
+        show(ctx, {"title": "Inbox zero", "size": "m", "blocks": [{"type": "text", "text": line}]})
+        return
+    items = []
+    for m, d in sorted(keep, key=lambda x: not x[1].get("urgent")):
+        items.append({"id": m["uid"], "title": f"{_sender_name(m['from'])[:40]} — {m['subject'][:60]}",
+                      "subtitle": str(d.get("summary", ""))[:160] + (" · reply expected" if d.get("needs_reply") else ""),
+                      "meta": "urgent" if d.get("urgent") else "",
+                      "actions": [{"label": i18n.t("d_read"), "say": f"read email {m['uid']}"},
+                                  {"label": i18n.t("d_archive"), "say": f"archive email {m['uid']}"}]})
+    blocks = ([{"type": "text", "text": line, "dim": True}] if noise else []) + [{"type": "list", "items": items}]
+    show(ctx, {"title": f"Needs you · {len(keep)}", "size": "l", "blocks": blocks})
 
 
 # ------------------------------------------------------------ generated UI, quotes, apps, wifi
@@ -4085,10 +4126,10 @@ def real_quote(a, ctx):
     try:
         res = [r for r in web.search(f"site:wikiquote.org {q}", n=6) if "wikiquote.org" in r["url"]]
         if not res:
-            return f"no Wikiquote page found for '{q}'"
+            return f"No Wikiquote page for {q}, so there is no sourced quote."
         page = web.read(res[0]["url"], limit=12000)
     except web.WebError as e:
-        return f"lookup failed: {e}"
+        return f"I couldn't look up a Wikiquote page for {q}: {e}"
     quotes = []
     for ln in page["text"].splitlines():
         t = ln.strip(" -•*•")
@@ -4097,7 +4138,7 @@ def real_quote(a, ctx):
         if len(quotes) >= 5:
             break
     if not quotes:
-        return f"the page {page['url']} had no clearly quoted lines"
+        return f"No quoted line on {page['url']}, so there is no sourced quote."
     show(ctx, {"title": page["title"][:60] or q, "size": "m",
                "blocks": [{"type": "quote", "text": t, "author": q if q.istitle() or " " in q else "", "source": page["url"]} for t in quotes[:3]]})
     return ("Real quotes (verbatim from " + page["url"] + ") are already shown in a window on screen:\n" +

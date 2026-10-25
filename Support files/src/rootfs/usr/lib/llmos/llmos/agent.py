@@ -938,6 +938,15 @@ def _restore_model(ctx, previous):
             pass
 
 
+def _media_shortcut(name, args):
+    """play_media needs mpv. Without it, the same request opens a YouTube search in the installed browser."""
+    if name != "play_media" or tools.REGISTRY["play_media"].available():
+        return name, args
+    import urllib.parse
+    q = str((args or {}).get("query") or "").strip()
+    return "browse", {"site": "https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(q)}
+
+
 def run(ctx, user_text, history):
     """Run one user turn. Streams text through ctx, executes tools under the
     autonomy policy, appends to history, returns the final text."""
@@ -1005,11 +1014,12 @@ def run(ctx, user_text, history):
         lead = re.match(r"^(?P<first>.+?)(?:,\s*|\s+)(?:and\s+)?then\s+(?P<rest>.+)$", user_text, re.I | re.S)
         first = intent.match(lead.group("first")) if lead else None
         if first:
-            opening = first[0] == "open_app" and hasattr(ctx, "app_read")
+            name1, args1 = _media_shortcut(first[0], first[1])
+            opening = name1 == "open_app" and hasattr(ctx, "app_read")
             before = _page_key(ctx)     # the page already on screen, before the step runs (opening or not)
-            out1 = execute(ctx, first[0], first[1])
+            out1 = execute(ctx, name1, args1)
             if not _failed(out1):
-                done = _cap(_shortcut_reply(first[0], first[1], out1))
+                done = _cap(_shortcut_reply(name1, args1, out1))
                 ctx.status(done)
                 if opening:
                     # continue as soon as the read bridge shows a page other than the one before (2 s at most)
@@ -1037,7 +1047,8 @@ def run(ctx, user_text, history):
                 user_text = ((rest or "Say in one sentence what was done.") + f"\n(Already done for this request: {done} {note})")
     shortcut = intent.match(user_text)
     if shortcut:
-        name, args = shortcut
+        name, args = _media_shortcut(*shortcut)
+        shortcut = (name, args)
         out = execute(ctx, name, args)
         if str(out).startswith(_NOT_AN_APP):
             shortcut = None         # "write a birthday message" is words: the model writes them
