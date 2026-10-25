@@ -931,6 +931,7 @@ def set_appearance(a, ctx):
     if not changed:
         return "nothing to change"
     ui.reload_theme()
+    themes.publish()
     if a.get("theme") or a.get("font") or a.get("color") or a.get("background") or a.get("accent"):
         try:
             if apps.retheme() and hasattr(ctx, "reload_apps"):

@@ -394,10 +394,18 @@ def _system_check():
             "cpu": cpu, "gpu": vendor if accel else "", "accel": accel}
 
 
+def _tier_row(tier, m, inst):
+    return {"tier": tier, "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"],
+            "size_gb": round(m["size"] / 1e9, 1), "installed": m["id"] in inst}
+
+
 def _model_tiers(allow_download):
     """The on-device models behind Fast / Balanced / Most capable on this computer: those that fit its memory
-    (1 GB left for the system); offline, only those already here. Fast is the smallest (or an installed quick one in the
-    same size band), Balanced the largest of the other quick ones, Most capable the largest. A tier that would repeat a model is dropped."""
+    (1 GB left for the system, the same line as models.fits); offline, only those already here. Fast is the smallest
+    (or an installed quick one in the same size band). When Dolphin or Huihui fit they take Balanced and then Most
+    capable, in that order — the same preference as models.active — and the largest model stays selectable from the
+    full list. Otherwise Balanced is the largest of the other quick ones and Most capable is the largest. A tier
+    that would repeat a model is dropped."""
     ram = models.ram_gb()
     inst = {m["id"] for m in models.installed()}
     fits = [m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (allow_download or m["id"] in inst)]
@@ -411,15 +419,26 @@ def _model_tiers(allow_download):
     # Fast is the smallest; but an installed quick model no bigger than 1.5x the smallest is the same band, and it is
     # ready at once, so it is Fast instead (a bigger installed model keeps its place in the order)
     fast = next((m for m in quick if m["id"] in inst and m["size"] <= fits[0]["size"] * 1.5), fits[0])
-    rest = [m for m in fits if m is not fast]
-    rest_quick = [m for m in quick if m is not fast]
+    by = {m["id"]: m for m in fits}
+    willing = [by[mid] for mid in models.DEFAULT_MODELS if mid in by and mid != fast["id"]]
+    if willing:
+        # Uncensored models that fit: Dolphin, then Huihui. One of them leaves Most capable as the largest model
+        # that is not already a stop. Both of them fill the two stops, and the largest stays in the full list.
+        picks = [("fast", fast), ("balanced", willing[0])]
+        if len(willing) > 1:
+            picks.append(("capable", willing[1]))
+        elif fits[-1]["id"] not in {fast["id"], willing[0]["id"]}:
+            picks.append(("capable", fits[-1]))
+    else:
+        rest = [m for m in fits if m is not fast]
+        rest_quick = [m for m in quick if m is not fast]
+        picks = (("fast", fast), ("balanced", (rest_quick or rest or [fast])[-1]), ("capable", fits[-1]))
     out, seen = [], set()
-    for tier, m in (("fast", fast), ("balanced", (rest_quick or rest or [fast])[-1]), ("capable", fits[-1])):
+    for tier, m in picks:
         if m["id"] in seen:
             continue
         seen.add(m["id"])
-        out.append({"tier": tier, "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"],
-                    "size_gb": round(m["size"] / 1e9, 1), "installed": m["id"] in inst})
+        out.append(_tier_row(tier, m, inst))
     return out
 
 
@@ -4368,6 +4387,10 @@ class Desk:
             side = "bottom" if config.settings.get("appearance.layout") == "windows" else "top"
             xml = re.sub(r"\s*<margin [^>]*/>", "", xml)
             xml = xml.replace("</labwc_config>", f'  <margin {side}="{bar}" />\n</labwc_config>', 1)
+            # window corners follow the desk's radius (0 for square). The template ships a fixed number.
+            rad = themes.window_radius()
+            if rad is not None:
+                xml = re.sub(r"(<cornerRadius>)\d+(</cornerRadius>)", rf"\g<1>{rad}\2", xml, count=1)
             # a slower double-click (shaky hands): two clicks this far apart still count as one double-click
             xml = xml.replace("<mouse>", f"<mouse><doubleClickTime>{int(inp.get('double_click_ms', 500))}</doubleClickTime>", 1)
             rate, delay = int(inp.get("repeat_rate", 25)), int(inp.get("repeat_delay", 600))

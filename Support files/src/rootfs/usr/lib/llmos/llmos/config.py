@@ -150,7 +150,8 @@ PUBLIC_DEFAULTS = {
     "internet": "yes",              # yes | ask | no
     "tor": False,
     "model": "",                    # catalog id; "" = Dolphin 3.0 8B if it is installed and fits, else Huihui
-                                    # Ornith 1.5 9B, else the first installed model (models.active)
+                                    # Ornith 1.5 9B, else Hermes 3 3B (the model the image ships), else the first
+                                    # installed model (models.active)
     "think": False,                 # let the model reason before answering
     "appearance": {
         "color": "",                # text color ("" = terminal default)
