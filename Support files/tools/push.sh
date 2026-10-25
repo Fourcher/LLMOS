@@ -4,7 +4,7 @@
 cd "/Volumes/Files/Claude Work Area/LLMOS/Support files"
 python3 -m compileall -q src/rootfs/usr/lib/llmos/llmos || exit 1
 find src/rootfs -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null
-chmod 0755 src/rootfs/usr/bin/llmos src/rootfs/usr/bin/llmos-model-run src/rootfs/usr/libexec/llmos-login src/rootfs/usr/libexec/llmos-desk src/rootfs/etc/init.d/llmos-*
+chmod 0755 src/rootfs/usr/bin/llmos src/rootfs/usr/bin/llmos-model-run src/rootfs/usr/libexec/llmos-login src/rootfs/usr/libexec/llmos-desk src/rootfs/etc/init.d/llmos-* src/rootfs/etc/periodic/15min/tailscale-watchdog
 (cd src/rootfs && tar --format=ustar --uid 0 --gid 0 --uname root --gname root -cf ../../build/work/payload.tar .)   # system files belong to root, not to the Mac user who built them
 curl -s -o /dev/null http://127.0.0.1:8765/src/install.sh || {
     nohup python3 -m http.server 8765 --bind 127.0.0.1 --directory "$PWD" > run/httpd.log 2>&1 &

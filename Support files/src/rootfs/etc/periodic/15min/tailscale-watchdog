@@ -1,0 +1,19 @@
+#!/bin/sh
+# remote_ssh in the owner's settings: absent or anything but false means SSH stays on, so a crash,
+# an update, or a prefs reset puts RunSSH back. false means the owner turned it off, and this check leaves it off.
+rc-update show default | grep -q tailscale || rc-update add tailscale default
+if ! tailscale status >/dev/null 2>&1; then rc-service tailscale restart >/dev/null 2>&1 || rc-service tailscale start; sleep 10; fi
+if python3 -c '
+import json, os, sys
+p = os.path.join(os.environ.get("LLMOS_ETC", "/etc/llmos"), "settings.json")
+try:
+    with open(p, encoding="utf-8") as f:
+        d = json.load(f)
+except Exception:
+    sys.exit(0)
+if not isinstance(d, dict):
+    sys.exit(0)
+sys.exit(0 if d.get("remote_ssh", True) is not False else 1)
+'; then
+  tailscale debug prefs 2>/dev/null | grep -q '"RunSSH": true' || tailscale set --ssh
+fi

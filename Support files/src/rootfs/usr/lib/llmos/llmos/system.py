@@ -110,6 +110,9 @@ def firewall_rules(internet, tor=False, firewall=True):
     # printers and other devices announce themselves on the local network (mDNS): answers from local addresses only
     ip saddr {{ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }} udp dport 5353 accept
     ip6 saddr fe80::/10 udp dport 5353 accept
+    # Tailscale SSH arrives on tailscale0 (the daemon, not sshd). Direct WireGuard uses UDP 41641.
+    iifname "tailscale0" accept
+    udp dport 41641 accept
 {sharing}{devssh}"""
     else:
         # the owner switched the firewall off: inbound is open; the output chain below is the same either way

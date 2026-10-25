@@ -40,9 +40,50 @@ SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 PORT = 8781
 NAMESPACE = "llmos-ota"
 EXEC = {"usr/bin/llmos", "usr/bin/llmos-model-run", "usr/libexec/llmos-login", "usr/libexec/llmos-desk"}
-ALLOWED = ("usr/lib/llmos/", "usr/share/llmos/", "usr/bin/llmos", "usr/libexec/llmos-", "etc/init.d/llmos-", "etc/xdg/")
+ALLOWED = ("usr/lib/llmos/", "usr/share/llmos/", "usr/bin/llmos", "usr/libexec/llmos-", "etc/init.d/llmos-", "etc/xdg/",
+           "etc/periodic/15min/tailscale-watchdog")
 SKIP = {"etc/nftables.nft"}
+# the same three paths the device refuses: state, OpenRC config, and the runlevel link stay on the machine
+PRESERVE = ("var/lib/tailscale", "etc/conf.d/tailscale", "etc/runlevels/default/tailscale")
 ID_RE = re.compile(r"[A-Za-z0-9._-]{1,80}")
+APK_NAME = re.compile(r"[a-z0-9][a-z0-9._+-]{0,63}")
+
+
+def preserved(name):
+    """True when an update must not ship this path (Tailscale state, its config, or its runlevel link)."""
+    if not isinstance(name, str):
+        return False
+    name = name[2:] if name.startswith("./") else name
+    name = name.lstrip("/").rstrip("/")
+    return any(name == p or name.startswith(p + "/") for p in PRESERVE)
+
+
+def listed_apk(root=None):
+    """Package names in usr/share/llmos/packages.txt. Comments and blank lines are skipped."""
+    path = os.path.join(root or SRC, "usr/share/llmos/packages.txt")
+    names = []
+    try:
+        lines = open(path).read().splitlines()
+    except OSError:
+        return names
+    for line in lines:
+        name = line.split("#", 1)[0].strip()
+        if name and APK_NAME.fullmatch(name) and name not in names:
+            names.append(name)
+    return names
+
+
+def merge_apk(extra, listed=None):
+    """Manifest apk list: names the publisher passed, then packages.txt, duplicates dropped, order kept."""
+    names, seen = [], set()
+    for p in list(extra or []) + (listed_apk() if listed is None else list(listed)):
+        if not isinstance(p, str):
+            continue
+        p = p.strip()
+        if p and p not in seen and APK_NAME.fullmatch(p):
+            seen.add(p)
+            names.append(p)
+    return names
 
 
 def pubkey():
@@ -96,7 +137,7 @@ def build_payload(version):
                     continue
                 full = os.path.join(dirpath, fn)
                 rel = os.path.relpath(full, SRC)
-                if rel in SKIP or not rel.startswith(ALLOWED):
+                if rel in SKIP or preserved(rel) or not rel.startswith(ALLOWED):
                     continue
                 ti = tf.gettarinfo(full, arcname=rel)
                 ti.uid = ti.gid = 0
@@ -104,7 +145,7 @@ def build_payload(version):
                 if ti.isreg():
                     # a program keeps its run permission: listed ones, services, helpers, and anything executable here
                     # (1.8.9.2 shipped usr/libexec/llmos-resolvconf without it and Wi-Fi would not start)
-                    ti.mode = 0o755 if (rel in EXEC or rel.startswith(("etc/init.d/", "usr/libexec/", "usr/bin/"))
+                    ti.mode = 0o755 if (rel in EXEC or rel.startswith(("etc/init.d/", "usr/libexec/", "usr/bin/", "etc/periodic/"))
                                         or os.access(full, os.X_OK)) else 0o644
                     data = open(full, "rb").read()
                     if rel == "usr/lib/llmos/llmos/__init__.py":
@@ -135,7 +176,7 @@ def cmd_publish(a):
     m = {"format": 1, "id": uid, "version": version, "payload": f"payload-{uid}.tar", "sha256": digest,
          "size": len(data), "files": n, "created": int(time.time()), "from": socket.gethostname(),
          "restart": [s for s in (a.restart or "llmos-rootd,llmos-scheduler,llmos-watchdog,desk").split(",") if s],
-         "apk": [p for p in (a.apk or "").split(",") if p], "note": a.note or "",
+         "apk": merge_apk([p for p in (a.apk or "").split(",") if p]), "note": a.note or "",
          "enable": [p for p in (getattr(a, "enable", None) or "").split(",") if p],
          "disable": [p for p in (getattr(a, "disable", None) or "").split(",") if p]}
     mpath = os.path.join(FEED, f"manifest-{uid}.json")
@@ -200,6 +241,12 @@ if not ota.verify_manifest(raw, sig, hello["key"]):
 ota.check_manifest(m)
 os.makedirs(ota.STATE_DIR, exist_ok=True)
 rec = ota.apply_files(os.path.join(T, "p.tar"), os.path.join(ota.STATE_DIR, f"backup-{uid}.tar"))
+try:
+    missed = ota.install_missing_packages()
+except Exception as e:
+    missed = [str(e)]
+if missed:
+    print("note: some packages were not installed: " + ", ".join(missed))
 ota._stamp_release(m["version"])
 st = ota._state()
 st["id"] = uid
