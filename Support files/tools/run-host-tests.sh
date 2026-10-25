@@ -11,10 +11,18 @@ SANDBOX="$PWD/run/testhome/run-$$"          # one per run: several check workers
 rm -rf "$SANDBOX"; mkdir -p "$SANDBOX/tmp"
 trap 'rm -rf "$SANDBOX"' EXIT
 export HOME="$SANDBOX" LLMOS_HOME="$SANDBOX" TMPDIR="$SANDBOX/tmp" XDG_CONFIG_HOME="$SANDBOX/.config" XDG_DATA_HOME="$SANDBOX/.local/share" XDG_CACHE_HOME="$SANDBOX/.cache"
+# LLMOS_TEST_TIMEOUT (seconds, default 300) caps one suite. selfdev's light gate lowers it so a stuck test
+# cannot sit for five minutes on the laptop. A non-number falls back to the default.
+tmo="${LLMOS_TEST_TIMEOUT:-300}"
+case "$tmo" in
+  [1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]) ;;
+  *) tmo=300 ;;
+esac
+export LLMOS_TEST_TIMEOUT="$tmo"
 [ ${#args[@]} -gt 0 ] && tests=("${args[@]}") || tests=(tools/test-*.py)
 fail=0
 for t in "${tests[@]}"; do
-  if ! python3 -c 'import subprocess,sys; sys.exit(subprocess.run(sys.argv[1:], timeout=300, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode)' python3 "$t"; then
+  if ! python3 -c 'import os,subprocess,sys; t=int(os.environ.get("LLMOS_TEST_TIMEOUT","300")); sys.exit(subprocess.run(sys.argv[1:], timeout=t, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode)' python3 "$t"; then
     echo "FAIL $t"; fail=$((fail+1))
   fi
 done
