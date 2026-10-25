@@ -34,12 +34,13 @@ models.installed = lambda: [m for m in models.catalog() if m["id"] in INSTALLED]
 desk.system.apply_firewall = lambda policy: None      # the chat pick runs the set-up's profile step; never touch the host's firewall
 CAT = {m["id"]: m for m in models.catalog()}
 
-# (memory GB, online tier ids, offline tier ids) as the set-up offered them before this change, with the installed model
+# (memory GB, online tier ids, offline tier ids). The installed model is Ministral 3 3B, so it is Fast when it
+# fits. From 16 GB up, Dolphin then Huihui take the other stops (they fit); the largest model stays in the full list.
 EXPECT = {
     3.5: (["hermes-3-3b"], ["ministral-3-3b"]),                      # nothing fits: the one slow stop
     7.6: (["ministral-3-3b", "gemma-4-e4b"], ["ministral-3-3b"]),
-    15.3: (["ministral-3-3b", "lfm2.5-8b-a1b", "ministral-3-14b"], ["ministral-3-3b"]),
-    31.0: (["ministral-3-3b", "lfm2.5-8b-a1b", "underdog-27b"], ["ministral-3-3b"]),
+    15.3: (["ministral-3-3b", "dolphin-3-8b", "huihui-ornith-1.5-9b"], ["ministral-3-3b"]),
+    31.0: (["ministral-3-3b", "dolphin-3-8b", "huihui-ornith-1.5-9b"], ["ministral-3-3b"]),
 }
 
 for ram, (want_on, want_off) in EXPECT.items():
@@ -53,8 +54,8 @@ for ram, (want_on, want_off) in EXPECT.items():
         check(got_off == want_off and off[0]["bigger"] and off[0]["installed"],
               f"tiers offline: the installed model, slow {got_off}")
     else:
-        check(got_on == want_on, f"tiers online as before {got_on}")
-        check(got_off == want_off, f"tiers offline as before {got_off}")
+        check(got_on == want_on, f"tiers online {got_on}")
+        check(got_off == want_off, f"tiers offline {got_off}")
         check(all(not t.get("bigger") for t in on + off), "nothing fitting is marked running from disk")
     check(all(set(t) >= {"tier", "id", "name", "need_gb", "size_gb", "installed"} and "tight" not in t for t in on + off),
           "every tier has its fields; no old 'tight' flag")
