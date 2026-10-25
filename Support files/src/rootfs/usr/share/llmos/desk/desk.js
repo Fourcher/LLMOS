@@ -93,6 +93,7 @@
     st.textContent = m.style || "";
     ownerStyle();
     document.documentElement.dataset.motion = ["full", "reduced", "off"].includes(m.motion) ? m.motion : "full";
+    document.documentElement.dataset.backdrop = m.backdrop || (m.wallpaper ? "photo" : "living");
     const layout = ["windows", "mac"].includes(m.layout) ? m.layout : "clean";
     if (document.documentElement.dataset.layout !== layout) { document.documentElement.dataset.layout = layout; startMenu(false); dock(); }
     software = !!m.software;
@@ -105,9 +106,10 @@
     Object.assign(S, m.strings || {});
     document.querySelectorAll("[data-s]").forEach(e => { e.textContent = t(e.dataset.s); });
     document.querySelectorAll("[data-ph]").forEach(e => { e.placeholder = t(e.dataset.ph); e.setAttribute("aria-label", t(e.dataset.ph)); });
-    $("in").placeholder = t("hint", "Tell me what you want…");
+    $("in").placeholder = t("hint", "Tell me what you want.");
     paintMode();
-    $("in").setAttribute("aria-label", t("hint", "Tell me what you want…"));
+    $("in").setAttribute("aria-label", t("hint", "Tell me what you want."));
+    const send = $("send"); if (send) send.setAttribute("aria-label", t("d_send", "Send"));
     const desk = $("desk");
     if ((m.wallpaper || "") !== wallpaper && wallpaper && !motionOff()) {
       // the old picture fades out over the new one
@@ -154,14 +156,15 @@
   function idle() {
     const box = $("idle"); if (!box) return;
     const anyWin = [...wins.values()].some(w => !w.min);
-    const show = !$("desk").classList.contains("hidden") && !anyWin && $("reply").classList.contains("hidden") && !wizard.active;
+    const thread = $("thread");
+    const show = !$("desk").classList.contains("hidden") && !anyWin && $("reply").classList.contains("hidden") && !wizard.active && !(thread && thread.children.length);
     if (!show) { if (!box.classList.contains("hidden")) afterAnim(box, "closing", () => { box.classList.add("hidden"); box.classList.remove("closing"); }); return; }
     if (!box.classList.contains("hidden")) return;
     const h = new Date().getHours();
     const g = t(h < 12 ? "d_morning" : h < 18 ? "d_afternoon" : "d_evening");
-    box.innerHTML = `<div><div class="orb big"><i class="halo"></i></div><h1>${esc(ownerName ? g + ", " + ownerName : g)}</h1><p>${esc(t("d_idle_hint"))}</p><div class="sugg"></div></div>`;
+    box.innerHTML = `<div class="empty"><h1>${esc(ownerName ? g + ", " + ownerName : g)}</h1><p>${esc(t("d_idle_hint"))}</p><div class="sugg"></div></div>`;
     const sg = box.querySelector(".sugg");
-    ["g_ex1", "g_ex2", "g_ex3"].forEach((k, i) => { const b = el("button", "btn small", esc(t(k))); b.style.setProperty("--i", i); b.onclick = () => say(t(k)); sg.append(b); });
+    ["g_ex1", "g_ex2", "g_ex3"].forEach((k, i) => { const b = el("button", "btn ghost", esc(t(k))); b.type = "button"; b.style.setProperty("--i", i); b.onclick = () => say(t(k)); sg.append(b); });
     box.classList.remove("closing", "hidden");
   }
   // the orb's idle breathing: one style change 8 times a second, nothing when motion is reduced or off
@@ -424,6 +427,7 @@
         for (const q of Q) {
           const card = el("section", "q");
           card.innerHTML = `<div class="qh"><span class="qt" id="ql-${q.k}">${esc(t("q_" + q.k))}</span><span class="qx"></span></div><div class="seg" role="radiogroup" aria-labelledby="ql-${q.k}"></div><div class="qd"></div><div class="morem"></div>`;
+          if (q.k === "autonomy" || q.k === "capability") card.classList.add("lead", q.k === "capability" ? "model" : "autonomy");
           cards[q.k] = card; box.appendChild(card);
         }
         Q.forEach(fill);
@@ -929,6 +933,29 @@
   }
   // a one-line answer ("Done — animations off.") steps aside by itself so the windows stay in view;
   // anything longer waits for the owner (Esc / Close), and the pointer over the card keeps it
+  function cleanLayout() { const l = document.documentElement.dataset.layout; return l !== "windows" && l !== "mac"; }
+  // a finished turn joins the column, so the conversation stays on the page instead of a card that steps aside
+  function archiveTurn(err) {
+    const thread = $("thread"); if (!thread || !cleanLayout()) return;
+    const req = $("reply-req").textContent.trim();
+    const text = $("reply-text").innerHTML.trim();
+    if (!req && !text) return;
+    const art = el("article", "turn" + (err ? " err" : ""));
+    const rq = el("div", "req");
+    const you = el("span", "you", esc(t("d_you")));
+    rq.append(you, document.createTextNode(" " + req));
+    const act = el("div", "activity");
+    act.innerHTML = $("reply-activity").innerHTML;
+    act.querySelectorAll("details").forEach(d => { d.open = false; });
+    const tx = el("div", "text" + (err ? " err" : ""));
+    tx.innerHTML = $("reply-text").innerHTML;
+    art.append(rq, act, tx);
+    thread.append(art);
+    thread.scrollTop = thread.scrollHeight;
+  }
+  function hideReplyNow() {
+    const r = $("reply"); r.classList.add("hidden"); r.classList.remove("closing", "collapsed", "writing", "busy"); idle();
+  }
   function replyEnd(m) {
     if (!cur) return; cur.text = m.text || cur.text;
     // nothing to say (a window opened and is the answer): no empty "LLM OS" card left above the bar
@@ -938,6 +965,9 @@
     const short = cur.text.length < 90 && !cur.text.includes("\n") && !needs, opened = !!cur.opened;
     conv.push(cur); cur = null; histPos = -1; $("reply-progress").classList.add("hidden"); $("reply").classList.remove("writing"); orb("idle", "");
     clearTimeout(autoHide);
+    const det = $("reply-activity").querySelector("details"); if (det) det.open = false;
+    // the clean desk keeps the answer in the column. The other layouts still fold a short card.
+    if (cleanLayout()) { archiveTurn(false); hideReplyNow(); return; }
     // the window IS the answer: a short reply that opened one folds at once; a short answer alone steps aside after a while
     if (opened && short) setTimeout(() => { if (!busy && !cur) collapseReply(); }, motionOff() ? 0 : 900);
     else if (short && !motionOff()) autoHide = setTimeout(() => { if (!$("reply").matches(":hover") && !busy) hideReply(); }, Math.max(12000, 250 * $("reply-text").textContent.length));
@@ -945,12 +975,26 @@
   function replyError(m) {
     // Stop: what was already written stays, with a clear end line (the text used to just stop, or be replaced)
     if (m.stopped && cur && cur.text) { replyEnd({ text: cur.text.replace(/\s+$/, "") + "\n\n*— " + (m.text || "Stopped.") + "*" }); return; }
-    if (!cur) replyStart({ request: "" }); $("reply-text").className = "text err"; $("reply-text").textContent = m.text; cur.text = m.text; conv.push(cur); cur = null; histPos = -1; orb("attention", ""); setTimeout(presence, 1500); }
+    if (!cur) replyStart({ request: "" }); $("reply-text").className = "text err"; $("reply-text").textContent = m.text; cur.text = m.text; conv.push(cur); cur = null; histPos = -1; orb("attention", "");
+    if (cleanLayout()) { archiveTurn(true); hideReplyNow(); return; }
+    setTimeout(presence, 1500); }
+  function paintActivity(open) {
+    const box = $("reply-activity"); if (!box) return;
+    const lines = (cur && cur.activity) || [];
+    box.innerHTML = "";
+    if (!lines.length) return;
+    if (lines.length === 1) { box.append(el("div", "act-one", esc(lines[0]))); return; }
+    const d = el("details", "acts"); d.open = !!open;
+    const s = document.createElement("summary"); s.textContent = lines[lines.length - 1];
+    const list = el("div", "act-list");
+    for (const line of lines.slice(0, -1)) list.append(el("div", "", esc(line)));
+    d.append(s, list); box.append(d);
+  }
   function activity(m) {
     if (!cur) return;
-    const box = $("reply-activity"), last = box.lastElementChild;
-    if (m.replace && last) { last.textContent = m.text; cur.activity[cur.activity.length - 1] = m.text; }
-    else { cur.activity.push(m.text); box.append(el("div", "", esc(m.text))); }
+    if (m.replace && cur.activity.length) cur.activity[cur.activity.length - 1] = m.text;
+    else cur.activity.push(m.text);
+    paintActivity(true);
     $("reply").scrollTop = 1e6; orb("thinking", t("d_working"));
   }
   // the requests waiting behind the one in progress: in order, each with ✕ to take it out of the queue
@@ -1132,7 +1176,7 @@
           const c = $("lock-card"); c.classList.remove("shake"); void c.offsetWidth; c.classList.add("shake"); return; }
         case "speaking": speaking = !!m.on; presence(); return;
         case "unlock.busy": $("lock-busy").classList.remove("hidden"); return;
-        case "clear": for (const id of [...wins.keys()]) closeWindow(id, false); conv.length = 0; $("reply").classList.add("hidden"); idle(); return;
+        case "clear": for (const id of [...wins.keys()]) closeWindow(id, false); conv.length = 0; if ($("thread")) $("thread").innerHTML = ""; $("reply").classList.add("hidden"); idle(); return;
         case "eval": try { (0, eval)(m.js); } catch (e) { console.log(e); } return;
       }
     }

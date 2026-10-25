@@ -943,22 +943,22 @@ def set_appearance(a, ctx):
         ("; a custom style is still on and may override this (say 'back to the default look' to remove it)" if still and not a.get("theme") else "")
 
 
-_RESTYLE_SYSTEM = """You restyle a desktop's interface by writing CSS for its page (an HTML page in a web view). Parts:
-html, body: the whole screen. #top: the top bar (clock, status). #stage: where windows sit. .win: every window (a box with
-border, border-radius, background var(--card)); .win .head: a window's title bar; #cmd: the request box at the bottom (input
-#in); #reply: the column where answers appear; .btn: buttons; #backdrop: the animated background canvas; #dock: the dock.
-Colours in use: var(--bg), var(--fg), var(--accent), var(--card), var(--line). Fonts available: sans-serif, serif, monospace,
-'Noto Sans', 'JetBrains Mono', 'Noto Serif'.
-Write CSS that makes the look the owner asked for as fully and literally as CSS can: shapes (clip-path, border-radius,
-transform), filters (filter: grayscale/sepia/invert/hue-rotate/blur/contrast), fonts, letter-spacing, text-transform,
-colours, borders, shadows, animations (@keyframes). Style the real elements themselves (.win, #top, html...), not ::before
-or ::after, and add !important to every declaration so it wins over the page's own rules. Keep text readable and keep
-#cmd usable. No url(), no @import.
+_RESTYLE_SYSTEM = """You restyle a desktop by changing its design tokens. Write CSS for the page. The look is driven by variables on :root; change those, not one-off colours on random elements.
+
+Put the look in one :root rule. Every declaration needs !important so it wins:
+--bg background, --fg text, --accent highlight, --danger, --ok, --warn,
+--radius and --radius-sm (0px for square, 12px for a soft corner, 24px for very round), --radius-pill,
+--font and --mono. System fonts only: system-ui, ui-serif, ui-monospace, serif, monospace, "Noto Sans", "Noto Serif", "Noto Sans Mono". No external fonts.
+--text-xs, --text-sm, --text-md, --text-base, --text-lg, --text-xl, --text-2xl,
+--space-1 (4px) --space-2 (8px) --space-3 (12px) --space-4 (16px) --space-5 (24px) --space-6 (32px) --space-7 (48px) --space-8 (64px),
+--shadow, --card, --line, --dim.
+Example: :root { --bg: #160f22 !important; --fg: #f3eefe !important; --accent: #b388ff !important; --radius: 0px !important; --radius-sm: 0px !important; }
+
+Add other rules only for something a token cannot do (a clip-path, a filter, a tilt). Parts: html, body, #top, #stage, .win, .win .head, #cmd, #in, #reply, #thread, .btn, #dock, #backdrop. Style those elements, not ::before or ::after, and add !important to every declaration. Keep text readable and keep #cmd usable. No url(), no @import.
 Patterns (adapt them, they are not answers):
-- a shape for every window: .win { clip-path: polygon(...) !important; }   (percent points; text inside may need padding)
+- a shape for every window: .win { clip-path: polygon(...) !important; }
 - a whole-screen effect: html { filter: sepia(1) contrast(1.1) !important; }
-- a typeface everywhere: * { font-family: monospace !important; letter-spacing: .05em !important; }
-- tilted windows: .win { transform: rotate(-3deg) !important; }
+- a typeface everywhere: :root { --font: ui-monospace, monospace !important; }
 Reply with only the CSS (at most 25 rules, no explanation, no code fences). If part of the request is impossible with CSS,
 add one last line starting with NOTE: and one short plain sentence saying which part."""
 

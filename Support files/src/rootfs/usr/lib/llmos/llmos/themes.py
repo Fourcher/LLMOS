@@ -27,11 +27,12 @@ PALETTES = [
     (("dark", "night", "black", "midnight", "dim"), "#0b0d14", "#e8e9ef", "#7a52ff", ""),
 ]
 DEFAULT = ("#0b0d14", "#e8e9ef", "#7a52ff")
+# System faces only. Named fonts are used when the machine has them; nothing is fetched.
 FONTS = {
-    "sans": 'Inter, "Noto Sans", system-ui, sans-serif',
-    "serif": '"Noto Serif", Georgia, serif',
-    "mono": '"JetBrains Mono", "Noto Sans Mono", monospace',
-    "pixel": 'Terminus, "JetBrains Mono", monospace',
+    "sans": 'system-ui, "Noto Sans", sans-serif',
+    "serif": 'ui-serif, Georgia, "Noto Serif", serif',
+    "mono": 'ui-monospace, "Noto Sans Mono", monospace',
+    "pixel": 'Terminus, ui-monospace, monospace',
 }
 FONT_WORDS = {
     "mono": ("mono", "monospace", "monospaced", "code", "coding", "programmer", "typewriter", "jetbrains", "courier", "console"),
@@ -110,14 +111,15 @@ def resolve(words, current=None):
     return None
 
 
-FAMILY = {"sans": "Inter", "serif": "Noto Serif", "mono": "JetBrains Mono", "pixel": "Terminus"}
+# Pango names for GTK. system-ui matches the desk page. Inter and JetBrains Mono are not bundled.
+FAMILY = {"sans": "system-ui", "serif": "serif", "mono": "monospace", "pixel": "Terminus"}
 
 
 def apply_programs(home, mode, font="sans", bg="", fg="", acc="", scale=100):
     """The other programs follow the look too: GTK programs (Files, the editor, Firefox's own dark mode) through
     their settings files, the terminal through its colours. Programs read these when they start."""
     import os
-    fam = FAMILY.get(font or "sans", "Inter")
+    fam = FAMILY.get(font or "sans", "system-ui")
     dark = mode != "light"
     ini = ("[Settings]\n"
            f"gtk-application-prefer-dark-theme={'1' if dark else '0'}\n"
@@ -141,7 +143,7 @@ def apply_programs(home, mode, font="sans", bg="", fg="", acc="", scale=100):
         d = os.path.join(home, ".config", "foot")
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "foot.ini"), "w") as f:
-            f.write(f"font={'JetBrains Mono' if font in ('sans', 'serif', '') else fam}:size={round(11 * max(80, min(int(scale or 100), 250)) / 100)}\npad=10x10\n\n[colors-dark]\n"
+            f.write(f"font={'monospace' if font in ('sans', 'serif', '') else fam}:size={round(11 * max(80, min(int(scale or 100), 250)) / 100)}\npad=10x10\n\n[colors-dark]\n"
                     f"background={b}\nforeground={t}\nselection-background={a}\nselection-foreground={b}\n")
         out.append("foot")
     except OSError:
