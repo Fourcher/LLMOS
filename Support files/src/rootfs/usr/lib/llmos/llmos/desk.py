@@ -2957,6 +2957,9 @@ class Desk:
             if not open_now and not any(s.get("kind") == "app" for s in self.windows.values()):
                 self.last_reply = self._said = _nothing_open_reply(line)
                 return True
+        hit = intent._remote(low)
+        if hit and self._remote_shortcut(hit, line):
+            return True
         r = self._system_shortcut(low, line)
         if r:
             return True
@@ -3992,9 +3995,6 @@ class Desk:
     def _system_shortcut(self, low, line):
         """The system's own panels and their buttons (syspanels.py): no model, done at once."""
         low = low.rstrip("?.!")
-        hit = intent._remote(low)
-        if hit and self._remote_shortcut(hit, line):
-            return True
         for rx, canon in self._CANON:
             if rx.fullmatch(low):
                 if canon == "__bt__":
