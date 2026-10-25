@@ -324,7 +324,9 @@ class Settings:
     _cache = (None, None)
 
     def all(self):
-        # re-read whenever the file changed (all consoles and the scheduler agree), parsed once otherwise
+        # re-read whenever the file changed (all consoles and the scheduler agree), parsed once otherwise.
+        # A same-size replacement can keep the previous timestamp (os.replace on this filesystem), so set()
+        # also stores the value it just wrote under that same key; otherwise get() would hand back the old one.
         try:
             st = os.stat(self.path)
             key = (st.st_mtime_ns, st.st_size)
@@ -367,6 +369,12 @@ class Settings:
         node[parts[-1]] = value
         _write_etc("settings.json", json.dumps(cur, ensure_ascii=False, indent=1))
         _good_settings = copy.deepcopy(cur)
+        try:
+            st = os.stat(self.path)
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            key = None
+        Settings._cache = (key, _merge(PUBLIC_DEFAULTS, cur))
 
 
 settings = Settings()

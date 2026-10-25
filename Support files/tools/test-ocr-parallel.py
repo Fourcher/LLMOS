@@ -3,6 +3,9 @@
 
 Every external call (magick, tesseract, grim) and the OCR step is faked with a 0.2 s sleep. read_screen() must
 finish clearly faster than doing those calls one after another, and must leave no temporary crop files behind.
+Each button box is a crop plus a tesseract read, and each strip is a crop plus an OCR read, so the serial cost
+counts both. A limit that counted one delay per box and per strip (3.0 s here) is already past on a 4-core
+machine, where the pool is 4 and the sleeps alone take about 3.4 s, while the real serial cost is about 11 s.
 
 Run: python3 tools/test-ocr-parallel.py
 """
@@ -67,7 +70,9 @@ def main():
             control.read_screen()
             elapsed = time.time() - t0
 
-        serial_floor = DELAY * (N_BOXES + N_STRIPS + 3)
+        # grim, connected-components, crop+read per box, crop+ocr per strip, final whole-screen OCR
+        serial_calls = 2 + N_BOXES * 2 + N_STRIPS * 2 + 1
+        serial_floor = DELAY * serial_calls
         limit = serial_floor / 2
         check(f"read_screen finishes in {elapsed:.2f}s (serial would take about {serial_floor:.1f}s, limit {limit:.1f}s)",
               elapsed < limit, f"{elapsed:.2f}s >= {limit:.2f}s")

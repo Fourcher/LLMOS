@@ -54,7 +54,15 @@ mb = subprocess.run(["git", "merge-base", "HEAD", REF], cwd=LLMOS_DIR,
 REF_USED = mb.stdout.strip() if mb.returncode == 0 and mb.stdout.strip() else REF
 old_src = subprocess.run(["git", "show", REF_USED + ":./i18n.py"], cwd=LLMOS_DIR,
                          capture_output=True, text=True, check=False)
-check(old_src.returncode == 0, f"reference {REF_USED} ({'merge-base with ' + REF if REF_USED != REF else REF}):i18n.py readable")
+if old_src.returncode != 0:
+    have_ref = subprocess.run(["git", "rev-parse", "--verify", "--quiet", REF], cwd=LLMOS_DIR,
+                              capture_output=True, text=True, check=False)
+    if have_ref.returncode != 0 and mb.returncode != 0:
+        print(f"SKIP: git ref {REF} is not in this clone, so the language blocks were not compared with it")
+    else:
+        check(False, f"reference {REF_USED} ({'merge-base with ' + REF if REF_USED != REF else REF}):i18n.py readable")
+else:
+    check(True, f"reference {REF_USED} ({'merge-base with ' + REF if REF_USED != REF else REF}):i18n.py readable")
 old = blocks_from_source(old_src.stdout) if old_src.returncode == 0 else {}
 
 check(sorted(new) == sorted(BLOCKS), "all six language blocks present")

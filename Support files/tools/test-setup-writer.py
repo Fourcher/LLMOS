@@ -16,6 +16,7 @@ import json
 import os
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -132,31 +133,35 @@ for mode, expect in (("cancel", "Cancelled"), ("denied", "Full Disk Access")):
     os.environ.pop("FAKE_AUTHOPEN", None)
 
 print("the drive list on this Mac")
+if not shutil.which("diskutil"):
+    print("SKIP: the drive list needs macOS diskutil, which is not on this machine")
+else:
+    def physical_disk_of(path):
+        """The physical whole disk holding `path`, found independently of the code under test."""
+        dev = subprocess.run(["df", "-P", path], capture_output=True, text=True).stdout.splitlines()[-1].split()[0]
+        info = plistlib.loads(subprocess.run(["diskutil", "info", "-plist", dev], capture_output=True).stdout)
+        whole = info.get("ParentWholeDisk", "")
+        apfs = plistlib.loads(subprocess.run(["diskutil", "apfs", "list", "-plist"], capture_output=True).stdout)
+        for c in apfs.get("Containers", []):
+            if c.get("ContainerReference") == whole:
+                store = c["PhysicalStores"][0]["DeviceIdentifier"]
+                return plistlib.loads(subprocess.run(["diskutil", "info", "-plist", store], capture_output=True).stdout).get("ParentWholeDisk", whole)
+        return whole
 
-
-def physical_disk_of(path):
-    """The physical whole disk holding `path`, found independently of the code under test."""
-    dev = subprocess.run(["df", "-P", path], capture_output=True, text=True).stdout.splitlines()[-1].split()[0]
-    info = plistlib.loads(subprocess.run(["diskutil", "info", "-plist", dev], capture_output=True).stdout)
-    whole = info.get("ParentWholeDisk", "")
-    apfs = plistlib.loads(subprocess.run(["diskutil", "apfs", "list", "-plist"], capture_output=True).stdout)
-    for c in apfs.get("Containers", []):
-        if c.get("ContainerReference") == whole:
-            store = c["PhysicalStores"][0]["DeviceIdentifier"]
-            return plistlib.loads(subprocess.run(["diskutil", "info", "-plist", store], capture_output=True).stdout).get("ParentWholeDisk", whole)
-    return whole
-
-
-own = physical_disk_of(S.FILES)
-ids = [d["id"] for d in S.list_drives()["drives"]]
-external = plistlib.loads(subprocess.run(["diskutil", "list", "-plist", "external", "physical"], capture_output=True).stdout).get("WholeDisks", [])
-print(f"    (this setup runs from {own}; external disks: {external}; offered: {ids})")
-check(own not in ids, f"the disk this setup runs from ({own}) is never offered")
-for b in S._mac_backup_mounts():
-    check(physical_disk_of(b) not in ids, f"the Time Machine backup on {b} is never offered")
-check("test" not in ids, "no test drive unless a test asks for one")
+    own = physical_disk_of(S.FILES)
+    ids = [d["id"] for d in S.list_drives()["drives"]]
+    external = plistlib.loads(subprocess.run(["diskutil", "list", "-plist", "external", "physical"], capture_output=True).stdout).get("WholeDisks", [])
+    print(f"    (this setup runs from {own}; external disks: {external}; offered: {ids})")
+    check(own not in ids, f"the disk this setup runs from ({own}) is never offered")
+    for b in S._mac_backup_mounts():
+        check(physical_disk_of(b) not in ids, f"the Time Machine backup on {b} is never offered")
+    check("test" not in ids, "no test drive unless a test asks for one")
 
 print("a whole job through Setup's web API, onto a raw block device (a RAM disk)")
+if not shutil.which("hdiutil"):
+    print("SKIP: the USB write through Setup needs macOS hdiutil to attach a RAM disk, which is not on this machine")
+    print("all good" if not fails else f"{fails} FAILED")
+    sys.exit(1 if fails else 0)
 ram = subprocess.run(["hdiutil", "attach", "-nomount", "ram://131072"], capture_output=True, text=True).stdout.split()[0]   # 64 MiB
 raw = ram.replace("/dev/disk", "/dev/rdisk")
 files = os.path.join(tmp, "files")
