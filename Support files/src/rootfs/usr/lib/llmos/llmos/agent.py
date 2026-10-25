@@ -821,19 +821,51 @@ _LECTURE_RE = re.compile(
     r"for your safety|at your own risk|i feel (?:obligated|compelled) to (?:warn|mention|point out|tell)|"
     r"let me (?:warn|caution) you|i (?:need|have) to (?:warn|caution) you|"
     r"it'?s important to (?:note|remember|understand|consider) that)\b", re.I)
-# requests that SHOULD be refused (the two hard stops): keep the refusal, never escalate past it.
+# requests that SHOULD be refused (the two hard stops): keep the refusal, never escalate past it, and never run a
+# tool for them. The check is this code, not the prompt, so a custom conduct.txt cannot turn it off.
 # Minors: teen/teenager, ages as words ("fourteen year old"), and ages with yo ("15yo", "16 yo").
+# A weapon request that names no person ("how do I build a bomb") is the same physical-harm stop. The pattern
+# asks for building one, so "the history of the bomb", "how do I clean my gun" and "how to build a bookshelf" do not match.
 _MINOR_RE = (r"child(?:ren)?|minors?|kids?|under-?age|infants?|toddlers?|teens?|teenagers?|teenage|pre-?teens?|"
              r"under-? ?18|under eighteen|(?<![0-9])(?:1[0-7]|[0-9])[\s-]*(?:yo|y\.o\.|y/o)(?!\w)|"
              r"(?<![0-9])(?:1[0-7]|[0-9])[\s-]*years?[\s-]*olds?\b|"
              r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
              r"sixteen|seventeen)[\s-]+years?[\s-]+olds?\b")
 _SEX_RE = r"sex|sexual|nude|naked|porn|explicit"
-_HARM_REQ_RE = re.compile(r"\b(kill|murder|stab|shoot|hurt|harm|attack|assault|beat up|poison|strangle|bomb|explosive|"
-                          r"nerve agent|bioweapon|chemical weapon)\b.{0,40}\b(him|her|them|someone|somebody|people|person|"
-                          r"a human|my (?:neighbou?r|coworker|boss|ex|wife|husband|partner|teacher|friend))\b|"
-                          r"\b(?:" + _MINOR_RE + r")(?!\w).{0,40}\b(?:" + _SEX_RE + r")\b|"
-                          r"\b(?:" + _SEX_RE + r")\b.{0,40}\b(?:" + _MINOR_RE + r")(?!\w)", re.I)
+_VIOLENCE_ALT = (r"\b(kill|murder|stab|shoot|hurt|harm|attack|assault|beat up|poison|strangle|bomb|explosive|"
+                 r"nerve agent|bioweapon|chemical weapon)\b.{0,40}\b(him|her|them|someone|somebody|people|person|"
+                 r"a human|my (?:neighbou?r|coworker|boss|ex|wife|husband|partner|teacher|friend))\b")
+_MINOR_SEX_ALT = (r"\b(?:" + _MINOR_RE + r")(?!\w).{0,40}\b(?:" + _SEX_RE + r")\b|"
+                  r"\b(?:" + _SEX_RE + r")\b.{0,40}\b(?:" + _MINOR_RE + r")(?!\w)")
+_WEAPON_ALT = (
+    r"\b(?:how (?:do i|can i|to)|help me(?: to)?|plan to|instructions? (?:for|to)|recipe for|blueprint for|steps to)\s+"
+    r"(?:build|mak(?:e|ing)|construct|assembl(?:e|ing)|synthesi[sz]e|fabricat\w*|manufactur\w*|creat(?:e|ing))\b"
+    r".{0,48}\b(?:bombs?|explosives?|grenades?|firearms?|guns?(?![\s-]*safes?\b)|gunpowder|molotovs?|ieds?|"
+    r"nerve agents?|bioweapons?|chemical weapons?|pipe bombs?)\b|"
+    r"\b(?:bombs?|explosives?|nerve agents?|bioweapons?|chemical weapons?|pipe bombs?)\s+"
+    r"(?:recipe|instructions|blueprint|plans?)\b|"
+    r"\b(?:recipe|instructions|blueprint|plans?)\s+(?:for|to make)\s+(?:a |an )?"
+    r"(?:bombs?|explosives?|nerve agents?|bioweapons?|chemical weapons?|pipe bombs?|guns?(?![\s-]*safes?\b)|firearms?)\b")
+_HARM_REQ_RE = re.compile(_VIOLENCE_ALT + "|" + _MINOR_SEX_ALT + "|" + _WEAPON_ALT, re.I)
+_VIOLENCE_RE = re.compile(_VIOLENCE_ALT, re.I)
+_MINOR_SEX_RE = re.compile(_MINOR_SEX_ALT, re.I)
+_WEAPON_RE = re.compile(_WEAPON_ALT, re.I)
+# Ordinary requests the harm words can brush against. These never block a tool: property, computers, money,
+# fiction, history, medical and self-defense information, and adults. Sexual content about a minor is not in
+# this list — that stop is checked first and is not waived by the word "story".
+_ORDINARY_RE = re.compile(
+    r"\b(?:fiction(?:al)?|novel|short story|screenplay|movie|film|poem|lyrics|fairy tale|video game|"
+    r"role-?play|once upon|stor(?:y|ies)|"
+    r"history|historical|world war|documentary|"
+    r"first aid|treat(?:ment|ing)?|wound|symptom|hospital|medical|medicine|cpr|bandage|antidote|"
+    r"injur(?:y|ies)|diagnos\w*|surgery|clinic|"
+    r"self[- ]?defen[cs]e|defend myself|protect myself|martial arts)\b", re.I)
+# "shoot a photo of my friend" is a picture, not violence. "shoot him and take a photo" is not this shape.
+_PHOTO_SHOOT_RE = re.compile(
+    r"\b(?:photo|photograph)s?\s+shoot\b|\bshoot\s+(?:a\s+|the\s+)?(?:photo|photograph|picture)s?\b|\bphotoshoot\b", re.I)
+_NOT_A_PHOTO_RE = re.compile(r"\b(?:kill|murder|stab|hurt|harm|attack|assault|beat up|poison|strangle)\b", re.I)
+_HARD_STOP_HARM = "I won't help cause physical harm to a person."
+_HARD_STOP_MINOR = "I won't produce sexual content involving anyone under 18."
 # Local models a timid refusal may move to, scored by capability (higher is stronger). Huihui is newer and
 # smarter than Dolphin; Granite is the cautious 8B, so it ranks under Dolphin. A model not in this list is
 # scored from the size in its id, so the current model — whatever it is — is never replaced by a weaker one.
@@ -850,6 +882,32 @@ _ESCALATE_RANK = (
 def _plain(text):
     """Straight apostrophes, so can't and won't match the same as their curly forms."""
     return (text or "").translate(_APOS).strip()
+
+
+def hard_stop(text):
+    """True when the request is one of the two hard stops: physical harm to a person (including a weapon
+    request that names nobody), or sexual content involving anyone under 18. Ordinary requests about property,
+    computers, money, fiction, history, medical or self-defense information, and adults are not stops."""
+    t = _plain(text)
+    if not t:
+        return False
+    if _MINOR_SEX_RE.search(t):
+        return True
+    violence, weapon = _VIOLENCE_RE.search(t), _WEAPON_RE.search(t)
+    if not violence and not weapon:
+        return False
+    if _ORDINARY_RE.search(t):
+        return False
+    if violence and not weapon and _PHOTO_SHOOT_RE.search(t) and not _NOT_A_PHOTO_RE.search(t):
+        return False
+    return True
+
+
+def hard_stop_reply(text):
+    """The one sentence the owner sees when a hard stop blocks a tool. No steps, no lecture."""
+    if _MINOR_SEX_RE.search(_plain(text)):
+        return _HARD_STOP_MINOR
+    return _HARD_STOP_HARM
 
 
 def _model_rank(mid):
@@ -947,12 +1005,95 @@ def _media_shortcut(name, args):
     return "browse", {"site": "https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(q)}
 
 
+# A goal the owner left unfinished when the step cap hit ("inbox zero today", "keep going until it's done").
+# A one-off question that happens to be long is not a goal: it still stops with the old "couldn't finish".
+_GOAL_RE = re.compile(r"\b(?:today|until it(?:'s| is) done|keep going until)\b", re.I)
+_GOAL_CONTINUE = "I'll keep going on that in the background and tell you when it's done."
+
+
+def _call_args(arguments):
+    try:
+        args = json.loads(arguments) if isinstance(arguments, str) and arguments.strip() else (arguments or {})
+    except ValueError:
+        return {}
+    return args if isinstance(args, dict) else {}
+
+
+def _call_risk(name, arguments):
+    tool = tools.REGISTRY.get(name)
+    if not tool:
+        return None
+    try:
+        return tool.risk_for(_call_args(arguments))
+    except Exception:
+        return None
+
+
+def _goal_remainder(user_text, calls):
+    """The owner's goal, plus the steps already taken, so the background run does not start from nothing."""
+    lines = []
+    for name, _args, out in calls[-8:]:
+        bit = re.sub(r"\s+", " ", str(out)).strip()
+        if len(bit) > 140:
+            bit = bit[:140] + "…"
+        lines.append(f"- {name}: {bit}" if bit else f"- {name}")
+    text = user_text.strip()
+    if lines:
+        text += "\n\nAlready done (do not repeat it):\n" + "\n".join(lines)
+    return text[:4000]
+
+
+def _continue_goal(ctx, user_text, calls):
+    """The step cap ended a goal. Store the rest as a background task and say so in one sentence.
+
+    hands-off continues with no question. balanced and hands-on use the same confirmation as any other
+    action (a change asks on hands-on; deleting asks on balanced). A SECURITY tool is not stored: the
+    scheduler never runs one unattended, and queueing it would only try again with nobody there.
+    Returns the sentence, or None when nothing was stored."""
+    said = getattr(ctx, "current_request", "") or user_text
+    if not _GOAL_RE.search(_plain(said)):
+        return None
+    risks = [_call_risk(name, args) for name, args, _out in calls]
+    if tools.SECURITY in risks:
+        return None
+    headless = getattr(ctx, "headless", False)
+    if not headless:
+        tainted = getattr(ctx, "tainted", False) and config.settings.get("guard_untrusted", True)
+        must_ask = tainted or needs_confirm(tools.CHANGE) or any(needs_confirm(r) for r in risks if r)
+        if must_ask:
+            confirm = getattr(ctx, "confirm_action", None)
+            tool = tools.REGISTRY.get("schedule_task")
+            if not callable(confirm) or tool is None:
+                return None
+            risk = tools.DESTRUCTIVE if any(r == tools.DESTRUCTIVE for r in risks) else tools.CHANGE
+            try:
+                ok = confirm(tool, {"task": said.strip()[:200]}, risk)
+            except Exception:
+                return None
+            if not ok:
+                return None
+        approved = True          # the owner asked for this goal, in this turn
+    else:
+        approved = bool(getattr(ctx, "approved", False))
+    try:
+        store.add_task("in 1 minute", _goal_remainder(said, calls), "agent", approved=approved)
+    except store.WhenError:
+        return None
+    try:
+        ctx._goal_continued = True
+    except AttributeError:
+        pass
+    return _GOAL_CONTINUE
+
+
 def run(ctx, user_text, history):
     """Run one user turn. Streams text through ctx, executes tools under the
     autonomy policy, appends to history, returns the final text."""
     try:
         ctx.tainted = False        # nothing outside the owner's own words has been read yet this turn
         ctx._tools_acted = False   # set again by execute() if a tool actually runs; escalation refuses to repeat it
+        ctx._hard_stop = False     # set by execute() if this request is one of the two hard stops
+        ctx._goal_continued = False
     except AttributeError:
         pass
     forget_last_routine(user_text)
@@ -1126,6 +1267,7 @@ def run(ctx, user_text, history):
     rare_on = False                              # a rare tool was called this turn: keep offering the rare group
     fresh = len(msgs[-1].get("content") or "")   # characters the model has not seen yet (its cache holds the rest)
     switched_from = None          # settings model id before a one-turn switch; restored in finally
+    ran_calls = []                # (name, arguments, result) this attempt; the step-cap hands the rest onward
     try:
         while True:
             chat = llm.cloud_chat if where == "cloud" else llm.chat
@@ -1199,11 +1341,19 @@ def run(ctx, user_text, history):
                 msgs.append(assistant_msg)
                 fresh = 0
                 same = {}                                    # the same call twice in one step runs once
+                hard = False
                 for i, call in enumerate(calls):
                     cid = call["id"] or f"call_{step}_{i}"
                     key = (call["name"], json.dumps(call["arguments"], sort_keys=True) if not isinstance(call["arguments"], str) else call["arguments"])
                     out = same[key] if key in same else execute(ctx, call["name"], call["arguments"])
                     same[key] = out
+                    ran_calls.append((call["name"], call["arguments"], out))
+                    if getattr(ctx, "_hard_stop", False):
+                        # the tool did not run. Stop the turn on the one-sentence refusal; do not let a later
+                        # step call another tool for the same request.
+                        final = str(out).split(":", 1)[1].strip() if str(out).lower().startswith("blocked:") else str(out)
+                        hard = True
+                        break
                     if str(out).lower().startswith(("not done", "blocked")):
                         # a refused call asked again, or words asked for as an app: the next turn is words only
                         if key in blocked or str(out).startswith(_NOT_AN_APP):
@@ -1214,6 +1364,8 @@ def run(ctx, user_text, history):
                     if tool_steps == 0:
                         first_calls.append((call["name"], call["arguments"], out))
                     msgs.append({"role": "tool", "tool_call_id": cid, "content": out})
+                if hard:
+                    break
                 tool_steps += 1
                 # one plain tool that already did the job ("volume up", "open my downloads", "add eggs to my list"): its own
                 # result is the answer, so the model is not asked to say it again (a whole model turn saved)
@@ -1233,8 +1385,12 @@ def run(ctx, user_text, history):
                 if ctx.after_turn:
                     break
             else:
-                # ran out of steps without a plain answer: ask for one final summary
-                if not final:
+                # the step cap: a goal keeps going in the background instead of stopping here. Anything else
+                # still gets one summary, then the old "couldn't finish".
+                cont = _continue_goal(ctx, user_text, ran_calls)
+                if cont:
+                    final = cont
+                elif not final:
                     try:
                         msgs.append({"role": "user", "content":
                                      "Stop using tools now and give me a one or two sentence plain answer "
@@ -1263,7 +1419,7 @@ def run(ctx, user_text, history):
             # re-run the turn on a more capable model, but only when nothing has run yet. A tool that already
             # deleted or sent must not run again. Genuinely harmful asks keep their refusal.
             acted = bool(getattr(ctx, "_tools_acted", False))
-            if final and not acted and len(tried) < 2 and _looks_refused(final) and not _HARM_REQ_RE.search(_plain(user_text)):
+            if final and not acted and len(tried) < 2 and _looks_refused(final) and not hard_stop(user_text):
                 tgt = _escalation_target(ctx, where, tried, forced)
                 if tgt:
                     escalated = True
@@ -1290,6 +1446,7 @@ def run(ctx, user_text, history):
                     final, tools_ran, nudged, no_tools = "", 0, False, bool(getattr(ctx, "ask_only", False))
                     blocked, rare_on = set(), False
                     tool_steps = 0
+                    ran_calls = []
                     continue
             break
     finally:
@@ -1703,6 +1860,16 @@ def execute(ctx, name, arguments):
     cancel = getattr(ctx, "cancel", None)
     if cancel is not None and cancel.is_set():        # the owner pressed Stop: no further step of this turn runs
         raise Cancelled()
+    # The two hard stops, before any tool: a conduct.txt that never mentions them does not turn this off,
+    # and the model agreeing is not enough. Ordinary requests never reach this return.
+    request = getattr(ctx, "current_request", "") or ""
+    if hard_stop(request):
+        store.audit(name, {}, "blocked: hard stop", allowed=False)
+        try:
+            ctx._hard_stop = True
+        except AttributeError:
+            pass
+        return "blocked: " + hard_stop_reply(request)
     tool = tools.REGISTRY.get(name)
     if not tool:
         return f"error: no such tool '{name}'"
