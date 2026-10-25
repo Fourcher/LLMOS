@@ -1775,7 +1775,7 @@ class Desk:
         s = config.settings.all()
         m = models.active()
         self.emit({"t": "status", "model": m["name"] if m else "", "model_ok": llm.health(),
-                   "autonomy": s.get("autonomy", "balanced"), "host_gpu": models.host_mode(),
+                   "autonomy": s.get("autonomy", "hands-off"), "host_gpu": models.host_mode(),
                    "brain": s.get("brain", "local"), "cloud": llm.cloud_label() if vault.unlocked() or not s.get("vault") else "", "home": llm.cloud_is_home(),
                    "home_up": llm.cloud_is_home() and llm.home_up(),
                    "tor": bool(s.get("tor")), "internet": s.get("internet", "yes"),
@@ -2176,7 +2176,7 @@ class Desk:
         s = config.settings.all()
         if which == "settings":
             L = lambda k, **kw: T(k, area="settings", **kw)
-            auto = s.get("autonomy", "balanced")
+            auto = s.get("autonomy", "hands-off")
             pick = lambda k, v: {"label": L(k), "say": v}
             blocks = [
                 {"type": "buttons", "items": [{"label": T("d_network"), "say": "network"}, {"label": T("d_sound"), "say": "sound"},

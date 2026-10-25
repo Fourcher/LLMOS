@@ -2,7 +2,7 @@
 """Host-side test of when LLM OS asks before acting (agent.execute), per the owner's choice:
   full trust (hands-off)  nothing the owner asks for is checked with them first: email, deleting, removing
                           programs, settings, commands. The one question is the consent itself, when switching to it.
-  balanced (the default)  asks before what can't be undone (and always before email leaves or the trash is emptied).
+  balanced                asks before what can't be undone (and always before email leaves or the trash is emptied).
   hands-on                asks before every change.
 In every mode, what an instruction inside a web page, email or file would make it do is shown first, unless the
 owner turned that check off too ("follow instructions in web pages too").
@@ -84,7 +84,7 @@ for name, args, req in (("mail_send", {"to": "ann@example.com", "subject": "hi",
     asked, did, out = run(name, args, req)
     check(not asked and (did or name == "change_setting"), f"{name}: done without asking" + (f" (asked {asked})" if asked else ""))
 
-print("balanced (the default): asks before what can't be undone")
+print("balanced: asks before what can't be undone")
 config.settings.set("autonomy", "balanced")
 for name, args, req, want in (("mail_send", {"to": "ann@example.com", "subject": "hi", "body": "hello"}, "email ann and say hello", True),
                               ("empty_trash", {}, "empty the trash", True),

@@ -71,7 +71,14 @@ def host_mode():
     return bool(config.host_model_id()) or os.path.exists(config.HOST_MODEL_URL_FILE)
 
 
+# No explicit choice: Dolphin 3.0 8B, then Huihui Ornith 1.5 9B (the handoff's on-device defaults).
+# A model that does not fit this machine's memory is skipped. The first installed model is the last resort.
+DEFAULT_MODELS = ("dolphin-3-8b", "huihui-ornith-1.5-9b")
+
+
 def active():
+    """The model answering on this computer. An explicit settings choice wins. With none, Dolphin 3.0 8B
+    if it is installed and fits in memory, else Huihui Ornith 1.5 9B, else the first installed model."""
     if host_mode():
         return by_id(config.host_model_id()) or {"id": "host", "name": "host model", "maker": "",
                                                     "origin": "", "license": "", "file": "", "size": 0,
@@ -79,7 +86,13 @@ def active():
     want = config.settings.get("model")
     inst = installed()
     for m in inst:
-        if m["id"] == want:
+        if want and m["id"] == want:
+            return m
+    mem = ram_gb()
+    by = {m["id"]: m for m in inst}
+    for mid in DEFAULT_MODELS:
+        m = by.get(mid)
+        if m and not _bigger_than_ram(m, mem):
             return m
     return inst[0] if inst else None
 

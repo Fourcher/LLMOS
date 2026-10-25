@@ -107,8 +107,10 @@ class ConsoleCtx:
     def edit_conduct(self):
         return ("The conduct section of the assistant's own instructions is the plain-text file "
                 "/etc/llmos/conduct.txt. Open it in an editor (say 'open a terminal', then `nano "
-                "/etc/llmos/conduct.txt`); whatever it holds replaces the built-in conduct. Delete the file to "
-                "return to the default. This is the one part of the system prompt you control. On the desk an "
+                "/etc/llmos/conduct.txt`); whatever it holds replaces the built-in conduct. The two hard stops stay "
+                "in the prompt either way: no help causing physical harm to a person, and no sexual content involving "
+                "anyone under 18. Delete the file to return to the default. This is the one part of the system prompt "
+                "you control. On the desk an "
                 "editor opens instead.")
 
     def interactive(self, cmd):
