@@ -130,9 +130,16 @@ These are the course-corrections the owner gave repeatedly. Treat them as bindin
   confirm links, so the owner doesn't copy 2FA codes by hand. (Shared free domains are on disposable blocklists, so
   screened sign-ups reject them — use the owner's real IMAP account for those.)
 - **Self-patching loop** (`tools/selfdev.py`, test-gated, NEVER auto-ships): the model proposes SEARCH/REPLACE edits →
-  applied to the real files ONLY while the full suite runs, then restored → staged only when the suite ACTUALLY ran
-  (a real "N run" summary via bash) and added no failures beyond a clean-tree baseline. `--show` / `--apply` / OTA are
-  separate human steps. Deployed on the laptop at `/root/llmos-dev`; uses the laptop's online coder.
+  applied to the real files ONLY while a gate runs, then restored (a journal covers kill/crash; the next start puts
+  the files back) → staged only when the suite ACTUALLY ran (a real "N run" summary via bash) and added no failures
+  beyond a baseline from the **same** test list. `--gate auto` (the default) runs the **full** suite on a dev machine
+  and the **light** gate on a live install or when MemAvailable is under 2 GiB. Light runs the tests that import or
+  read the changed modules, plus a small core, under nice/ionice, a 1 GiB address-space cap, and timeouts. It refuses
+  to stage (and does not fall through to the full suite) when it cannot tell which tests apply. Edits cannot leave
+  the OS package or touch tests / `run-host-tests.sh`. `--apply` checks a hash so it will not overwrite a file that
+  changed since staging. `--show` / `--apply` / OTA stay separate human steps. This loop does **not** escalate on
+  refusal. Normal path: run it on a dev machine and ship to the laptop via OTA. Light is what may run on the laptop
+  checkout at `/root/llmos-dev`; it is not the gate to ship on.
 
 ## 5. The real walls — hardware/physics, not policy (don't burn effort here)
 
@@ -146,12 +153,14 @@ These are the course-corrections the owner gave repeatedly. Treat them as bindin
   change what Google blocks.)
 - **The 8–14B local models can't reliably edit code** (measured: Huihui 9B ~3 min/turn, small coders fabricate and
   leak tool-call syntax). Route real code edits to a capable model (home brain or online).
-- **The host test suite is DESTRUCTIVE on a live install — never run it there.** Several tests reconfigure the real
-  machine: `test-firewall.py` / `test-rootd-firewall.py` apply the real firewall (one applies internet=off), and
-  `test-rootd-power.py` stops/restarts real services. Running the full suite on the live laptop once rebuilt its
-  firewall WITHOUT the dev-SSH rule and knocked out remote SSH (the machine was fine — 4 days uptime — but
-  unreachable until the firewall was reapplied via the devlink/OTA channel). `selfdev.py` now REFUSES to run on a
-  live install (`_is_live_install`). The gate belongs on a dev checkout or a VM; ship the result to the laptop via OTA.
+- **The full host suite does not belong on a live install.** It is heavy enough to wedge a 16 GB machine, and parts
+  of it reconfigure the real machine: `test-firewall.py` / `test-rootd-firewall.py` and `test-rootd-power.py` are the
+  ones that once rebuilt the laptop's firewall without the dev-SSH rule and knocked out remote SSH (the machine was
+  fine — 4 days uptime — but unreachable until the firewall was reapplied via the devlink/OTA channel). `selfdev.py`
+  still REFUSES `--gate full` on a live install (`_is_live_install`). `--gate light` may run there: only the tests
+  that touch the patched modules, plus a small core, with nice/ionice, a memory cap, and timeouts. Do NOT "fix" the
+  full-gate refusal by removing it. The normal path is still a dev checkout or a VM, then ship to the laptop via OTA.
+  A light-staged diff should pass the full suite on that dev machine before it is published.
 - **The agent's tools are real.** They delete files and touch the network. Test risky prompts only inside a VM, never
   the one real install.
 
@@ -167,10 +176,10 @@ These are the course-corrections the owner gave repeatedly. Treat them as bindin
 
 ## 7. Open / next
 
-- Bring the laptop back online (it froze during a full-suite self-dev run) and confirm it's healthy — the installed
-  OS was not modified (self-dev ran in a separate `/root/llmos-dev` checkout).
-- Self-dev must run on a dev checkout or VM (its test gate reconfigures the real firewall + services), then ship to
-  the laptop via OTA. `selfdev.py` now refuses to run on a live install. Do NOT "fix" that by removing the guard.
+- Self-dev normally runs on a dev checkout or VM, then ships to the laptop via OTA. `--gate full` stays refused on
+  a live install (do not remove that guard). `--gate light` is the laptop-sized gate: affected tests plus a core,
+  resource-limited, and it will not stage a change whose tests it cannot identify. A light-staged diff still wants
+  a full-suite run on the dev machine before OTA.
 - Optional model follow-ups the owner raised: benchmark a local coder vs the online one; a durable (non-disposable)
   device email via a domain the owner owns.
 

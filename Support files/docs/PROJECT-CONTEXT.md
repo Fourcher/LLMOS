@@ -70,22 +70,36 @@ ships its own OS code with no tests and no review is not self-improvement — on
 destructive tools, it is how the machine gets bricked or its own safeguards stripped. Keep the gate.
 
 **The loop is built: `tools/selfdev.py`.**
-- `tools/selfdev.py "the change you want"` — a model proposes the edit, it's applied to a throwaway copy, the full
-  host suite runs against it, and if green the diff is **staged, not shipped**. Up to 3 rounds; a refusal auto-switches
-  model (agent.py escalation), so "best coder, switch on refusal" is automatic.
-- `tools/selfdev.py --show` — the staged diff and its test result. `--apply` — a human accepts it into the source
-  (a commit). `--discard` — drop it. Shipping is still a separate `tools/ota.py publish` a human runs after `--apply`.
+- `tools/selfdev.py "the change you want"` — a model proposes SEARCH/REPLACE edits. They are written into the real
+  files only while a test gate runs, then put back. A journal of the originals is restored on the next start if the
+  process is killed mid-run. If the gate passes, the diff is **staged, not shipped**. Up to 3 rounds. This loop does
+  not escalate to another model on a refusal; a round is tried again only when the edit is unusable or the gate fails.
+- **Gates** (`--gate auto`, the default):
+  - `full` — the whole host suite. This is what auto picks on a dev machine with free memory. It is refused on a
+    live install (the suite applies the real firewall and stops real services, and on a 16 GB machine it can wedge
+    the box).
+  - `light` — only the tests that import or read the changed modules, plus a small core: the seatbelt itself
+    (`test-selfdev.py`), command risk, firewall rule text, refusal escalation, the untrusted-content guard, the
+    ask-first gate, and settings writes. Auto picks this on a live install, and when MemAvailable is under 2 GiB.
+    The choice is printed, and `--gate full` / `--gate light` override it (full still refuses on a live install).
+  - If the light gate cannot tell which tests a changed module has, it does **not** stage, and it does not fall
+    through to the full suite. Re-run with `--gate full` on a dev machine.
+- A light run is niced, put in the idle I/O class when `ionice` exists, capped at 1 GiB of address space per test
+  process, and bounded by a suite timeout and a shorter per-test timeout, so one run cannot wedge the laptop.
+- The gate judges a change by the failures it ADDS beyond a clean-tree baseline computed with the **same** test
+  list (and the same limits, for the light gate). Edits may only touch Python files in the OS package. A patch
+  cannot edit tests or `run-host-tests.sh`, and `..` cannot leave the package. `--apply` refuses if a file has
+  changed since staging.
+- `tools/selfdev.py --show` — the staged diff, the gate that ran, and its test result. `--apply` — a human accepts
+  it into the source. `--discard` — drop it. Shipping is still a separate `tools/ota.py publish` a human runs
+  after `--apply`.
 - The model is whatever LLM OS is set to use, so the loop is only as good as that model. The 8–9B local models produce
   mostly unusable edits (measured); the loop is genuinely useful when the capable home-brain or an online model is
-  configured — the same mechanism picks it up automatically. Regression-guarded by `tools/test-selfdev.py`.
-- It needs the source tree + `tools/run-host-tests.sh` present (the dev repo). **It is deployed on the laptop** at
-  `/root/llmos-dev` (a git checkout of the source, 97 MB). Run it there:
-  `cd "/root/llmos-dev/Support files" && python3 tools/selfdev.py "the change you want"`. It uses the laptop's
-  configured online coder (Nemotron via OpenRouter) automatically.
-- The gate judges a change by the test failures it ADDS beyond a clean-tree baseline, so the ~handful of tests that
-  need `git` or a UI venv (absent on the laptop) don't block it. The full suite is slow on the laptop (minutes per
-  run, and the gate runs it at least twice), so a self-dev task there takes a while — that's the hardware, not a bug.
-  A dev loop is naturally happier on a fast dev machine that ships results to the laptop via OTA.
+  configured. Regression-guarded by `tools/test-selfdev.py`.
+- **Run selfdev on a dev machine, and ship the result to the laptop via OTA.** That is the normal path. The light
+  gate exists so a run on the laptop (the checkout at `/root/llmos-dev`) does not have to execute every suite; it
+  is not the gate to ship on. A diff staged by the light gate should still pass the full suite on a dev machine
+  before `tools/ota.py publish`. The full suite stays slow (it runs at least twice: baseline, then the patch).
 
 ## How to work here
 
