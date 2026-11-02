@@ -36,7 +36,7 @@ calls = []
 
 def fake_service(*a, **kw):
     calls.append((a, kw))
-    return 0
+    return 0, "", ""
 
 
 def fake_wait_ready(*a, **kw):

@@ -135,11 +135,17 @@ def test_use():
         for reply in ((0, "restarted", ""), (1, "", "rc-service failed"), (124, "", "timed out after 60 s")):
             calls.clear()
             scripted[:] = [reply]
-            out = models.use("test-model")
+            try:
+                out, raised = models.use("test-model"), None
+            except RuntimeError as e:
+                out, raised = None, str(e)
             check(f"use with rc {reply[0]}: service('llmos-model','restart', timeout=60) called once",
                   calls == [("service", ("llmos-model", "restart"), {"timeout": 60})], repr(calls))
-            check(f"use with rc {reply[0]}: returns the model dict as before",
-                  out is model, repr(out))
+            if reply[0] == 0:
+                check("use with rc 0: returns the model dict", out is model, repr(out))
+            else:
+                check(f"use with rc {reply[0]}: raises naming the failed restart",
+                      raised is not None and "did not restart" in raised, repr(raised))
         check("use stored the model id in the stub settings",
               config.settings.get("model") == "test-model", repr(config.settings.get("model")))
     finally:
