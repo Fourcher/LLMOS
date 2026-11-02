@@ -2419,7 +2419,7 @@ class Desk:
                 with open(f) as fh:
                     lid = fh.read().split()[-1]
             was, self._lid = getattr(self, "_lid", lid), lid
-            if lid == "closed" and was == "open" and config.settings.get("lid", "sleep") == "sleep" and not self._external_screen():
+            if lid == "closed" and was == "open" and config.settings.get("lid", "stay") == "sleep" and not self._external_screen():
                 if _stay_awake():
                     # a test computer stays reachable: only the screen goes off (it comes back with the lid)
                     subprocess.run(["wlopm", "--off", "*"], capture_output=True, env=dict(os.environ, **(media.desk_env() or {})))

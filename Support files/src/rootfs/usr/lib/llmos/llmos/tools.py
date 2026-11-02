@@ -1760,7 +1760,7 @@ _SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission
       "user. brain: local (answered only on this computer) | ask (here; asks before a big request goes to "
       "the online model) | cloud (the online model answers everything). guidance: owner | standard. "
       "autolock: minutes (0 = off). screen_off: minutes idle before the screen turns off (0 = never). "
-      "sleep_after: minutes idle before the computer sleeps (0 = never). lid: sleep | nothing. "
+      "sleep_after: minutes idle before the computer sleeps (0 = never). lid: sleep | stay. "
       "guard_untrusted: on/off (show me first what instructions inside web pages, files or emails would make you do). "
       "do_not_disturb: on/off (programs' notifications hidden). night_light: on/off (warmer screen in the evening). timezone: a city, country or zone name ('Paris', 'Pacific', 'Asia/Tokyo'). "
       "clock: 24 or 12 (the hours shown in the top bar and on the clock: '24-hour clock', '12-hour clock'). "
@@ -1917,9 +1917,9 @@ def change_setting(a, ctx):
             ctx.redraw()
         return "the clock shows 24-hour time now" if h24 else "the clock shows 12-hour time (AM/PM) now"
     if s == "lid":
-        val = "nothing" if re.search(r"\b(nothing|stay|keep|awake|no|off|don'?t)\b", str(v), re.I) else "sleep"
+        val = "stay" if re.search(r"\b(nothing|stay|keep|awake|no|off|don'?t)\b", str(v), re.I) else "sleep"
         config.settings.set("lid", val)
-        return "closing the lid now does nothing (it keeps running)" if val == "nothing" else "closing the lid puts the computer to sleep"
+        return "closing the lid now does nothing (it keeps running)" if val == "stay" else "closing the lid puts the computer to sleep"
     if s == "timezone":
         try:
             zone = system.set_timezone(v)
