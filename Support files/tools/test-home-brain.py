@@ -107,7 +107,16 @@ config.settings.set("internet", "no")
 check(agent.route_for(Ctx(), "write me a letter") == "local", "an online account still stops when the internet is off")
 # tools/brain.py's laptop set-up script fills in and compiles (a stray % once crashed the supervisor)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import brain  # noqa: E402
+import shutil, subprocess  # noqa: E402
+if shutil.which("sysctl"):
+    import brain  # noqa: E402
+else:  # brain.py is a macOS tool that reads hw.memsize at import; give it a 0 here (Linux build box)
+    _real_run = subprocess.run
+    subprocess.run = lambda a, *k, **kw: subprocess.CompletedProcess(a, 0, "0", "") if a[:1] == ["sysctl"] else _real_run(a, *k, **kw)
+    try:
+        import brain  # noqa: E402
+    finally:
+        subprocess.run = _real_run
 script = (brain.SETUP.replace("@PORT@", "8090").replace("@MODEL@", repr("huihui-ornith-1.5-9b"))
           .replace("@KEY@", repr("k%s'\"")).replace("@LABEL@", repr("Huihui 9B on Mac")))
 try:

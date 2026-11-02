@@ -2608,11 +2608,11 @@ def show_screen(a, ctx):
         return "error: nothing to show (give blocks or lines)"
     sig = hashlib.sha1(json.dumps(spec, sort_keys=True, default=str).encode()).hexdigest()
     if _LAST_SCREEN.get('sig') == sig and time.time() - _LAST_SCREEN.get('t', 0) < 600:
-        return 'that same window is already on screen and unchanged; do not call show_screen again. If the owner sent answers from it, save them (remember or note_add) and reply in one short sentence.'
+        return 'that same window is already on screen and unchanged; do not call show_screen again. If answers came back from it, save them (remember or note_add) and reply in one short sentence.'
     else:
         show(ctx, spec)
         _LAST_SCREEN.update(sig=sig, t=time.time())
-        return 'the window is now on screen; do not repeat its contents. When the owner answers or submits it, record the data and reply once; do not show it again unless it changed.'
+        return 'the window is now on screen; do not repeat its contents. When they answer or submit it, record the data and reply once; do not show it again unless it changed.'
 
 
 def _sys_facts():
