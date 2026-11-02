@@ -291,7 +291,9 @@ def use(mid):
         m = dict(m, bigger_than_ram_note=f"This model is bigger than memory ({m['ram_gb']} GB vs {mem:.1f} GB). "
                                          "It will run from disk, much slower.")
     config.settings.set("model", m["id"])
-    system.service("llmos-model", "restart", timeout=60)
+    rc, _out, err = system.service("llmos-model", "restart", timeout=60)
+    if rc != 0:
+        raise RuntimeError(f"{m['name']} was selected but the model service did not restart: {(err or '').strip()[-200:]}")
     return m
 
 

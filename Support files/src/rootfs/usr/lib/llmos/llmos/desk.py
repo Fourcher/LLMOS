@@ -1793,7 +1793,10 @@ class Desk:
     def push_status(self):
         s = config.settings.all()
         m = models.active()
-        self.emit({"t": "status", "model": m["name"] if m else "", "model_ok": llm.health(),
+        model_name = m["name"] if m else ""
+        if s.get("brain","local") == "cloud" and config.cloud() and llm.cloud_label():
+            model_name = llm.cloud_label() + " (online)"
+        self.emit({"t": "status", "model": model_name, "model_ok": llm.health(),
                    "autonomy": s.get("autonomy", "hands-off"), "host_gpu": models.host_mode(),
                    "brain": s.get("brain", "local"), "cloud": llm.cloud_label() if vault.unlocked() or not s.get("vault") else "", "home": llm.cloud_is_home(),
                    "home_up": llm.cloud_is_home() and llm.home_up(),
@@ -2075,7 +2078,7 @@ class Desk:
     def models_panel(self):
         """The model manager: on-device models and the optional online model, each with its facts and
         drawbacks, every action a spoken command so a button never does more than the owner could say."""
-        L = lambda k, **kw: T(k, area="settings", **kw)
+        L = lambda _key, **kw: T(_key, area="settings", **kw)
 
         def facts(good, limits):
             lines = []
@@ -2122,7 +2125,14 @@ class Desk:
         if acct:
             cur_online = acct.get("model")
             prov = llm.CLOUD_PROVIDERS.get(acct.get("provider"), {})
-            catalog = prov.get("models") or [{"id": cur_online, "name": llm.cloud_label(acct), "good_at": [], "limits": [], "speed": "", "cost": ""}]
+            if cur_online:
+                model_ids = {m["id"] for m in prov.get("models", [])}
+                if cur_online not in model_ids:
+                    catalog = prov.get("models", []) + [{"id": cur_online, "name": llm.cloud_label(acct), "good_at": [], "limits": [], "speed": "", "cost": ""}]
+                else:
+                    catalog = prov.get("models", [])
+            else:
+                catalog = prov.get("models", [])
             online = []
             for m in catalog:
                 on = m["id"] == cur_online
@@ -2130,6 +2140,9 @@ class Desk:
                 online.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
                                "meta": L("d_in_use") if on else "",
                                "actions": [] if on else [{"label": T("d_use"), "say": f"use the online model {m['id']}", "primary": True}]})
+            if brain == "cloud":
+                blocks.append({"type": "text", "dim": True, "text": f"Answers come from the online model {llm.cloud_label(acct)}, not the model on this computer. Use on a model above switches answers to this computer."})
+                blocks.append({"type": "buttons", "items": [{"label": "Answer on this computer", "say": "think only on this computer", "primary": True}]})
             blocks.append({"type": "list", "items": online})
             blocks.append({"type": "kv", "rows": [[L("s_online_model"), f"{prov.get('name', acct.get('provider'))} · {L('d_key_ending', k=acct['key'][-4:])}"],
                                                   [L("s_brain"), L("v_brain_" + (brain if brain in ("local", "ask", "cloud") else "local"))]]})
@@ -2172,7 +2185,7 @@ class Desk:
         """The connectors (apps) manager: installed connectors and the tools each adds, with enable/disable/
         remove, and a form to add one. Every connector tool runs under the same autonomy policy and audit log."""
         from . import mcp
-        L = lambda k, **kw: T(k, area="settings", **kw)
+        L = lambda _key, **kw: T(_key, area="settings", **kw)
         regs = mcp.connectors()
         blocks = [{"type": "text", "text": L("d_connectors_intro"), "dim": True}]
         if not regs:
@@ -2194,7 +2207,7 @@ class Desk:
     def panel_spec(self, which):
         s = config.settings.all()
         if which == "settings":
-            L = lambda k, **kw: T(k, area="settings", **kw)
+            L = lambda _key, **kw: T(_key, area="settings", **kw)
             auto = s.get("autonomy", "hands-off")
             pick = lambda k, v: {"label": L(k), "say": v}
             blocks = [
@@ -2817,6 +2830,9 @@ class Desk:
         try:
             out = agent.execute(Lane(self.ctx), "manage_models", args)
             reply = agent._cap(agent._shortcut_reply("manage_models", args, out))
+            if action == "use" and str(out).lower().startswith("now using") and config.settings.get("brain", "local") != "local":
+                config.settings.set("brain", "local")
+                reply += " Answers now come from this computer, not the online model."
         except Exception as e:
             reply = agent._plain_error(str(e))
         self.emit({"t": "toast", "text": (reply or "Done.")[:240]})
@@ -4697,6 +4713,24 @@ class Desk:
 
     # ---- apps and terminals (windows in the compositor)
 
+    def _tray_host(self):
+        """True when a tray host (org.kde.StatusNotifierWatcher) is on the session bus; checked once a minute."""
+        cached = getattr(self, '_tray_ok', None)
+        if cached and time.monotonic() - cached[1] < 60:
+            return cached[0]
+        try:
+            from gi.repository import Gio, GLib
+            result = Gio.bus_get_sync(Gio.BusType.SESSION, None).call_sync(
+                'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus',
+                'NameHasOwner', GLib.Variant('(s)', ('org.kde.StatusNotifierWatcher',)),
+                GLib.VariantType('(b)'), Gio.DBusCallFlags.NONE, 500, None
+            ).unpack()[0]
+            self._tray_ok = (result, time.monotonic())
+            return result
+        except Exception:
+            self._tray_ok = (False, time.monotonic())
+            return False
+
     def _child_env(self):
         env = dict(os.environ, MOZ_ENABLE_WAYLAND="1", GDK_BACKEND="wayland", QT_QPA_PLATFORM="wayland",
                    SDL_VIDEODRIVER="wayland", XDG_SESSION_TYPE="wayland")
@@ -4706,6 +4740,11 @@ class Desk:
         mod = f"/usr/lib/llmos/gtk/noroot-{platform.machine()}.so"
         if os.path.exists(mod) and mod not in env.get("GTK3_MODULES", ""):
             env["GTK3_MODULES"] = ":".join(x for x in (env.get("GTK3_MODULES", ""), mod) if x)
+        if not self._tray_host():
+            # no tray host here: Qt programs (QDBusTrayIcon) would log a D-Bus error per window; silence it, Qt
+            # then shows their messages as plain notifications instead of a tray balloon
+            rules = 'qt.qpa.tray.warning=false;qt.qpa.tray.debug=false'
+            env['QT_LOGGING_RULES'] = ';'.join(x for x in (env.get('QT_LOGGING_RULES', ''), rules) if x)
         return env
 
     def _app_evt(self):
