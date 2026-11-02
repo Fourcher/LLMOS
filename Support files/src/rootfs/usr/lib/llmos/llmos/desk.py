@@ -4713,6 +4713,24 @@ class Desk:
 
     # ---- apps and terminals (windows in the compositor)
 
+    def _tray_host(self):
+        """True when a tray host (org.kde.StatusNotifierWatcher) is on the session bus; checked once a minute."""
+        cached = getattr(self, '_tray_ok', None)
+        if cached and time.monotonic() - cached[1] < 60:
+            return cached[0]
+        try:
+            from gi.repository import Gio, GLib
+            result = Gio.bus_get_sync(Gio.BusType.SESSION, None).call_sync(
+                'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus',
+                'NameHasOwner', GLib.Variant('(s)', ('org.kde.StatusNotifierWatcher',)),
+                GLib.VariantType('(b)'), Gio.DBusCallFlags.NONE, 500, None
+            ).unpack()[0]
+            self._tray_ok = (result, time.monotonic())
+            return result
+        except Exception:
+            self._tray_ok = (False, time.monotonic())
+            return False
+
     def _child_env(self):
         env = dict(os.environ, MOZ_ENABLE_WAYLAND="1", GDK_BACKEND="wayland", QT_QPA_PLATFORM="wayland",
                    SDL_VIDEODRIVER="wayland", XDG_SESSION_TYPE="wayland")
@@ -4722,6 +4740,11 @@ class Desk:
         mod = f"/usr/lib/llmos/gtk/noroot-{platform.machine()}.so"
         if os.path.exists(mod) and mod not in env.get("GTK3_MODULES", ""):
             env["GTK3_MODULES"] = ":".join(x for x in (env.get("GTK3_MODULES", ""), mod) if x)
+        if not self._tray_host():
+            # no tray host here: Qt programs (QDBusTrayIcon) would log a D-Bus error per window; silence it, Qt
+            # then shows their messages as plain notifications instead of a tray balloon
+            rules = 'qt.qpa.tray.warning=false;qt.qpa.tray.debug=false'
+            env['QT_LOGGING_RULES'] = ';'.join(x for x in (env.get('QT_LOGGING_RULES', ''), rules) if x)
         return env
 
     def _app_evt(self):
