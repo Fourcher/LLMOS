@@ -3,6 +3,7 @@ class the user's autonomy setting is checked against, and an implementation
 that returns plain text (the only thing the model ever gets back)."""
 import ast
 import glob
+import hashlib
 import json
 import math
 import time
@@ -2332,6 +2333,9 @@ def _triage_window(ctx, line, keep, noise):
 
 # ------------------------------------------------------------ generated UI, quotes, apps, wifi
 
+_LAST_SCREEN = {}   # the last generated window: the same spec again is not re-drawn (a submit looped 7 times)
+
+
 @tool("show_screen", "Show the owner an interface you compose, drawn as a window in their chosen style: a "
       "dashboard, a checklist, a table, a summary. Give a title and blocks. Block types: "
       "{type:'text', text} · {type:'kv', rows:[[label, value]]} · {type:'stat', label, value, fraction 0-1} · "
@@ -2351,8 +2355,13 @@ def show_screen(a, ctx):
     spec = uispec.normalize({"title": str(a.get("title", ""))[:60], "blocks": blocks, "size": "m"})
     if not spec:
         return "error: nothing to show (give blocks or lines)"
-    show(ctx, spec)
-    return "the window is now on screen; do not repeat its contents"
+    sig = hashlib.sha1(json.dumps(spec, sort_keys=True, default=str).encode()).hexdigest()
+    if _LAST_SCREEN.get('sig') == sig and time.time() - _LAST_SCREEN.get('t', 0) < 600:
+        return 'that same window is already on screen and unchanged; do not call show_screen again. If the owner sent answers from it, save them (remember or note_add) and reply in one short sentence.'
+    else:
+        show(ctx, spec)
+        _LAST_SCREEN.update(sig=sig, t=time.time())
+        return 'the window is now on screen; do not repeat its contents. When the owner answers or submits it, record the data and reply once; do not show it again unless it changed.'
 
 
 def _sys_facts():
