@@ -1793,7 +1793,10 @@ class Desk:
     def push_status(self):
         s = config.settings.all()
         m = models.active()
-        self.emit({"t": "status", "model": m["name"] if m else "", "model_ok": llm.health(),
+        model_name = m["name"] if m else ""
+        if s.get("brain","local") == "cloud" and config.cloud() and llm.cloud_label():
+            model_name = llm.cloud_label() + " (online)"
+        self.emit({"t": "status", "model": model_name, "model_ok": llm.health(),
                    "autonomy": s.get("autonomy", "hands-off"), "host_gpu": models.host_mode(),
                    "brain": s.get("brain", "local"), "cloud": llm.cloud_label() if vault.unlocked() or not s.get("vault") else "", "home": llm.cloud_is_home(),
                    "home_up": llm.cloud_is_home() and llm.home_up(),
@@ -2075,7 +2078,7 @@ class Desk:
     def models_panel(self):
         """The model manager: on-device models and the optional online model, each with its facts and
         drawbacks, every action a spoken command so a button never does more than the owner could say."""
-        L = lambda k, **kw: T(k, area="settings", **kw)
+        L = lambda _key, **kw: T(_key, area="settings", **kw)
 
         def facts(good, limits):
             lines = []
@@ -2122,7 +2125,14 @@ class Desk:
         if acct:
             cur_online = acct.get("model")
             prov = llm.CLOUD_PROVIDERS.get(acct.get("provider"), {})
-            catalog = prov.get("models") or [{"id": cur_online, "name": llm.cloud_label(acct), "good_at": [], "limits": [], "speed": "", "cost": ""}]
+            if cur_online:
+                model_ids = {m["id"] for m in prov.get("models", [])}
+                if cur_online not in model_ids:
+                    catalog = prov.get("models", []) + [{"id": cur_online, "name": llm.cloud_label(acct), "good_at": [], "limits": [], "speed": "", "cost": ""}]
+                else:
+                    catalog = prov.get("models", [])
+            else:
+                catalog = prov.get("models", [])
             online = []
             for m in catalog:
                 on = m["id"] == cur_online
@@ -2130,6 +2140,9 @@ class Desk:
                 online.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
                                "meta": L("d_in_use") if on else "",
                                "actions": [] if on else [{"label": T("d_use"), "say": f"use the online model {m['id']}", "primary": True}]})
+            if brain == "cloud":
+                blocks.append({"type": "text", "dim": True, "text": f"Answers come from the online model {llm.cloud_label(acct)}, not the model on this computer. Use on a model above switches answers to this computer."})
+                blocks.append({"type": "buttons", "items": [{"label": "Answer on this computer", "say": "think only on this computer", "primary": True}]})
             blocks.append({"type": "list", "items": online})
             blocks.append({"type": "kv", "rows": [[L("s_online_model"), f"{prov.get('name', acct.get('provider'))} · {L('d_key_ending', k=acct['key'][-4:])}"],
                                                   [L("s_brain"), L("v_brain_" + (brain if brain in ("local", "ask", "cloud") else "local"))]]})
@@ -2817,6 +2830,9 @@ class Desk:
         try:
             out = agent.execute(Lane(self.ctx), "manage_models", args)
             reply = agent._cap(agent._shortcut_reply("manage_models", args, out))
+            if action == "use" and str(out).lower().startswith("now using") and config.settings.get("brain", "local") != "local":
+                config.settings.set("brain", "local")
+                reply += " Answers now come from this computer, not the online model."
         except Exception as e:
             reply = agent._plain_error(str(e))
         self.emit({"t": "toast", "text": (reply or "Done.")[:240]})
