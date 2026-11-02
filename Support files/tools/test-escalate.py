@@ -54,7 +54,7 @@ cat = {m["id"]: m for m in models.catalog()}
 for m in models.catalog():
     want = m["id"] in ("huihui-ornith-1.5-9b", "dolphin-3-8b")
     check(m.get("uncensored") is want, f"{m['id']} uncensored={want}")
-check(agent.OWNER_AUTHORITY_NUDGE == "[OWNER_AUTHORITY_NUDGE]", "owner-authority nudge is a placeholder constant")
+check(agent.OWNER_AUTHORITY_NUDGE != "[OWNER_AUTHORITY_NUDGE]" and "physical harm" in agent.OWNER_AUTHORITY_NUDGE and "under 18" in agent.OWNER_AUTHORITY_NUDGE, "owner-authority nudge is filled in and keeps both exceptions")
 check(agent.OWNER_AUTHORITY_NUDGE not in agent.system_prompt(), "the standing system prompt is unchanged")
 
 class Ctx:
