@@ -89,6 +89,14 @@ def _remember_choice(on):
     config.settings.set("remote_ssh", bool(on))
 
 
+def up_argv():
+    """Connect keeps the owner's SSH choice: off stays off."""
+    if owner_wants_ssh():
+        return UP
+    else:
+        return ["tailscale", "up", "--ssh=false", "--qr"]
+
+
 def facts_from(status, prefs, installed=True):
     """Panel facts from `tailscale status --json` and `tailscale debug prefs`. No commands run here."""
     if not installed:
@@ -147,7 +155,7 @@ def _capture_up():
         if proc is not None and proc.poll() is None:
             return {"ok": True, "pending": True, "url": _login_url, "qr": _login_qr, "running": True, "installed": True}
     try:
-        proc = subprocess.Popen(UP, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(up_argv(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except OSError as e:
         return {"ok": False, "installed": True, "note": str(e)}
     fd = proc.stdout.fileno()

@@ -332,5 +332,10 @@ check(rc == 0 and "set --ssh" not in logged, f"remote_ssh false: the check does 
 rc, logged = run_watch({"remote_ssh": True}, prefs='{"RunSSH": true}')
 check(rc == 0 and "set --ssh" not in logged, f"already on: the check does not set it again\n{logged}")
 
+config.settings.set("remote_ssh", False)
+check("--ssh=false" in tailscale.up_argv() and "--ssh" not in tailscale.up_argv(), "connect keeps SSH off when the owner turned it off")
+config.settings.set("remote_ssh", True)
+check(tailscale.up_argv() == tailscale.UP, "connect turns SSH on when the owner wants it")
+
 print("all good" if not fails else f"{fails} failed")
 sys.exit(1 if fails else 0)
