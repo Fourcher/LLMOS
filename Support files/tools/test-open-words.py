@@ -46,9 +46,9 @@ CASES = {
     "open /tmp/x; rm -rf /": None,
     "apt install htop vim": ("install_app", {"packages": "htop vim"}),
     "apt install htop vim git": ("install_app", {"packages": "htop vim git"}),
-    "apt install -y htop": None,
-    "apt install htop && reboot": None,
-    "apk add curl; rm -rf /": None,
+    "apt install -y htop": ("run_command", {"command": "apt install -y htop"}),  # a typed command line runs as typed (owner shell, risk-gated)
+    "apt install htop && reboot": ("run_command", {"command": "apt install htop && reboot"}),  # a typed command line runs as typed (owner shell, risk-gated)
+    "apk add curl; rm -rf /": ("run_command", {"command": "apk add curl; rm -rf /"}),  # a typed command line runs as typed (owner shell, risk-gated)
     "apk add a b c d e f g h i j k": None,
     # new: a trailing polite or filler word is not part of the path or the package list
     "open /etc/hosts please": ("open_file", {"path": "/etc/hosts"}),
