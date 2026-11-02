@@ -393,7 +393,12 @@ CLOUD_PROVIDERS = {
                    "console": "openrouter.ai", "signin": "https://openrouter.ai/settings/keys",
                    "key_re": r"sk-or-v1-[A-Za-z0-9]{40,}", "auto_model": "free",
                    "note": "free models with a free account: about 50 requests a day; the companies serving free models "
-                           "may keep what is sent to them", "models": []},
+                           "may keep what is sent to them",
+                   "models": [
+                              {"id": "nvidia/nemotron-3-ultra-550b-a55b:free", "name": "NVIDIA Nemotron 3 Ultra (free)", "note": "1M context model", "speed": "moderate", "cost": "free", "good_at": ["long context", "complex tasks"], "limits": ["about 50 requests a day; the provider may keep what is sent"]},
+                              {"id": "google/gemma-4-31b-it:free", "name": "Google Gemma 4 31B (free)", "note": "262k context model", "speed": "fast", "cost": "free", "good_at": ["instruction following", "general chat"], "limits": ["about 50 requests a day; the provider may keep what is sent"]},
+                              {"id": "thinkingmachines/inkling:free", "name": "Thinking Machines Inkling (free)", "note": "1M context model", "speed": "moderate", "cost": "free", "good_at": ["long context", "creative tasks"], "limits": ["about 50 requests a day; the provider may keep what is sent"]},
+                              {"id": "nvidia/nemotron-3.5-lightning:free", "name": "NVIDIA Nemotron 3.5 Lightning (free)", "note": "1M context model", "speed": "fast", "cost": "free", "good_at": ["speed", "efficient tasks"], "limits": ["about 50 requests a day; the provider may keep what is sent"]}]},
     # uncensored models online (abliterated: the refusal removed), OpenAI-compatible with tool calling. One free try with
     # a new account, then billed per use by Abliteration from prepaid credit.
     "abliteration": {"name": "Abliteration (uncensored)", "url": "https://api.abliteration.ai/v1", "key_hint": "ak_…",
@@ -797,7 +802,7 @@ def cloud_setup(fields, adopt=True):
         pid = "anthropic" if (not pname or "claude" in pname or "anthropic" in pname) else "openai"
     prov = CLOUD_PROVIDERS[pid]
     c = {"provider": pid, "url": str(fields.get("url") or "").strip() or prov["url"],
-         "model": str(fields.get("model") or "").strip() or (prov["models"][0]["id"] if prov["models"] else ""),
+         "model": str(fields.get("model") or "").strip() or ("" if prov.get("auto_model") else prov["models"][0]["id"] if prov["models"] else ""),
          "key": str(fields.get("key") or "").strip()}
     if not c["key"]:
         return False, "no API key was given"
