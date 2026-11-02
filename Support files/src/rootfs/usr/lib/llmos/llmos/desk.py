@@ -2185,7 +2185,7 @@ class Desk:
         """The connectors (apps) manager: installed connectors and the tools each adds, with enable/disable/
         remove, and a form to add one. Every connector tool runs under the same autonomy policy and audit log."""
         from . import mcp
-        L = lambda k, **kw: T(k, area="settings", **kw)
+        L = lambda _key, **kw: T(_key, area="settings", **kw)
         regs = mcp.connectors()
         blocks = [{"type": "text", "text": L("d_connectors_intro"), "dim": True}]
         if not regs:
@@ -2207,7 +2207,7 @@ class Desk:
     def panel_spec(self, which):
         s = config.settings.all()
         if which == "settings":
-            L = lambda k, **kw: T(k, area="settings", **kw)
+            L = lambda _key, **kw: T(_key, area="settings", **kw)
             auto = s.get("autonomy", "hands-off")
             pick = lambda k, v: {"label": L(k), "say": v}
             blocks = [
