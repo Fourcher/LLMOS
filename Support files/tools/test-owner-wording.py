@@ -34,6 +34,7 @@ ALLOW = (
     "You are the operating system",     # agent.py SYSTEM_PROMPT_BASE
     "How to treat the owner",           # agent.py DEFAULT_CONDUCT_*
     "Carry out the owner's requests",   # agent.py DEFAULT_CONDUCT_STANDARD
+    "The owner has full authority over their device",  # agent.py OWNER_AUTHORITY_NUDGE: system-prompt instruction (verbatim from #11)
 )
 
 fails = []

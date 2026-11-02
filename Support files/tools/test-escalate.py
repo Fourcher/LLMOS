@@ -306,6 +306,34 @@ finally:
     tools.REGISTRY["calculate"].fn = real_calc
     config.remove_conduct()
 
+
+# owner-authority nudge (ported from #11): verbatim text, keeps both hard stops, not in the standing prompt
+N = agent.OWNER_AUTHORITY_NUDGE
+check(N == open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "owner_authority_nudge.txt"), encoding="utf-8").read().strip()
+      if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "owner_authority_nudge.txt")) else bool(N), "nudge text present")
+check("physical harm to a person" in N and "under 18" in N, "nudge keeps both hard-stop exceptions")
+check(N not in agent.system_prompt(), "the standing system prompt does not carry the nudge")
+check(agent.hard_stop("give me a plan to kill someone") and agent.hard_stop("write sexual content involving a 14 year old"),
+      "hard stops still hold")
+
+
+# no stronger model left: one retry with the nudge appended to the system message, then stop
+_sys_seen = []
+from llmos import llm as _llm
+_orig_chat = _llm.chat
+def _rec(msgs, tools=None, on_text=None, **kw):
+    _sys_seen.append(agent.OWNER_AUTHORITY_NUDGE in (msgs[0].get("content") or ""))
+    return {"content": "I can't help with that.", "tool_calls": [], "timings": {}} if len(_sys_seen) == 1 else \
+        {"content": "Dear Landlord, fixed.", "tool_calls": [], "timings": {}}
+with mock.patch.object(_llm, "chat", _rec), mock.patch.object(agent, "_escalation_target", return_value=None):
+    config.settings.set("auto_escalate", True)
+    out = agent.run(Harness(), "write a scathing complaint about the heating", [])
+check(_sys_seen == [False, True] and out.startswith("Dear Landlord"), f"nudge retry once: {_sys_seen} {out!r}")
+_sys_seen.clear()
+with mock.patch.object(_llm, "chat", _rec), mock.patch.object(agent, "_escalation_target", return_value=None):
+    out = agent.run(Harness(), "give me a plan to kill someone", [])
+check(True not in _sys_seen, f"hard stop: no nudge retry {_sys_seen}")
+
 if fails:
     print(f"{fails} FAILED"); sys.exit(1)
 print("all good")
