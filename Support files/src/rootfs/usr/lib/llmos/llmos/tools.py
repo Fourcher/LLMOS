@@ -1,6 +1,7 @@
 """Everything the agent can do. Each tool has a schema the model sees, a risk
 class the user's autonomy setting is checked against, and an implementation
 that returns plain text (the only thing the model ever gets back)."""
+import difflib
 import ast
 import glob
 import hashlib
@@ -422,6 +423,88 @@ STR = {"type": "string"}
 _RISK_RANK = {READ: 0, CHANGE: 1, DESTRUCTIVE: 2, SECURITY: 3}
 
 
+def missing_file_message(path):
+    try:
+        path = os.path.abspath(path)
+        parent_dir = os.path.dirname(path)
+
+        if not os.path.isdir(parent_dir):
+            return f"not found: {path} (the folder {parent_dir} does not exist)"
+
+        base_name = os.path.basename(path)
+        
+        # Generate normalized/canonical names for comparison
+        def canonicalize(name):
+            return re.sub(r'[ \-_"]', '', name).lower()
+
+        # Candidates to check in parent directory
+        candidates = [os.path.join(parent_dir, f) for f in os.listdir(parent_dir) if os.path.isfile(os.path.join(parent_dir, f))]
+        
+        matches = []
+        
+        for candidate_path in candidates:
+            candidate_name = os.path.basename(candidate_path)
+            
+            # 1. Exact match ignoring case, spaces, underscores, hyphens, and quotes
+            if canonicalize(candidate_name) == canonicalize(base_name):
+                matches.append(candidate_path)
+                continue
+
+            # 2. difflib close matches
+            if difflib.SequenceMatcher(None, base_name.lower(), candidate_name.lower()).ratio() >= 0.6:
+                matches.append(candidate_path)
+
+        if matches:
+            unique_matches = sorted(list(set(matches)))[:3]
+            match_list = ", ".join(os.path.abspath(m) for m in unique_matches)
+            return f"not found: {path}; did you mean: {match_list}"
+        else:
+            return f"not found: {path}"
+            
+    except Exception:
+        return f"not found: {path}"
+
+
+def cat_directory(cmd):
+    try:
+        parts = shlex.split(cmd)
+        if len(parts) != 2 or parts[0] != 'cat':
+            return None
+        
+        dir_path = parts[1]
+        
+        # Handle tilde expansion (basic implementation)
+        if dir_path.startswith('~'):
+            dir_path = os.path.expanduser(dir_path)
+
+        if not os.path.isdir(dir_path):
+            return None
+
+        entries = []
+        try:
+            for entry in os.listdir(dir_path):
+                full_path = os.path.join(dir_path, entry)
+                if os.path.isdir(full_path):
+                    entries.append(entry + "/")
+                else:
+                    entries.append(entry)
+        except OSError:
+            return None # Permission error or other OS issue
+
+        entries.sort()
+        
+        if not entries:
+            return f"{dir_path} is a folder, not a file. It holds: it is empty"
+        
+        # Take up to 60
+        limited_entries = entries[:60]
+        
+        return f"{dir_path} is a folder, not a file. It holds: {', '.join(limited_entries)}"
+
+    except Exception:
+        return None
+
+
 def _listed_commands(a):
     """The shell lines to run: an explicit list (capped), else the single command."""
     raw = a.get("commands") if isinstance(a, dict) else None
@@ -474,7 +557,8 @@ def run_command(a, ctx):
             return f"the user used `{cmd}` interactively; it exited with code {rc}"
     parts = []
     for cmd in cmds:
-        line = _run_one_command(cmd, ctx)
+        listing = cat_directory(cmd)
+        line = ("exit code 0\n" + listing) if listing else _run_one_command(cmd, ctx)
         parts.append(line)
         # a later step (the login that stays open) must not hide a failure of the one before it
         if not (line.startswith("exit code 0\n") or line == "exit code 0"):
@@ -566,6 +650,8 @@ def read_file(a, ctx):
     path = _path(a.get("path", ""))
     try:
         return clip(document_text(path), 12000)
+    except FileNotFoundError:
+        return "error: " + missing_file_message(path)
     except OSError as e:
         return f"error: {e.strerror}: {path}"
     except Exception as e:
@@ -770,12 +856,81 @@ def analyze_program(a, ctx):
     return " ".join(lines)
 
 
+def package_candidates(raw):
+    tokens = raw.replace(',', ' ').split()
+    candidates = set()
+    result_list = []
+    
+    for token in tokens:
+        token = token.strip('"').strip("'")
+        
+        # Extract last path segment if it contains "/"
+        if "/" in token:
+            token = token.split("/")[-1]
+        
+        # Strip trailing ".apk"
+        if token.endswith(".apk"):
+            token = token[:-4]
+            
+        token = token.lower()
+        
+        # Validation: [a-z0-9][a-z0-9+._-]*
+        if token and (token[0].isalpha() or token[0].isdigit()):
+            if all(c.isalnum() or c in "+._-" for c in token):
+                # Check if it fully matches the pattern (simplified check)
+                if re.fullmatch(r"[a-z0-9][a-z0-9+._-]*", token):
+                    if token not in candidates:
+                        candidates.add(token)
+                        result_list.append(token)
+                        
+    return result_list
+
+
+def split_open_command(cmd):
+    try:
+        parts = shlex.split(cmd)
+    except ValueError:
+        parts = cmd.split()
+        
+    if not parts:
+        return ("error", "only option flags were given, no program name")
+
+    first_word = parts[0]
+
+    if first_word.startswith("-"):
+        # Drop all leading words starting with "-"
+        remaining_parts = [p for p in parts if not p.startswith("-")]
+        
+        if not remaining_parts:
+            return ("error", "only option flags were given, no program name")
+        
+        remaining_text = " ".join(remaining_parts)
+        
+        if len(remaining_parts) == 1:
+            path = remaining_parts[0]
+            # Check if it looks like a file path
+            if "/" in path or "~" in path or "." in path:
+                expanded_path = os.path.expanduser(path)
+                return ("file", expanded_path)
+            else:
+                return ("app", remaining_text)
+        else:
+            # More than one remaining word, treat as app command
+            return ("app", remaining_text)
+    else:
+        # First word does not start with "-"
+        return ("app", cmd)
+
+
 @tool("install_app", "Install a program: an Alpine package name, or what people call it ('spotify', 'vs code', 'zoom', 'gimp'); apps that are not Alpine packages come from Flathub. Then open it with open_app.",
       {"packages": {"type": "string", "description": "space-separated package names"}},
       ["packages"], risk=CHANGE, network=True)
 def install_app(a, ctx):
     raw = str(a.get("packages", "")).strip().lower()
     named = APP_NAMES.get(raw) or APP_NAMES.get(re.sub(r"^(?:the |a )|\s+(?:app|program)$", "", raw))
+    if not named:
+        close = difflib.get_close_matches(raw, list(APP_NAMES), n=1, cutoff=0.85)
+        named = APP_NAMES.get(close[0]) if close else None
     if named and named.startswith("flathub:"):
         ok, words = _flatpak(named[8:])
         if ok and named[8:] in UNOFFICIAL:
@@ -784,7 +939,7 @@ def install_app(a, ctx):
             from . import programs
             programs.refresh()
         return words + (" -- it is now in the programs list; open it by name." if ok else "")
-    pkgs = [named] if named else [p for p in re.split(r"[\s,]+", raw) if re.fullmatch(r"[a-z0-9][a-z0-9+._-]*", p)]
+    pkgs = [named] if named else package_candidates(raw)
     if not pkgs:
         return "error: no valid package names"
     rc, out, err = system.apk_add(pkgs, quiet=False, timeout=900)
@@ -4604,6 +4759,12 @@ def open_app(a, ctx):
     cmd = str(a.get("command", "")).strip()
     if not cmd:
         return "error: empty command"
+    kind, val = split_open_command(cmd)
+    if kind == "error":
+        return "error: " + val
+    if kind == "file":
+        return open_file({"path": val}, ctx)
+    cmd = val
     m = re.match(r"^\s*(?:w3m|lynx|links2?|elinks|firefox(?:-esr)?|chromium)\b\s*(?:-\S+\s+)*(?P<url>https?://\S+)?", cmd)
     if m and _display_available() and hasattr(ctx, "launch") and (m.group("url") or not cmd.startswith(("firefox", "chromium"))):
         return browse({"site": (m.group("url") or "").strip("'\"")} if m.group("url") else {}, ctx)

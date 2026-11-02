@@ -10,6 +10,7 @@ read from its MCP annotations (read-only / destructive hints); an HTTP connector
 internet setting. Connectors are off until the owner adds one.
 
 Dependency-free: JSON-RPC 2.0 over a subprocess or over http.client. No third-party MCP library."""
+import difflib
 import http.client
 import json
 import os
@@ -414,6 +415,96 @@ def sync_tools(log=None):
     return out
 
 
+def normalize_args(schema, a):
+    try:
+        normalized = {}
+        properties = schema.get("properties", {})
+        required = set(schema.get("required", []))
+
+        for key, value in a.items():
+            if key not in properties:
+                normalized[key] = value
+                continue
+
+            prop_schema = properties[key]
+            prop_type = prop_schema.get("type")
+            prop_enum = prop_schema.get("enum")
+
+            if prop_enum and isinstance(prop_enum, list) and all(isinstance(e, str) for e in prop_enum):
+                # Enum handling
+                is_in_enum = value in prop_enum
+                if not is_in_enum:
+                    # Check synonym match
+                    synonym_map = {"done": ["close","closed","archive","resolve","resolved","complete"], "all": ["any","every","*"]}
+                    
+                    found_synonym = False
+                    for group_key, synonyms in synonym_map.items():
+                        group = [group_key] + synonyms
+                        if str(value).lower() in group:
+                            hit = [e for e in prop_enum if e.lower() in group]
+                            if hit:
+                                group_key = hit[0]
+                                normalized[key] = group_key
+                                found_synonym = True
+                                break
+                    
+                    if not found_synonym:
+                        # difflib match
+                        low = [e for e in prop_enum if e.lower() == str(value).lower()]
+                        matches = low or difflib.get_close_matches(str(value), prop_enum, n=1, cutoff=0.6)
+                        if matches:
+                            # Synonym match found via fuzzy
+                            normalized[key] = matches[0]
+                        elif not required:
+                            # Drop if not required
+                            continue
+                        else:
+                            # Keep original value if required and no fuzzy match
+                            normalized[key] = value
+                    else:
+                        # Synonym match found via map
+                        normalized[key] = group_key
+                else:
+                    # Direct enum match, use synonym logic if applicable (simplified to direct match if already in enum)
+                    # The prompt implies synonym logic is for *not* being in the enum, but for completeness:
+                    # if value is in enum, use synonym match (this logic is slightly ambiguous, sticking to direct value if present)
+                    normalized[key] = value
+            
+            elif prop_type in ["integer", "number"] and isinstance(value, str):
+                try:
+                    if value.lower() in ["all", "any", "*"]:
+                        if not required:
+                            continue  # Drop if not required
+                        else:
+                            normalized[key] = value # Keep string if required and not numeric
+                    else:
+                        normalized[key] = float(value) if prop_type == "number" else int(value)
+                except ValueError:
+                    if not required:
+                        continue # Drop if non-numeric and not required
+                    else:
+                        normalized[key] = value # Keep original if required
+            
+            elif prop_type == "boolean" and isinstance(value, str):
+                lower_val = value.lower()
+                if lower_val in ["true", "yes", "on", "1"]:
+                    normalized[key] = True
+                elif lower_val in ["false", "no", "off", "0"]:
+                    normalized[key] = False
+                else:
+                    normalized[key] = value # Keep original if unrecognized string
+            
+            else:
+                # Keep other types as is
+                normalized[key] = value
+
+        # Keys not in properties are handled by the initial loop structure
+        return normalized
+
+    except Exception:
+        return a
+
+
 def _register_tool(tools_mod, full, spec, t):
     desc = (t.get("description") or t.get("title") or t.get("name"))
     if spec.get("rule"):                     # a connector's standing rule goes first, so it survives the cut below
@@ -427,8 +518,8 @@ def _register_tool(tools_mod, full, spec, t):
     network = spec["transport"] == "http" or bool(spec.get("network"))   # a stdio connector that goes online says so
     conn_name, tool_name = spec["name"], t["name"]
 
-    def fn(a, ctx, _conn=conn_name, _tool=tool_name):
-        return call(_conn, _tool, a)
+    def fn(a, ctx, _conn=conn_name, _tool=tool_name, _schema=schema):
+        return call(_conn, _tool, normalize_args(_schema, a) if isinstance(a, dict) else a)
 
     tools_mod.REGISTRY[full] = tools_mod.Tool(full, desc, params, required, fn, risk, network,
                                               available=lambda _n=conn_name: get(_n) is not None and get(_n).get("enabled", True))
