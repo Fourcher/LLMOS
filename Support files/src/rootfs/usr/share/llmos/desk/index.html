@@ -55,7 +55,6 @@
     <div id="status" class="right"></div>
   </header>
 
-  <div id="idle" class="hidden"></div>
   <main id="stage"></main>
 
   <div id="dock"></div>
@@ -63,7 +62,10 @@
   <button id="start" aria-label="start" title="Start"><i class="orb small"></i></button>
   <div id="startmenu" class="hidden"></div>
 
-  <!-- the computer's own column: what it is doing and what it says, always above the windows -->
+  <!-- one column: the conversation, then the text box. Windows and the Mac layout keep the old places. -->
+  <div id="sheet">
+  <div id="thread" role="log" aria-live="polite"></div>
+  <div id="idle" class="hidden"></div>
   <div id="reply" class="hidden">
     <div class="req"><span class="you" data-s="d_you"></span> <span id="reply-req"></span></div>
     <div class="who"><i class="orb small" id="reply-orb"></i><span class="ai">LLM OS</span><span id="reply-state" class="state"></span><span id="reply-brain" class="brain hidden"></span></div>
@@ -91,6 +93,7 @@
   </div>
 
   <div id="hint" class="hint"></div>
+  </div>
   <div id="toasts" role="status" aria-live="polite"></div>
   <div id="overlay" class="hidden"></div>
 </section>

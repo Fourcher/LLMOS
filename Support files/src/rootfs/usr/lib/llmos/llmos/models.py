@@ -71,7 +71,28 @@ def host_mode():
     return bool(config.host_model_id()) or os.path.exists(config.HOST_MODEL_URL_FILE)
 
 
+# No explicit choice: Dolphin 3.0 8B, then Huihui Ornith 1.5 9B (uncensored, when they fit), then Hermes 3 3B
+# (the small model the image ships — the same file preinstall.env fetches and the 4 GB tier recommends).
+# A model that does not leave 1 GB for the system is skipped, the same line the tier list uses. The first
+# installed model is the last resort.
+DEFAULT_MODELS = ("dolphin-3-8b", "huihui-ornith-1.5-9b")
+SHIPPED_MODEL = "hermes-3-3b"
+
+
+def fits(m, mem=None):
+    """True when `m` leaves 1 GB for the system. Unknown memory (0) does not exclude a model: the tier list
+    treats that as 'nothing fits' and offers the smallest one slowly, but a default must still be chosen."""
+    if mem is None:
+        mem = ram_gb()
+    if not mem:
+        return True
+    return m.get("ram_gb", 0) <= mem - 1
+
+
 def active():
+    """The model answering on this computer. An explicit settings choice wins. With none, Dolphin 3.0 8B
+    if it is installed and fits, else Huihui Ornith 1.5 9B, else Hermes 3 3B (the shipped model), else the
+    first installed model. 'Fits' is the tier-list rule: 1 GB left for the system."""
     if host_mode():
         return by_id(config.host_model_id()) or {"id": "host", "name": "host model", "maker": "",
                                                     "origin": "", "license": "", "file": "", "size": 0,
@@ -79,7 +100,13 @@ def active():
     want = config.settings.get("model")
     inst = installed()
     for m in inst:
-        if m["id"] == want:
+        if want and m["id"] == want:
+            return m
+    mem = ram_gb()
+    by = {m["id"]: m for m in inst}
+    for mid in DEFAULT_MODELS + (SHIPPED_MODEL,):
+        m = by.get(mid)
+        if m and fits(m, mem):
             return m
     return inst[0] if inst else None
 
@@ -264,7 +291,9 @@ def use(mid):
         m = dict(m, bigger_than_ram_note=f"This model is bigger than memory ({m['ram_gb']} GB vs {mem:.1f} GB). "
                                          "It will run from disk, much slower.")
     config.settings.set("model", m["id"])
-    system.service("llmos-model", "restart", timeout=60)
+    rc, _out, err = system.service("llmos-model", "restart", timeout=60)
+    if rc != 0:
+        raise RuntimeError(f"{m['name']} was selected but the model service did not restart: {(err or '').strip()[-200:]}")
     return m
 
 

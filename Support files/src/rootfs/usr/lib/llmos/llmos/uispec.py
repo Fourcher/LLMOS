@@ -221,8 +221,12 @@ def _block(b):
         label = _s(b.get("label"), 80)
         if not label:
             return None
-        return {"type": "toggle", "label": label, "on": bool(b.get("on")),
-                "say_on": _s(b.get("say_on"), 300), "say_off": _s(b.get("say_off"), 300)}
+        out = {"type": "toggle", "label": label, "on": bool(b.get("on")),
+               "say_on": _s(b.get("say_on"), 300), "say_off": _s(b.get("say_off"), 300)}
+        hint = _s(b.get("hint"), 200)
+        if hint:
+            out["hint"] = hint
+        return out
     if t == "form":
         fields = []
         for f in _list(b.get("fields"))[:12]:

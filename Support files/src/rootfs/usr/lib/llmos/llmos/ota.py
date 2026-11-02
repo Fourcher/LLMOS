@@ -34,8 +34,10 @@ ROOT = os.environ.get("LLMOS_OTA_ROOT", "/")
 RELEASE = os.path.join(ROOT, "etc/llmos-release")
 # what an update may change: LLM OS's own program files only (never /etc/llmos, the owner's data or generated files)
 ALLOWED = ("usr/lib/llmos/", "usr/share/llmos/", "usr/bin/llmos", "usr/bin/llmos-model-run", "usr/libexec/llmos-",
-           "etc/init.d/llmos-", "etc/xdg/")
+           "etc/init.d/llmos-", "etc/xdg/", "etc/periodic/15min/tailscale-watchdog")
 NEVER = ("etc/nftables.nft",)
+# an update must not replace Tailscale's node state, its OpenRC config, or the runlevel link the owner already has
+PRESERVE = ("var/lib/tailscale", "etc/conf.d/tailscale", "etc/runlevels/default/tailscale")
 SERVICES = re.compile(r"llmos-[a-z]+")
 APK_NAME = re.compile(r"[a-z0-9][a-z0-9._+-]{0,63}")
 
@@ -265,11 +267,76 @@ def check_manifest(m):
     return m
 
 
+def preserved(name):
+    """True when this path is Tailscale state, its config, or its runlevel link (an update leaves it alone)."""
+    if not isinstance(name, str):
+        return False
+    name = name[2:] if name.startswith("./") else name
+    name = name.lstrip("/").rstrip("/")
+    return any(name == p or name.startswith(p + "/") for p in PRESERVE)
+
+
+def listed_packages():
+    """Package names shipped in usr/share/llmos/packages.txt (comments and blank lines skipped)."""
+    path = os.path.join(ROOT, "usr/share/llmos/packages.txt")
+    names = []
+    try:
+        lines = open(path).read().splitlines()
+    except OSError:
+        return names
+    for line in lines:
+        name = line.split("#", 1)[0].strip()
+        if name and APK_NAME.fullmatch(name) and name not in names:
+            names.append(name)
+    return names
+
+
+def missing_packages(wanted, installed):
+    """Names in wanted that are not already installed, order kept."""
+    have = set(installed or [])
+    return [p for p in wanted if p not in have]
+
+
+def _installed_apk():
+    if not shutil.which("apk"):
+        return None
+    try:
+        r = subprocess.run(["apk", "info"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode:
+        return None
+    return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+
+
+def install_missing_packages(log=None):
+    """Install packages.txt names that are not installed yet. A failure is reported, not raised:
+    the signed file update still stands. Returns the names that could not be installed."""
+    wanted = listed_packages()
+    have = _installed_apk()
+    if have is None:
+        return []
+    failed = []
+    for p in missing_packages(wanted, have):
+        try:
+            r = subprocess.run(["apk", "add", "-q", p], capture_output=True, text=True, timeout=900)
+        except (OSError, subprocess.SubprocessError) as e:
+            failed.append(p)
+            if log:
+                log(f"package {p} could not be installed: {e}")
+            continue
+        if r.returncode:
+            failed.append(p)
+            if log:
+                log(f"package {p} could not be installed: {(r.stderr or r.stdout).strip()[:200]}")
+    return failed
+
+
 def _member_ok(t):
     name = t.name[2:] if t.name.startswith("./") else t.name
     if not name or name in (".",):
         return None
-    if name.startswith("/") or ".." in name.split("/") or name in NEVER:
+    if preserved(name) or name.startswith("/") or ".." in name.split("/") or name in NEVER:
         raise ValueError(f"refused path {t.name}")
     if t.isdir():
         return name
@@ -662,6 +729,12 @@ def install(base, m, key, log=print):
         return "".join(_sha(os.path.join(d, f)) for f in sorted(os.listdir(d)) if f.endswith(".py"))
     before = _code()
     rec = apply_files(payload, os.path.join(STATE_DIR, f"backup-{m['id']}.tar"))
+    try:
+        missed = install_missing_packages(log)     # packages.txt may name something the manifest's apk list did not
+        if missed:
+            log("some packages were not installed: " + ", ".join(missed))
+    except Exception as e:
+        log(f"packages listed for this update were not all installed: {e}")
     install.files_at, install.self_changed = time.time(), _code() != before
     if _restart(m.get("restart", ["desk"]), desk_was_up):
         _stamp_release(m["version"])      # only once it is kept: a rolled-back update leaves the stamp as it was

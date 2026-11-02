@@ -1653,6 +1653,31 @@ def _everyday(text):
     return None
 
 
+def _phrase_is_program(n):
+    """True when `n` is exactly an installed program or a known kind of program that is installed.
+    A longer phrase that only contains one of those words is not ("firefox by default", "terminal window
+    on the screen"), and neither is one word of a longer name ("settings" inside "File Manager Settings").
+    programs.find itself is wider on purpose: "firefox" means whatever browser is installed."""
+    import os
+    from . import programs
+    norm = re.sub(r"[^a-z0-9+ ]+", " ", str(n).lower())
+    norm = re.sub(r"\b(?:the|a|an|my|app|application|program|please|open|launch|start|run)\b", " ", norm)
+    norm = " ".join(norm.split())
+    if not norm:
+        return False
+    for says, _prefer, _cat in programs.KINDS.values():
+        if norm in says:
+            return programs.find(norm) is not None
+    p = programs.find(norm)
+    if not p:
+        return False
+    name = " ".join(re.sub(r"[^a-z0-9+ ]+", " ", (p.get("name") or "").lower()).split())
+    pid = (p.get("id") or "").lower()
+    exe = os.path.basename((p.get("exec") or "").split()[0]).lower() if p.get("exec") else ""
+    generic = " ".join(re.sub(r"[^a-z0-9+ ]+", " ", (p.get("generic") or "").lower()).split())
+    return norm in (name, pid, exe, generic)
+
+
 def _apps(text):
     if _UNDO_RE.match(text):
         return ("undo", {})
@@ -1723,8 +1748,13 @@ def _apps(text):
         from . import tools as _T
         if n.lower().removeprefix("my ").strip() in _T.FOLDERS or n.lower() in ("files", "my files", "file"):
             return None              # "show my files": the folder, not a program called something like Files
-        from . import programs
-        if apps.find(n) or (apps.match_template(n) and len(n.split()) <= 3) or programs.find(n):
+        # "open firefox" / "launch firefox" is the browser shortcut, and "open a terminal window on the
+        # screen" is the foot shortcut. Neither is "launch whatever .desktop file matched a word in the phrase"
+        # (on a dev machine that has Chrome or Xfce Terminal, that word would steal the shortcut).
+        bare = _TRAIL_FILLER.sub("", text).strip()
+        shortcut = (_OPEN_BROWSER.match(text) or _OPEN_BROWSER.match(bare)
+                    or _TERMINAL.match(text) or _TERMINAL.match(bare))
+        if not shortcut and (apps.find(n) or (apps.match_template(n) and len(n.split()) <= 3) or _phrase_is_program(n)):
             return ("open_app", {"command": n})
     # a bare name with no route above ("discord", "scientific calculator please"): nothing above matched, so no earlier result changes
     m = _BARE_APP.match(text)
@@ -1822,9 +1852,43 @@ def _recent_saved(text):
     return None
 
 
+def _inbox_zero(low):
+    """'I need to get to inbox zero today' and the inbox button's 'get me to inbox zero': the mail triage,
+    not a shopping search. 'get me some batteries' does not match."""
+    s = re.sub(r"\s+", " ", str(low or "").strip().rstrip(".!?").strip())
+    if re.fullmatch(r"(?:please\s+)?(?:"
+                    r"i\s+need\s+to\s+get\s+to\s+inbox\s+zero(?:\s+today)?"
+                    r"|get\s+me\s+to\s+inbox\s+zero(?:\s+today)?"
+                    r"|inbox\s+zero"
+                    r"|clean\s+up\s+my\s+inbox"
+                    r")", s):
+        return ("mail_triage", {})
+    return None
+
+
+_QUOTE_FROM = re.compile(r"^(?:please\s+)?(?:a\s+)?real\s+quote\s+(?:from|by|of)\s+(?P<who>.+?)\s*[.!?]?$", re.I)
+_QUOTE_NAME = re.compile(r"^(?:please\s+)?quote\s+(?P<who>.+?)\s*[.!?]?$", re.I)
+
+
+def _real_quote(text):
+    """'quote Ada Lovelace' / 'a real quote from Ada Lovelace': a Wikiquote lookup, never a line the model writes.
+    Anything that is not asking for a quotation (a file, a price) is left alone."""
+    raw = str(text or "").strip()
+    m = _QUOTE_FROM.match(raw) or _QUOTE_NAME.match(raw)
+    if not m:
+        return None
+    who = raw[m.start("who"):m.end("who")].strip().strip("\"'")
+    if len(who) < 2 or re.search(r"\b(?:file|folder|price|prices|stock|code|this|that|it)\b", who, re.I):
+        return None
+    return ("real_quote", {"who_or_topic": who})
+
+
 def _everyday2(text):
     t = text.strip()
     low = t.lower().rstrip(".!?")
+    iz = _inbox_zero(low)
+    if iz:
+        return iz
     if re.fullmatch(r"where (?:did|has) (?:it|that|my file|the file|my download|the download) (?:get )?(?:save[d]?|go|gone|end up|ended up)|where(?:'s| is) (?:the|that) (?:file|thing|document) (?:you|i) (?:just )?(?:made|saved|downloaded|created)|where did (?:you|it) (?:just )?(?:save|put) (?:it|that)", low.rstrip("?.! ")):
         return ("last_saved", {})
     import urllib.parse as _u
@@ -2207,9 +2271,9 @@ def _everyday2(text):
             return ("browse", {"site": "https://www.openstreetmap.org/search?query=" + _u.quote(place)})
     if re.fullmatch(r"(?:please\s+)?(?:(?:open|go\s+to|launch)\s+)?youtube\s+music(?:\s+please)?", low.strip()):
         return ("browse", {"site": "https://music.youtube.com"})
-    m = re.match(r"^(?:give\s+me\s+|get\s+|show\s+me\s+)?(?:the\s+)?(?:directions|route|way)\s+(?:to|for)\s+(?P<p>.+)$|^how\s+do\s+i\s+get\s+to\s+(?P<p2>.+)$|^(?:navigate|drive)\s+to\s+(?P<p3>.+)$", low)
+    m = re.match(r"^(?:give\s+me\s+|get\s+|show\s+me\s+)?(?:the\s+)?(?:directions|route|way)\s+(?:to|for)\s+(?P<p>.+)$|^how\s+do\s+i\s+get\s+to\s+(?P<p2>.+)$|^(?:navigate|drive)\s+to\s+(?P<p3>.+)$|^get\s+me\s+to\s+(?P<p4>.+)$", low)
     if m:
-        place = (m.group("p") or m.group("p2") or m.group("p3")).strip()
+        place = (m.group("p") or m.group("p2") or m.group("p3") or m.group("p4")).strip()
         return ("browse", {"site": "https://www.google.com/maps/dir/?api=1&destination=" + _u.quote_plus(place)})
     if re.match(r"^(?:help\s+me\s+)?(?:apply\s+for|find|look\s+for|search\s+for)\s+(?:a\s+)?jobs?(?:\s+.*)?$|^job\s+search$", low):
         q = re.sub(r"^(?:help\s+me\s+)?(?:apply\s+for|find|look\s+for|search\s+for)\s+(?:a\s+)?jobs?\s*", "", low).strip()
@@ -2471,6 +2535,32 @@ def _owner_shell(t):
     return ("run_command", {"command": parts[0], "commands": parts})
 
 
+_REMOTE_CONNECT = re.compile(
+    r"^(?:please\s+)?(?:(?:turn\s+on|enable)\s+remote\s+access|connect(?:\s+to)?\s+tailscale|tailscale\s+up"
+    r"|(?:log|sign)\s+in\s+to\s+tailscale)\s*[.!]?\s*$", re.I)
+_REMOTE_SSH = re.compile(
+    r"^(?:please\s+)?(?:turn\s+(?P<a>on|off)\s+tailscale\s+ssh|tailscale\s+ssh\s+(?P<b>on|off)"
+    r"|(?P<c>enable|disable)\s+tailscale\s+ssh)\s*[.!]?\s*$", re.I)
+_REMOTE_OPEN = re.compile(
+    r"^(?:please\s+)?(?:(?:open|show|display|pull\s+up)(?:\s+up)?(?:\s+me)?(?:\s+(?:the|my))?\s+)?"
+    r"(?:remote\s+access|tailscale)(?:\s+(?:settings|panel|page|screen))?\s*[.!]?\s*$", re.I)
+
+
+def _remote(text):
+    """Remote access (Tailscale): connect, the SSH switch, or open the panel. None for anything else,
+    including wifi and the internet switch."""
+    t = _TRAIL_FILLER.sub("", str(text or "")).strip()
+    if _REMOTE_CONNECT.match(t):
+        return ("remote_access", {"action": "connect"})
+    m = _REMOTE_SSH.match(t)
+    if m:
+        off = (m.group("a") or m.group("b") or "") == "off" or (m.group("c") or "") == "disable"
+        return ("remote_access", {"action": "ssh-off" if off else "ssh-on"})
+    if _REMOTE_OPEN.match(t):
+        return ("show_panel", {"panel": "remote"})
+    return None
+
+
 def _match(text):
     text = plain(text)
     t = text.strip()
@@ -2482,6 +2572,9 @@ def _match(text):
             return sh
     if len(t) > 400 or "\n" in t:
         return None
+    rm = _remote(t)
+    if rm:
+        return rm
     ms = _mail_setup(t)
     if ms:
         return ms
@@ -2498,6 +2591,9 @@ def _match(text):
     rs = _recent_saved(t)
     if rs:
         return rs
+    rq = _real_quote(t)
+    if rq:
+        return rq
     ev2 = _everyday2(t)
     if ev2:
         return ev2

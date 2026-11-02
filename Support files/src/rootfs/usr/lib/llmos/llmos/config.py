@@ -144,10 +144,14 @@ PUBLIC_DEFAULTS = {
     "onboarded": False,
     "language": "English",
     "settings_language": "",        # "" = same as language
-    "autonomy": "balanced",         # hands-off | balanced | hands-on (balanced: asks before anything irreversible)
+    "autonomy": "hands-off",        # hands-off | balanced | hands-on. hands-off is the default, the same place the
+                                    # first-run slider (0) and the console ([1]) start: the OS asks nothing.
+                                    # balanced asks before anything irreversible; hands-on asks before every change.
     "internet": "yes",              # yes | ask | no
     "tor": False,
-    "model": "",                    # catalog id; "" = whatever is installed
+    "model": "",                    # catalog id; "" = Dolphin 3.0 8B if it is installed and fits, else Huihui
+                                    # Ornith 1.5 9B, else Hermes 3 3B (the model the image ships), else the first
+                                    # installed model (models.active)
     "think": False,                 # let the model reason before answering
     "appearance": {
         "color": "",                # text color ("" = terminal default)
@@ -168,6 +172,9 @@ PUBLIC_DEFAULTS = {
     "profile": {},                  # the first-run sliders (0-100 each), kept for reference
     "vault": False,
     "focus": {"on": False, "until": 0},
+    "remote_ssh": True,             # Tailscale SSH. True (the default, also when the key is absent) so a crash,
+                                    # an update, or a prefs reset turns it back on. False is the owner's choice
+                                    # to keep remote maintenance off, and the 15-minute check leaves it off.
 }
 
 
@@ -324,7 +331,9 @@ class Settings:
     _cache = (None, None)
 
     def all(self):
-        # re-read whenever the file changed (all consoles and the scheduler agree), parsed once otherwise
+        # re-read whenever the file changed (all consoles and the scheduler agree), parsed once otherwise.
+        # A same-size replacement can keep the previous timestamp (os.replace on this filesystem), so set()
+        # also stores the value it just wrote under that same key; otherwise get() would hand back the old one.
         try:
             st = os.stat(self.path)
             key = (st.st_mtime_ns, st.st_size)
@@ -367,9 +376,14 @@ class Settings:
         node[parts[-1]] = value
         _write_etc("settings.json", json.dumps(cur, ensure_ascii=False, indent=1))
         _good_settings = copy.deepcopy(cur)
-        # "yes" and "ask" are the same length, and so are "balanced" and "hands-on". On a filesystem whose
-        # mtime does not move for that write, all() would keep serving the previous value.
-        Settings._cache = (None, None)
+        # A same-size write ("cloud" -> "local") can keep the previous mtime, so the next get() would
+        # return the cached value. Store the value just written under the file's current key.
+        try:
+            st = os.stat(self.path)
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            key = None
+        Settings._cache = (key, _merge(PUBLIC_DEFAULTS, cur))
 
 
 settings = Settings()

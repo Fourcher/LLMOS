@@ -59,7 +59,8 @@ on, off = desk._model_tiers(True), desk._model_tiers(False)
 names = {t["tier"]: t["name"] for t in on}
 check([t["tier"] for t in on] == ["fast", "balanced", "capable"], f"16 GB: three tiers {names}")
 check(on[0]["installed"] and on[0]["id"] == "ministral-3-3b", "Fast is the installed model (ready at once)")
-check([t["id"] for t in on][1:] == ["lfm2.5-8b-a1b", "ministral-3-14b"], f"installed Fast: Balanced and Most capable unchanged {[t['id'] for t in on]}")
+check([t["id"] for t in on][1:] == ["dolphin-3-8b", "huihui-ornith-1.5-9b"],
+      f"16 GB: Balanced and Most capable are the uncensored models that fit {[t['id'] for t in on]}")
 RAM[0] = 31.0
 installed = {"gemma-4-e4b"}          # 4.6 GB: quick, but more than 1.5x the smallest (hermes 2.0 GB): not Fast
 on = desk._model_tiers(True)

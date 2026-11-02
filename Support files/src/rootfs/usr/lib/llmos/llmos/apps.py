@@ -124,8 +124,8 @@ PALETTES = [  # (words, bg, fg, accent, font)
     (("light", "bright", "day"), "#f6f6f8", "#16171d", "#5b5bd6", ""),
     (("dark", "night", "black", "midnight"), "#0e1016", "#e8e9ef", "#7a52ff", ""),
 ]
-FONTS = {"mono": "'JetBrains Mono', monospace", "serif": "'Noto Serif', serif", "sans": "Inter, 'Noto Sans', sans-serif",
-         "pixel": "Terminus, 'JetBrains Mono', monospace"}
+FONTS = {"mono": "ui-monospace, 'Noto Sans Mono', monospace", "serif": "ui-serif, Georgia, 'Noto Serif', serif",
+         "sans": "system-ui, 'Noto Sans', sans-serif", "pixel": "Terminus, ui-monospace, monospace"}
 
 
 def look(words="", desk_theme=None):

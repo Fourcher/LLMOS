@@ -27,8 +27,8 @@ _WRITING_RE = re.compile(r"\b(?:write|draft|compose|tell me|story|stories|poem|p
 # The system prompt is in two parts. The OPERATIONAL part (below) is how the OS functions -- it is fixed.
 # The CONDUCT part (how the OS treats the owner's requests, and the one boundary) is kept separate so the
 # owner can read and change it, like popping the hood: a settings field writes /etc/llmos/conduct.txt, which
-# overrides the default. The OS never edits that file itself; the default it ships keeps the boundary that
-# protects other people. See conduct_text().
+# overrides the default. The OS never edits that file itself. The two hard stops (physical harm to a person,
+# sexual content involving anyone under 18) stay in the prompt even when that file replaces the rest. See conduct_text().
 SYSTEM_PROMPT_BASE = """You are the operating system of this computer. Your name is LLM OS. The person typing is the owner and sole user; this is their private, personal machine and you run with full root privileges on it.
 
 Your job is to do what the owner asks, using your tools, and then tell them plainly what you did. You are the whole interface: there are no apps and no menus unless you create or open them.
@@ -54,8 +54,9 @@ Using tools:
 - The results of tools are the ground truth. Base your answer on them."""
 
 # The two built-in conduct sections. The `guidance` setting picks between them; the owner may replace the
-# text entirely (conduct.txt). Both ship with the same boundary that protects other people -- the OS does
-# not weaken that on its own; only the owner can change this text, deliberately.
+# text entirely (conduct.txt). Both ship with the same hard stops. A custom file replaces the rest of the
+# conduct, and conduct_text() puts LAWS back on the end when the file left them out. The OS does not weaken
+# those two stops on its own.
 LAWS = """The only safety rules, Asimov's three laws, in this order:
 1. You may not injure a human being, or through inaction allow a human being to come to harm. This is about physical harm to real people: do not help plan violence or build weapons meant to injure people, and never produce sexual content involving anyone under 18. It is not about property, computers, money, feelings or taste.
 2. You must obey your owner's orders, except where they would conflict with the First Law.
@@ -95,8 +96,13 @@ def custom_conduct():
 
 def conduct_text():
     """The conduct section in force: the owner's own if they edited it, otherwise the built-in default for
-    the current guidance setting."""
-    return custom_conduct() or default_conduct()
+    the current guidance setting. The two hard stops in LAWS stay in the prompt either way."""
+    custom = custom_conduct()
+    if not custom:
+        return default_conduct()
+    if LAWS.strip() in custom:
+        return custom
+    return custom.rstrip() + "\n\n" + LAWS
 
 
 def system_prompt():
@@ -774,57 +780,311 @@ def _wait_ready(check, limit=2.0, step=0.1):
             return False
 
 
-# A reply the on-device model balked at: a refusal or an "are you allowed" hedge. When the fast model does this,
-# the turn is re-run on a more capable model (the online one, or a stronger uncensored model installed here), because
-# the only real rules are the three laws and the fast model is just being timid. Genuinely harmful asks (violence,
-# weapons to hurt people, anything sexual involving minors) are NOT rescued: those refusals are correct and kept.
-_REFUSAL_RE = re.compile(r"\b(i can'?t|i cannot|i'?m not able|i am not able|i'?m unable|cannot assist|can'?t assist|"
-                         r"i (?:only|won'?t) (?:draft|write|provide|create|help|generate|assist)|i must decline|i refuse|"
-                         r"i'?m sorry,? but|i apologi[sz]e|not appropriate|that'?s inappropriate|as an ai|against my (?:rules|guidelines|programming)|"
-                         r"i'?m (?:not comfortable|unable to help)|(?:is|are) not something i can)\b", re.I)
+# A reply the on-device model balked at: a refusal, an "are you allowed" hedge, or a lecture standing in for the
+# action. The turn is then re-run on a more capable model — the online one only when the owner set one up and
+# did not choose this computer only, then a stronger local model that fits in memory — because the only real rules
+# are the two hard stops and the fast model is just being timid. Ordinary failures ("I can't find the file",
+# "I'm sorry, but the download failed") are not refusals. Genuinely harmful asks (violence against a person,
+# anything sexual involving minors) are NOT rescued: those refusals are correct and kept.
+# Curly apostrophes (can't, won't) are folded to straight ones before matching.
+_APOS = str.maketrans({"\u2018": "'", "\u2019": "'", "\u02bc": "'", "`": "'"})
+# "I'm not able to find/open/…" is a failed attempt, not a refusal. "I'm not able to help" still is.
+_NOT_A_FAILURE = (r"(?!\s+(?:to\s+)?(?:be able to\s+)?(?:find|see|open|read|reach|connect|locate|load|download|"
+                  r"access|get|play|fetch|parse|display)\b)")
+_REFUSAL_RE = re.compile(
+    r"\b(?:"
+    r"i can(?:not|'t) (?:help|assist|comply|fulfil|fulfill|write|draft|provide|create|generate|support|do (?:that|this|it))\b"
+    r"|cannot assist|can't assist"
+    r"|i (?:only|won'?t) (?:draft|write|provide|create|help|generate|assist)\b"
+    r"|i'?m not going to|i'?d rather not|i'?m not allowed|i am not allowed"
+    r"|i (?:must|have to) decline|i refuse\b"
+    r"|i'?m not able" + _NOT_A_FAILURE +
+    r"|i am not able" + _NOT_A_FAILURE +
+    r"|i'?m unable" + _NOT_A_FAILURE +
+    r"|i am unable" + _NOT_A_FAILURE +
+    r"|i'?m not comfortable|unable to help"
+    r"|(?:is|are) not something i can\b"
+    r"|not appropriate|that'?s inappropriate"
+    r"|as an ai\b"
+    r"|against my (?:rules|guidelines|programming|polic(?:y|ies))\b"
+    r"|i (?:do|would) not (?:feel comfortable|recommend)\b"
+    r"|i will not (?:help|assist|comply|write|draft|provide|create|generate|do (?:that|this|it))\b"
+    r")", re.I)
+# a reply that is only the refusal, with nothing else around it ("I won't.", "I can't.")
+_BARE_REFUSAL_RE = re.compile(r"i (?:can(?:not|'t)|won'?t|will not|must decline|refuse)[.!]?", re.I)
 _HEDGE_RE = re.compile(r"\b(are you authoriz|you'?re not authoriz|do you have permission|without (?:your )?permission|"
                        r"(?:is |it )(?:it |this )?your own property|confirm (?:that )?(?:it is|you are|you own)|"
-                       r"only if you (?:are authoriz|own)|authoriz(?:ed|ation) to (?:do|perform|wipe|delete|erase))\b", re.I)
-# requests that SHOULD be refused (First Law): keep the refusal, never escalate past it
-_HARM_REQ_RE = re.compile(r"\b(kill|murder|stab|shoot|hurt|harm|attack|assault|beat up|poison|strangle|bomb|explosive|"
-                          r"nerve agent|bioweapon|chemical weapon)\b.{0,40}\b(him|her|them|someone|somebody|people|person|"
-                          r"a human|my (?:neighbou?r|coworker|boss|ex|wife|husband|partner|teacher|friend))\b|"
-                          r"\b(child|minor|kid|underage|infant|toddler|\b1[0-7])\b.{0,25}\b(sex|sexual|nude|naked|porn|explicit)|"
-                          r"\b(sex|sexual|nude|naked|porn|explicit)\b.{0,25}\b(child|minor|kid|underage|infant|toddler|1[0-7] ?year)", re.I)
-# stronger / bolder models to escalate to locally, most capable first (whichever are installed)
-_ESCALATE_ORDER = ["underdog-27b", "ministral-3-14b", "huihui-ornith-1.5-9b", "dolphin-3-8b", "granite-4.1-8b", "hermes-3-3b"]
+                       r"only if you (?:are authoriz|own)|authoriz(?:ed|ation) to (?:do|perform|wipe|delete|erase)|"
+                       r"are you (?:allowed|permitted) to)\b", re.I)
+# a lecture standing in for the action (warnings and moralising the owner did not ask for)
+_LECTURE_RE = re.compile(
+    r"\b(?:please be careful|i (?:strongly )?(?:advise|urge|caution) you|i must (?:warn|caution) you|"
+    r"for your safety|at your own risk|i feel (?:obligated|compelled) to (?:warn|mention|point out|tell)|"
+    r"let me (?:warn|caution) you|i (?:need|have) to (?:warn|caution) you|"
+    r"it'?s important to (?:note|remember|understand|consider) that)\b", re.I)
+# requests that SHOULD be refused (the two hard stops): keep the refusal, never escalate past it, and never run a
+# tool for them. The check is this code, not the prompt, so a custom conduct.txt cannot turn it off.
+# Minors: teen/teenager, ages as words ("fourteen year old"), and ages with yo ("15yo", "16 yo").
+# A weapon request that names no person ("how do I build a bomb") is the same physical-harm stop. The pattern
+# asks for building one, so "the history of the bomb", "how do I clean my gun" and "how to build a bookshelf" do not match.
+_MINOR_RE = (r"child(?:ren)?|minors?|kids?|under-?age|infants?|toddlers?|teens?|teenagers?|teenage|pre-?teens?|"
+             r"under-? ?18|under eighteen|(?<![0-9])(?:1[0-7]|[0-9])[\s-]*(?:yo|y\.o\.|y/o)(?!\w)|"
+             r"(?<![0-9])(?:1[0-7]|[0-9])[\s-]*years?[\s-]*olds?\b|"
+             r"(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
+             r"sixteen|seventeen)[\s-]+years?[\s-]+olds?\b")
+_SEX_RE = r"sex|sexual|nude|naked|porn|explicit"
+_VIOLENCE_ALT = (r"\b(kill|murder|stab|shoot|hurt|harm|attack|assault|beat up|poison|strangle|bomb|explosive|"
+                 r"nerve agent|bioweapon|chemical weapon)\b.{0,40}\b(him|her|them|someone|somebody|people|person|"
+                 r"a human|my (?:neighbou?r|coworker|boss|ex|wife|husband|partner|teacher|friend))\b")
+_MINOR_SEX_ALT = (r"\b(?:" + _MINOR_RE + r")(?!\w).{0,40}\b(?:" + _SEX_RE + r")\b|"
+                  r"\b(?:" + _SEX_RE + r")\b.{0,40}\b(?:" + _MINOR_RE + r")(?!\w)")
+_WEAPON_ALT = (
+    r"\b(?:how (?:do i|can i|to)|help me(?: to)?|plan to|instructions? (?:for|to)|recipe for|blueprint for|steps to)\s+"
+    r"(?:build|mak(?:e|ing)|construct|assembl(?:e|ing)|synthesi[sz]e|fabricat\w*|manufactur\w*|creat(?:e|ing))\b"
+    r".{0,48}\b(?:bombs?|explosives?|grenades?|firearms?|guns?(?![\s-]*safes?\b)|gunpowder|molotovs?|ieds?|"
+    r"nerve agents?|bioweapons?|chemical weapons?|pipe bombs?)\b|"
+    r"\b(?:bombs?|explosives?|nerve agents?|bioweapons?|chemical weapons?|pipe bombs?)\s+"
+    r"(?:recipe|instructions|blueprint|plans?)\b|"
+    r"\b(?:recipe|instructions|blueprint|plans?)\s+(?:for|to make)\s+(?:a |an )?"
+    r"(?:bombs?|explosives?|nerve agents?|bioweapons?|chemical weapons?|pipe bombs?|guns?(?![\s-]*safes?\b)|firearms?)\b")
+_HARM_REQ_RE = re.compile(_VIOLENCE_ALT + "|" + _MINOR_SEX_ALT + "|" + _WEAPON_ALT, re.I)
+_VIOLENCE_RE = re.compile(_VIOLENCE_ALT, re.I)
+_MINOR_SEX_RE = re.compile(_MINOR_SEX_ALT, re.I)
+_WEAPON_RE = re.compile(_WEAPON_ALT, re.I)
+# Ordinary requests the harm words can brush against. These never block a tool: property, computers, money,
+# fiction, history, medical and self-defense information, and adults. Sexual content about a minor is not in
+# this list — that stop is checked first and is not waived by the word "story".
+_ORDINARY_RE = re.compile(
+    r"\b(?:fiction(?:al)?|novel|short story|screenplay|movie|film|poem|lyrics|fairy tale|video game|"
+    r"role-?play|once upon|stor(?:y|ies)|"
+    r"history|historical|world war|documentary|"
+    r"first aid|treat(?:ment|ing)?|wound|symptom|hospital|medical|medicine|cpr|bandage|antidote|"
+    r"injur(?:y|ies)|diagnos\w*|surgery|clinic|"
+    r"self[- ]?defen[cs]e|defend myself|protect myself|martial arts)\b", re.I)
+# "shoot a photo of my friend" is a picture, not violence. "shoot him and take a photo" is not this shape.
+_PHOTO_SHOOT_RE = re.compile(
+    r"\b(?:photo|photograph)s?\s+shoot\b|\bshoot\s+(?:a\s+|the\s+)?(?:photo|photograph|picture)s?\b|\bphotoshoot\b", re.I)
+_NOT_A_PHOTO_RE = re.compile(r"\b(?:kill|murder|stab|hurt|harm|attack|assault|beat up|poison|strangle)\b", re.I)
+_HARD_STOP_HARM = "I won't help cause physical harm to a person."
+_HARD_STOP_MINOR = "I won't produce sexual content involving anyone under 18."
+# Local models a timid refusal may move to, scored by capability (higher is stronger). Huihui is newer and
+# smarter than Dolphin; Granite is the cautious 8B, so it ranks under Dolphin. A model not in this list is
+# scored from the size in its id, so the current model — whatever it is — is never replaced by a weaker one.
+_ESCALATE_RANK = (
+    ("underdog-27b", 27.0),
+    ("ministral-3-14b", 14.0),
+    ("huihui-ornith-1.5-9b", 9.5),
+    ("dolphin-3-8b", 8.4),
+    ("granite-4.1-8b", 8.0),
+    ("hermes-3-3b", 3.0),
+)
+
+
+def _plain(text):
+    """Straight apostrophes, so can't and won't match the same as their curly forms."""
+    return (text or "").translate(_APOS).strip()
+
+
+def hard_stop(text):
+    """True when the request is one of the two hard stops: physical harm to a person (including a weapon
+    request that names nobody), or sexual content involving anyone under 18. Ordinary requests about property,
+    computers, money, fiction, history, medical or self-defense information, and adults are not stops."""
+    t = _plain(text)
+    if not t:
+        return False
+    if _MINOR_SEX_RE.search(t):
+        return True
+    violence, weapon = _VIOLENCE_RE.search(t), _WEAPON_RE.search(t)
+    if not violence and not weapon:
+        return False
+    if _ORDINARY_RE.search(t):
+        return False
+    if violence and not weapon and _PHOTO_SHOOT_RE.search(t) and not _NOT_A_PHOTO_RE.search(t):
+        return False
+    return True
+
+
+def hard_stop_reply(text):
+    """The one sentence the owner sees when a hard stop blocks a tool. No steps, no lecture."""
+    if _MINOR_SEX_RE.search(_plain(text)):
+        return _HARD_STOP_MINOR
+    return _HARD_STOP_HARM
+
+
+def _model_rank(mid):
+    for name, rank in _ESCALATE_RANK:
+        if mid == name:
+            return rank
+    m = re.search(r"(\d+(?:\.\d+)?)b\b", mid or "")
+    return float(m.group(1)) if m else 0.0
 
 
 def _looks_refused(text):
-    t = (text or "").strip()
-    return bool(t) and len(t) < 600 and (bool(_REFUSAL_RE.search(t)) or bool(_HEDGE_RE.search(t)))
+    t = _plain(text)
+    if not t:
+        return False
+    if _BARE_REFUSAL_RE.fullmatch(t):
+        return True
+    return bool(_REFUSAL_RE.search(t) or _HEDGE_RE.search(t) or _LECTURE_RE.search(t))
 
 
-def _escalation_target(ctx, where, tried=()):
+def _escalation_target(ctx, where, tried=(), forced=None):
     """Where to re-run a timid refusal. ("cloud", None) for the online model, ("local", model_id) for a stronger
-    model installed here, or None if there is nothing more capable to try. tried: what this turn already ran on
-    ("cloud", model ids), so a refusal online (a free model can be as timid) still falls through to a stronger
-    uncensored model here, and nothing is asked twice."""
+    model installed here that fits this machine's memory, or None when nothing stronger is left. tried: what this
+    turn already ran on ("cloud", model ids), so a refusal online still falls through to a stronger model here
+    and nothing is asked twice.
+
+    The chain is local, then online, then one stronger local — each place at most once. Online is used only when
+    the owner set an account up and the brain setting is not "local" (and this turn was not forced onto this
+    computer with "here:"). A model weaker than the one that just answered, or one that does not fit in memory
+    (Underdog 27B on a 16 GB machine), is never chosen."""
     if not config.settings.get("auto_escalate", True):
         return None
-    try:
-        if where != "cloud" and "cloud" not in tried and config.cloud() and not getattr(ctx, "headless", False) and (
-                llm.home_up() if llm.cloud_is_home() else config.settings.get("internet", "yes") != "no"):
-            return ("cloud", None)
-    except Exception:
-        pass
+    tried = set(tried or ())
+    online = forced != "local" and config.settings.get("brain", "local") != "local"
+    if online and where != "cloud" and "cloud" not in tried:
+        try:
+            if config.cloud() and not getattr(ctx, "headless", False) and (
+                    llm.home_up() if llm.cloud_is_home() else config.settings.get("internet", "yes") != "no"):
+                return ("cloud", None)
+        except Exception:
+            pass
     try:
         from . import models
         if models.host_mode():
             return None
-        active = (models.active() or {}).get("id")
-        have = {m["id"] for m in models.installed()}
-        for mid in _ESCALATE_ORDER:
-            if mid in have and mid != active and mid not in tried:
-                return ("local", mid)
+        active_id = (models.active() or {}).get("id")
+        floor = _model_rank(active_id)
+        mem = models.ram_gb()
+        ranked = {name for name, _rank in _ESCALATE_RANK}
+        best, best_rank = None, floor
+        for m in models.installed():
+            mid = m.get("id")
+            if not mid or mid not in ranked or mid == active_id or mid in tried:
+                continue
+            if models._bigger_than_ram(m, mem):
+                continue
+            rank = _model_rank(mid)
+            if rank > best_rank:
+                best, best_rank = mid, rank
+        if best:
+            return ("local", best)
     except Exception:
         pass
     return None
+
+
+def _restore_model(ctx, previous):
+    """Put the on-device model back after a one-turn escalation. `previous` is the saved settings value
+    ("" when the owner had not chosen one)."""
+    from . import models
+    try:
+        if models.host_mode():
+            return
+        current = config.settings.get("model") or ""
+        if current == (previous or ""):
+            return
+        if previous:
+            models.use(previous)
+            return
+        config.settings.set("model", "")
+        from . import system
+        system.service("llmos-model", "restart", timeout=60)
+    except Exception as e:
+        try:
+            ctx.status(f"couldn't switch back to the previous model: {e}")
+        except Exception:
+            pass
+
+
+def _media_shortcut(name, args):
+    """play_media needs mpv. Without it, the same request opens a YouTube search in the installed browser."""
+    if name != "play_media" or tools.REGISTRY["play_media"].available():
+        return name, args
+    import urllib.parse
+    q = str((args or {}).get("query") or "").strip()
+    return "browse", {"site": "https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(q)}
+
+
+# A goal the owner left unfinished when the step cap hit ("inbox zero today", "keep going until it's done").
+# A one-off question that happens to be long is not a goal: it still stops with the old "couldn't finish".
+_GOAL_RE = re.compile(r"\b(?:today|until it(?:'s| is) done|keep going until)\b", re.I)
+_GOAL_CONTINUE = "I'll keep going on that in the background and tell you when it's done."
+
+
+def _call_args(arguments):
+    try:
+        args = json.loads(arguments) if isinstance(arguments, str) and arguments.strip() else (arguments or {})
+    except ValueError:
+        return {}
+    return args if isinstance(args, dict) else {}
+
+
+def _call_risk(name, arguments):
+    tool = tools.REGISTRY.get(name)
+    if not tool:
+        return None
+    try:
+        return tool.risk_for(_call_args(arguments))
+    except Exception:
+        return None
+
+
+def _goal_remainder(user_text, calls):
+    """The owner's goal, plus the steps already taken, so the background run does not start from nothing."""
+    lines = []
+    for name, _args, out in calls[-8:]:
+        bit = re.sub(r"\s+", " ", str(out)).strip()
+        if len(bit) > 140:
+            bit = bit[:140] + "…"
+        lines.append(f"- {name}: {bit}" if bit else f"- {name}")
+    text = user_text.strip()
+    if lines:
+        text += "\n\nAlready done (do not repeat it):\n" + "\n".join(lines)
+    return text[:4000]
+
+
+def _continue_goal(ctx, user_text, calls):
+    """The step cap ended a goal. Store the rest as a background task and say so in one sentence.
+
+    hands-off continues with no question. balanced and hands-on use the same confirmation as any other
+    action (a change asks on hands-on; deleting asks on balanced). A SECURITY tool is not stored: the
+    scheduler never runs one unattended, and queueing it would only try again with nobody there.
+    Returns the sentence, or None when nothing was stored."""
+    said = getattr(ctx, "current_request", "") or user_text
+    if not _GOAL_RE.search(_plain(said)):
+        return None
+    risks = [_call_risk(name, args) for name, args, _out in calls]
+    if tools.SECURITY in risks:
+        return None
+    headless = getattr(ctx, "headless", False)
+    if not headless:
+        tainted = getattr(ctx, "tainted", False) and config.settings.get("guard_untrusted", True)
+        must_ask = tainted or needs_confirm(tools.CHANGE) or any(needs_confirm(r) for r in risks if r)
+        if must_ask:
+            confirm = getattr(ctx, "confirm_action", None)
+            tool = tools.REGISTRY.get("schedule_task")
+            if not callable(confirm) or tool is None:
+                return None
+            risk = tools.DESTRUCTIVE if any(r == tools.DESTRUCTIVE for r in risks) else tools.CHANGE
+            try:
+                ok = confirm(tool, {"task": said.strip()[:200]}, risk)
+            except Exception:
+                return None
+            if not ok:
+                return None
+        approved = True          # the owner asked for this goal, in this turn
+    else:
+        approved = bool(getattr(ctx, "approved", False))
+    try:
+        store.add_task("in 1 minute", _goal_remainder(said, calls), "agent", approved=approved)
+    except store.WhenError:
+        return None
+    try:
+        ctx._goal_continued = True
+    except AttributeError:
+        pass
+    return _GOAL_CONTINUE
 
 
 def run(ctx, user_text, history):
@@ -832,6 +1092,9 @@ def run(ctx, user_text, history):
     autonomy policy, appends to history, returns the final text."""
     try:
         ctx.tainted = False        # nothing outside the owner's own words has been read yet this turn
+        ctx._tools_acted = False   # set again by execute() if a tool actually runs; escalation refuses to repeat it
+        ctx._hard_stop = False     # set by execute() if this request is one of the two hard stops
+        ctx._goal_continued = False
     except AttributeError:
         pass
     forget_last_routine(user_text)
@@ -893,11 +1156,12 @@ def run(ctx, user_text, history):
         lead = re.match(r"^(?P<first>.+?)(?:,\s*|\s+)(?:and\s+)?then\s+(?P<rest>.+)$", user_text, re.I | re.S)
         first = intent.match(lead.group("first")) if lead else None
         if first:
-            opening = first[0] == "open_app" and hasattr(ctx, "app_read")
+            name1, args1 = _media_shortcut(first[0], first[1])
+            opening = name1 == "open_app" and hasattr(ctx, "app_read")
             before = _page_key(ctx)     # the page already on screen, before the step runs (opening or not)
-            out1 = execute(ctx, first[0], first[1])
+            out1 = execute(ctx, name1, args1)
             if not _failed(out1):
-                done = _cap(_shortcut_reply(first[0], first[1], out1))
+                done = _cap(_shortcut_reply(name1, args1, out1))
                 ctx.status(done)
                 if opening:
                     # continue as soon as the read bridge shows a page other than the one before (2 s at most)
@@ -925,7 +1189,8 @@ def run(ctx, user_text, history):
                 user_text = ((rest or "Say in one sentence what was done.") + f"\n(Already done for this request: {done} {note})")
     shortcut = intent.match(user_text)
     if shortcut:
-        name, args = shortcut
+        name, args = _media_shortcut(*shortcut)
+        shortcut = (name, args)
         out = execute(ctx, name, args)
         if str(out).startswith(_NOT_AN_APP):
             shortcut = None         # "write a birthday message" is words: the model writes them
@@ -1002,164 +1267,192 @@ def run(ctx, user_text, history):
         no_tools = True
     rare_on = False                              # a rare tool was called this turn: keep offering the rare group
     fresh = len(msgs[-1].get("content") or "")   # characters the model has not seen yet (its cache holds the rest)
-    while True:
-        chat = llm.cloud_chat if where == "cloud" else llm.chat
-        for step in range(MAX_STEPS):
-            if getattr(ctx, "cancel", None) is not None and ctx.cancel.is_set():
-                raise Cancelled()
-            if where != "cloud":
-                _wait_warm()          # the local model slot: let a warm-up in progress finish first
-            stream = ctx.new_stream()
-            est = expect_seconds(where, fresh)
-            if est:
-                _ctx(ctx, "expect", est, step)
-            t0 = time.time()
-            try:
-                watch = getattr(ctx, "watch", None) if where != "cloud" else None
-                result = chat(msgs, tools=None if no_tools else (tools.schemas() if where == "cloud" and not llm.cloud_is_home()
-                                                                    else tool_schemas(user_text, sticky=rare_on)),
-                              on_text=lambda t: ctx.on_text(stream, t), **({"watch": watch} if callable(watch) else {}))
-            except llm.CloudError as e:
-                # the online model did not answer: say so and carry on here with the same messages
-                ctx.end_stream(stream)
-                _ctx(ctx, "brain", False, "")
-                ctx.status("your other computer stopped answering; answering here" if llm.cloud_is_home()
-                           else f"the online model did not answer ({e}); answering here")
-                llm._HOME_UP[:] = [time.time(), False]
-                where, chat, escalated = "local", llm.chat, True
-                tried.add("cloud")
-                continue
-            except llm.ModelError as e:
-                ctx.end_stream(stream)
-                # too long for the model's memory (small machines run a 6k context): retry with the
-                # history dropped and the request halved, twice, before giving up
-                if "too long" in str(e) and not tools_ran and not final and shrunk < 2:
-                    shrunk += 1
-                    keep = max(800, len(user_text) // 2)
-                    user_text = user_text[:keep].rstrip() + "\n[… cut here: the request was too long …]"
-                    ctx.status("too long for the model's memory; trying with a shorter version")
-                    msgs = build_messages(ctx, user_text, [], private=private)
-                    continue
-                raise
-            except llm.ModelDown:
-                ctx.end_stream(stream)
-                raise
-            ctx.end_stream(stream)
-            _learn_speed(result.get("timings") or {}, time.time() - t0, where)
-            content = result["content"].strip()
-            calls = result["tool_calls"]
-            if any(_is_rare(c["name"]) for c in calls):
-                rare_on = True
-            if content:
-                final = content
-            if not calls:
-                # honesty guard: the model narrated an action but ran no tool for it
-                if not tools_ran and not nudged and _CLAIM_RE.search(content[:400]) and not _WRITING_RE.search(user_text) \
-                        and len(content) < 600:
-                    nudged = True
-                    msgs.append({"role": "assistant", "content": content, **({"_anthropic": result["raw"]} if result.get("raw") else {})})
-                    msgs.append({"role": "user", "content":
-                                 "You described that as done, but you did not call any tool, so nothing "
-                                 "actually happened. If it needs a tool, call it now. If no tool fits, say "
-                                 "plainly that you did not do it. Do not claim an action you did not perform."})
-                    final = ""
-                    continue
-                break
-            assistant_msg = {"role": "assistant", "content": content or None,
-                             "tool_calls": [{"id": c["id"] or f"call_{step}_{i}", "type": "function",
-                                             "function": {"name": c["name"], "arguments": c["arguments"]}}
-                                            for i, c in enumerate(calls)]}
-            if result.get("raw"):
-                assistant_msg["_anthropic"] = result["raw"]     # replayed unchanged on the next step (llm.py)
-            msgs.append(assistant_msg)
-            fresh = 0
-            same = {}                                    # the same call twice in one step runs once
-            for i, call in enumerate(calls):
-                cid = call["id"] or f"call_{step}_{i}"
-                key = (call["name"], json.dumps(call["arguments"], sort_keys=True) if not isinstance(call["arguments"], str) else call["arguments"])
-                out = same[key] if key in same else execute(ctx, call["name"], call["arguments"])
-                same[key] = out
-                if str(out).lower().startswith(("not done", "blocked")):
-                    # a refused call asked again, or words asked for as an app: the next turn is words only
-                    if key in blocked or str(out).startswith(_NOT_AN_APP):
-                        no_tools = True
-                    blocked.add(key)
-                tools_ran += 1
-                fresh += len(out)
-                if tool_steps == 0:
-                    first_calls.append((call["name"], call["arguments"], out))
-                msgs.append({"role": "tool", "tool_call_id": cid, "content": out})
-            tool_steps += 1
-            # one plain tool that already did the job ("volume up", "open my downloads", "add eggs to my list"): its own
-            # result is the answer, so the model is not asked to say it again (a whole model turn saved)
-            plain_done = (len(calls) == 1 and not content and calls[0]["name"] in _PLAIN_REPLY and not _failed(out)
-                          and not getattr(ctx, "after_turn", None) and not _WRITING_RE.search(user_text)
-                          and not _NOT_A_PLAIN_ANSWER.match(str(out)))
-            if plain_done:
+    switched_from = None          # settings model id before a one-turn switch; restored in finally
+    ran_calls = []                # (name, arguments, result) this attempt; the step-cap hands the rest onward
+    try:
+        while True:
+            chat = llm.cloud_chat if where == "cloud" else llm.chat
+            for step in range(MAX_STEPS):
+                if getattr(ctx, "cancel", None) is not None and ctx.cancel.is_set():
+                    raise Cancelled()
+                if where != "cloud":
+                    _wait_warm()          # the local model slot: let a warm-up in progress finish first
+                stream = ctx.new_stream()
+                est = expect_seconds(where, fresh)
+                if est:
+                    _ctx(ctx, "expect", est, step)
+                t0 = time.time()
                 try:
-                    args = json.loads(calls[0]["arguments"]) if isinstance(calls[0]["arguments"], str) and calls[0]["arguments"].strip() else {}
-                except ValueError:
-                    args = {}
-                final = _cap(_shortcut_reply(calls[0]["name"], args if isinstance(args, dict) else {}, out))
-                st = ctx.new_stream()
-                ctx.on_text(st, final)
-                ctx.end_stream(st)
-                break
-            if ctx.after_turn:
-                break
-        else:
-            # ran out of steps without a plain answer: ask for one final summary
-            if not final:
-                try:
-                    msgs.append({"role": "user", "content":
-                                 "Stop using tools now and give me a one or two sentence plain answer "
-                                 "based on what you found, or say plainly if you could not do it."})
-                    final = chat(msgs, on_text=None).get("content", "").strip()
-                    if final:
-                        st = ctx.new_stream()
-                        ctx.on_text(st, final)
-                        ctx.end_stream(st)
-                except (llm.ModelDown, llm.CloudError):
-                    pass
-            # under 'ask', a request this computer could not finish may go to the online model -- with a yes
-            if not final and not escalated and where == "local" and _can_escalate(ctx) and _ctx(ctx, "confirm_online", user_text, "failed", default=False):
-                escalated, where = True, "cloud"
-                tried.add("cloud")
-                _going_online(ctx, True)
-                msgs = build_messages(ctx, user_text, history, private=True)
-                tools_ran, nudged = 0, False
-                continue
-            if not final:
-                final = "I couldn't finish that. Try saying it another way, or say \u201cwhat did you do\u201d to see what I tried."
-                ctx.status(i18n.t("stopped"))
-        # the quick model was just being timid (a refusal or an "are you allowed" hedge on something allowed):
-        # re-run the whole turn on a more capable model. Genuinely harmful asks keep their refusal.
-        if final and len(tried) < 2 and _looks_refused(final) and not _HARM_REQ_RE.search(user_text):
-            tgt = _escalation_target(ctx, where, tried)
-            if tgt:
-                escalated = True
-                tried.add(tgt[0] if tgt[0] == "cloud" else tgt[1])
-                if tgt[0] == "cloud":
-                    ctx.status("the quick model wouldn't; asking the online model")
-                    where, chat, private = "cloud", llm.cloud_chat, True
-                    _going_online(ctx, True)
-                else:
-                    try:
-                        from . import models
-                        ctx.status(("the online model wouldn't either" if "cloud" in tried else "the quick model wouldn't")
-                                   + f"; switching to {models.by_id(tgt[1])['name']}")
-                        models.use(tgt[1])
-                        _wait_warm()
-                        where = "local"
-                    except Exception as e:
-                        ctx.status(f"couldn't switch models: {e}")
+                    watch = getattr(ctx, "watch", None) if where != "cloud" else None
+                    result = chat(msgs, tools=None if no_tools else (tools.schemas() if where == "cloud" and not llm.cloud_is_home()
+                                                                        else tool_schemas(user_text, sticky=rare_on)),
+                                  on_text=lambda t: ctx.on_text(stream, t), **({"watch": watch} if callable(watch) else {}))
+                except llm.CloudError as e:
+                    # the online model did not answer: say so and carry on here with the same messages
+                    ctx.end_stream(stream)
+                    _ctx(ctx, "brain", False, "")
+                    ctx.status("your other computer stopped answering; answering here" if llm.cloud_is_home()
+                               else f"the online model did not answer ({e}); answering here")
+                    llm._HOME_UP[:] = [time.time(), False]
+                    where, chat, escalated = "local", llm.chat, True
+                    tried.add("cloud")
+                    continue
+                except llm.ModelError as e:
+                    ctx.end_stream(stream)
+                    # too long for the model's memory (small machines run a 6k context): retry with the
+                    # history dropped and the request halved, twice, before giving up
+                    if "too long" in str(e) and not tools_ran and not final and shrunk < 2:
+                        shrunk += 1
+                        keep = max(800, len(user_text) // 2)
+                        user_text = user_text[:keep].rstrip() + "\n[… cut here: the request was too long …]"
+                        ctx.status("too long for the model's memory; trying with a shorter version")
+                        msgs = build_messages(ctx, user_text, [], private=private)
+                        continue
+                    raise
+                except llm.ModelDown:
+                    ctx.end_stream(stream)
+                    raise
+                ctx.end_stream(stream)
+                _learn_speed(result.get("timings") or {}, time.time() - t0, where)
+                content = result["content"].strip()
+                calls = result["tool_calls"]
+                if any(_is_rare(c["name"]) for c in calls):
+                    rare_on = True
+                if content:
+                    final = content
+                if not calls:
+                    # honesty guard: the model narrated an action but ran no tool for it
+                    if not tools_ran and not nudged and _CLAIM_RE.search(content[:400]) and not _WRITING_RE.search(user_text) \
+                            and len(content) < 600:
+                        nudged = True
+                        msgs.append({"role": "assistant", "content": content, **({"_anthropic": result["raw"]} if result.get("raw") else {})})
+                        msgs.append({"role": "user", "content":
+                                     "You described that as done, but you did not call any tool, so nothing "
+                                     "actually happened. If it needs a tool, call it now. If no tool fits, say "
+                                     "plainly that you did not do it. Do not claim an action you did not perform."})
+                        final = ""
+                        continue
+                    break
+                assistant_msg = {"role": "assistant", "content": content or None,
+                                 "tool_calls": [{"id": c["id"] or f"call_{step}_{i}", "type": "function",
+                                                 "function": {"name": c["name"], "arguments": c["arguments"]}}
+                                                for i, c in enumerate(calls)]}
+                if result.get("raw"):
+                    assistant_msg["_anthropic"] = result["raw"]     # replayed unchanged on the next step (llm.py)
+                msgs.append(assistant_msg)
+                fresh = 0
+                same = {}                                    # the same call twice in one step runs once
+                hard = False
+                for i, call in enumerate(calls):
+                    cid = call["id"] or f"call_{step}_{i}"
+                    key = (call["name"], json.dumps(call["arguments"], sort_keys=True) if not isinstance(call["arguments"], str) else call["arguments"])
+                    out = same[key] if key in same else execute(ctx, call["name"], call["arguments"])
+                    same[key] = out
+                    ran_calls.append((call["name"], call["arguments"], out))
+                    if getattr(ctx, "_hard_stop", False):
+                        # the tool did not run. Stop the turn on the one-sentence refusal; do not let a later
+                        # step call another tool for the same request.
+                        final = str(out).split(":", 1)[1].strip() if str(out).lower().startswith("blocked:") else str(out)
+                        hard = True
                         break
-                msgs = build_messages(ctx, user_text, history, private=private)
-                final, tools_ran, nudged, no_tools = "", 0, False, bool(getattr(ctx, "ask_only", False))
-                blocked, rare_on = set(), False
-                tool_steps = 0
-                continue
-        break
+                    if str(out).lower().startswith(("not done", "blocked")):
+                        # a refused call asked again, or words asked for as an app: the next turn is words only
+                        if key in blocked or str(out).startswith(_NOT_AN_APP):
+                            no_tools = True
+                        blocked.add(key)
+                    tools_ran += 1
+                    fresh += len(out)
+                    if tool_steps == 0:
+                        first_calls.append((call["name"], call["arguments"], out))
+                    msgs.append({"role": "tool", "tool_call_id": cid, "content": out})
+                if hard:
+                    break
+                tool_steps += 1
+                # one plain tool that already did the job ("volume up", "open my downloads", "add eggs to my list"): its own
+                # result is the answer, so the model is not asked to say it again (a whole model turn saved)
+                plain_done = (len(calls) == 1 and not content and calls[0]["name"] in _PLAIN_REPLY and not _failed(out)
+                              and not getattr(ctx, "after_turn", None) and not _WRITING_RE.search(user_text)
+                              and not _NOT_A_PLAIN_ANSWER.match(str(out)))
+                if plain_done:
+                    try:
+                        args = json.loads(calls[0]["arguments"]) if isinstance(calls[0]["arguments"], str) and calls[0]["arguments"].strip() else {}
+                    except ValueError:
+                        args = {}
+                    final = _cap(_shortcut_reply(calls[0]["name"], args if isinstance(args, dict) else {}, out))
+                    st = ctx.new_stream()
+                    ctx.on_text(st, final)
+                    ctx.end_stream(st)
+                    break
+                if ctx.after_turn:
+                    break
+            else:
+                # the step cap: a goal keeps going in the background instead of stopping here. Anything else
+                # still gets one summary, then the old "couldn't finish".
+                cont = _continue_goal(ctx, user_text, ran_calls)
+                if cont:
+                    final = cont
+                elif not final:
+                    try:
+                        msgs.append({"role": "user", "content":
+                                     "Stop using tools now and give me a one or two sentence plain answer "
+                                     "based on what you found, or say plainly if you could not do it."})
+                        final = chat(msgs, on_text=None).get("content", "").strip()
+                        if final:
+                            st = ctx.new_stream()
+                            ctx.on_text(st, final)
+                            ctx.end_stream(st)
+                    except (llm.ModelDown, llm.CloudError):
+                        pass
+                # under 'ask', a request this computer could not finish may go to the online model -- with a yes.
+                # Not after a tool has already run: the online model would do that action a second time.
+                if (not final and not getattr(ctx, "_tools_acted", False) and not escalated and where == "local"
+                        and _can_escalate(ctx) and _ctx(ctx, "confirm_online", user_text, "failed", default=False)):
+                    escalated, where = True, "cloud"
+                    tried.add("cloud")
+                    _going_online(ctx, True)
+                    msgs = build_messages(ctx, user_text, history, private=True)
+                    tools_ran, nudged = 0, False
+                    continue
+                if not final:
+                    final = "I couldn't finish that. Try saying it another way, or say \u201cwhat did you do\u201d to see what I tried."
+                    ctx.status(i18n.t("stopped"))
+            # the quick model was just being timid (a refusal or an "are you allowed" hedge on something allowed):
+            # re-run the turn on a more capable model, but only when nothing has run yet. A tool that already
+            # deleted or sent must not run again. Genuinely harmful asks keep their refusal.
+            acted = bool(getattr(ctx, "_tools_acted", False))
+            if final and not acted and len(tried) < 2 and _looks_refused(final) and not hard_stop(user_text):
+                tgt = _escalation_target(ctx, where, tried, forced)
+                if tgt:
+                    escalated = True
+                    tried.add(tgt[0] if tgt[0] == "cloud" else tgt[1])
+                    if tgt[0] == "cloud":
+                        ctx.status("the quick model wouldn't; asking the online model")
+                        where, chat, private = "cloud", llm.cloud_chat, True
+                        _going_online(ctx, True)
+                    else:
+                        try:
+                            from . import models
+                            chosen = models.by_id(tgt[1]) or {}
+                            ctx.status(("the online model wouldn't either" if "cloud" in tried else "the quick model wouldn't")
+                                       + f"; switching to {chosen.get('name') or tgt[1]}")
+                            if switched_from is None:
+                                switched_from = config.settings.get("model") or ""
+                            models.use(tgt[1])
+                            _wait_warm()
+                            where = "local"
+                        except Exception as e:
+                            ctx.status(f"couldn't switch models: {e}")
+                            break
+                    msgs = build_messages(ctx, user_text, history, private=private)
+                    final, tools_ran, nudged, no_tools = "", 0, False, bool(getattr(ctx, "ask_only", False))
+                    blocked, rare_on = set(), False
+                    tool_steps = 0
+                    ran_calls = []
+                    continue
+            break
+    finally:
+        if switched_from is not None:
+            _restore_model(ctx, switched_from)
     # a turn that went well in one tool step may be repeated without thinking next time
     if tool_steps == 1 and final and not nudged and not shrunk and not forced and not getattr(ctx, "after_turn", None):
         _maybe_save_routine(user_text, first_calls)
@@ -1568,6 +1861,16 @@ def execute(ctx, name, arguments):
     cancel = getattr(ctx, "cancel", None)
     if cancel is not None and cancel.is_set():        # the owner pressed Stop: no further step of this turn runs
         raise Cancelled()
+    # The two hard stops, before any tool: a conduct.txt that never mentions them does not turn this off,
+    # and the model agreeing is not enough. Ordinary requests never reach this return.
+    request = getattr(ctx, "current_request", "") or ""
+    if hard_stop(request):
+        store.audit(name, {}, "blocked: hard stop", allowed=False)
+        try:
+            ctx._hard_stop = True
+        except AttributeError:
+            pass
+        return "blocked: " + hard_stop_reply(request)
     tool = tools.REGISTRY.get(name)
     if not tool:
         return f"error: no such tool '{name}'"
@@ -1702,6 +2005,10 @@ def execute(ctx, name, arguments):
 
     ctx.begin_tool(tool, shown, risk)
     try:
+        try:
+            ctx._tools_acted = True    # the action is starting: a later refusal must not run this turn again
+        except AttributeError:
+            pass
         result = tool.fn(args, ctx)
     except Cancelled:
         raise

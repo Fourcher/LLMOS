@@ -6,8 +6,8 @@
     python3 -> python3.13 symlink, as in the real archive) and runs Setup with it -- a local stand-in server
     serves the archive, so nothing is downloaded from the internet
   * a download that doesn't match its checksum is refused, and nothing broken is left behind
-  * the folder layout: three Start Here files and one "Support files" folder; the Windows file has CRLF endings
-    and every launcher points at a starter that exists
+  * the folder layout: LICENSE, README.md, three Start Here files and one "Support files" folder; the Windows
+    file has CRLF endings and every launcher points at a starter that exists
 
 Run: python3 tools/test-start.py
 """
@@ -15,6 +15,7 @@ import hashlib
 import http.server
 import io
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -56,8 +57,10 @@ base_env = dict(os.environ, LLMOS_SETUP_NO_BROWSER="1", TERM="dumb")
 
 print("the folder a friend opens")
 top = sorted(n for n in os.listdir(TOP) if not n.startswith(".") and n != "packages")   # packages/: local build output (git-ignored), never shipped
-check(top == ["Start Here (Linux).sh", "Start Here (Mac).command", "Start Here (Windows).bat", "Support files"],
-      f"only the three Start Here files and one folder: {top}")
+# LICENSE and README.md are the GitHub checkout (the license and the overview). Dotfiles stay ignored.
+check(top == ["LICENSE", "README.md", "Start Here (Linux).sh", "Start Here (Mac).command",
+              "Start Here (Windows).bat", "Support files"],
+      f"LICENSE, README, the three Start Here files and one folder: {top}")
 bat = open(os.path.join(TOP, "Start Here (Windows).bat"), "rb").read()
 check(b"\r\n" in bat and b"\n" not in bat.replace(b"\r\n", b""), "the Windows file has Windows line endings throughout")
 for name in os.listdir(TOP):
@@ -68,8 +71,11 @@ for name in os.listdir(TOP):
         check(os.access(os.path.join(TOP, name), os.X_OK), f"{name} is executable (double-click runs it)")
 
 print("Start Here on this Mac, with its own Python")
-out = launch(["/bin/bash", os.path.join(TOP, "Start Here (Mac).command")], base_env)
-check("LLM OS Setup is open in your web browser" in out, "opens Setup")
+if platform.system() != "Darwin":
+    print("SKIP: this check needs macOS, where Start Here looks for the Mac's own Python. This machine is not macOS.")
+else:
+    out = launch(["/bin/bash", os.path.join(TOP, "Start Here (Mac).command")], base_env)
+    check("LLM OS Setup is open in your web browser" in out, "opens Setup")
 
 print("a Mac without Python: the starter fetches a private copy")
 tmp = tempfile.mkdtemp(prefix="llmos-start-")

@@ -26,7 +26,7 @@
     },
     "FirefoxHome": {
       "Search": true,
-      "TopSites": true,
+      "TopSites": false,
       "SponsoredTopSites": false,
       "Highlights": false,
       "Pocket": false,
@@ -48,7 +48,23 @@
         "Status": "default"
       },
       "media.autoplay.default": {
-        "Value": 0,
+        "Value": 1,
+        "Status": "default"
+      },
+      "toolkit.legacyUserProfileCustomizations.stylesheets": {
+        "Value": true,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.showSponsored": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.showSponsoredTopSites": {
+        "Value": false,
+        "Status": "default"
+      },
+      "browser.newtabpage.activity-stream.feeds.topsites": {
+        "Value": false,
         "Status": "default"
       },
       "widget.use-xdg-desktop-portal.file-picker": {

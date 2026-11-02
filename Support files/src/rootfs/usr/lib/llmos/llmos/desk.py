@@ -394,10 +394,18 @@ def _system_check():
             "cpu": cpu, "gpu": vendor if accel else "", "accel": accel}
 
 
+def _tier_row(tier, m, inst):
+    return {"tier": tier, "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"],
+            "size_gb": round(m["size"] / 1e9, 1), "installed": m["id"] in inst}
+
+
 def _model_tiers(allow_download):
     """The on-device models behind Fast / Balanced / Most capable on this computer: those that fit its memory
-    (1 GB left for the system); offline, only those already here. Fast is the smallest (or an installed quick one in the
-    same size band), Balanced the largest of the other quick ones, Most capable the largest. A tier that would repeat a model is dropped."""
+    (1 GB left for the system, the same line as models.fits); offline, only those already here. Fast is the smallest
+    (or an installed quick one in the same size band). When Dolphin or Huihui fit they take Balanced and then Most
+    capable, in that order — the same preference as models.active — and the largest model stays selectable from the
+    full list. Otherwise Balanced is the largest of the other quick ones and Most capable is the largest. A tier
+    that would repeat a model is dropped."""
     ram = models.ram_gb()
     inst = {m["id"] for m in models.installed()}
     fits = [m for m in models.catalog() if m["ram_gb"] <= ram - 1 and (allow_download or m["id"] in inst)]
@@ -411,15 +419,26 @@ def _model_tiers(allow_download):
     # Fast is the smallest; but an installed quick model no bigger than 1.5x the smallest is the same band, and it is
     # ready at once, so it is Fast instead (a bigger installed model keeps its place in the order)
     fast = next((m for m in quick if m["id"] in inst and m["size"] <= fits[0]["size"] * 1.5), fits[0])
-    rest = [m for m in fits if m is not fast]
-    rest_quick = [m for m in quick if m is not fast]
+    by = {m["id"]: m for m in fits}
+    willing = [by[mid] for mid in models.DEFAULT_MODELS if mid in by and mid != fast["id"]]
+    if willing:
+        # Uncensored models that fit: Dolphin, then Huihui. One of them leaves Most capable as the largest model
+        # that is not already a stop. Both of them fill the two stops, and the largest stays in the full list.
+        picks = [("fast", fast), ("balanced", willing[0])]
+        if len(willing) > 1:
+            picks.append(("capable", willing[1]))
+        elif fits[-1]["id"] not in {fast["id"], willing[0]["id"]}:
+            picks.append(("capable", fits[-1]))
+    else:
+        rest = [m for m in fits if m is not fast]
+        rest_quick = [m for m in quick if m is not fast]
+        picks = (("fast", fast), ("balanced", (rest_quick or rest or [fast])[-1]), ("capable", fits[-1]))
     out, seen = [], set()
-    for tier, m in (("fast", fast), ("balanced", (rest_quick or rest or [fast])[-1]), ("capable", fits[-1])):
+    for tier, m in picks:
         if m["id"] in seen:
             continue
         seen.add(m["id"])
-        out.append({"tier": tier, "id": m["id"], "name": m["name"], "need_gb": m["ram_gb"],
-                    "size_gb": round(m["size"] / 1e9, 1), "installed": m["id"] in inst})
+        out.append(_tier_row(tier, m, inst))
     return out
 
 
@@ -832,8 +851,8 @@ class Desk:
             settings = WebKit.Settings(enable_developer_extras=False, enable_javascript=True, enable_media=True,
                                        enable_webgl=False, allow_file_access_from_file_urls=True,
                                        allow_universal_access_from_file_urls=True, enable_smooth_scrolling=True,
-                                       enable_page_cache=False, default_font_family="Inter",
-                                       monospace_font_family="JetBrains Mono", default_font_size=16)
+                                       enable_page_cache=False, default_font_family="sans-serif",
+                                       monospace_font_family="monospace", default_font_size=16)
             if _software_gpu():
                 try:
                     settings.set_hardware_acceleration_policy(WebKit.HardwareAccelerationPolicy.NEVER)
@@ -955,7 +974,7 @@ class Desk:
         try:
             os.makedirs(d, exist_ok=True)
             with open(os.path.join(d, "config"), "w") as f:
-                f.write(f"font=Inter 12\nbackground-color={bg}ee\ntext-color={fg}\nborder-color={acc}\nborder-size=2\n"
+                f.write(f"font=sans-serif 12\nbackground-color={bg}ee\ntext-color={fg}\nborder-color={acc}\nborder-size=2\n"
                         f"border-radius=12\npadding=12\nmargin=58,16,16,16\nwidth=360\ndefault-timeout=7000\nanchor=top-right\n"
                         f"max-visible=3\nlayer=overlay\n\n[mode=do-not-disturb]\ninvisible=1\n")
             subprocess.run(["pkill", "-x", "mako"], capture_output=True)
@@ -1774,8 +1793,11 @@ class Desk:
     def push_status(self):
         s = config.settings.all()
         m = models.active()
-        self.emit({"t": "status", "model": m["name"] if m else "", "model_ok": llm.health(),
-                   "autonomy": s.get("autonomy", "balanced"), "host_gpu": models.host_mode(),
+        model_name = m["name"] if m else ""
+        if s.get("brain","local") == "cloud" and config.cloud() and llm.cloud_label():
+            model_name = llm.cloud_label() + " (online)"
+        self.emit({"t": "status", "model": model_name, "model_ok": llm.health(),
+                   "autonomy": s.get("autonomy", "hands-off"), "host_gpu": models.host_mode(),
                    "brain": s.get("brain", "local"), "cloud": llm.cloud_label() if vault.unlocked() or not s.get("vault") else "", "home": llm.cloud_is_home(),
                    "home_up": llm.cloud_is_home() and llm.home_up(),
                    "tor": bool(s.get("tor")), "internet": s.get("internet", "yes"),
@@ -2056,7 +2078,7 @@ class Desk:
     def models_panel(self):
         """The model manager: on-device models and the optional online model, each with its facts and
         drawbacks, every action a spoken command so a button never does more than the owner could say."""
-        L = lambda k, **kw: T(k, area="settings", **kw)
+        L = lambda _key, **kw: T(_key, area="settings", **kw)
 
         def facts(good, limits):
             lines = []
@@ -2103,7 +2125,14 @@ class Desk:
         if acct:
             cur_online = acct.get("model")
             prov = llm.CLOUD_PROVIDERS.get(acct.get("provider"), {})
-            catalog = prov.get("models") or [{"id": cur_online, "name": llm.cloud_label(acct), "good_at": [], "limits": [], "speed": "", "cost": ""}]
+            if cur_online:
+                model_ids = {m["id"] for m in prov.get("models", [])}
+                if cur_online not in model_ids:
+                    catalog = prov.get("models", []) + [{"id": cur_online, "name": llm.cloud_label(acct), "good_at": [], "limits": [], "speed": "", "cost": ""}]
+                else:
+                    catalog = prov.get("models", [])
+            else:
+                catalog = prov.get("models", [])
             online = []
             for m in catalog:
                 on = m["id"] == cur_online
@@ -2111,6 +2140,9 @@ class Desk:
                 online.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
                                "meta": L("d_in_use") if on else "",
                                "actions": [] if on else [{"label": T("d_use"), "say": f"use the online model {m['id']}", "primary": True}]})
+            if brain == "cloud":
+                blocks.append({"type": "text", "dim": True, "text": f"Answers come from the online model {llm.cloud_label(acct)}, not the model on this computer. Use on a model above switches answers to this computer."})
+                blocks.append({"type": "buttons", "items": [{"label": "Answer on this computer", "say": "think only on this computer", "primary": True}]})
             blocks.append({"type": "list", "items": online})
             blocks.append({"type": "kv", "rows": [[L("s_online_model"), f"{prov.get('name', acct.get('provider'))} · {L('d_key_ending', k=acct['key'][-4:])}"],
                                                   [L("s_brain"), L("v_brain_" + (brain if brain in ("local", "ask", "cloud") else "local"))]]})
@@ -2153,7 +2185,7 @@ class Desk:
         """The connectors (apps) manager: installed connectors and the tools each adds, with enable/disable/
         remove, and a form to add one. Every connector tool runs under the same autonomy policy and audit log."""
         from . import mcp
-        L = lambda k, **kw: T(k, area="settings", **kw)
+        L = lambda _key, **kw: T(_key, area="settings", **kw)
         regs = mcp.connectors()
         blocks = [{"type": "text", "text": L("d_connectors_intro"), "dim": True}]
         if not regs:
@@ -2175,15 +2207,16 @@ class Desk:
     def panel_spec(self, which):
         s = config.settings.all()
         if which == "settings":
-            L = lambda k, **kw: T(k, area="settings", **kw)
-            auto = s.get("autonomy", "balanced")
+            L = lambda _key, **kw: T(_key, area="settings", **kw)
+            auto = s.get("autonomy", "hands-off")
             pick = lambda k, v: {"label": L(k), "say": v}
             blocks = [
                 {"type": "buttons", "items": [{"label": T("d_network"), "say": "network"}, {"label": T("d_sound"), "say": "sound"},
                                               {"label": "Displays", "say": "displays"}, {"label": "Keyboard and mouse", "say": "keyboard and mouse"},
                                               {"label": "Bluetooth", "say": "bluetooth"}, {"label": "Printers", "say": "printers"},
                                               {"label": "Drives", "say": "drives"}, {"label": "Storage", "say": "storage"},
-                                              {"label": "Updates", "say": "updates"}, {"label": T("d_power"), "say": "power"},
+                                              {"label": "Updates", "say": "updates"}, {"label": "Remote access", "say": "remote access"},
+                                              {"label": T("d_power"), "say": "power"},
                                               {"label": "What's running", "say": "task manager"}, {"label": T("d_myapps"), "say": "show my apps"},
                                               {"label": T("d_conversations"), "say": "conversations"}, {"label": "About this computer", "say": "about this computer"}]},
                 {"type": "heading", "text": L("s_autonomy")},
@@ -2278,6 +2311,8 @@ class Desk:
                 {"type": "text", "text": L("s_change_hint"), "dim": True},
             ]
             return {"title": L("settings"), "kind": "panel", "size": "m", "blocks": blocks}
+        if which == "remote":
+            return syspanels.remote_access()
         if which == "models":
             return self.models_panel()
         if which == "connectors":
@@ -2387,7 +2422,7 @@ class Desk:
                 with open(f) as fh:
                     lid = fh.read().split()[-1]
             was, self._lid = getattr(self, "_lid", lid), lid
-            if lid == "closed" and was == "open" and config.settings.get("lid", "sleep") == "sleep" and not self._external_screen():
+            if lid == "closed" and was == "open" and config.settings.get("lid", "stay") == "sleep" and not self._external_screen():
                 if _stay_awake():
                     # a test computer stays reachable: only the screen goes off (it comes back with the lid)
                     subprocess.run(["wlopm", "--off", "*"], capture_output=True, env=dict(os.environ, **(media.desk_env() or {})))
@@ -2713,6 +2748,8 @@ class Desk:
         low = intent.plain(text).lower().strip()
         if intent.is_chain(low):
             return False                  # several steps that build on each other: the model does them together
+        if intent._remote(low):
+            return True                    # remote access: the panel, Connect, and the SSH switch, done here
         if self._app_question(low) is not None:
             return True                   # close or read an open app of the OS's own: done now, even while the model works
         if low in self._QUICK or low in _LOCK_WORDS or self._QUICK_RE.fullmatch(low) or everyday.MATCH.search(low) or _MEDIUM_Q.search(low) or _TIME_Q.fullmatch(low) or _BATTERY_Q.fullmatch(low) or re.search(r"\b(?:font|typeface)\b", low) or re.search(r"\b(?:magnif\w*|keyboard)\b", low) or re.search(r"\b(?:games?|bored)\b", low) or re.match(r"close window \S|(?:switch to|close) [\w.-]+$", low) or re.search(r"\b(?:root|sudo|admin|firewall|virus|viruses|malware|antivirus|permissions?|dual[- ]?boot|boot|crash\w*|captions|subtitles|dock|taskbar|default|button|drive|open right now|what'?s open|popped up|side by side|split screen|battery|history|conversations?|what did you)\b", low) or re.search(r"\bip\b", low) or re.search(r"\b(?:unsaved|forgot to save|didn'?t save|(?:from|off(?: of)?) (?:my |the )?(?:phone|camera|iphone|android))\b|\brepo(?:sitory)?\b|\b(?:reset|factory|like new|erase everything)\b|\b(?:lock|encrypt|password|protect|secure)\b.*\bfolder\b|^(?:unlock|decrypt) \w|\b(?:lock|encrypt|password[- ]?protect) (?:my )?(?:documents|pictures|photos|music|videos|downloads|desktop)\b|\bbookmarks?\b|\bblur\b|\b(?:users?|accounts?|profile|login|guest)\b|plug in (?:my )?phone|connect (?:my )?(?:phone|iphone)", low) or re.search(r"\brecord|recording\b|voice (?:memo|note)", low) or re.fullmatch(r"forget (?:this|the current|my|the) (?:wi-?fi|network|wi-?fi network)", low.rstrip(".!")) or re.search(r"\bspell|\bscan\b", low) or re.search(r"\bshare (?:my |the )?screen|screen ?shar|fill (?:in|out) .*pdf|sign .*pdf", low) or re.search(r"\b(?:pdf|password|passwords|translate|safe|legit|scam)\b", low) or re.match(r"(?:please )?(?:set ?up|add|connect|configure|sign in to|log ?in to)(?: my)? e-?mail", low) or re.search(r"\b(?:website|site|page)s?\b.*\b(?:load|work|open|broken)", low) or re.search(r"\b(?:zoom (?:in|out)|bookmark|ads|adverts|pop-?ups|ad ?blocker|history)\b|bigger on (?:this|the)|smaller on (?:this|the)", low) or low in ("switch to hands-off mode", "switch to balanced mode", "switch to hands-on mode", "follow my instructions on my machine", "keep standard assistant caution") or re.match(r"use sound (?:output|input) \d+", low) or re.search(r"\b(?:presentation|slides|slideshow|powerpoint)\b", low) or re.match(r"(?:my email is|i use) ", low) or re.search(r"\b(?:workspace|virtual desktop)\b", low) or re.match(r"how (?:do|can|to) |where (?:are|do|is) my|what(?:'s| is)? (?:the )?(?:keyboard )?shortcut|keyboard shortcuts|privacy|is (?:this|it|my data) private|(?:do|does|are) you (?:spy|track|send|collect|record|listen)|what (?:data |information )?(?:do|does|will) (?:you|it|this)|(?:the )?(?:model|ai|you|wi-?fi|internet)\b.*(?:respond|answer|work|stuck|frozen|down|connect)|are you there|no (?:internet|wi-?fi)|headphones", low) or re.fullmatch(r"(?:please )?(?:close|hide|dismiss) (?:this|it|that)(?: \w+)?|close the window", low.rstrip("?.!")) or re.search(r"\b(?:read (?:this|that|it)|aloud|out loud|dictat|type what i say|can'?t (?:see|read|hear)|too small|hard to (?:see|read)|wrong (?:time|clock|speaker)|time is wrong|clock is wrong|no sound|wallpaper|background)\b", low) or re.match(r"(?:please )?(?:save|keep) (?:it|this|that|the \w+)\b", low) or re.search(r"(?:airplane|aeroplane|flight) mode|^forget (?:the )?wi-?fi|^disconnect (?:from )?(?:the )?wi-?fi", low) or re.fullmatch(r"(?:pause|resume|unpause|play ?pause)[.!]?", low) or re.fullmatch(r"(?:it says )?(?:(?:the )?(?:wi-?fi|network) )?connected(?: to (?:the |my )?(?:wi-?fi|network|internet))?,? (?:but|yet|and)(?: (?:there'?s|there is|it'?s|it is|nothing))? (?:no internet|not online|nothing loads)", low.rstrip("?.!")) or _CLIP_Q.fullmatch(low) or _DEV_Q.fullmatch(low) or _UPD_AUTO.fullmatch(low.rstrip("?.! ")) or _UPD_SHOW.fullmatch(low.rstrip("?.! ")) or _UPD_INSTALL.fullmatch(low.rstrip("?.! ")) or _VOICES_Q.fullmatch(low.rstrip("?.! ")) or _MODELS_Q.fullmatch(low.rstrip("?.! ")) or \
@@ -2798,6 +2835,9 @@ class Desk:
         try:
             out = agent.execute(Lane(self.ctx), "manage_models", args)
             reply = agent._cap(agent._shortcut_reply("manage_models", args, out))
+            if action == "use" and str(out).lower().startswith("now using") and config.settings.get("brain", "local") != "local":
+                config.settings.set("brain", "local")
+                reply += " Answers now come from this computer, not the online model."
         except Exception as e:
             reply = agent._plain_error(str(e))
         self.emit({"t": "toast", "text": (reply or "Done.")[:240]})
@@ -2933,6 +2973,9 @@ class Desk:
             if not open_now and not any(s.get("kind") == "app" for s in self.windows.values()):
                 self.last_reply = self._said = _nothing_open_reply(line)
                 return True
+        hit = intent._remote(low)
+        if hit and self._remote_shortcut(hit, line):
+            return True
         r = self._system_shortcut(low, line)
         if r:
             return True
@@ -3925,6 +3968,46 @@ class Desk:
                 return text
         return None
 
+    def _remote_shortcut(self, hit, line):
+        """Open Remote access, start `tailscale up --ssh`, or flip Tailscale SSH. The owner asked in words
+        or pressed the button, so this does not go through the model's confirm step."""
+        from . import tailscale
+        name, args = hit
+        if name == "show_panel":
+            self.open_panel("remote")
+            self._said = "Here's remote access."
+            return True
+        action = (args or {}).get("action")
+        if action == "connect":
+            tailscale.note_pending()
+            self.open_panel("remote")
+
+            def go():
+                try:
+                    tailscale.connect()
+                except Exception as e:
+                    self.emit({"t": "toast", "text": str(e), "long": True})
+                self.open_panel("remote")
+            threading.Thread(target=go, daemon=True).start()
+            self._said = "Connecting. The sign-in link will show in Remote access."
+            return True
+        if action in ("ssh-on", "ssh-off"):
+            on = action == "ssh-on"
+
+            def flip():
+                try:
+                    ok, note = tailscale.set_ssh(on)
+                except Exception as e:
+                    ok, note = False, str(e)
+                self.open_panel("remote")
+                if not ok:
+                    self.emit({"t": "toast", "text": note, "long": True})
+            threading.Thread(target=flip, daemon=True).start()
+            self._said = ("SSH is on." if on else
+                          "Remote maintenance access is off until you turn it back on.")
+            return True
+        return False
+
     def _system_shortcut(self, low, line):
         """The system's own panels and their buttons (syspanels.py): no model, done at once."""
         low = low.rstrip("?.!")
@@ -4368,6 +4451,10 @@ class Desk:
             side = "bottom" if config.settings.get("appearance.layout") == "windows" else "top"
             xml = re.sub(r"\s*<margin [^>]*/>", "", xml)
             xml = xml.replace("</labwc_config>", f'  <margin {side}="{bar}" />\n</labwc_config>', 1)
+            # window corners follow the desk's radius (0 for square). The template ships a fixed number.
+            rad = themes.window_radius()
+            if rad is not None:
+                xml = re.sub(r"(<cornerRadius>)\d+(</cornerRadius>)", rf"\g<1>{rad}\2", xml, count=1)
             # a slower double-click (shaky hands): two clicks this far apart still count as one double-click
             xml = xml.replace("<mouse>", f"<mouse><doubleClickTime>{int(inp.get('double_click_ms', 500))}</doubleClickTime>", 1)
             rate, delay = int(inp.get("repeat_rate", 25)), int(inp.get("repeat_delay", 600))
@@ -4674,6 +4761,24 @@ class Desk:
 
     # ---- apps and terminals (windows in the compositor)
 
+    def _tray_host(self):
+        """True when a tray host (org.kde.StatusNotifierWatcher) is on the session bus; checked once a minute."""
+        cached = getattr(self, '_tray_ok', None)
+        if cached and time.monotonic() - cached[1] < 60:
+            return cached[0]
+        try:
+            from gi.repository import Gio, GLib
+            result = Gio.bus_get_sync(Gio.BusType.SESSION, None).call_sync(
+                'org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus',
+                'NameHasOwner', GLib.Variant('(s)', ('org.kde.StatusNotifierWatcher',)),
+                GLib.VariantType('(b)'), Gio.DBusCallFlags.NONE, 500, None
+            ).unpack()[0]
+            self._tray_ok = (result, time.monotonic())
+            return result
+        except Exception:
+            self._tray_ok = (False, time.monotonic())
+            return False
+
     def _child_env(self):
         env = dict(os.environ, MOZ_ENABLE_WAYLAND="1", GDK_BACKEND="wayland", QT_QPA_PLATFORM="wayland",
                    SDL_VIDEODRIVER="wayland", XDG_SESSION_TYPE="wayland")
@@ -4683,6 +4788,11 @@ class Desk:
         mod = f"/usr/lib/llmos/gtk/noroot-{platform.machine()}.so"
         if os.path.exists(mod) and mod not in env.get("GTK3_MODULES", ""):
             env["GTK3_MODULES"] = ":".join(x for x in (env.get("GTK3_MODULES", ""), mod) if x)
+        if not self._tray_host():
+            # no tray host here: Qt programs (QDBusTrayIcon) would log a D-Bus error per window; silence it, Qt
+            # then shows their messages as plain notifications instead of a tray balloon
+            rules = 'qt.qpa.tray.warning=false;qt.qpa.tray.debug=false'
+            env['QT_LOGGING_RULES'] = ';'.join(x for x in (env.get('QT_LOGGING_RULES', ''), rules) if x)
         return env
 
     def _app_evt(self):

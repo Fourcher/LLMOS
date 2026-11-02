@@ -10,7 +10,7 @@
   "size": 2147023008,
   "sha256": "9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8",
   "ram_gb": 3,
-  "note": "the default: coherent, follows instructions closely, few refusals",
+  "note": "coherent, follows instructions closely, few refusals",
   "speed": "fast",
   "good_at": [
    "everyday questions and help",
@@ -156,7 +156,7 @@
   "size": 4920745856,
   "sha256": "4c001f29d4edbd9327a6df8e16e2b7907a64e0e31b0a7abe9c779a96773f304e",
   "ram_gb": 8,
-  "note": "the most willing: does not impose its own ethics on you",
+  "note": "the on-device default when it fits: the most willing; does not impose its own ethics on you",
   "speed": "medium",
   "good_at": [
    "answers anything you ask",

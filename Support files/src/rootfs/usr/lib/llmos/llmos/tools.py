@@ -3,6 +3,7 @@ class the user's autonomy setting is checked against, and an implementation
 that returns plain text (the only thing the model ever gets back)."""
 import ast
 import glob
+import hashlib
 import json
 import math
 import time
@@ -344,7 +345,7 @@ def _first_sentence(text, n=110):
 # always fit; the owner's connectors come right after them. The order never changes, so the prompt cache holds.
 PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpage", "real_quote", "calculate", "remember", "forget",
             "show_screen", "schedule_task", "manage_tasks", "note_add", "notes_show", "note_done", "note_remove",
-            "set_appearance", "change_setting", "show_panel", "open_app", "play_media", "media_control", "set_volume",
+            "set_appearance", "change_setting", "show_panel", "remote_access", "open_app", "play_media", "media_control", "set_volume",
             "set_brightness", "show_files", "open_file", "delete_file", "restore_file", "empty_trash", "screenshot",
             "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program", "security_check", "scan_network", "web_security_scan", "capture_traffic",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
@@ -989,6 +990,7 @@ def set_appearance(a, ctx):
     if not changed:
         return "nothing to change"
     ui.reload_theme()
+    themes.publish()
     if a.get("theme") or a.get("font") or a.get("color") or a.get("background") or a.get("accent"):
         try:
             if apps.retheme() and hasattr(ctx, "reload_apps"):
@@ -1001,22 +1003,22 @@ def set_appearance(a, ctx):
         ("; a custom style is still on and may override this (say 'back to the default look' to remove it)" if still and not a.get("theme") else "")
 
 
-_RESTYLE_SYSTEM = """You restyle a desktop's interface by writing CSS for its page (an HTML page in a web view). Parts:
-html, body: the whole screen. #top: the top bar (clock, status). #stage: where windows sit. .win: every window (a box with
-border, border-radius, background var(--card)); .win .head: a window's title bar; #cmd: the request box at the bottom (input
-#in); #reply: the column where answers appear; .btn: buttons; #backdrop: the animated background canvas; #dock: the dock.
-Colours in use: var(--bg), var(--fg), var(--accent), var(--card), var(--line). Fonts available: sans-serif, serif, monospace,
-'Noto Sans', 'JetBrains Mono', 'Noto Serif'.
-Write CSS that makes the look the owner asked for as fully and literally as CSS can: shapes (clip-path, border-radius,
-transform), filters (filter: grayscale/sepia/invert/hue-rotate/blur/contrast), fonts, letter-spacing, text-transform,
-colours, borders, shadows, animations (@keyframes). Style the real elements themselves (.win, #top, html...), not ::before
-or ::after, and add !important to every declaration so it wins over the page's own rules. Keep text readable and keep
-#cmd usable. No url(), no @import.
+_RESTYLE_SYSTEM = """You restyle a desktop by changing its design tokens. Write CSS for the page. The look is driven by variables on :root; change those, not one-off colours on random elements.
+
+Put the look in one :root rule. Every declaration needs !important so it wins:
+--bg background, --fg text, --accent highlight, --danger, --ok, --warn,
+--radius and --radius-sm (0px for square, 12px for a soft corner, 24px for very round), --radius-pill,
+--font and --mono. System fonts only: system-ui, ui-serif, ui-monospace, serif, monospace, "Noto Sans", "Noto Serif", "Noto Sans Mono". No external fonts.
+--text-xs, --text-sm, --text-md, --text-base, --text-lg, --text-xl, --text-2xl,
+--space-1 (4px) --space-2 (8px) --space-3 (12px) --space-4 (16px) --space-5 (24px) --space-6 (32px) --space-7 (48px) --space-8 (64px),
+--shadow, --card, --line, --dim.
+Example: :root { --bg: #160f22 !important; --fg: #f3eefe !important; --accent: #b388ff !important; --radius: 0px !important; --radius-sm: 0px !important; }
+
+Add other rules only for something a token cannot do (a clip-path, a filter, a tilt). Parts: html, body, #top, #stage, .win, .win .head, #cmd, #in, #reply, #thread, .btn, #dock, #backdrop. Style those elements, not ::before or ::after, and add !important to every declaration. Keep text readable and keep #cmd usable. No url(), no @import.
 Patterns (adapt them, they are not answers):
-- a shape for every window: .win { clip-path: polygon(...) !important; }   (percent points; text inside may need padding)
+- a shape for every window: .win { clip-path: polygon(...) !important; }
 - a whole-screen effect: html { filter: sepia(1) contrast(1.1) !important; }
-- a typeface everywhere: * { font-family: monospace !important; letter-spacing: .05em !important; }
-- tilted windows: .win { transform: rotate(-3deg) !important; }
+- a typeface everywhere: :root { --font: ui-monospace, monospace !important; }
 Reply with only the CSS (at most 25 rules, no explanation, no code fences). If part of the request is impossible with CSS,
 add one last line starting with NOTE: and one short plain sentence saying which part."""
 
@@ -1063,11 +1065,49 @@ def restyle(a, ctx):
 
 
 @tool("show_panel", "Show one of the system's screens to the user.",
-      {"panel": {"type": "string", "enum": ["settings", "models", "connectors", "tasks", "memory", "audit", "help"]}},
+      {"panel": {"type": "string", "enum": ["settings", "models", "connectors", "tasks", "memory", "audit", "help", "remote"]}},
       ["panel"])
 def show_panel(a, ctx):
     ctx.show_panel(a.get("panel", "help"))
     return f"the {a.get('panel')} screen is now shown to the user; do not repeat its contents"
+
+
+def _remote_risk(a):
+    act = (a or {}).get("action")
+    if act == "ssh-on":
+        return SECURITY
+    if act in ("connect", "ssh-off"):
+        return CHANGE
+    return SAFE
+
+
+def _remote_net(a):
+    return (a or {}).get("action") == "connect"
+
+
+@tool("remote_access", "Tailscale remote access: show the Remote access screen, connect this computer to the "
+      "tailnet (tailscale up --ssh), or turn Tailscale SSH on or off.",
+      {"action": {"type": "string", "enum": ["show", "connect", "ssh-on", "ssh-off"]}},
+      ["action"], risk=_remote_risk, network=_remote_net)
+def remote_access(a, ctx):
+    from . import tailscale
+    action = a.get("action") or "show"
+    if action == "connect":
+        tailscale.note_pending()
+        if hasattr(ctx, "show_panel"):
+            ctx.show_panel("remote")
+        tailscale.connect()
+    elif action == "ssh-on":
+        tailscale.set_ssh(True)
+    elif action == "ssh-off":
+        tailscale.set_ssh(False)
+    if hasattr(ctx, "show_panel"):
+        ctx.show_panel("remote")
+    return {"show": "Remote access is on screen.",
+            "connect": "Connecting. The sign-in link is on the Remote access screen.",
+            "ssh-on": "Tailscale SSH is on.",
+            "ssh-off": "Remote maintenance access is off until you turn it back on."}.get(
+                action, "Remote access is on screen.")
 
 
 # ------------------------------------------------------------ memory
@@ -1755,8 +1795,9 @@ def edit_conduct(a, ctx):
     if hasattr(ctx, "edit_conduct"):
         return ctx.edit_conduct()
     return ("to change the conduct, edit the plain-text file /etc/llmos/conduct.txt — whatever is in it replaces the "
-            "built-in conduct section; delete it to go back to the default. (This is the one part of the system "
-            "prompt you control.)")
+            "built-in conduct section; the two hard stops stay in the prompt either way (no help causing physical harm "
+            "to a person, and no sexual content involving anyone under 18). Delete the file to go back to the default. "
+            "(This is the one part of the system prompt you control.)")
 
 
 def _guard_on(value):
@@ -1815,7 +1856,7 @@ _SETTING_WORDS = {"autonomy": r"autonom|hands|ask(?:s|ing)?\b|confirm|permission
       "user. brain: local (answered only on this computer) | ask (here; asks before a big request goes to "
       "the online model) | cloud (the online model answers everything). guidance: owner | standard. "
       "autolock: minutes (0 = off). screen_off: minutes idle before the screen turns off (0 = never). "
-      "sleep_after: minutes idle before the computer sleeps (0 = never). lid: sleep | nothing. "
+      "sleep_after: minutes idle before the computer sleeps (0 = never). lid: sleep | stay. "
       "guard_untrusted: on/off (show me first what instructions inside web pages, files or emails would make you do). "
       "do_not_disturb: on/off (programs' notifications hidden). night_light: on/off (warmer screen in the evening). timezone: a city, country or zone name ('Paris', 'Pacific', 'Asia/Tokyo'). "
       "clock: 24 or 12 (the hours shown in the top bar and on the clock: '24-hour clock', '12-hour clock'). "
@@ -1972,9 +2013,9 @@ def change_setting(a, ctx):
             ctx.redraw()
         return "the clock shows 24-hour time now" if h24 else "the clock shows 12-hour time (AM/PM) now"
     if s == "lid":
-        val = "nothing" if re.search(r"\b(nothing|stay|keep|awake|no|off|don'?t)\b", str(v), re.I) else "sleep"
+        val = "stay" if re.search(r"\b(nothing|stay|keep|awake|no|off|don'?t)\b", str(v), re.I) else "sleep"
         config.settings.set("lid", val)
-        return "closing the lid now does nothing (it keeps running)" if val == "nothing" else "closing the lid puts the computer to sleep"
+        return "closing the lid now does nothing (it keeps running)" if val == "stay" else "closing the lid puts the computer to sleep"
     if s == "timezone":
         try:
             zone = system.set_timezone(v)
@@ -2279,73 +2320,117 @@ _TRIAGE_SCHEMA = {"type": "object",
                   "required": ["category", "needs_reply", "urgent", "summary"]}
 
 
-@tool("mail_triage", "Get the inbox to zero: reads every unread email, archives newsletters, notifications and junk "
-      "on its own, and returns the short list of what actually needs the owner (with ids) so replies can follow. "
-      "Use for 'inbox zero', 'clean up my inbox', 'what needs my attention'.",
+_TRIAGE_CAP = 200
+_TRIAGE_BATCH = 40
+
+
+def _triage_line(noise, keep, left):
+    """What the owner reads after a triage: one sentence, then the urgent senders. Never 'ask again'."""
+    urgent = []
+    for m, d in keep:
+        if d.get("urgent"):
+            name = _sender_name(m["from"])
+            if name and name not in urgent:
+                urgent.append(name)
+    n_noise, n_keep = len(noise), len(keep)
+    if n_noise and n_keep:
+        line = f"Archived {n_noise}; {n_keep} still {'needs' if n_keep == 1 else 'need'} you."
+    elif n_noise:
+        line = f"Archived {n_noise}, and nothing left that needs you."
+    elif n_keep:
+        line = f"{n_keep} still {'needs' if n_keep == 1 else 'need'} you."
+    else:
+        line = "No unread mail is left."
+    if left:
+        line = line.rstrip(".") + f". {left} more unread were not sorted."
+    if urgent:
+        line = line.rstrip(".") + ". Urgent: " + ", ".join(urgent) + "."
+    elif not line.endswith("."):
+        line += "."
+    return line
+
+
+@tool("mail_triage", "Get the inbox to zero: reads unread email until none is left or 200 messages, archives "
+      "newsletters, notifications and junk on its own, and answers in one sentence naming what still needs the owner "
+      "and which senders are urgent. Nothing is sent. Use for 'inbox zero', 'clean up my inbox', 'what needs my attention'.",
       {"archive": {"type": "string", "enum": ["noise", "nothing"], "description": "what to archive automatically (default noise)"}},
       [], risk=CHANGE, network=True, available=lambda: mail.account() is not None)
 def mail_triage(a, ctx):
-    try:
-        items = mail.unread(limit=40)
-    except mail.MailError as e:
-        return f"error: {e}"
-    if not items:
-        return "no unread mail in the inbox: nothing new to sort"
+    """Sort unread mail until none is left or 200 messages have been sorted, whichever comes first.
+    Newsletters, notifications and junk are archived. Nothing is sent. The reply is one sentence plus urgent senders."""
+    archive_noise = (a.get("archive") or "noise") == "noise"
     facts = "; ".join(f["fact"] for f in store.facts()[-20:]) or "nothing known"
-    keep, noise = [], []
-    for m in items:
-        ctx.status(f"sorting: {m['subject'][:56]}")
+    seen, keep, noise = set(), [], []
+    while len(seen) < _TRIAGE_CAP:
         try:
-            d = llm.complete_json(
-                "You sort email for the owner of this computer. Classify one message. Newsletters, marketing, "
-                "automated notifications and junk are noise; messages from people who expect something are not.",
-                f"What is known about the owner: {facts}\nFrom: {m['from']}\nSubject: {m['subject']}\n"
-                f"Preview: {m['snippet']}\n\nReturn JSON with category (personal|work|newsletter|notification|junk), "
-                f"needs_reply, urgent, and a one-line summary.", _TRIAGE_SCHEMA, max_tokens=160)
-        except Exception:
-            d = {"category": "personal", "needs_reply": False, "urgent": False, "summary": m["subject"]}
-        if (a.get("archive") or "noise") == "noise" and d.get("category") in ("newsletter", "notification", "junk"):
-            noise.append((m, d))
-        else:
-            keep.append((m, d))
-    lines = []
-    if noise:
-        try:
-            done, dest = mail.move([m["uid"] for m, _ in noise], "archive")
-            lines.append(f"archived {len(done)} noise message(s) to {dest}: " +
-                         "; ".join(f"{m['subject'][:40]}" for m, _ in noise[:6]) + (" …" if len(noise) > 6 else ""))
+            batch = mail.unread(limit=min(_TRIAGE_BATCH, _TRIAGE_CAP - len(seen)) + len(seen))
         except mail.MailError as e:
-            lines.append(f"could not archive: {e}")
-    # what is really left: the sort looks at the newest 40 unread at a time, so say so rather than claim zero
-    try:
-        waiting = max(0, mail.count_unread() - len(keep))
-    except mail.MailError:
-        waiting = 0
-    if waiting:
-        lines.append(f"{waiting} more unread message(s) were not sorted this time; ask again to sort them.")
+            if not seen:
+                return f"error: {e}"
+            break
+        fresh = [m for m in batch if str(m.get("uid")) not in seen]
+        if not fresh:
+            break
+        fresh = fresh[:_TRIAGE_CAP - len(seen)]
+        batch_noise = []
+        for m in fresh:
+            seen.add(str(m.get("uid")))
+            ctx.status(f"sorting: {str(m.get('subject', ''))[:56]}")
+            try:
+                d = llm.complete_json(
+                    "You sort email for the owner of this computer. Classify one message. Newsletters, marketing, "
+                    "automated notifications and junk are noise; messages from people who expect something are not.",
+                    f"What is known about the owner: {facts}\nFrom: {m['from']}\nSubject: {m['subject']}\n"
+                    f"Preview: {m['snippet']}\n\nReturn JSON with category (personal|work|newsletter|notification|junk), "
+                    f"needs_reply, urgent, and a one-line summary.", _TRIAGE_SCHEMA, max_tokens=160)
+            except Exception:
+                d = {"category": "personal", "needs_reply": False, "urgent": False, "summary": m["subject"]}
+            if archive_noise and d.get("category") in ("newsletter", "notification", "junk"):
+                batch_noise.append((m, d))
+            else:
+                keep.append((m, d))
+        if batch_noise:
+            try:
+                mail.move([m["uid"] for m, _ in batch_noise], "archive")
+                noise.extend(batch_noise)
+            except mail.MailError as e:
+                keep.extend(batch_noise)
+                line = _triage_line(noise, keep, 0).rstrip(".") + f". Could not archive: {e}."
+                _triage_window(ctx, line, keep, noise)
+                return line
+    if not seen:
+        return "no unread mail in the inbox: nothing new to sort"
+    left = 0
+    if len(seen) >= _TRIAGE_CAP:
+        try:
+            left = max(0, mail.count_unread() - len(keep))
+        except mail.MailError:
+            left = 0
+    line = _triage_line(noise, keep, left)
+    _triage_window(ctx, line, keep, noise)
+    return line
+
+
+def _triage_window(ctx, line, keep, noise):
+    """The inbox panel. The spoken reply stays the one sentence from _triage_line."""
     if not keep:
-        lines.append("inbox zero: no unread mail is left." if not waiting else "nothing in this batch needs you.")
-        show(ctx, {"title": "Inbox zero" if not waiting else "Inbox", "size": "m", "blocks": [{"type": "text", "text": "\n".join(lines)}]})
-    else:
-        rows, items = [], []
-        for m, d in sorted(keep, key=lambda x: not x[1].get("urgent")):
-            rows.append(f"[{m['uid']}] {'URGENT · ' if d.get('urgent') else ''}{m['from'][:30]} — {m['subject'][:48]}")
-            rows.append(f"      {str(d.get('summary', ''))[:100]}" + (" (reply expected)" if d.get("needs_reply") else ""))
-            items.append({"id": m["uid"], "title": f"{_sender_name(m['from'])[:40]} — {m['subject'][:60]}",
-                          "subtitle": str(d.get("summary", ""))[:160] + (" · reply expected" if d.get("needs_reply") else ""),
-                          "meta": "urgent" if d.get("urgent") else "",
-                          "actions": [{"label": i18n.t("d_read"), "say": f"read email {m['uid']}"},
-                                      {"label": i18n.t("d_archive"), "say": f"archive email {m['uid']}"}]})
-        blocks = ([{"type": "text", "text": lines[0], "dim": True}] if noise else []) + [{"type": "list", "items": items}]
-        show(ctx, {"title": f"Needs you · {len(keep)}", "size": "l", "blocks": blocks})
-        lines.append(f"{len(keep)} message(s) need you and stay in the inbox (shown on screen as is):")
-        lines += rows
-        lines.append("The panel is already on screen: do not repeat it. Do NOT archive or delete "
-                     "these; reply (mail_reply) only when you say what to answer.")
-    return "\n".join(lines)
+        show(ctx, {"title": "Inbox zero", "size": "m", "blocks": [{"type": "text", "text": line}]})
+        return
+    items = []
+    for m, d in sorted(keep, key=lambda x: not x[1].get("urgent")):
+        items.append({"id": m["uid"], "title": f"{_sender_name(m['from'])[:40]} — {m['subject'][:60]}",
+                      "subtitle": str(d.get("summary", ""))[:160] + (" · reply expected" if d.get("needs_reply") else ""),
+                      "meta": "urgent" if d.get("urgent") else "",
+                      "actions": [{"label": i18n.t("d_read"), "say": f"read email {m['uid']}"},
+                                  {"label": i18n.t("d_archive"), "say": f"archive email {m['uid']}"}]})
+    blocks = ([{"type": "text", "text": line, "dim": True}] if noise else []) + [{"type": "list", "items": items}]
+    show(ctx, {"title": f"Needs you · {len(keep)}", "size": "l", "blocks": blocks})
 
 
 # ------------------------------------------------------------ generated UI, quotes, apps, wifi
+
+_LAST_SCREEN = {}   # the last generated window: the same spec again is not re-drawn (a submit looped 7 times)
+
 
 @tool("show_screen", "Show the owner an interface you compose, drawn as a window in their chosen style: a "
       "dashboard, a checklist, a table, a summary. Give a title and blocks. Block types: "
@@ -2366,8 +2451,13 @@ def show_screen(a, ctx):
     spec = uispec.normalize({"title": str(a.get("title", ""))[:60], "blocks": blocks, "size": "m"})
     if not spec:
         return "error: nothing to show (give blocks or lines)"
-    show(ctx, spec)
-    return "the window is now on screen; do not repeat its contents"
+    sig = hashlib.sha1(json.dumps(spec, sort_keys=True, default=str).encode()).hexdigest()
+    if _LAST_SCREEN.get('sig') == sig and time.time() - _LAST_SCREEN.get('t', 0) < 600:
+        return 'that same window is already on screen and unchanged; do not call show_screen again. If the owner sent answers from it, save them (remember or note_add) and reply in one short sentence.'
+    else:
+        show(ctx, spec)
+        _LAST_SCREEN.update(sig=sig, t=time.time())
+        return 'the window is now on screen; do not repeat its contents. When the owner answers or submits it, record the data and reply once; do not show it again unless it changed.'
 
 
 def _sys_facts():
@@ -4142,10 +4232,10 @@ def real_quote(a, ctx):
     try:
         res = [r for r in web.search(f"site:wikiquote.org {q}", n=6) if "wikiquote.org" in r["url"]]
         if not res:
-            return f"no Wikiquote page found for '{q}'"
+            return f"No Wikiquote page for {q}, so there is no sourced quote."
         page = web.read(res[0]["url"], limit=12000)
     except web.WebError as e:
-        return f"lookup failed: {e}"
+        return f"I couldn't look up a Wikiquote page for {q}: {e}"
     quotes = []
     for ln in page["text"].splitlines():
         t = ln.strip(" -•*•")
@@ -4154,7 +4244,7 @@ def real_quote(a, ctx):
         if len(quotes) >= 5:
             break
     if not quotes:
-        return f"the page {page['url']} had no clearly quoted lines"
+        return f"No quoted line on {page['url']}, so there is no sourced quote."
     show(ctx, {"title": page["title"][:60] or q, "size": "m",
                "blocks": [{"type": "quote", "text": t, "author": q if q.istitle() or " " in q else "", "source": page["url"]} for t in quotes[:3]]})
     return ("Real quotes (verbatim from " + page["url"] + ") are already shown in a window on screen:\n" +

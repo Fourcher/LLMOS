@@ -132,6 +132,10 @@ def run_task(t):
     except Exception as e:
         result = f"(couldn't run: {e})"
     store.finished(t["id"], result)
+    if getattr(ctx, "_goal_continued", False):
+        # the step cap handed the rest to another task. The owner already has one sentence saying it is
+        # continuing; they hear again when a run actually finishes, not at every cap.
+        return result
     store.notify(f"Scheduled: {t['task'][:60]}", result or "(no result)")
     return result
 
