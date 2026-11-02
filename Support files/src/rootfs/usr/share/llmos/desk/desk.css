@@ -70,6 +70,7 @@ button { cursor: pointer; }
 .error { color: var(--danger-text); min-height: 1.4em; margin-top: 8px; font-size: 14px; }
 code { font-family: var(--mono); font-size: .92em; background: color-mix(in srgb, var(--fg) 9%, var(--bg)); padding: 1px 6px; border-radius: 6px; }
 pre { font-family: var(--mono); font-size: 13.5px; background: color-mix(in srgb, var(--fg) 7%, var(--bg)); padding: 12px 14px; border-radius: var(--radius-sm); overflow: auto; white-space: pre-wrap; margin: 6px 0; }
+pre.qr { background: #fff; color: #111; white-space: pre; line-height: 1; letter-spacing: 0; font-size: 9px; font-family: var(--mono); display: inline-block; padding: 12px; border-radius: var(--radius-sm); }
 a { color: var(--accent-text); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
@@ -410,6 +411,7 @@ table.tbl tr:last-child td { border-bottom: 0; }
 .choice.sel .r { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 45%, transparent 50%); }
 .choice .d { color: var(--dim); font-size: 13px; }
 .toggle { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+.toggle .d { color: var(--dim); font-size: 13px; display: block; }
 .sw { width: 42px; height: 24px; border-radius: 12px; background: var(--dim2); position: relative; border: 0; transition: background-color calc(.2s * var(--dur)); }
 .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, var(--fg) 85%, var(--bg)); border: 1px solid color-mix(in srgb, var(--fg) 25%, transparent); transition: left calc(.2s * var(--dur)) cubic-bezier(.2,.8,.2,1.2); }
 .sw.on { background: var(--accent); }

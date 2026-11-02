@@ -371,7 +371,14 @@ class Console:
     def panel(self, which):
         {"settings": self.panel_settings, "models": self.panel_models,
          "tasks": self.panel_tasks, "memory": self.panel_memory,
-         "audit": self.panel_audit, "help": self.panel_help}.get(which, self.panel_help)()
+         "audit": self.panel_audit, "help": self.panel_help,
+         "remote": self.panel_remote}.get(which, self.panel_help)()
+
+    def panel_remote(self):
+        from . import syspanels, uispec
+        spec = uispec.normalize(syspanels.remote_access()) or {}
+        ui.box(spec.get("title") or "Remote access", uispec.to_rows(spec) if spec.get("blocks") else ["Remote access"])
+        ui.blank()
 
     def panel_help(self):
         ui.box("LLM OS", [T("help_1"), "", T("help_2"), T("help_3")])

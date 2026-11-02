@@ -626,6 +626,18 @@ def _is_shell_file(path):
     return os.path.isfile(path) and os.access(path, os.X_OK)
 
 
+def tailscale_verb(args):
+    """Remote access: status, `tailscale up --ssh`, or the SSH switch. No other arguments."""
+    args = _args_dict(args)
+    if set(args) - {"action"}:
+        raise ValueError("bad args: unexpected argument")
+    action = args.get("action")
+    if action not in ("status", "up", "ssh-on", "ssh-off"):
+        raise ValueError("bad args: action")
+    from . import tailscale
+    return tailscale.dispatch(action)
+
+
 def set_shell(args):
     """Change a login shell. Only root's line: the owner account's name is not recorded anywhere yet.
     The shell must be one of SHELL_CHOICES and installed; PASSWD and SHELLS must be plain files."""
@@ -670,6 +682,7 @@ VERBS = {
     "apk_upgrade": apk_upgrade,
     "clear_apk_cache": clear_apk_cache,
     "sync_time": sync_time,
+    "tailscale": tailscale_verb,
 }
 
 

@@ -172,6 +172,9 @@ PUBLIC_DEFAULTS = {
     "profile": {},                  # the first-run sliders (0-100 each), kept for reference
     "vault": False,
     "focus": {"on": False, "until": 0},
+    "remote_ssh": True,             # Tailscale SSH. True (the default, also when the key is absent) so a crash,
+                                    # an update, or a prefs reset turns it back on. False is the owner's choice
+                                    # to keep remote maintenance off, and the 15-minute check leaves it off.
 }
 
 

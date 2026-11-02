@@ -2462,11 +2462,40 @@ def _mail_send_direct(t):
     return ("mail_send", {"to": m.group("to"), "subject": subject, "body": body})
 
 
+_REMOTE_CONNECT = re.compile(
+    r"^(?:please\s+)?(?:(?:turn\s+on|enable)\s+remote\s+access|connect(?:\s+to)?\s+tailscale|tailscale\s+up"
+    r"|(?:log|sign)\s+in\s+to\s+tailscale)\s*[.!]?\s*$", re.I)
+_REMOTE_SSH = re.compile(
+    r"^(?:please\s+)?(?:turn\s+(?P<a>on|off)\s+tailscale\s+ssh|tailscale\s+ssh\s+(?P<b>on|off)"
+    r"|(?P<c>enable|disable)\s+tailscale\s+ssh)\s*[.!]?\s*$", re.I)
+_REMOTE_OPEN = re.compile(
+    r"^(?:please\s+)?(?:(?:open|show|display|pull\s+up)(?:\s+up)?(?:\s+me)?(?:\s+(?:the|my))?\s+)?"
+    r"(?:remote\s+access|tailscale)(?:\s+(?:settings|panel|page|screen))?\s*[.!]?\s*$", re.I)
+
+
+def _remote(text):
+    """Remote access (Tailscale): connect, the SSH switch, or open the panel. None for anything else,
+    including wifi and the internet switch."""
+    t = _TRAIL_FILLER.sub("", str(text or "")).strip()
+    if _REMOTE_CONNECT.match(t):
+        return ("remote_access", {"action": "connect"})
+    m = _REMOTE_SSH.match(t)
+    if m:
+        off = (m.group("a") or m.group("b") or "") == "off" or (m.group("c") or "") == "disable"
+        return ("remote_access", {"action": "ssh-off" if off else "ssh-on"})
+    if _REMOTE_OPEN.match(t):
+        return ("show_panel", {"panel": "remote"})
+    return None
+
+
 def _match(text):
     text = plain(text)
     t = text.strip()
     if len(t) > 400 or "\n" in t:
         return None
+    rm = _remote(t)
+    if rm:
+        return rm
     ms = _mail_setup(t)
     if ms:
         return ms

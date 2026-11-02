@@ -9,6 +9,9 @@ table inet llmos {
     ip protocol icmp icmp type { echo-reply, destination-unreachable, time-exceeded } accept
     ip6 nexthdr icmpv6 accept
     udp sport 67 udp dport 68 accept
+    # Tailscale SSH arrives on tailscale0 (the daemon, not sshd). Direct WireGuard uses UDP 41641.
+    iifname "tailscale0" accept
+    udp dport 41641 accept
   }
   chain forward {
     type filter hook forward priority 0; policy drop;

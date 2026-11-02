@@ -116,6 +116,7 @@ PKGS="
   yt-dlp quickjs-ng mpv
   alsa-utils alsa-ucm-conf pciutils espeak-ng chafa
   tor cryptsetup nftables
+  tailscale
   kbd font-terminus
   cage seatd seatd-launch foot w3m
   eudev udev-init-scripts
@@ -140,7 +141,7 @@ apk add --root $TARGET --no-cache -q $PKGS
 
 log "LLM OS files"
 wget -qO- "$PAYLOAD/build/work/payload.tar" | tar -x -o -C $TARGET     # -o: owned by root here, whoever made the archive
-chmod 0755 $TARGET/usr/bin/llmos $TARGET/usr/bin/llmos-model-run $TARGET/usr/libexec/llmos-login $TARGET/usr/libexec/llmos-desk $TARGET/etc/init.d/llmos-*
+chmod 0755 $TARGET/usr/bin/llmos $TARGET/usr/bin/llmos-model-run $TARGET/usr/libexec/llmos-login $TARGET/usr/libexec/llmos-desk $TARGET/etc/init.d/llmos-* $TARGET/etc/periodic/15min/tailscale-watchdog
 # byte-compile the package with the target's own python: the build strips __pycache__, and /usr/lib/llmos is root-owned,
 # so a desk running as the owner could not write it and would recompile the source on every start. Never fails the install.
 chroot $TARGET python3 -m compileall -q -j 0 /usr/lib/llmos/llmos >/dev/null 2>&1 || chroot $TARGET python3 -m compileall -q /usr/lib/llmos/llmos >/dev/null 2>&1 || echo "note: could not precompile (it still works, starts a little slower)"
@@ -258,15 +259,24 @@ rc-update add nftables default
 rc-update add acpid default
 rc-update add dbus default
 rc-update add iwd default
+rc-update add tailscale default
 # printing (driverless: modern printers need no driver), finding printers on the network, Bluetooth
 for s in cupsd avahi-daemon bluetooth; do rc-update add $s default 2>/dev/null || true; done
 # programs that are not Alpine packages (Spotify, VS Code, Zoom…) come from Flathub when asked for
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null || true
 rc-update add alsa default 2>/dev/null || true
-rc-update del crond default 2>/dev/null || true
+rc-update add crond default
 rc-update del sshd default 2>/dev/null || true
 rc-update del chronyd default 2>/dev/null || true
 echo 'SYSLOGD_OPTS="-C512"' > /etc/conf.d/syslog     # logs stay in RAM
+# the package already says no_logs_no_support=yes; keep that if an older package left the line off or commented
+if [ -f /etc/conf.d/tailscale ] && grep -q '^no_logs_no_support=' /etc/conf.d/tailscale; then
+  sed -i 's/^no_logs_no_support=.*/no_logs_no_support=yes/' /etc/conf.d/tailscale
+else
+  mkdir -p /etc/conf.d
+  echo 'no_logs_no_support=yes' >> /etc/conf.d/tailscale
+fi
+mkdir -p /var/lib/tailscale
 EOF
 
 # owner account, opt-in at install time (LLMOS_OWNER=1, like PAYLOAD and DISK above); unset, empty or 0 = off.

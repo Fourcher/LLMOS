@@ -21,7 +21,7 @@ tools/fetch-secureboot.sh
 echo "==> payload"
 python3 -m compileall -q src/rootfs/usr/lib/llmos/llmos
 find src/rootfs -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
-chmod 0755 src/rootfs/usr/bin/llmos src/rootfs/usr/bin/llmos-model-run src/rootfs/usr/libexec/llmos-login src/rootfs/usr/libexec/llmos-desk src/rootfs/etc/init.d/llmos-*
+chmod 0755 src/rootfs/usr/bin/llmos src/rootfs/usr/bin/llmos-model-run src/rootfs/usr/libexec/llmos-login src/rootfs/usr/libexec/llmos-desk src/rootfs/etc/init.d/llmos-* src/rootfs/etc/periodic/15min/tailscale-watchdog
 (cd src/rootfs && tar --format=ustar --uid 0 --gid 0 --uname root --gname root -cf ../../build/work/payload.tar .)   # system files belong to root, not to the Mac user who built them
 
 echo "==> host http server"
