@@ -2170,16 +2170,11 @@ class Desk:
             if have and not on:
                 acts.append({"label": T("d_use"), "say": f"use the {m['id']} voice model", "primary": True})
             if not have:
-                acts.append({"label": T("d_download", size=f"{m['size'] / 1e9:.1f}"), "say": f"download the {m['id']} voice model"})
-            if have and not on and not m.get("shipped"):
-                acts.append({"label": T("d_remove"), "say": f"remove the {m['id']} voice model", "danger": True})
-            sub = " · ".join(x for x in [L("d_voice_accuracy", a=m.get("accuracy", "")), m.get("speed", ""),
-                                         f"{m['size'] / 1e6:.0f} MB", f"{m['ram_gb']} GB RAM",
-                                         f"{m.get('langs', '')} {L('d_languages')}"] if x.strip())
-            vrows.append({"title": m["name"], "subtitle": sub, "detail": facts(m.get("good_at"), m.get("limits")),
-                          "meta": L("d_in_use") if on else (T("installed") if have else ""), "actions": acts})
+                vrows.append({"title": m["name"], "subtitle": "Not installed", "detail": facts(m.get("good_at"), m.get("limits")), "meta": "", "actions": [{"label": T("d_install"), "say": f"install the {m['id']} voice model"}]})
+            else:
+                vrows.append({"title": m["name"], "subtitle": "Installed", "detail": facts(m.get("good_at"), m.get("limits")), "meta": T("active") if on else T("installed"), "actions": acts})
         blocks.append({"type": "list", "items": vrows})
-        return {"title": T("models"), "kind": "panel", "size": "l", "blocks": blocks}
+        return blocks
 
     def connectors_panel(self):
         """The connectors (apps) manager: installed connectors and the tools each adds, with enable/disable/
