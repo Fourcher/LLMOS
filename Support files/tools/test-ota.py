@@ -172,5 +172,34 @@ ota.config.settings.set("ota", {"url": "http://192.168.1.20:8781", "key": key, "
 check("firewall exception for the paired server only", ota.firewall_rule() == "    ip daddr 192.168.1.20 tcp dport 8781 accept\n")
 ota.config.settings.set("ota", {})
 
+# a failed health check or a failed boot puts the previous files back
+os.environ["LLMOS_BOOT_FAILED"] = os.path.join(TMP, "no-boot-marker")
+os.environ.pop("LLMOS_HEALTH_CHECK", None)
+check("no health file means the check passes", ota.health_ok()[0] is True)
+hook = os.path.join(TMP, "health.sh")
+open(hook, "w").write("#!/bin/sh\nexit 1\n")
+os.chmod(hook, 0o755)
+os.environ["LLMOS_HEALTH_CHECK"] = hook
+check("a failing health check does not pass", ota.health_ok()[0] is False)
+open(old, "w").write('VERSION = "1.0.0"\n')
+rec = ota.apply_files(payload, os.path.join(TMP, "backup-health.tar"))
+check("files are the update before the health check", ota.current_version() == "9.9.9")
+kept, why = ota.keep_after_restart(True, rec, lambda *_a: None)
+check("a failed health check rolls the update back", kept is False and ota.current_version() == "1.0.0", why or "")
+check("a desk that did not come back also rolls back",
+      ota.keep_after_restart(False, {"backup": rec["backup"], "new": []}, lambda *_a: None)[0] is False)
+os.environ.pop("LLMOS_HEALTH_CHECK", None)
+open(old, "w").write('VERSION = "1.0.0"\n')
+rec = ota.apply_files(payload, os.path.join(TMP, "backup-boot.tar"))
+ota._save_state({"id": uid, "last": {"id": uid, "ok": True, "backup": rec["backup"], "new": rec["new"],
+                                     "previous_id": ""}})
+marker = os.path.join(TMP, "boot-failed")
+open(marker, "w").write("1\n")
+os.environ["LLMOS_BOOT_FAILED"] = marker
+check("a failed boot puts the last update back", ota.rollback_failed_boot() is True and ota.current_version() == "1.0.0")
+check("the boot marker is consumed", not os.path.exists(marker) and ota.rollback_failed_boot() is False)
+src = open(os.path.join(os.path.dirname(__file__), "..", "src/rootfs/usr/lib/llmos/llmos/ota.py"), encoding="utf-8").read()
+check("install keeps an update only after the health check", "keep_after_restart(" in src and "health_ok()" in src)
+
 print("all good" if not fails else f"{fails} failed")
 sys.exit(1 if fails else 0)

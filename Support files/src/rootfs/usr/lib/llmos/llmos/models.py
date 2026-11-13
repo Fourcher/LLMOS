@@ -154,6 +154,10 @@ def download(mid, progress=None):
     m = by_id(mid)
     if not m:
         raise ValueError(f"unknown model '{mid}'")
+    if m.get("store"):
+        from . import modelstore
+        modelstore.install(m.get("name") or mid, progress=progress, discover_packets=[])
+        return by_id(mid) or m
     if os.path.exists(path_of(m)):
         if verified(path_of(m), m["sha256"], progress):
             return m

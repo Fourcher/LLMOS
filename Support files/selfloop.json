@@ -1,0 +1,6 @@
+{
+  "mode": "dev",
+  "require_approval": true,
+  "max_per_day": 4,
+  "min_interval_sec": 1800
+}

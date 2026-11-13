@@ -696,6 +696,79 @@ def _sha(path):
         return ""
 
 
+def health_ok():
+    """After an update, the desk being back is not the only check. A boot marked failed, or a health-check
+    program the owner installed, rolls the update back. With neither, the check passes: a machine that has
+    no health-check file is not failed closed into a boot loop."""
+    marker = os.environ.get("LLMOS_BOOT_FAILED", "/run/llmos/boot-failed")
+    if marker and os.path.exists(marker):
+        return False, "the boot was marked failed"
+    hook = os.environ.get("LLMOS_HEALTH_CHECK")
+    if hook is None:
+        hook = "/etc/llmos/health-check"
+        if not os.path.isfile(hook):
+            return True, "ok"
+    if not hook:
+        return True, "ok"
+    if not os.path.isfile(hook) or not os.access(hook, os.X_OK):
+        return False, "the health check is missing"
+    try:
+        proc = subprocess.run([hook], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, f"the health check could not run: {e}"[:200]
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "health check failed").strip()
+        return False, detail[:200]
+    return True, "ok"
+
+
+def keep_after_restart(restart_ok, rec, log=lambda *_a: None):
+    """Keep the update only when the restarted desk came back and the health check passed.
+    Otherwise restore the backup. Returns (kept, detail). detail is None when it was kept."""
+    if not restart_ok:
+        log("the desk did not come back after the update: undoing it")
+        rollback(rec)
+        return False, "the desk did not start after the update, so the previous version was put back"
+    ok_h, why = health_ok()
+    if not ok_h:
+        log("health check failed after the update: undoing it (" + why + ")")
+        rollback(rec)
+        return False, "the health check failed, so the previous version was put back (" + why + ")"
+    return True, None
+
+
+def rollback_failed_boot():
+    """If this boot was marked failed and the last kept update still has its backup, put that update back.
+    The marker is removed either way so a later start does not undo an older backup."""
+    marker = os.environ.get("LLMOS_BOOT_FAILED", "/run/llmos/boot-failed")
+    if not marker or not os.path.exists(marker):
+        return False
+    st = _state()
+    last = st.get("last") or {}
+    backup = last.get("backup") or ""
+    if not last.get("ok") or not backup or not os.path.isfile(backup):
+        try:
+            os.unlink(marker)
+        except OSError:
+            pass
+        return False
+    rollback({"backup": backup, "new": last.get("new") or []})
+    try:
+        os.unlink(marker)
+    except OSError:
+        pass
+    last = dict(last)
+    last["ok"] = False
+    last["detail"] = "the boot failed, so the update was put back"
+    st["last"] = last
+    if last.get("id"):
+        st["failed"] = (st.get("failed") or [])[-19:] + [last["id"]]
+        if st.get("id") == last["id"]:
+            st["id"] = last.get("previous_id") or ""
+    _save_state(st)
+    return True
+
+
 def install(base, m, key, log=print):
     """Fetch, verify and install update manifest m from base. Returns (ok, detail)."""
     data = _get(f"{base}/ota/{m['payload']}", timeout=120, limit=2 * 1024 ** 3)
@@ -736,17 +809,22 @@ def install(base, m, key, log=print):
     except Exception as e:
         log(f"packages listed for this update were not all installed: {e}")
     install.files_at, install.self_changed = time.time(), _code() != before
-    if _restart(m.get("restart", ["desk"]), desk_was_up):
-        _stamp_release(m["version"])      # only once it is kept: a rolled-back update leaves the stamp as it was
-        return True, f"{len(rec['names'])} files"
-    log("the desk did not come back after the update: undoing it")
-    rollback(rec)
-    _restart(m.get("restart", ["desk"]), desk_was_up)
-    return False, "the desk did not start after the update, so the previous version was put back"
+    install.backup, install.new_files = rec.get("backup", ""), rec.get("new") or []
+    kept, why = keep_after_restart(_restart(m.get("restart", ["desk"]), desk_was_up), rec, log)
+    if not kept:
+        _restart(m.get("restart", ["desk"]), desk_was_up)
+        return False, why
+    _stamp_release(m["version"])      # only once it is kept: a rolled-back update leaves the stamp as it was
+    return True, f"{len(rec['names'])} files"
 
 
 def client():
     """The llmos-ota service: wait for updates from the paired server, install each new one once."""
+    try:
+        if rollback_failed_boot():
+            print("ota: the last boot failed; the last update was put back", flush=True)
+    except Exception as e:
+        print(f"ota: boot check failed: {e}", flush=True)
     try:
         if paired() and desk_behind():
             print("ota: the desk still runs the files from before the last update: starting it again", flush=True)
@@ -825,9 +903,12 @@ def client():
             ok, detail = False, f"error: {e}"
         live = "MEDIUM=live" in (open(RELEASE).read() if os.path.exists(RELEASE) else "")
         st = _state()
+        previous_id = st.get("id", "")
         st["last"] = {"id": m["id"], "version": m["version"], "ok": ok, "detail": detail, "ts": time.time(),
                       "files_at": getattr(install, "files_at", time.time()),
-                      "desk_restarted": ok and "desk" in m.get("restart", [])}
+                      "desk_restarted": ok and "desk" in m.get("restart", []),
+                      "backup": getattr(install, "backup", ""), "new": getattr(install, "new_files", []) or [],
+                      "previous_id": previous_id}
         if ok:
             st["id"] = m["id"]
         else:

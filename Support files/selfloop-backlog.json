@@ -1,0 +1,9 @@
+[
+  {
+    "id": "store-activity-line",
+    "title": "Keep the model store activity line short enough to read on one screen",
+    "detail": "Do not weaken signature checks, the test gate, or the rule that sharing is off until the owner asks. Do not edit tests to make them pass.",
+    "source": "seed",
+    "status": "open"
+  }
+]

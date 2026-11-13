@@ -608,7 +608,17 @@ def updates_panel(*, asked=False):
         if last:
             rows.append(["Last update", f"{last.get('version', '?')}, " + time.strftime("%b %d %H:%M", time.localtime(last.get("ts", 0)))
                          + ("" if last.get("ok") else " (undone)")])
-    blocks = [{"type": "heading", "text": "LLM OS"}, {"type": "kv", "rows": rows},
+    blocks = [{"type": "heading", "text": "LLM OS"}, {"type": "kv", "rows": rows}]
+    try:
+        from . import selfloop_ctl
+        # a kv row, not a text block: the updates panel's first text block is the update result
+        blocks += [{"type": "heading", "text": "Improving LLM OS"},
+                   {"type": "kv", "rows": [["Loop", selfloop_ctl.summary()]]},
+                   {"type": "buttons", "items": [{"label": "Loop status", "say": "what is the improvement loop doing"},
+                                                 {"label": "Stop the loop", "say": "stop the improvement loop"}]}]
+    except Exception:
+        pass
+    blocks += [
               {"type": "toggle", "label": "Install updates automatically", "hint": "Programs are updated once a day in the background; LLM OS updates from your computer always install on their own.",
                "on": bool(config.settings.get("auto_updates")), "say_on": "turn on automatic updates", "say_off": "turn off automatic updates"},
               {"type": "heading", "text": "Programs"}]
