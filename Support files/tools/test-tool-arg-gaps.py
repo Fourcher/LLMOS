@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bad tool arguments from real logs are tolerated: connector enums/ints, open_app flags, install_app paths,
 cat on a folder, read_file on a missing file. Run: python3 tools/test-tool-arg-gaps.py"""
-import os, sys, tempfile
+import os, shlex, sys, tempfile
 _ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src/rootfs")
 sys.path.insert(0, os.path.join(_ROOT, "usr/lib/llmos"))
 os.environ.setdefault("LLMOS_HOME", tempfile.mkdtemp(prefix="llmos-test-"))
@@ -26,7 +26,7 @@ check(tools.split_open_command("thunar /tmp") == ("app", "thunar /tmp"), "normal
 check(tools.package_candidates("aports/system/auto-updates") == ["auto-updates"], "aports path -> package name")
 check(tools.package_candidates("community/htop, vim.apk htop") == ["htop", "vim"], "dedupe, .apk")
 d = tempfile.mkdtemp(); open(os.path.join(d, "Handoff to next AI.md"), "w").write("x"); os.mkdir(os.path.join(d, "sub"))
-c = tools.cat_directory(f"cat {d}/")
+c = tools.cat_directory("cat " + shlex.quote(d + "/"))
 check(c and "is a folder" in c and "sub/" in c, f"cat on a folder lists it: {c}")
 check(tools.cat_directory(f"cat {d}/x") is None and tools.cat_directory("ls /") is None, "other commands untouched")
 m = tools.missing_file_message(os.path.join(d, "handoff_to_next_ai.md"))

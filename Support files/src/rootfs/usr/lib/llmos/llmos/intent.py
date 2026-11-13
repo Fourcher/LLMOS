@@ -592,6 +592,20 @@ _NEW_MODELS = re.compile(r"^\s*(?:please\s+)?(?:(?:check|look|search)\s+(?:for\s
                          r"(?:new|newer|updated|the\s+latest|better)?\s*(?:and\s+(?:updated|newer))?\s*models?(?:\s+(?:list|available|out|i\s+can\s+use|to\s+use))?\s*[.!?]?\s*$"
                          r"|^\s*(?:please\s+)?refresh\s+(?:the\s+)?models?(?:\s+list)?\s*[.!]?\s*$", re.I)
 _ADD_MODEL = re.compile(r"^\s*(?:please\s+)?(?:add|install|get)\s+(?:the\s+)?(?:model|gguf)\s+(?P<repo>[\w.\-]+/[\w.\-]+)(?:\s+(?P<file>[\w.\-]+\.gguf))?\s*[.!]?\s*$", re.I)
+# the decentralized store: a name, not a Hugging Face repo. "from the store" keeps this off the catalog route.
+_STORE_INSTALL = re.compile(r"^\s*(?:please\s+)?(?:install|get|download|fetch)\s+(?:the\s+)?(?:model\s+)?"
+                            r"(?P<name>[\w][\w .\-]{0,60}?)\s+from\s+(?:the\s+)?(?:model\s+)?store\s*[.!]?\s*$", re.I)
+_STORE_SHARE = re.compile(r"^\s*(?:please\s+)?(?:(?P<off>(?:stop|don'?t)\s+shar(?:e|ing)\s+(?:my\s+)?models)|"
+                          r"(?P<on>share\s+my\s+models(?:\s+on\s+(?:the\s+)?(?:network|lan))?))\s*[.!]?\s*$", re.I)
+_STORE_VERIFY = re.compile(r"^\s*(?:please\s+)?verify\s+(?:my\s+)?(?:models|the\s+model\s+store)\s*[.!]?\s*$", re.I)
+_STORE_IMPORT = re.compile(r"^\s*(?:please\s+)?import\s+(?:the\s+)?(?:models|model\s+folder|folder)\s+"
+                           r"(?:from|on|at)\s+(?P<path>\S+)\s*[.!]?\s*$", re.I)
+_STORE_SHOW = re.compile(r"^\s*(?:please\s+)?(?:show|open|list)\s+(?:me\s+)?(?:the\s+)?model\s+store\s*[.!]?\s*$", re.I)
+_STORE_ACTIVITY = re.compile(r"^\s*(?:please\s+)?(?:what\s+is\s+the\s+model\s+store\s+doing|model\s+store\s+activity|"
+                             r"show\s+(?:the\s+)?model\s+store\s+activity)\s*[.?!]?\s*$", re.I)
+_IMPROVE = re.compile(r"^\s*(?:please\s+)?(?:(?P<stop>stop\s+(?:the\s+)?improvement\s+loop|stop\s+improving\s+yourself)|"
+                      r"(?P<resume>resume\s+(?:the\s+)?improvement\s+loop)|"
+                      r"(?P<status>what\s+is\s+the\s+improvement\s+loop\s+doing))\s*[.?!]?\s*$", re.I)
 
 
 # connectors (the apps of this OS): add / enable / disable / remove
@@ -652,6 +666,33 @@ def _voice_model(text):
     if _VOICE_LIST.match(text):
         return ("manage_voice", {"action": "list"})
     return None
+
+
+def _model_store(text):
+    m = _STORE_INSTALL.match(text)
+    if m and m.group("name").strip():
+        return ("model_store", {"action": "install", "name": m.group("name").strip()})
+    m = _STORE_SHARE.match(text)
+    if m:
+        return ("model_store", {"action": "stop" if m.group("off") else "share"})
+    if _STORE_VERIFY.match(text):
+        return ("model_store", {"action": "verify"})
+    m = _STORE_IMPORT.match(text)
+    if m:
+        return ("model_store", {"action": "import", "path": m.group("path")})
+    if _STORE_SHOW.match(text):
+        return ("model_store", {"action": "list"})
+    if _STORE_ACTIVITY.match(text):
+        return ("model_store", {"action": "activity"})
+    return None
+
+
+def _improve(text):
+    m = _IMPROVE.match(text)
+    if not m:
+        return None
+    action = "stop" if m.group("stop") else "resume" if m.group("resume") else "status"
+    return ("improve_os", {"action": action})
 
 
 def _models_discover(text):
@@ -2637,6 +2678,12 @@ def _match(text):
     vm = _voice_model(t)
     if vm:
         return vm
+    st = _model_store(t)
+    if st:
+        return st
+    im = _improve(t)
+    if im:
+        return im
     dm = _models_discover(t)
     if dm:
         return dm

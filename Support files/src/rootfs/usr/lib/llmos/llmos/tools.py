@@ -351,7 +351,7 @@ PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpag
             "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program", "security_check", "scan_network", "web_security_scan", "capture_traffic",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
             "mail_delete", "mail_triage", "mail_setup", "show_image", "system_panel", "set_wallpaper",
-            "manage_models", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
+            "manage_models", "model_store", "improve_os", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
             "manage_connectors", "check_new_models", "add_model", "edit_conduct", "install_to_disk"]
 
 
@@ -2223,6 +2223,73 @@ def manage_models(a, ctx):
             return f"removed {m['name']}"
     except (ValueError, RuntimeError, OSError) as e:
         return f"error: {e}"
+    return "error: unknown action"
+
+
+@tool("model_store", "The on-device model store: signed, hash-checked models from a folder, a mirror, or a peer on "
+      "this network. action 'list' shows them; 'install' fetches one the owner named (nothing is used until the "
+      "hash matches); 'verify' re-checks every file; 'import' reads a folder with MANIFEST.txt; 'share' and 'stop' "
+      "turn LAN sharing on or off (off until asked; nothing is seeded to the internet); 'activity' shows every "
+      "network attempt. There is no telemetry.",
+      {"action": {"type": "string", "enum": ["list", "install", "verify", "import", "share", "stop", "activity"]},
+       "name": {"type": "string", "description": "model name, e.g. Qwen3.8-27B"},
+       "path": {"type": "string", "description": "folder to import, e.g. /media/usb"}}, ["action"],
+      risk=lambda a: SECURITY if a.get("action") == "share" else CHANGE if a.get("action") in ("install", "import", "verify") else SAFE,
+      network=lambda a: a.get("action") in ("install", "share"))
+def model_store(a, ctx):
+    from . import modelstore
+    act = str(a.get("action") or "list")
+    try:
+        if act == "list":
+            if getattr(ctx, "show_panel", None):
+                ctx.show_panel("models")
+            return modelstore.list_text()
+        if act == "activity":
+            return modelstore.activity_text()
+        if act == "verify":
+            return modelstore.verify()
+        if act == "import":
+            path = str(a.get("path") or "").strip()
+            if not path:
+                return "error: say which folder, for example import models from /media/usb"
+            row = modelstore.import_folder(path, progress=getattr(ctx, "progress", None))
+            man = row["manifest"]
+            return (f"Imported {man['name']} ({man['format']}). Every file matched its sha256. "
+                    + ("It is not signed, so other computers will not accept it until you share it "
+                       "and this computer signs it." if not man.get("signature") else "The signature checks out."))
+        if act == "install":
+            name = str(a.get("name") or "").strip()
+            if not name:
+                return "error: say which model, for example install Qwen3.8-27B from the store"
+            ctx.status(f"installing {name} from the model store…") if getattr(ctx, "status", None) else None
+            row = modelstore.install(name, progress=getattr(ctx, "progress", None))
+            man = row["manifest"]
+            return (f"Installed {man['name']} {man['version']} ({man['format']}). "
+                    "The hash matched, so it can be used.")
+        if act == "share":
+            return modelstore.start_share()
+        if act == "stop":
+            return modelstore.stop_share()
+    except (ValueError, RuntimeError, OSError) as e:
+        return f"error: {e}"
+    return "error: unknown action"
+
+
+@tool("improve_os", "The self-improvement loop's kill switch and status. The loop runs on a dev machine and ships "
+      "here only by a signed update after tests pass. action 'status' says whether it is stopped and whether a "
+      "change is waiting; 'stop' turns the kill switch on; 'resume' turns it off. This does not edit the running "
+      "install.",
+      {"action": {"type": "string", "enum": ["status", "stop", "resume"]}}, ["action"],
+      risk=lambda a: SECURITY if a.get("action") == "resume" else SAFE)
+def improve_os(a, ctx):
+    from . import selfloop_ctl
+    act = str(a.get("action") or "status")
+    if act == "stop":
+        return selfloop_ctl.set_killed(True)
+    if act == "resume":
+        return selfloop_ctl.set_killed(False)
+    if act == "status":
+        return selfloop_ctl.summary()
     return "error: unknown action"
 
 

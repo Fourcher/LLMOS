@@ -416,6 +416,12 @@ class Console:
             rows.append(f"{mark} {m['name']} · {m['maker']} · {tag}")
         rows.append("")
         rows.append(f"RAM {models.ram_gb():.1f} GB · " + 'say "use ministral 8b" or "download gemma 12b"')
+        try:
+            from . import modelstore
+            rows.append("")
+            rows.extend(modelstore.summary_lines())
+        except Exception:
+            pass
         ui.box(T("models"), rows)
         ui.blank()
 

@@ -2174,7 +2174,12 @@ class Desk:
             else:
                 vrows.append({"title": m["name"], "subtitle": "Installed", "detail": facts(m.get("good_at"), m.get("limits")), "meta": T("active") if on else T("installed"), "actions": acts})
         blocks.append({"type": "list", "items": vrows})
-        return blocks
+        try:
+            from . import modelstore
+            blocks.extend(modelstore.panel_blocks())
+        except Exception as e:
+            sys.stderr.write(f"desk: model store panel failed: {e}\n")
+        return {"title": T("models"), "kind": "panel", "size": "l", "blocks": blocks}
 
     def connectors_panel(self):
         """The connectors (apps) manager: installed connectors and the tools each adds, with enable/disable/
@@ -2775,6 +2780,11 @@ class Desk:
             threading.Thread(target=self._model_button, args=(text, mm.group(1).lower(), mm.group(2)),  # behind the model
                              daemon=True).start()
             return False
+        sm = re.fullmatch(r"(?:please )?(?:install|get|download|fetch) (?:the )?(?:model )?(.+?) from (?:the )?(?:model )?store[.!]?",
+                          text, re.I)
+        if sm and sm.group(1).strip():
+            threading.Thread(target=self._store_install, args=(text, sm.group(1).strip()), daemon=True).start()
+            return False
         if not self._instant(text):
             self._enqueue(intent.fix_typos(text), done, "main")
             return True
@@ -2814,6 +2824,28 @@ class Desk:
             self.ctx.after_turn = None
             self.shutdown(how)
         return False
+
+    def _store_install(self, text, name):
+        """Install from the model store on its own thread: a toast now, the result when the hash has been checked."""
+        self.emit({"t": "toast", "text": f"Installing {name} from the store…"})
+
+        class Lane:
+            def __init__(lane, ctx):
+                lane._ctx, lane.current_request = ctx, text
+
+            def __getattr__(lane, k):
+                return getattr(lane._ctx, k)
+        try:
+            out = agent.execute(Lane(self.ctx), "model_store", {"action": "install", "name": name})
+            reply = agent._cap(agent._shortcut_reply("model_store", {"action": "install", "name": name}, out))
+        except Exception as e:
+            reply = agent._plain_error(str(e))
+        self.emit({"t": "toast", "text": (reply or "Done.")[:240]})
+        try:
+            if "panel-models" in self.windows:
+                self.open_panel("models")
+        except Exception as e:
+            sys.stderr.write(f"desk: model store panel failed: {e}\n")
 
     def _model_button(self, text, action, mid):
         """Download / use / remove a model from its button: feedback at once, the result as a toast, the page refreshed."""
