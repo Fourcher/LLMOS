@@ -2,5 +2,16 @@
   "mode": "dev",
   "require_approval": true,
   "max_per_day": 4,
-  "min_interval_sec": 1800
+  "min_interval_sec": 1800,
+  "max_iterations": 3,
+  "max_light_tests": 24,
+  "backend": "configured",
+  "local": {
+    "transport": "auto",
+    "url": "http://127.0.0.1:8080",
+    "timeout_sec": 900,
+    "max_tokens": 800,
+    "temperature": 0.1,
+    "nice": 19
+  }
 }
