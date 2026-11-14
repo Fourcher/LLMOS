@@ -2,8 +2,10 @@
 """The self-development loop (tools/selfdev.py) keeps its seatbelt. It parses a model's edits, applies them to the real
 files ONLY while the test gate runs and always restores them (including from a journal if the process is killed),
 rejects edits that don't match or that escape the OS package, stages a tested change rather than shipping it, and
-NEVER ships on its own (applying, and shipping via OTA, are separate human steps). The light gate runs only the
-tests that touch the changed modules, plus a core subset. Does NOT run the full suite (do_task does).
+does not ship on its own (applying, and shipping via OTA, are separate human steps). The light gate runs only the
+tests that touch the changed modules, plus a core subset. --local-install is the owner-invoked path that installs
+the tested bytes into a runtime tree and rolls them back unless a read-back matches; those cases use a mock
+loopback model and a scratch install root. Does NOT run the full suite.
 Run: python3 tools/test-selfdev.py"""
 import ast
 import json
@@ -354,6 +356,576 @@ finally:
             os.remove(staged_diff)
     else:
         open(staged_diff, "w", encoding="utf-8").write(saved_diff)
+
+# --- local-only backend and owner-invoked install / verify / rollback ---
+# The model is a loopback HTTP fixture. The runtime tree is a scratch directory, never /usr/lib/llmos.
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+_local_saved = {
+    "stage": selfdev.STAGE, "journal": selfdev.JOURNAL, "rounds": selfdev.MAX_ROUNDS,
+    "baselines": dict(selfdev._BASELINES), "calls": dict(selfdev._CALLS),
+    "llama": os.environ.get("LLMOS_LLAMA_URL"), "root": os.environ.get("LLMOS_SELFDEV_INSTALL_ROOT"),
+}
+_local_signals = (signal.getsignal(signal.SIGINT), signal.getsignal(signal.SIGTERM))
+
+
+def _local_edit(rel):
+    return ("=== FILE: " + rel + "\n<<<<<<< SEARCH\nVALUE = 1\n=======\nVALUE = 2\n>>>>>>> REPLACE\n")
+
+
+class _ScriptedModel:
+    """OpenAI-style SSE on 127.0.0.1. Replies are consumed in order."""
+
+    def __init__(self):
+        self.replies = []
+        self.hits = []
+        self.httpd = None
+
+    def start(self):
+        owner = self
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                self.rfile.read(n)
+                owner.hits.append(self.path)
+                body = owner.replies.pop(0) if owner.replies else "no"
+                chunk = json.dumps({"choices": [{"delta": {"content": body}}]})
+                raw = ("data: " + chunk + "\n\ndata: [DONE]\n").encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def log_message(self, fmt, *args):
+                return
+
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        return "http://127.0.0.1:%d" % self.httpd.server_address[1]
+
+    def stop(self):
+        if self.httpd is not None:
+            self.httpd.shutdown()
+            self.httpd.server_close()
+            self.httpd = None
+
+
+_mod = "_selfdev_local"
+_rel = "src/rootfs/usr/lib/llmos/llmos/" + _mod + ".py"
+_full = os.path.join(ROOT, _rel)
+_orig_checkout = "# KEEP\nVALUE = 1\n"
+_prior_runtime = "OLD = 0\n"
+_local_tmp = tempfile.mkdtemp(prefix="llmos-selfdev-local-")
+_install_root = os.path.join(_local_tmp, "runtime")
+_stage_dir = os.path.join(_local_tmp, "stage")
+os.makedirs(os.path.join(_install_root, "llmos"), exist_ok=True)
+os.makedirs(_stage_dir, exist_ok=True)
+_runtime_file = os.path.join(_install_root, "llmos", _mod + ".py")
+_sentinel = os.path.join(_install_root, "llmos", "untouched.py")
+open(_sentinel, "w", encoding="utf-8").write("SENTINEL = 1\n")
+_keep_fix = os.path.join(_local_tmp, "check_keep.py")
+open(_keep_fix, "w", encoding="utf-8").write(
+    "import ast\np = %r\ntext = open(p, encoding='utf-8').read()\nast.parse(text)\n"
+    "if 'KEEP' not in text:\n    raise SystemExit('missing KEEP')\n" % _full)
+_fail_fix = os.path.join(_local_tmp, "check_fail.py")
+open(_fail_fix, "w", encoding="utf-8").write(
+    "p = %r\ntext = open(p, encoding='utf-8').read()\n"
+    "if 'VALUE = 2' in text:\n    raise SystemExit(1)\n" % _full)
+_real_select = selfdev.select_light_tests
+_real_run = selfdev.run_tests
+_real_verify = selfdev.verify_runtime
+_model = _ScriptedModel()
+_llm_mod = None
+_cfg_mod = None
+_real_cloud = _real_cloud_chat = None
+try:
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    selfdev.STAGE = _stage_dir
+    selfdev.JOURNAL = os.path.join(_stage_dir, "journal")
+    os.environ["LLMOS_SELFDEV_INSTALL_ROOT"] = _install_root
+    selfdev.MAX_ROUNDS = 1
+    selfdev._BASELINES.clear()
+    selfdev._CALLS["cloud"] = 0
+    selfdev._CALLS["local"] = 0
+
+    # direct refusals: nothing is written when the stage is not a tested local artifact
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    base_hash = selfdev._sha256(_orig_checkout)
+    good = "# KEEP\nVALUE = 2\n"
+    good_hash = selfdev._sha256(good)
+    meta_ok = {"files": {_rel: good}, "artifact_hashes": {_rel: good_hash},
+               "base_hashes": {_rel: base_hash}, "ran": True, "new_fails": [], "timed_out": False,
+               "backend": "local", "gate": "light", "tests": "host suites: 1 run, 0 failed"}
+
+    def _refuse(meta, label):
+        before = open(_runtime_file, encoding="utf-8").read()
+        rc = selfdev.install_verified(meta, {})
+        after = open(_runtime_file, encoding="utf-8").read()
+        ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+        check(rc != 0 and after == before and ev.get("accepted") is False and ev.get("installed") is False, label)
+
+    bad = dict(meta_ok)
+    bad["tests"] = "host suites: 0 run, 0 failed"
+    _refuse(bad, "zero tests are not installed")
+    bad = dict(meta_ok)
+    bad["ran"] = False
+    _refuse(bad, "a stage whose suite did not run is not installed")
+    bad = dict(meta_ok)
+    bad["new_fails"] = ["tools/test-x.py"]
+    _refuse(bad, "a stage with failing tests is not installed")
+    bad = dict(meta_ok)
+    bad["timed_out"] = True
+    _refuse(bad, "a timed-out stage is not installed")
+    bad = dict(meta_ok)
+    bad["artifact_hashes"] = {_rel: "0" * 64}
+    _refuse(bad, "a stage whose artifact hash does not match its bytes is not installed")
+    bad = dict(meta_ok)
+    bad["backend"] = "auto"
+    _refuse(bad, "a stage that was not produced by the local backend is not installed")
+    bad = dict(meta_ok)
+    bad["base_hashes"] = {_rel: selfdev._sha256("stale\n")}
+    _refuse(bad, "a stale stage whose checkout changed since the test is not installed")
+    _refuse("not json", "a malformed stage is not installed")
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    problems, _hashes = selfdev.verify_runtime({_rel: good})
+    check(problems and "do not match" in problems[0], "a read-back that is not the artifact fails verification")
+    open(_runtime_file, "w", encoding="utf-8").write("def (\n")
+    problems, hashes = selfdev.verify_runtime({_rel: "def (\n"})
+    check(problems and hashes.get(_rel) == selfdev._sha256("def (\n") and "compile" in problems[0],
+          "installed bytes that hash correctly but do not compile fail verification")
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+
+    # unrelated file in the runtime tree is not part of the artifact
+    check(open(_sentinel, encoding="utf-8").read() == "SENTINEL = 1\n", "sentinel exists before install")
+
+    # journal: no commit means the next start puts the previous bytes back; a commit whose
+    # bytes still match is left alone; a commit whose bytes were corrupted is rolled back
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    entries = {_rel: {"runtime": _prior_runtime, "checkout": _orig_checkout, "had_runtime": True}}
+    selfdev.install_journal_save(entries, {_rel: good_hash})
+    open(_runtime_file, "w", encoding="utf-8").write(good)
+    open(_full, "w", encoding="utf-8").write(good)
+    got = selfdev.install_journal_recover()
+    check(open(_runtime_file, encoding="utf-8").read() == _prior_runtime
+          and open(_full, encoding="utf-8").read() == _orig_checkout and _rel in got,
+          "an uncommitted install journal restores runtime and checkout (%s)" % (got,))
+    check(not os.path.isdir(selfdev.install_journal_dir()), "recovery removes the install journal")
+    selfdev.install_journal_save(entries, {_rel: good_hash})
+    open(_runtime_file, "w", encoding="utf-8").write(good)
+    open(_full, "w", encoding="utf-8").write(good)
+    selfdev._mark_install_commit({_rel: good_hash})
+    check(selfdev.install_journal_recover() == [] and open(_runtime_file, encoding="utf-8").read() == good,
+          "a committed install whose bytes match is not undone on restart")
+    check(not os.path.isdir(selfdev.install_journal_dir()), "a finished install journal is dropped")
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    selfdev.install_journal_save(entries, {_rel: good_hash})
+    open(_runtime_file, "w", encoding="utf-8").write(good)
+    selfdev._mark_install_commit({_rel: good_hash})
+    open(_runtime_file, "w", encoding="utf-8").write("OTHER = 3\n")
+    got = selfdev.install_journal_recover()
+    check(open(_runtime_file, encoding="utf-8").read() == _prior_runtime and _rel in got,
+          "a commit whose runtime bytes no longer match is rolled back")
+
+    # backend selection is independent of cloud config
+    import llmos.config as _cfg_mod
+    import llmos.llm as _llm_mod
+    _real_cloud = _cfg_mod.cloud
+    _real_cloud_chat = _llm_mod.cloud_chat
+    _cloud_hits = []
+
+    def _cloud_on():
+        return {"provider": "x", "url": "https://example.invalid", "model": "m", "key": "k"}
+
+    def _cloud_chat(*_a, **_k):
+        _cloud_hits.append(1)
+        return {"content": "CLOUD"}
+
+    _cfg_mod.cloud = _cloud_on
+    _llm_mod.cloud_chat = _cloud_chat
+
+    class _FakeLLM:
+        def __init__(self):
+            self.cloud = 0
+            self.local = 0
+
+        def cloud_chat(self, *_a, **_k):
+            self.cloud += 1
+            return {"content": "CLOUD"}
+
+        def chat(self, *_a, **_k):
+            self.local += 1
+            raise RuntimeError("local down")
+
+    _fake = _FakeLLM()
+    _real_llm = selfdev._llm
+    selfdev._llm = lambda: _fake
+    try:
+        try:
+            selfdev._chat([{"role": "user", "content": "hi"}], backend="local")
+            _local_raised = False
+        except RuntimeError:
+            _local_raised = True
+        check(_local_raised and _fake.cloud == 0 and _fake.local == 1,
+              "local backend does not fall back to the online model when the on-device model fails")
+        def _chat_ok(*_a, **_k):
+            _fake.local += 1
+            return {"content": "LOCAL"}
+
+        _fake.chat = _chat_ok
+        _auto = selfdev._chat([{"role": "user", "content": "hi"}], backend="auto")
+        _loc = selfdev._chat([{"role": "user", "content": "hi"}], backend="local")
+        check(_auto.get("content") == "CLOUD" and _fake.cloud == 1,
+              "auto still uses the configured online model")
+        check(_loc.get("content") == "LOCAL" and _fake.local == 2,
+              "local ignores a configured online model and uses the on-device client")
+    finally:
+        selfdev._llm = _real_llm
+
+    _url = _model.start()
+    os.environ["LLMOS_LLAMA_URL"] = _url
+    _local_fn = ast.get_source_segment(src, funcs["_chat_local"])
+    check("cloud_chat" not in _local_fn and "config.cloud" not in _local_fn,
+          "the local backend function neither reads cloud config nor calls the online model")
+    check("input(" not in src, "the owner-invoked lifecycle does not ask for a confirmation")
+
+    _called = {"propose": 0}
+
+    def _boom_propose(*_a, **_k):
+        _called["propose"] += 1
+        raise AssertionError("model should not be asked")
+
+    _real_propose = selfdev.propose
+    selfdev.propose = _boom_propose
+    try:
+        rc = selfdev.do_task("do not generate", "full", backend="local", install=True)
+    finally:
+        selfdev.propose = _real_propose
+    check(rc == 2 and _called["propose"] == 0, "local install refuses the full gate before asking a model")
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    check(_ev.get("accepted") is False and _ev.get("installed") is False,
+          "refusing the full gate does not report an install")
+
+    os.environ["LLMOS_SELFDEV_INSTALL_ROOT"] = os.path.realpath(selfdev.SRC)
+    selfdev.propose = _boom_propose
+    try:
+        rc = selfdev.do_task("do not generate", "light", install=True)
+    finally:
+        selfdev.propose = _real_propose
+        os.environ["LLMOS_SELFDEV_INSTALL_ROOT"] = _install_root
+    check(rc == 2 and _called["propose"] == 0,
+          "local install refuses when the install root is the dev checkout")
+
+    def _use_select(paths):
+        def _sel(_edits):
+            return list(paths), "fixture"
+        selfdev.select_light_tests = _sel
+
+    def _run_lifecycle(reply, paths, install=True, gate="auto"):
+        selfdev._BASELINES.clear()
+        selfdev._CALLS["cloud"] = 0
+        selfdev._CALLS["local"] = 0
+        open(_full, "w", encoding="utf-8").write(_orig_checkout)
+        open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+        open(os.path.join(_stage_dir, "staged.json"), "w", encoding="utf-8").write('{"task": "UNRELATED"}\n')
+        _model.replies.append(reply)
+        _use_select(paths)
+        runs = []
+
+        def _wrap(only=None, limited=False):
+            runs.append((list(only) if only else None, bool(limited)))
+            return _real_run(only, limited)
+
+        selfdev.run_tests = _wrap
+        rc = selfdev.do_task("edit " + _mod, gate, backend="local", install=install)
+        selfdev.run_tests = _real_run
+        selfdev.select_light_tests = _real_select
+        return rc, runs
+
+    rc, runs = _run_lifecycle(_local_edit(_rel), [_keep_fix], install=True, gate="auto")
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    _installed = open(_runtime_file, encoding="utf-8").read()
+    check(rc == 0 and _ev.get("accepted") is True and _ev.get("ok") is True and _ev.get("installed") is True,
+          "local install accepts only after runtime verification (%s)" % (_ev.get("reason"),))
+    check(_ev.get("cloud_calls") == 0 and not _cloud_hits and _model.hits,
+          "the install talked to the loopback model and not the online model (%s)" % (_model.hits[:1],))
+    check(_installed == "# KEEP\nVALUE = 2\n" and _ev.get("runtime_hashes", {}).get(_rel) == selfdev._sha256(_installed)
+          and _ev.get("artifact_hashes", {}).get(_rel) == selfdev._sha256(_installed),
+          "the runtime file is the tested artifact, hash included")
+    check(open(_full, encoding="utf-8").read() == _installed,
+          "the checkout matches the installed artifact after verification")
+    check(runs and all(limited and only == [_keep_fix] for only, limited in runs),
+          "the install ran the bounded fixture, not the full suite (%s)" % (runs,))
+    check("1 run" in open(os.path.join(_stage_dir, "tests.txt"), encoding="utf-8").read(),
+          "the bounded test actually ran")
+    check(open(_sentinel, encoding="utf-8").read() == "SENTINEL = 1\n",
+          "an unrelated runtime file is left untouched")
+    _prev = open(os.path.join(_stage_dir, "previous-staged.json"), encoding="utf-8").read()
+    check("UNRELATED" in _prev, "the stage this install replaced is kept")
+    _new_stage = json.load(open(os.path.join(_stage_dir, "staged.json"), encoding="utf-8"))
+    check(_new_stage.get("backend") == "local" and _new_stage.get("gate") == "light" and _new_stage.get("ran") is True,
+          "the staged record of the install names the local light run")
+
+    rb = selfdev.rollback_installed()
+    check(rb == 0 and open(_runtime_file, encoding="utf-8").read() == _prior_runtime
+          and open(_full, encoding="utf-8").read() == _orig_checkout,
+          "--rollback restores the previous runtime and checkout bytes")
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    check(_ev.get("phase") == "rollback" and _ev.get("accepted") is False and _ev.get("rolled_back") is True,
+          "rollback evidence does not claim the artifact is still installed")
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    rb2 = selfdev.rollback_installed()
+    check(rb2 != 0 and open(_runtime_file, encoding="utf-8").read() == _prior_runtime,
+          "a second rollback refuses once the runtime is no longer the installed artifact")
+
+    # failed read-back: the suite passes, then the installed bytes are not the artifact
+    def _tamper(files):
+        path, _err = selfdev.runtime_path(next(iter(files)))
+        open(path, "w", encoding="utf-8").write(open(path, encoding="utf-8").read() + "\n# tamper\n")
+        return _real_verify(files)
+
+    selfdev.verify_runtime = _tamper
+    try:
+        rc, _runs = _run_lifecycle(_local_edit(_rel), [_keep_fix], install=True)
+    finally:
+        selfdev.verify_runtime = _real_verify
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    check(rc != 0 and _ev.get("accepted") is False and _ev.get("rolled_back") is True
+          and open(_runtime_file, encoding="utf-8").read() == _prior_runtime
+          and open(_full, encoding="utf-8").read() == _orig_checkout,
+          "a failed runtime read-back rolls back and does not report success (%s)" % (_ev.get("reason"),))
+    check(open(os.path.join(_stage_dir, "staged.json"), encoding="utf-8").read().strip().startswith("{")
+          and "UNRELATED" in open(os.path.join(_stage_dir, "staged.json"), encoding="utf-8").read(),
+          "a failed install puts the unrelated stage back")
+
+    rc, _runs = _run_lifecycle(_local_edit(_rel), [_fail_fix], install=True)
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    check(rc != 0 and _ev.get("accepted") is False and open(_runtime_file, encoding="utf-8").read() == _prior_runtime
+          and open(_full, encoding="utf-8").read() == _orig_checkout,
+          "a failing bounded test does not install (%s)" % (_ev.get("reason"),))
+
+    selfdev._BASELINES.clear()
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    open(os.path.join(_stage_dir, "staged.json"), "w", encoding="utf-8").write('{"task": "UNRELATED"}\n')
+    _model.replies.append(_local_edit(_rel))
+    _use_select([_keep_fix])
+    _n = {"n": 0}
+
+    def _rt_timeout(only=None, limited=False):
+        _n["n"] += 1
+        if _n["n"] == 1:
+            return "host suites: 1 run, 0 failed", set(), True
+        return "timed out after 5s", set(), False
+
+    selfdev.run_tests = _rt_timeout
+    rc = selfdev.do_task("edit " + _mod, "auto", backend="local", install=True)
+    selfdev.run_tests = _real_run
+    selfdev.select_light_tests = _real_select
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    check(rc != 0 and _ev.get("accepted") is False and open(_runtime_file, encoding="utf-8").read() == _prior_runtime,
+          "a timed-out suite does not install (%s)" % (_ev.get("reason"),))
+    check("UNRELATED" in open(os.path.join(_stage_dir, "staged.json"), encoding="utf-8").read(),
+          "a timeout leaves the unrelated stage in place")
+
+    selfdev._BASELINES.clear()
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    _model.replies.append(_local_edit(_rel))
+    _use_select([_keep_fix])
+
+    def _rt_zero(only=None, limited=False):
+        return "host suites: 0 run, 0 failed", set(), False
+
+    selfdev.run_tests = _rt_zero
+    rc = selfdev.do_task("edit " + _mod, "auto", backend="local", install=True)
+    selfdev.run_tests = _real_run
+    selfdev.select_light_tests = _real_select
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    _why = (_ev.get("reason") or "").lower()
+    check(rc != 0 and ("zero" in _why or "could not run" in _why or "did not run" in _why),
+          "zero tests do not install (%s)" % (_ev.get("reason"),))
+    check(_ev.get("accepted") is False and open(_runtime_file, encoding="utf-8").read() == _prior_runtime
+          and open(_full, encoding="utf-8").read() == _orig_checkout,
+          "zero tests leave runtime and checkout unchanged")
+
+    selfdev._BASELINES.clear()
+    _model.replies.append("I will not use the format")
+    _use_select([_keep_fix])
+    selfdev.run_tests = _real_run
+    rc = selfdev.do_task("edit " + _mod, "auto", backend="local", install=True)
+    selfdev.select_light_tests = _real_select
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    check(rc != 0 and _ev.get("accepted") is False and open(_runtime_file, encoding="utf-8").read() == _prior_runtime,
+          "a malformed model reply does not install (%s)" % (_ev.get("reason"),))
+
+    # stage-only local run still stops before the runtime tree
+    selfdev._BASELINES.clear()
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    _model.replies.append(_local_edit(_rel))
+    _use_select([_keep_fix])
+
+    def _rt_pass(only=None, limited=False):
+        return "host suites: 1 run, 0 failed", set(), True
+
+    selfdev.run_tests = _rt_pass
+    if os.path.isfile(os.path.join(_stage_dir, "evidence.json")):
+        os.remove(os.path.join(_stage_dir, "evidence.json"))
+    rc = selfdev.do_task("edit " + _mod, "light", backend="local", install=False)
+    selfdev.run_tests = _real_run
+    selfdev.select_light_tests = _real_select
+    check(rc == 0 and open(_runtime_file, encoding="utf-8").read() == _prior_runtime
+          and not os.path.isfile(os.path.join(_stage_dir, "evidence.json")),
+          "--backend local without --install stages and does not touch the runtime tree")
+    _staged_only = json.load(open(os.path.join(_stage_dir, "staged.json"), encoding="utf-8"))
+    check(_staged_only.get("backend") == "local" and selfdev._CALLS.get("cloud") == 0,
+          "the stage-only local run recorded the local backend and made no cloud call")
+
+    # a module no test covers is not installed, and the full suite is not started
+    selfdev._BASELINES.clear()
+    _suite_calls = {"n": 0}
+
+    def _count_run(*_a, **_k):
+        _suite_calls["n"] += 1
+        return "host suites: 1 run, 0 failed", set(), True
+
+    selfdev.run_tests = _count_run
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    _clip = _pkg("clip")
+    _model.replies.append("=== FILE: " + _clip + "\n<<<<<<< SEARCH\nx\n=======\ny\n>>>>>>> REPLACE\n")
+    rc = selfdev.do_task("edit clip", "auto", backend="local", install=True)
+    selfdev.run_tests = _real_run
+    _ev = json.load(open(os.path.join(_stage_dir, "evidence.json"), encoding="utf-8"))
+    check(rc == 2 and _suite_calls["n"] == 0 and _ev.get("accepted") is False and "Nothing was staged" in (_ev.get("reason") or ""),
+          "when the light gate cannot name tests, local install does not fall through to the full suite")
+
+    # Ctrl-C and kill -9 during an install
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    _ready = os.path.join(_local_tmp, "ready.txt")
+    if os.path.isfile(_ready):
+        os.remove(_ready)
+    _sig = (
+        "import os, sys, time\n"
+        "os.environ['LLMOS_SELFDEV_STAGE'] = %r\n"
+        "os.environ['LLMOS_SELFDEV_INSTALL_ROOT'] = %r\n"
+        "sys.path.insert(0, %r)\n"
+        "import selfdev\n"
+        "selfdev._install_signals()\n"
+        "rel = os.environ['PROBE_REL']\n"
+        "prior_rt = open(os.environ['PRIOR_RT'], encoding='utf-8').read()\n"
+        "prior_co = open(os.environ['PRIOR_CO'], encoding='utf-8').read()\n"
+        "selfdev.install_journal_save({rel: {'runtime': prior_rt, 'checkout': prior_co, 'had_runtime': True}}, {})\n"
+        "rt, err = selfdev.runtime_path(rel)\n"
+        "open(rt, 'w', encoding='utf-8').write('NEW = 9\\n')\n"
+        "open(os.environ['PROBE_FULL'], 'w', encoding='utf-8').write('NEW = 9\\n')\n"
+        "open(%r, 'w', encoding='utf-8').write('ready')\n"
+        "time.sleep(60)\n"
+    ) % (_stage_dir, _install_root, HERE, _ready)
+    _prior_rt_path = os.path.join(_local_tmp, "prior-rt.py")
+    _prior_co_path = os.path.join(_local_tmp, "prior-co.py")
+    open(_prior_rt_path, "w", encoding="utf-8").write(_prior_runtime)
+    open(_prior_co_path, "w", encoding="utf-8").write(_orig_checkout)
+    _env = dict(os.environ)
+    _env["PROBE_REL"] = _rel
+    _env["PROBE_FULL"] = _full
+    _env["PRIOR_RT"] = _prior_rt_path
+    _env["PRIOR_CO"] = _prior_co_path
+    _env["LLMOS_SELFDEV_STAGE"] = _stage_dir
+    _env["LLMOS_SELFDEV_INSTALL_ROOT"] = _install_root
+    proc = subprocess.Popen([sys.executable, "-c", _sig], env=_env)
+    for _i in range(50):
+        if os.path.isfile(_ready):
+            break
+        time.sleep(0.1)
+    proc.send_signal(signal.SIGINT)
+    proc.wait(timeout=10)
+    check(open(_runtime_file, encoding="utf-8").read() == _prior_runtime
+          and open(_full, encoding="utf-8").read() == _orig_checkout,
+          "Ctrl-C during install restores the runtime and the checkout")
+
+    open(_runtime_file, "w", encoding="utf-8").write(_prior_runtime)
+    open(_full, "w", encoding="utf-8").write(_orig_checkout)
+    _kill = (
+        "import os, sys\n"
+        "os.environ['LLMOS_SELFDEV_STAGE'] = %r\n"
+        "os.environ['LLMOS_SELFDEV_INSTALL_ROOT'] = %r\n"
+        "sys.path.insert(0, %r)\n"
+        "import selfdev\n"
+        "rel = os.environ['PROBE_REL']\n"
+        "prior_rt = open(os.environ['PRIOR_RT'], encoding='utf-8').read()\n"
+        "prior_co = open(os.environ['PRIOR_CO'], encoding='utf-8').read()\n"
+        "selfdev.install_journal_save({rel: {'runtime': prior_rt, 'checkout': prior_co, 'had_runtime': True}}, {})\n"
+        "rt, err = selfdev.runtime_path(rel)\n"
+        "open(rt, 'w', encoding='utf-8').write('NEW = 9\\n')\n"
+        "open(os.environ['PROBE_FULL'], 'w', encoding='utf-8').write('NEW = 9\\n')\n"
+        "os.kill(os.getpid(), 9)\n"
+    ) % (_stage_dir, _install_root, HERE)
+    subprocess.run([sys.executable, "-c", _kill], env=_env, capture_output=True, text=True)
+    check(open(_runtime_file, encoding="utf-8").read() == "NEW = 9\n",
+          "kill -9 leaves the install in place so the next start can roll it back")
+    restarted = subprocess.run([sys.executable, os.path.join(HERE, "selfdev.py")], env=_env,
+                               capture_output=True, text=True)
+    check(restarted.returncode != 0 and open(_runtime_file, encoding="utf-8").read() == _prior_runtime
+          and open(_full, encoding="utf-8").read() == _orig_checkout,
+          "the next start rolls back an install killed mid-write (rc %s)" % (restarted.returncode,))
+    _ev_path = os.path.join(_stage_dir, "evidence.json")
+    if os.path.isfile(_ev_path):
+        _ev = json.load(open(_ev_path, encoding="utf-8"))
+        check(_ev.get("accepted") is not True, "restart recovery does not report the killed install as accepted")
+
+    help_proc = subprocess.run([sys.executable, os.path.join(HERE, "selfdev.py"), "--help"],
+                               capture_output=True, text=True)
+    help_text = help_proc.stdout
+    check(help_proc.returncode == 0 and "--local-install" in help_text and "--backend" in help_text
+          and "--rollback" in help_text, "help shows the local install lifecycle")
+    bare = subprocess.run([sys.executable, os.path.join(HERE, "selfdev.py"), "--local-install"],
+                          capture_output=True, text=True)
+    check(bare.returncode != 0 and "does not install an existing stage" in (bare.stdout + bare.stderr),
+          "--local-install without a task does not install whatever stage is sitting there")
+finally:
+    selfdev.select_light_tests = _real_select
+    selfdev.run_tests = _real_run
+    selfdev.verify_runtime = _real_verify
+    selfdev.journal_clear()
+    selfdev.install_journal_clear()
+    selfdev.MAX_ROUNDS = _local_saved["rounds"]
+    selfdev._BASELINES.clear()
+    selfdev._BASELINES.update(_local_saved["baselines"])
+    selfdev._CALLS.clear()
+    selfdev._CALLS.update(_local_saved["calls"])
+    selfdev.STAGE = _local_saved["stage"]
+    selfdev.JOURNAL = _local_saved["journal"]
+    selfdev._ACTIVE["backups"] = None
+    if _model.httpd is not None:
+        _model.stop()
+    if _cfg_mod is not None and _real_cloud is not None:
+        _cfg_mod.cloud = _real_cloud
+    if _llm_mod is not None and _real_cloud_chat is not None:
+        _llm_mod.cloud_chat = _real_cloud_chat
+    if _local_saved["llama"] is None:
+        os.environ.pop("LLMOS_LLAMA_URL", None)
+    else:
+        os.environ["LLMOS_LLAMA_URL"] = _local_saved["llama"]
+    if _local_saved["root"] is None:
+        os.environ.pop("LLMOS_SELFDEV_INSTALL_ROOT", None)
+    else:
+        os.environ["LLMOS_SELFDEV_INSTALL_ROOT"] = _local_saved["root"]
+    signal.signal(signal.SIGINT, _local_signals[0])
+    signal.signal(signal.SIGTERM, _local_signals[1])
+    if os.path.isfile(_full):
+        os.remove(_full)
+    shutil_mod = __import__("shutil")
+    shutil_mod.rmtree(_local_tmp, ignore_errors=True)
 
 if fails:
     print(f"{fails} FAILED")
