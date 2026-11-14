@@ -36,3 +36,6 @@ Options:
 ## Tested
 - **Host test:** `tools/test-ota.py`.
 - **VM test (1.8.2 arm64, 2026-10-13):** pairing by phrase, a good update installed, another key's signature refused, a tampered archive refused, a broken desk rolled back on its own, and unpairing.
+
+## The on-device loop
+`tools/selfloop.py` in on-device mode installs through this same check, from disk instead of from the paired computer. It signs a manifest with `ssh-keygen -Y sign`, verifies it with `ota.verify_manifest` against a pinned public key, refuses paths outside LLM OS's program files, backs up what it replaces, and restores that backup when the health check fails. It does not restart network services, and it does not restart the desk or the model server; the new files are read the next time those start. The dev-machine loop still publishes with `tools/ota.py publish` and the `&&` test gate. See `docs/PROJECT-CONTEXT.md`.

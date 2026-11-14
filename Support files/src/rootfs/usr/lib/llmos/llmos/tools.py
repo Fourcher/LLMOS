@@ -2275,10 +2275,11 @@ def model_store(a, ctx):
     return "error: unknown action"
 
 
-@tool("improve_os", "The self-improvement loop's kill switch and status. The loop runs on a dev machine and ships "
-      "here only by a signed update after tests pass. action 'status' says whether it is stopped and whether a "
-      "change is waiting; 'stop' turns the kill switch on; 'resume' turns it off. This does not edit the running "
-      "install.",
+@tool("improve_os", "The self-improvement loop's kill switch and status. Dev-machine mode edits a separate "
+      "checkout and ships by a signed update. On-device mode edits a staging copy, runs a light test subset, and "
+      "installs with the same signature and rollback; it does not restart network services. action 'status' says "
+      "whether it is stopped and whether a change is waiting; 'stop' turns the kill switch on; 'resume' turns it "
+      "off. This does not edit the running install.",
       {"action": {"type": "string", "enum": ["status", "stop", "resume"]}}, ["action"],
       risk=lambda a: SECURITY if a.get("action") == "resume" else SAFE)
 def improve_os(a, ctx):

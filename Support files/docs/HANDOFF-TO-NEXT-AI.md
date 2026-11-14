@@ -140,6 +140,11 @@ These are the course-corrections the owner gave repeatedly. Treat them as bindin
   changed since staging. `--show` / `--apply` / OTA stay separate human steps. This loop does **not** escalate on
   refusal. Normal path: run it on a dev machine and ship to the laptop via OTA. Light is what may run on the laptop
   checkout at `/root/llmos-dev`; it is not the gate to ship on.
+- **On-device self-improvement** is `tools/selfloop.py` with `selfloop.json` `"mode": "device"` and `"backend": "local"`.
+  It copies `/usr/lib/llmos`, asks loopback llama.cpp only (no cloud API), runs a capped light subset under nice, and
+  installs through the OTA signature / backup / rollback path. `require_approval` still defaults to true. It does not
+  restart network services. Do not "fix" dev mode's live-install refusal, and do not point device mode at a non-loopback
+  URL or at the full suite.
 
 ## 5. The real walls — hardware/physics, not policy (don't burn effort here)
 

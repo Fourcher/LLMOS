@@ -101,6 +101,47 @@ destructive tools, it is how the machine gets bricked or its own safeguards stri
   is not the gate to ship on. A diff staged by the light gate should still pass the full suite on a dev machine
   before `tools/ota.py publish`. The full suite stays slow (it runs at least twice: baseline, then the patch).
 
+**On-device loop: `tools/selfloop.py` with `"mode": "device"`.** The dev-machine loop above stays the default
+(`"mode": "dev"` in `selfloop.json`). On the laptop the same command can do the whole cycle without a cloud API:
+
+1. **Propose and code** on a staging copy of `/usr/lib/llmos`. The running install is not the work tree.
+2. **Test** only a light subset: the tests that read the changed modules, plus the core seatbelt, capped
+   (`max_light_tests`, default 24) so the full suite — which has frozen the 16 GB laptop — is never started.
+   The run is `nice`'d (and idle `ionice` when that works), with the same per-test timeout as selfdev's light gate.
+3. **Install** only after that gate, and only when `require_approval` is false or the owner runs `--ship-approved`.
+   The install is a local signed update: Ed25519 via `ssh-keygen -Y sign` / `verify`, the OTA path allow-list, a
+   backup, then the files. It is the same signature and rollback machinery as `llmos/ota.py`, fed from disk instead
+   of the network.
+4. **Verify** with the owner's `/etc/llmos/health-check` when one is installed, plus a compile of the new Python.
+   If either fails, the backup is restored.
+5. **Stop** after `max_iterations` rounds (default 3, at most 8). The kill switch, the daily cap, and the minimum
+   interval still refuse a run before any copy is made.
+
+The model backend is `backend` in `selfloop.json`. `configured` (the default) keeps selfdev's existing choice: the
+online model when one is set, otherwise its on-device client. `cloud` and `llama` are those two clients on their
+own. `local` talks only to llama.cpp on this machine — `llama-server` on a loopback URL, or `llama-cli` /
+`llama-completion` reading a GGUF that is already a file here. A URL that is not loopback is refused before any
+socket is opened, and a loopback name that resolves anywhere else is refused too. On-device mode accepts only
+`local`. Nothing in that path calls a cloud API, and the loop does not restart network services or the model server.
+Regression-guarded by `tools/test-selfloop.py` and `tools/test-selfloop-device.py`.
+
+To turn it on after this code is on the laptop (ship this change with the normal signed update first):
+
+- In the checkout's `selfloop.json` (or the file `LLMOS_SELFLOOP_CONFIG` points at), set `"mode": "device"` and
+  `"backend": "local"`. Leave `"require_approval": true` until you have watched one change install and roll back.
+- `local.url` stays `http://127.0.0.1:8080` (the server the OS already runs). `local.transport` `auto` uses that
+  server when `/health` says ok, and otherwise `llama-cli` on the active GGUF. Set `local.model` if the CLI should
+  read a specific file. A 9B model on CPU can take minutes; `local.timeout_sec` defaults to 900.
+- `python3 tools/selfloop.py --once` stages, tests, and queues. `python3 tools/selfloop.py --ship-approved` re-runs
+  the light gate and, only if it passes, signs and installs. `--stop`, `LLMOS_SELFLOOP=off`, or
+  `/etc/llmos/selfloop-stop` still halt it.
+- The signing key is created on first install under the loop's state directory (`run/selfloop/ota/keys/` next to
+  `selfloop.json`, or `LLMOS_SELFLOOP_DIR`). The public half is pinned the first time. A later private key that
+  does not match the pin does not install. `LLMOS_SELFLOOP_SIGNING_KEY` can point at an existing `ssh-keygen`
+  Ed25519 key (the OTA key, when that private key is on this machine).
+- New files are on disk after a kept install. The desk and the model server are left running; they read the new
+  code the next time they start. Do not expect this loop to restart Wi-Fi, ssh, or the firewall.
+
 ## How to work here
 
 - Everything lives under the project folder; never touch personal Mac folders. Host tests only via
