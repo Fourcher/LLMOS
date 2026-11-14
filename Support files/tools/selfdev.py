@@ -72,6 +72,9 @@ if _stage_env:
 JOURNAL = os.path.join(STAGE, "journal")
 TESTS = os.path.join(HERE, "run-host-tests.sh")
 MAX_ROUNDS = 3
+# A 9B on-device model often spends a round copying the template or returning an unchanged block.
+# Extra local rounds are cheap next to a cloud call. Tests that set MAX_ROUNDS below 3 still get that.
+LOCAL_ROUNDS = 5
 
 # full suite: historical ceiling. light: a desk-sized selection is tens of tests, each capped below.
 FULL_TIMEOUT = 1800
@@ -462,22 +465,23 @@ def _chat(messages, backend="auto", **kw):
     return llm.chat(messages, **kw)
 
 
-EDIT_FORMAT = """Reply with ONLY the block below, one per change. No greeting and no explanation.
-A line that is only ``` is ignored. Copy SEARCH from the file exactly, spaces included, long enough to be unique.
-The path is relative to the repo root, or just the file name if it is one of the files shown (web.py).
-Only Python files in src/rootfs/usr/lib/llmos/llmos/ may be edited. Do not edit tests.
+EDIT_FORMAT = """Reply with ONLY one block. No greeting and no explanation.
+Do not copy this template. SEARCH is lines copied from the file shown, and REPLACE is those lines changed.
+A line that is only ``` is ignored.
+The path is that file's path, or just its name (web.py). Only Python files in
+src/rootfs/usr/lib/llmos/llmos/ may be edited. Do not edit tests.
 
-=== FILE: src/rootfs/usr/lib/llmos/llmos/web.py
+=== FILE: <path.py>
 <<<<<<< SEARCH
-_TIMEOUT = 10
+<exact lines from the file>
 =======
-_TIMEOUT = 20
+<those lines with your change>
 >>>>>>> REPLACE"""
 
 # Angle-bracket block. The path may be "=== FILE: p", "FILE: p", or a bare p.py line.
 # Markers accept the words small models substitute (ORIGINAL/OLD, UPDATED/NEW).
 _ANGLE = re.compile(
-    r"(?P<path>[^\s`'\"]+\.py)[ \t]*\n+[ \t]*"
+    r"(?P<path>[^\s`'\"]+\.py)>?[ \t]*\n+[ \t]*"
     r"<<<<<<<[ \t]*(?:SEARCH|ORIGINAL|OLD)?[ \t]*\n"
     r"(?P<search>.*?)\n"
     r"=======[ \t]*\n"
@@ -485,7 +489,7 @@ _ANGLE = re.compile(
     r">>>>>>>[ \t]*(?:REPLACE|UPDATED|NEW|END)?",
     re.S | re.I)
 _WORDS = re.compile(
-    r"(?P<path>[^\s`'\"]+\.py)[ \t]*\n+[ \t]*"
+    r"(?P<path>[^\s`'\"]+\.py)>?[ \t]*\n+[ \t]*"
     r"SEARCH:[ \t]*\n"
     r"(?P<search>.*?)\n"
     r"REPLACE:[ \t]*\n"
@@ -524,7 +528,12 @@ def gather_context(task, limit=3000):
         if score == 0 and name not in named:
             break
         rel = f"src/rootfs/usr/lib/llmos/llmos/{name}"
-        snip = _snippets(text, words, limit)
+        # "change a comment" does not appear in the source, so keyword windows fall back to the
+        # file's head (the module docstring). Show the # lines instead, which are the editable points.
+        if "comment" in words:
+            snip = _snippets(text, {"#"}, limit, pad=2)
+        else:
+            snip = _snippets(text, words, limit)
         out.append(f"--- {rel} ---\n{snip}")
         used += len(snip)
         if used >= limit * 2:         # ~2 files max; a big prompt makes the free endpoint truncate its reply
@@ -568,7 +577,8 @@ def propose(task, note="", backend="auto"):
     user = f"TASK: {task}\n"
     if note:
         user += f"\nThe last attempt did not work: {note}\n"
-    user += f"\nRELEVANT FILES:\n{ctx}"
+    user += f"\nRELEVANT FILES:\n{ctx}\n"
+    user += "Change one of those lines. SEARCH is copied from them. REPLACE must be different.\n"
     r = _chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}],
               max_tokens=1200, temperature=0.1, backend=backend)
     return (r.get("content") or "").strip()
@@ -596,8 +606,9 @@ def _clean_path(path):
     return path
 
 
-def _keep_edits(edits):
-    out = []
+def _classify_edits(edits):
+    """(usable, noops, copied_template). A block whose two sides match is a no-op, not 'no block'."""
+    kept, noops, copied = [], [], []
     for e in edits:
         path = _clean_path(e.get("path", ""))
         if not path:
@@ -608,7 +619,7 @@ def _keep_edits(edits):
                 continue
             if not body.endswith("\n"):
                 body += "\n"
-            out.append({"path": path, "search": "", "replace": body, "whole": True})
+            kept.append({"path": path, "search": "", "replace": body, "whole": True})
             continue
         search, replace = e.get("search"), e.get("replace")
         if search is None:
@@ -618,17 +629,23 @@ def _keep_edits(edits):
         replace = replace if replace is not None else ""
         if replace.endswith("\n"):
             replace = replace[:-1]
-        if search == "" or search == replace:
+        if search == "":
             continue
-        out.append({"path": path, "search": search, "replace": replace})
-    return out
+        if "<path.py>" in path or "<exact lines" in search or "<those lines" in replace:
+            copied.append({"path": path, "search": search, "replace": replace})
+            continue
+        if search == replace:
+            noops.append({"path": path, "search": search, "replace": replace})
+            continue
+        kept.append({"path": path, "search": search, "replace": replace})
+    return kept, noops, copied
 
 
 def _edits_from_regex(text, pattern):
     edits = []
     for m in pattern.finditer(text):
         edits.append({"path": m.group("path"), "search": m.group("search"), "replace": m.group("replace")})
-    return _keep_edits(edits)
+    return _classify_edits(edits)
 
 
 def _edits_from_diff(text):
@@ -638,7 +655,7 @@ def _edits_from_diff(text):
 
     def flush():
         nonlocal search, replace
-        if path and search and "".join(search) != "".join(replace):
+        if path and search:
             edits.append({"path": path, "search": "\n".join(search), "replace": "\n".join(replace)})
         search, replace = [], []
 
@@ -673,7 +690,7 @@ def _edits_from_diff(text):
             search.append(ctx)
             replace.append(ctx)
     flush()
-    return _keep_edits(edits)
+    return _classify_edits(edits)
 
 
 def _edits_from_whole_file(text):
@@ -686,7 +703,7 @@ def _edits_from_whole_file(text):
         if "<<<<<<<" in body or re.search(r"(?m)^[ \t]*SEARCH:[ \t]*$", body):
             continue
         edits.append({"path": m.group("path").strip().strip("`\"'"), "replace": body, "whole": True})
-    return _keep_edits(edits)
+    return _classify_edits(edits)
 
 
 def _format_error(text):
@@ -708,16 +725,46 @@ def _format_error(text):
             "<<<<<<< SEARCH\n<exact lines from the file>\n=======\n<changed lines>\n>>>>>>> REPLACE")
 
 
+def _noop_note(noops):
+    """Retry text for a parsed block that does not change anything. Quotes the block so the next round can see it."""
+    b = noops[0]
+    quote = b.get("search") or ""
+    if len(quote) > 500:
+        quote = quote[:500] + "\n…"
+    extra = ""
+    if len(noops) > 1:
+        extra = " %d blocks were unchanged." % len(noops)
+    return ("your SEARCH and REPLACE are identical; REPLACE must differ, e.g. change the comment text.%s\n"
+            "You sent this block unchanged:\n"
+            "=== FILE: %s\n<<<<<<< SEARCH\n%s\n=======\n%s\n>>>>>>> REPLACE"
+            % (extra, b.get("path") or "", quote, quote))
+
+
+def _round_limit(backend):
+    """Local tries a couple more times than the cloud path. A test that lowers MAX_ROUNDS keeps that lower number."""
+    if (backend or "auto").lower() == "local" and MAX_ROUNDS >= 3:
+        return max(MAX_ROUNDS, LOCAL_ROUNDS)
+    return MAX_ROUNDS
+
+
 def explain_edits(text):
     """(edits, error). error is empty when at least one edit was recovered.
     Fenced blocks, missing === FILE, ORIGINAL/UPDATED words, SEARCH:/REPLACE: lines, a unified diff,
-    and a whole-file reply under a FILE line are all accepted. The error is the note for the next round."""
-    raw = text or ""
-    cleaned = _strip_fences(raw)
-    for edits in (_edits_from_regex(cleaned, _ANGLE), _edits_from_regex(cleaned, _WORDS),
-                  _edits_from_diff(cleaned), _edits_from_whole_file(cleaned)):
-        if edits:
-            return edits, ""
+    and a whole-file reply under a FILE line are all accepted. An identical SEARCH and REPLACE is a
+    different error from 'no block', and that error quotes the block. The error is the next round's note."""
+    cleaned = _strip_fences(text or "")
+    noops, copied = [], []
+    for found, skipped, echoed in (_edits_from_regex(cleaned, _ANGLE), _edits_from_regex(cleaned, _WORDS),
+                                   _edits_from_diff(cleaned), _edits_from_whole_file(cleaned)):
+        if found:
+            return found, ""
+        noops.extend(skipped)
+        copied.extend(echoed)
+    if noops:
+        return [], _noop_note(noops)
+    if copied:
+        return [], ("you copied the template. SEARCH must be lines from the file, and REPLACE must change them. "
+                    "Do not send <path.py> or <exact lines from the file> back.")
     return [], _format_error(cleaned)
 
 
@@ -1473,7 +1520,8 @@ def do_task(task, gate_request="auto", backend="auto", install=False):
     if gate == "light":
         print(f"[selfdev] light-gate limits: {_limits_line()}", flush=True)
     note = ""
-    for rnd in range(1, MAX_ROUNDS + 1):
+    rounds = _round_limit(backend)
+    for rnd in range(1, rounds + 1):
         print(f"[selfdev] round {rnd}: asking the model for a change…", flush=True)
         try:
             text = propose(task, note, backend=backend)
@@ -1557,7 +1605,7 @@ def do_task(task, gate_request="auto", backend="auto", install=False):
         note = (f"the test suite did not run ({tail})" if not ran
                 else f"the change broke tests that pass without it: {', '.join(sorted(new_fails))} ({tail})")
         print(f"[selfdev] {note}", flush=True)
-    print("[selfdev] gave up after %d rounds without a change that passes the tests." % MAX_ROUNDS, flush=True)
+    print("[selfdev] gave up after %d rounds without a change that passes the tests." % rounds, flush=True)
     return stop(1, "generate", note or "no change passed the tests")
 
 
