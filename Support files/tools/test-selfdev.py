@@ -84,6 +84,36 @@ check(all(os.path.isfile(os.path.join(ROOT, r)) for r in selfdev.DEPLOY_FILES),
 check("llm.py" not in selfdev.DEPLOY_FILES and "config.py" not in selfdev.DEPLOY_FILES,
       "llm.py and config.py are not in the copy set")
 
+# Shapes from the Huihui 9B laptop smoke (task: change only a comment in web.py).
+# Round 1 was prose plus a fenced copy of the old prompt's _TIMEOUT example, and no block.
+_round1 = "I will change only a comment in web.py.\n\n```\n_TIMEOUT = 20\n```\n"
+_r1, _r1err = selfdev.explain_edits(_round1)
+check(_r1 == [] and "identical" not in _r1err and ("no edit block" in _r1err or "SEARCH/REPLACE" in _r1err),
+      "prose plus a fenced _TIMEOUT = 20 example is not an edit (%s)" % (_r1err.split("\n", 1)[0],))
+check("_TIMEOUT" not in selfdev.EDIT_FORMAT and "Do not copy this template" in selfdev.EDIT_FORMAT,
+      "the prompt example is a template, not a timeout assignment the model can echo")
+_doc = ("\"\"\"Web access for research. Only runs when a request needs it and the user's\n"
+        "internet setting allows it. No cookies, no JavaScript, no accounts, no API\n"
+        "keys. With the Tor setting on, every request (DNS included) goes through Tor.\"\"\"")
+_round2 = ("Here is the change:\n```相同\n=== FILE: src/rootfs/usr/lib/llmos/llmos/web.py\n"
+           "<<<<<<< SEARCH\n" + _doc + "\n=======\n" + _doc + "\n>>>>>>> REPLACE\n")
+_r2, _r2err = selfdev.explain_edits(_round2)
+check(_r2 == [] and "identical" in _r2err and "REPLACE must differ" in _r2err and "comment text" in _r2err
+      and "web.py" in _r2err and _doc.split("\n", 1)[0] in _r2err
+      and "no edit block" not in _r2err and "no SEARCH/REPLACE block" not in _r2err,
+      "an unchanged docstring block is a no-op note that quotes it, not 'no block'")
+_tmpl = ("=== FILE: <path.py>\n<<<<<<< SEARCH\n<exact lines from the file>\n=======\n"
+         "<those lines with your change>\n>>>>>>> REPLACE\n")
+_rt, _rterr = selfdev.explain_edits(_tmpl)
+check(_rt == [] and "copied the template" in _rterr, "sending the template back is not an edit")
+_ctx = selfdev.gather_context("in web.py, change only a comment")
+check("web.py" in _ctx and "#" in _ctx and "Wikipedia" in _ctx
+      and '"""Web access for research' not in _ctx,
+      "a comment task is shown # lines from web.py, not only the module docstring")
+check(selfdev._round_limit("local") == selfdev.LOCAL_ROUNDS
+      and selfdev._round_limit("auto") == selfdev.MAX_ROUNDS,
+      "local-only gets %d rounds and auto keeps %d" % (selfdev.LOCAL_ROUNDS, selfdev.MAX_ROUNDS))
+
 # --- paths a patch must not be able to touch (the gate, or anywhere outside the OS package) ---
 applied, probs, backups, _new = selfdev.apply_live(
     [{"path": "src/rootfs/usr/lib/llmos/llmos/../../../../etc/passwd", "search": "root", "replace": "nope"}])
