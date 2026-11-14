@@ -36,6 +36,15 @@ success. Zero tests, a timeout, a failed test, a stale stage, a malformed edit, 
 read-back exits non-zero and leaves the previous runtime bytes in place. The command does not ask for a second
 confirmation. A run without --local-install still stops at the staged diff; shipping that one is still a
 separate, deliberate `tools/ota.py publish` a human runs after --apply.
+
+A checkout that is still the 2026-10-23 tree needs these three files copied together. The light gate's
+per-test cap is in the runner; copying only selfdev.py leaves that cap unset and makes test-selfdev.py's
+timeout probe fail:
+    tools/selfdev.py
+    tools/test-selfdev.py
+    tools/run-host-tests.sh
+llmos/llm.py and llmos/config.py also differ from that date. They are not part of this copy: the local
+backend calls llm.chat, which is unchanged, and those diffs change the online catalog and settings defaults.
 Run the loop on a dev machine when you can, and ship the result to the laptop afterwards. --gate light exists so
 a run on the laptop does not have to execute all 200+ suites."""
 import argparse
@@ -86,6 +95,14 @@ LOW_MEM_KIB = 2 * 1024 * 1024
 #   test-config-etc.py   settings are still written to the OS config directory, or through the root helper
 # test-intent.py is not in here: a change to intent.py already selects it (about 39 tests), so the core stays
 # the safeguard cross-check rather than the whole router table.
+# Files that differ from the 2026-10-23 checkout (6a172ce) and have to be copied together.
+# llm.py and config.py also differ; they are intentionally not here.
+DEPLOY_FILES = (
+    "tools/selfdev.py",
+    "tools/test-selfdev.py",
+    "tools/run-host-tests.sh",
+)
+
 CORE_TESTS = (
     "tools/test-selfdev.py",
     "tools/test-risk.py",
@@ -445,22 +462,37 @@ def _chat(messages, backend="auto", **kw):
     return llm.chat(messages, **kw)
 
 
-EDIT_FORMAT = """Return ONLY changes, in this EXACT format. No markdown, no ```, no +/- diff lines, no explanation.
-Copy this layout literally:
+EDIT_FORMAT = """Reply with ONLY the block below, one per change. No greeting and no explanation.
+A line that is only ``` is ignored. Copy SEARCH from the file exactly, spaces included, long enough to be unique.
+The path is relative to the repo root, or just the file name if it is one of the files shown (web.py).
+Only Python files in src/rootfs/usr/lib/llmos/llmos/ may be edited. Do not edit tests.
 
 === FILE: src/rootfs/usr/lib/llmos/llmos/web.py
 <<<<<<< SEARCH
 _TIMEOUT = 10
 =======
 _TIMEOUT = 20
->>>>>>> REPLACE
+>>>>>>> REPLACE"""
 
-Rules: the path is relative to the repo root. The SEARCH text is copied VERBATIM from the file shown to you, exact
-whitespace, enough lines to be unique. One block per change; repeat the whole block for more. Nothing outside blocks.
-Only Python files in the OS package (src/rootfs/usr/lib/llmos/llmos/*.py) may be edited. Do not edit tests."""
-
-_BLOCK = re.compile(r"===\s*FILE:\s*(?P<path>\S+)\s*\n<<<<<<<\s*SEARCH\s*\n(?P<search>.*?)\n=======\s*\n"
-                    r"(?P<replace>.*?)\n>>>>>>>\s*REPLACE", re.S)
+# Angle-bracket block. The path may be "=== FILE: p", "FILE: p", or a bare p.py line.
+# Markers accept the words small models substitute (ORIGINAL/OLD, UPDATED/NEW).
+_ANGLE = re.compile(
+    r"(?P<path>[^\s`'\"]+\.py)[ \t]*\n+[ \t]*"
+    r"<<<<<<<[ \t]*(?:SEARCH|ORIGINAL|OLD)?[ \t]*\n"
+    r"(?P<search>.*?)\n"
+    r"=======[ \t]*\n"
+    r"(?P<replace>.*?)\n"
+    r">>>>>>>[ \t]*(?:REPLACE|UPDATED|NEW|END)?",
+    re.S | re.I)
+_WORDS = re.compile(
+    r"(?P<path>[^\s`'\"]+\.py)[ \t]*\n+[ \t]*"
+    r"SEARCH:[ \t]*\n"
+    r"(?P<search>.*?)\n"
+    r"REPLACE:[ \t]*\n"
+    r"(?P<replace>.*?)(?=\n[ \t]*(?:===\s*)?(?:FILE:|SEARCH:)|\Z)",
+    re.S | re.I)
+_FENCE_LINE = re.compile(r"^[ \t]*(?:`{3,}|~{3,}).*$")
+_FILE_HEAD = re.compile(r"(?:^|\n)(?:===\s*)?FILE:[ \t]*(?P<path>\S+)", re.I)
 
 
 def gather_context(task, limit=3000):
@@ -542,11 +574,155 @@ def propose(task, note="", backend="auto"):
     return (r.get("content") or "").strip()
 
 
-def parse_edits(text):
-    text = text.replace("```", "")        # the model sometimes fences the blocks; the markers below are what matter
+def _strip_fences(text):
+    """Drop markdown fence lines. Deleting the backticks in place used to glue a language tag onto the next line."""
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    return "\n".join(line for line in text.split("\n") if not _FENCE_LINE.match(line))
+
+
+def _clean_path(path):
+    """Turn a bare name a small model prints ('web.py') into the package path when that file exists."""
+    path = (path or "").strip().strip("`\"'")
+    if path.startswith("./"):
+        path = path[2:]
+    for prefix in ("a/", "b/"):
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+    path = path.replace("\\", "/")
+    if "/" not in path and path.endswith(".py"):
+        full = "src/rootfs/usr/lib/llmos/llmos/" + path
+        if os.path.isfile(os.path.join(ROOT, full)):
+            return full
+    return path
+
+
+def _keep_edits(edits):
+    out = []
+    for e in edits:
+        path = _clean_path(e.get("path", ""))
+        if not path:
+            continue
+        if e.get("whole"):
+            body = e.get("replace") or ""
+            if not body.strip() or body.count("\n") < 2:
+                continue
+            if not body.endswith("\n"):
+                body += "\n"
+            out.append({"path": path, "search": "", "replace": body, "whole": True})
+            continue
+        search, replace = e.get("search"), e.get("replace")
+        if search is None:
+            continue
+        if search.endswith("\n"):
+            search = search[:-1]
+        replace = replace if replace is not None else ""
+        if replace.endswith("\n"):
+            replace = replace[:-1]
+        if search == "" or search == replace:
+            continue
+        out.append({"path": path, "search": search, "replace": replace})
+    return out
+
+
+def _edits_from_regex(text, pattern):
     edits = []
-    for m in _BLOCK.finditer(text):
-        edits.append({"path": m.group("path").strip(), "search": m.group("search"), "replace": m.group("replace")})
+    for m in pattern.finditer(text):
+        edits.append({"path": m.group("path"), "search": m.group("search"), "replace": m.group("replace")})
+    return _keep_edits(edits)
+
+
+def _edits_from_diff(text):
+    """One unified diff. Context lines (a leading space) are part of both SEARCH and REPLACE."""
+    lines = text.split("\n")
+    edits, path, search, replace, in_hunk = [], None, [], [], False
+
+    def flush():
+        nonlocal search, replace
+        if path and search and "".join(search) != "".join(replace):
+            edits.append({"path": path, "search": "\n".join(search), "replace": "\n".join(replace)})
+        search, replace = [], []
+
+    for line in lines:
+        if line.startswith("--- ") or line.startswith("diff "):
+            flush()
+            in_hunk = False
+            continue
+        if line.startswith("+++ "):
+            flush()
+            raw = line[4:].strip()
+            if raw.startswith("b/"):
+                raw = raw[2:]
+            if raw.endswith(".py"):
+                path = raw.split("\t", 1)[0]
+            in_hunk = True
+            continue
+        if line.startswith("@@"):
+            flush()
+            in_hunk = True
+            continue
+        if not in_hunk or path is None:
+            continue
+        if line.startswith("+"):
+            replace.append(line[1:])
+        elif line.startswith("-"):
+            search.append(line[1:])
+        elif line.startswith("\\"):
+            continue
+        else:
+            ctx = line[1:] if line.startswith(" ") else line
+            search.append(ctx)
+            replace.append(ctx)
+    flush()
+    return _keep_edits(edits)
+
+
+def _edits_from_whole_file(text):
+    """A FILE line followed by the new file, which is what a small model emits when it ignores SEARCH/REPLACE."""
+    marks = list(_FILE_HEAD.finditer(text))
+    edits = []
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+        body = text[m.end():end].strip("\n")
+        if "<<<<<<<" in body or re.search(r"(?m)^[ \t]*SEARCH:[ \t]*$", body):
+            continue
+        edits.append({"path": m.group("path").strip().strip("`\"'"), "replace": body, "whole": True})
+    return _keep_edits(edits)
+
+
+def _format_error(text):
+    """The exact reason a reply produced no edit, short enough to send back on the next round."""
+    if "<<<<<<<" in text and "=======" not in text:
+        return ("found <<<<<<< but no ======= line. Put ======= between the old lines and the new lines, "
+                "then >>>>>>> REPLACE.")
+    if "<<<<<<<" in text and ">>>>>>>" not in text:
+        return "found <<<<<<< and ======= but no >>>>>>> REPLACE line to close the block."
+    if re.search(r"(?i)search", text) and not re.search(r"(?i)replace", text) and "<<<<<<<" not in text:
+        return "found SEARCH but no REPLACE. Put the new lines after a REPLACE: line."
+    if "--- " in text and "+++ " in text:
+        return "a diff was found but it had no file path or no removed lines to search for."
+    if ".py" in text and len(text) > 80:
+        return ("no SEARCH/REPLACE block. Put === FILE: <path.py> on its own line, then the block "
+                "(<<<<<<< SEARCH, =======, >>>>>>> REPLACE) or the whole new file under that line.")
+    return ("no edit block. Reply with only this shape:\n"
+            "=== FILE: src/rootfs/usr/lib/llmos/llmos/<name>.py\n"
+            "<<<<<<< SEARCH\n<exact lines from the file>\n=======\n<changed lines>\n>>>>>>> REPLACE")
+
+
+def explain_edits(text):
+    """(edits, error). error is empty when at least one edit was recovered.
+    Fenced blocks, missing === FILE, ORIGINAL/UPDATED words, SEARCH:/REPLACE: lines, a unified diff,
+    and a whole-file reply under a FILE line are all accepted. The error is the note for the next round."""
+    raw = text or ""
+    cleaned = _strip_fences(raw)
+    for edits in (_edits_from_regex(cleaned, _ANGLE), _edits_from_regex(cleaned, _WORDS),
+                  _edits_from_diff(cleaned), _edits_from_whole_file(cleaned)):
+        if edits:
+            return edits, ""
+    return [], _format_error(cleaned)
+
+
+def parse_edits(text):
+    edits, _err = explain_edits(text)
     return edits
 
 
@@ -577,7 +753,16 @@ def apply_live(edits):
             pending[cleaned] = text0
             originals[cleaned] = text0
         text = pending[cleaned]
-        if e["search"] not in text:
+        if e.get("whole"):
+            body = e.get("replace") or ""
+            if not body.endswith("\n"):
+                body += "\n"
+            if body == text:
+                problems.append(f"{cleaned}: the whole-file reply matches the file already")
+                continue
+            pending[cleaned] = body
+            continue
+        if e.get("search", "") not in text:
             problems.append(f"{cleaned}: the SEARCH text was not found exactly")
             continue
         if text.count(e["search"]) > 1:
@@ -1296,9 +1481,9 @@ def do_task(task, gate_request="auto", backend="auto", install=False):
             note = "the model did not answer (%s)" % e
             print(f"[selfdev] {note}", flush=True)
             continue
-        edits = parse_edits(text)
+        edits, perr = explain_edits(text)
         if not edits:
-            note = "no change block was produced in the required format"
+            note = perr or "no change block was produced in the required format"
             print(f"[selfdev] {note}", flush=True)
             continue
         if gate == "light":
@@ -1451,7 +1636,9 @@ def main(argv=None):
         write_evidence({"ok": False, "accepted": False, "phase": "rollback", "backend": "local",
                         "installed": False, "rolled_back": True, "cloud_calls": 0,
                         "reason": "interrupted install was rolled back on startup", "restored": interrupted})
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        epilog="Copy onto a 2026-10-23 checkout, together: " + ", ".join(DEPLOY_FILES)
+        + ". Do not copy llmos/llm.py or llmos/config.py with these files.")
     ap.add_argument("task", nargs="?", default="")
     ap.add_argument("--show", action="store_true")
     ap.add_argument("--apply", action="store_true")
