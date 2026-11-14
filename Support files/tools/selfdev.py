@@ -481,7 +481,7 @@ src/rootfs/usr/lib/llmos/llmos/ may be edited. Do not edit tests.
 # Angle-bracket block. The path may be "=== FILE: p", "FILE: p", or a bare p.py line.
 # Markers accept the words small models substitute (ORIGINAL/OLD, UPDATED/NEW).
 _ANGLE = re.compile(
-    r"(?P<path>[^\s`'\"]+\.py)>?[ \t]*\n+[ \t]*"
+    r"(?P<path>[^\s`'\"]+\.py)>?(?:[ \t]*=+)?[ \t]*\n+[ \t]*"
     r"<<<<<<<[ \t]*(?:SEARCH|ORIGINAL|OLD)?[ \t]*\n"
     r"(?P<search>.*?)\n"
     r"=======[ \t]*\n"
@@ -489,7 +489,7 @@ _ANGLE = re.compile(
     r">>>>>>>[ \t]*(?:REPLACE|UPDATED|NEW|END)?",
     re.S | re.I)
 _WORDS = re.compile(
-    r"(?P<path>[^\s`'\"]+\.py)>?[ \t]*\n+[ \t]*"
+    r"(?P<path>[^\s`'\"]+\.py)>?(?:[ \t]*=+)?[ \t]*\n+[ \t]*"
     r"SEARCH:[ \t]*\n"
     r"(?P<search>.*?)\n"
     r"REPLACE:[ \t]*\n"
@@ -497,6 +497,14 @@ _WORDS = re.compile(
     re.S | re.I)
 _FENCE_LINE = re.compile(r"^[ \t]*(?:`{3,}|~{3,}).*$")
 _FILE_HEAD = re.compile(r"(?:^|\n)(?:===\s*)?FILE:[ \t]*(?P<path>\S+)", re.I)
+# A block with no path line. <<<<<<< and >>>>>>> may omit the words SEARCH and REPLACE.
+_ANGLE_NO_PATH = re.compile(
+    r"<<<<<<<[ \t]*(?:SEARCH|ORIGINAL|OLD)?[ \t]*\n"
+    r"(?P<search>.*?)\n"
+    r"=======[ \t]*\n"
+    r"(?P<replace>.*?)\n"
+    r">>>>>>>[ \t]*(?:REPLACE|UPDATED|NEW|END)?",
+    re.S | re.I)
 
 
 def gather_context(task, limit=3000):
@@ -693,17 +701,219 @@ def _edits_from_diff(text):
     return _classify_edits(edits)
 
 
+def _top_defs(src):
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return None
+    return [n.name for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+
+
+def _fragment_reasons(body, path):
+    """Why body must not replace the whole file. Empty when it is a real whole-file reply."""
+    reasons = []
+    if "…" in body or re.search(r"(?m)^\s*(?:\.{3,}|…+)\s*$", body) or re.search(r",\s*\.{3,}", body):
+        reasons.append("it contains an … or ... elision")
+    original = None
+    if path:
+        full, _cleaned, err = _package_file(path)
+        if full and not err and os.path.isfile(full):
+            try:
+                original = open(full, encoding="utf-8", errors="replace").read()
+            except OSError:
+                original = None
+    if original:
+        old_lines, new_lines = original.splitlines(), body.splitlines()
+        if len(old_lines) >= 20 and len(new_lines) * 2 < len(old_lines):
+            reasons.append("it is much shorter than the file (%d lines vs %d)" % (len(new_lines), len(old_lines)))
+        old_defs, new_defs = _top_defs(original), _top_defs(body)
+        if old_defs and len(old_defs) >= 2 and new_defs is not None and len(new_defs) * 2 < len(old_defs):
+            reasons.append("it drops most functions (%s)" % ", ".join(old_defs[:8]))
+    return reasons
+
+
+def _fragment_note(path, reasons):
+    return ("this is a fragment of %s, not a whole-file replace (%s). "
+            "Send a SEARCH/REPLACE block for only the lines you change."
+            % (path, "; ".join(reasons)))
+
+
+def _ws(s):
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _comment_tail(file_line, search_line):
+    """True when search_line is the whole line, or a prefix whose remainder is only a trailing comment."""
+    if file_line == search_line:
+        return True
+    if search_line and file_line.startswith(search_line):
+        return re.fullmatch(r"\s*(?:#.*)?", file_line[len(search_line):]) is not None
+    fl, sl = file_line.lstrip(), search_line.lstrip()
+    if sl and fl.startswith(sl):
+        return re.fullmatch(r"\s*(?:#.*)?", fl[len(sl):]) is not None
+    return False
+
+
+def _splice_lines(text, start, count, replace):
+    lines = text.splitlines()
+    new_lines = lines[:start] + replace.split("\n") + lines[start + count:]
+    out = "\n".join(new_lines)
+    if text.endswith("\n"):
+        out += "\n"
+    return out
+
+
+def _ambig_note(kind, hits, lines):
+    shown = []
+    for i in hits[:5]:
+        line = lines[i]
+        if len(line) > 160:
+            line = line[:160] + "…"
+        shown.append("line %d: %s" % (i + 1, line))
+    return ("SEARCH matches %d places once %s is ignored, so it was not applied. %s"
+            % (len(hits), kind, " | ".join(shown)))
+
+
+def _near_miss(text, search):
+    """Quote the closest real line when SEARCH is not an exact, whitespace, or trailing-comment match."""
+    lines = text.splitlines()
+    first = search.split("\n", 1)[0]
+    key = first.strip()
+    scored = []
+    for i, line in enumerate(lines):
+        other = line.strip()
+        n = 0
+        for a, b in zip(key, other):
+            if a != b:
+                break
+            n += 1
+        if key and n >= max(8, len(key) // 2):
+            scored.append((n, i, line))
+    scored.sort(key=lambda item: -item[0])
+    show_s = first if len(first) <= 300 else first[:300] + "…"
+    if not scored:
+        return ("SEARCH does not match this file. No line is close to your first SEARCH line:\n%s" % show_s)
+    _n, idx, line = scored[0]
+    show_f = line if len(line) <= 300 else line[:300] + "…"
+    extra = " The lines differ."
+    sl = first.lstrip()
+    fl = line.lstrip()
+    if sl and fl.startswith(sl):
+        rest = fl[len(sl):]
+        if rest.strip().startswith("#"):
+            extra = " The file line has a trailing comment your SEARCH omitted: `%s`." % rest
+    elif len(scored) > 1 and scored[1][0] == _n:
+        extra = " Several lines are equally close, so this is ambiguous."
+    return ("SEARCH does not match. Your first SEARCH line:\n%s\nClosest line %d:\n%s.%s"
+            % (show_s, idx + 1, show_f, extra))
+
+
+def _apply_search(text, search, replace):
+    """(new_text, None) or (None, error). Exact match first, then whitespace, then a trailing-comment prefix.
+    A tolerant match is used only when it hits exactly one place. REPLACE is inserted as the model wrote it."""
+    if not search:
+        return None, "SEARCH was empty."
+    # A match has to cover whole lines. A SEARCH that is only a prefix of a line (the rest being a
+    # trailing comment) is not an exact hit; replacing the prefix would leave the old comment in place.
+    spans = []
+    start = 0
+    while True:
+        i = text.find(search, start)
+        if i < 0:
+            break
+        end = i + len(search)
+        if (i == 0 or text[i - 1] == "\n") and (end == len(text) or text[end] == "\n"):
+            spans.append((i, end))
+        start = i + 1
+    if len(spans) > 1:
+        return None, "the SEARCH text is not unique; it matches %d places. Make it longer." % len(spans)
+    if len(spans) == 1:
+        i, end = spans[0]
+        return text[:i] + replace + text[end:], None
+    lines = text.splitlines()
+    slines = search.split("\n")
+    if not lines or not slines or len(slines) > len(lines):
+        return None, _near_miss(text, search)
+    keys = [_ws(s) for s in slines]
+    whits = []
+    if any(keys):
+        for i in range(len(lines) - len(slines) + 1):
+            if [_ws(lines[i + j]) for j in range(len(slines))] == keys:
+                whits.append(i)
+    if len(whits) > 1:
+        return None, _ambig_note("whitespace differences", whits, lines)
+    if len(whits) == 1:
+        return _splice_lines(text, whits[0], len(slines), replace), None
+    phits = []
+    for i in range(len(lines) - len(slines) + 1):
+        if all(_comment_tail(lines[i + j], slines[j]) for j in range(len(slines))):
+            if any(lines[i + j] != slines[j] for j in range(len(slines))):
+                phits.append(i)
+    if len(phits) > 1:
+        return None, _ambig_note("a trailing comment", phits, lines)
+    if len(phits) == 1:
+        return _splice_lines(text, phits[0], len(slines), replace), None
+    return None, _near_miss(text, search)
+
+
+def _infer_path(search, task):
+    """A missing FILE line uses the one file the task names, or the one file whose text matches SEARCH."""
+    named = []
+    for name in re.findall(r"([A-Za-z0-9_]+\.py)", task or ""):
+        low = name.lower()
+        if low not in named:
+            named.append(low)
+    if len(named) == 1:
+        return _clean_path(named[0]), ""
+    hits = []
+    try:
+        names = sorted(os.listdir(PKG))
+    except OSError:
+        names = []
+    for name in names:
+        if not name.endswith(".py"):
+            continue
+        full = os.path.join(PKG, name)
+        try:
+            body = open(full, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        _new, err = _apply_search(body, search, search)
+        rel = "src/rootfs/usr/lib/llmos/llmos/" + name
+        if _new is not None:
+            hits.append(rel)
+        elif err and "matches" in err and "places" in err:
+            return "", "%s: %s" % (rel, err)
+    if len(hits) == 1:
+        return hits[0], ""
+    if len(hits) > 1:
+        return "", "SEARCH matches more than one file, so no FILE line was assumed: " + ", ".join(hits)
+    if len(named) > 1:
+        return "", ("the task names more than one file (%s) and the block has no FILE line."
+                    % ", ".join(named))
+    return "", ("the block has no FILE line. The task does not name exactly one .py file, "
+                "and SEARCH matches none.")
+
+
 def _edits_from_whole_file(text):
-    """A FILE line followed by the new file, which is what a small model emits when it ignores SEARCH/REPLACE."""
+    """A FILE line followed by the new file. A fragment (elision, or much shorter than the real file) is not one.
+    Returns (kept, noops, copied, fragment_note)."""
     marks = list(_FILE_HEAD.finditer(text))
-    edits = []
+    edits, notes = [], []
     for i, m in enumerate(marks):
         end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
         body = text[m.end():end].strip("\n")
+        body = re.sub(r"^[ \t]*=+[ \t]*\n", "", body)
         if "<<<<<<<" in body or re.search(r"(?m)^[ \t]*SEARCH:[ \t]*$", body):
             continue
-        edits.append({"path": m.group("path").strip().strip("`\"'"), "replace": body, "whole": True})
-    return _classify_edits(edits)
+        path = m.group("path").strip().strip("`\"'")
+        reasons = _fragment_reasons(body, path)
+        if reasons:
+            notes.append(_fragment_note(path, reasons))
+            continue
+        edits.append({"path": path, "replace": body, "whole": True})
+    kept, noops, copied = _classify_edits(edits)
+    return kept, noops, copied, notes[0] if notes else ""
 
 
 def _format_error(text):
@@ -747,19 +957,46 @@ def _round_limit(backend):
     return MAX_ROUNDS
 
 
-def explain_edits(text):
+def explain_edits(text, task=""):
     """(edits, error). error is empty when at least one edit was recovered.
-    Fenced blocks, missing === FILE, ORIGINAL/UPDATED words, SEARCH:/REPLACE: lines, a unified diff,
-    and a whole-file reply under a FILE line are all accepted. An identical SEARCH and REPLACE is a
-    different error from 'no block', and that error quotes the block. The error is the next round's note."""
+    Fenced blocks, a trailing === on the FILE line, bare <<<<<<< and >>>>>>>, missing FILE
+    (when the task names one file, or SEARCH matches one file), ORIGINAL/UPDATED words,
+    SEARCH:/REPLACE: lines, and a unified diff are accepted. A FILE line followed by a fragment
+    is not a whole-file replace. An identical SEARCH and REPLACE is a different error from 'no block'."""
     cleaned = _strip_fences(text or "")
     noops, copied = [], []
     for found, skipped, echoed in (_edits_from_regex(cleaned, _ANGLE), _edits_from_regex(cleaned, _WORDS),
-                                   _edits_from_diff(cleaned), _edits_from_whole_file(cleaned)):
+                                   _edits_from_diff(cleaned)):
         if found:
             return found, ""
         noops.extend(skipped)
         copied.extend(echoed)
+    bare = list(_ANGLE_NO_PATH.finditer(cleaned))
+    # A block that already had a path was classified above. Don't parse it again without the path.
+    if bare and not noops and not copied:
+        raw = []
+        infer_err = ""
+        for m in bare:
+            path, err = _infer_path(m.group("search"), task)
+            if err and not path:
+                infer_err = err
+                continue
+            raw.append({"path": path, "search": m.group("search"), "replace": m.group("replace")})
+        found, skipped, echoed = _classify_edits(raw)
+        if found:
+            return found, ""
+        if skipped:
+            return [], _noop_note(skipped)
+        if infer_err:
+            return [], infer_err
+        copied.extend(echoed)
+    found, skipped, echoed, frag = _edits_from_whole_file(cleaned)
+    if found:
+        return found, ""
+    noops.extend(skipped)
+    copied.extend(echoed)
+    if frag:
+        return [], frag
     if noops:
         return [], _noop_note(noops)
     if copied:
@@ -802,6 +1039,10 @@ def apply_live(edits):
         text = pending[cleaned]
         if e.get("whole"):
             body = e.get("replace") or ""
+            reasons = _fragment_reasons(body, cleaned)
+            if reasons:
+                problems.append(_fragment_note(cleaned, reasons))
+                continue
             if not body.endswith("\n"):
                 body += "\n"
             if body == text:
@@ -809,13 +1050,11 @@ def apply_live(edits):
                 continue
             pending[cleaned] = body
             continue
-        if e.get("search", "") not in text:
-            problems.append(f"{cleaned}: the SEARCH text was not found exactly")
+        new_text, err = _apply_search(text, e.get("search", ""), e.get("replace") or "")
+        if err:
+            problems.append(f"{cleaned}: {err}")
             continue
-        if text.count(e["search"]) > 1:
-            problems.append(f"{cleaned}: the SEARCH text is not unique; make it longer")
-            continue
-        pending[cleaned] = text.replace(e["search"], e["replace"], 1)
+        pending[cleaned] = new_text
     changed = {rel: pending[rel] for rel in pending if pending[rel] != originals[rel]}
     if not changed:
         return 0, problems, {}, {}
@@ -1529,7 +1768,7 @@ def do_task(task, gate_request="auto", backend="auto", install=False):
             note = "the model did not answer (%s)" % e
             print(f"[selfdev] {note}", flush=True)
             continue
-        edits, perr = explain_edits(text)
+        edits, perr = explain_edits(text, task)
         if not edits:
             note = perr or "no change block was produced in the required format"
             print(f"[selfdev] {note}", flush=True)

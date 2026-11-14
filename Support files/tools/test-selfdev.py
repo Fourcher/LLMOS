@@ -114,6 +114,80 @@ check(selfdev._round_limit("local") == selfdev.LOCAL_ROUNDS
       and selfdev._round_limit("auto") == selfdev.MAX_ROUNDS,
       "local-only gets %d rounds and auto keeps %d" % (selfdev.LOCAL_ROUNDS, selfdev.MAX_ROUNDS))
 
+# Huihui rounds. The {...} in the report was the real _WIKI_LANG lines, copied from web.py into a fixture.
+_wiki_name = "_selfdev_wiki" + ".py"
+_wiki_rel = "src/rootfs/usr/lib/llmos/llmos/" + _wiki_name
+_wiki_full = os.path.join(ROOT, _wiki_rel)
+_web_rel = "src/rootfs/usr/lib/llmos/llmos/" + "web" + ".py"
+_web_lines = open(os.path.join(ROOT, _web_rel), encoding="utf-8").read().splitlines()
+_ua = next(l for l in _web_lines if l.startswith("_WIKI_UA "))
+_ua_at = _web_lines.index(_ua)
+_lang = "\n".join(_web_lines[_ua_at + 1:_ua_at + 3])
+_lang_lines = _lang.split("\n")
+_ua_code = _ua.split("    #", 1)[0].rstrip()
+_lang_comment = "    # the common name on the left, the short code on the right"
+_wiki_body = (_ua + "\n" + _lang + "\n\n\ndef _search_wikipedia(query, timeout=8):\n    return query\n\n\n"
+              "def _other(query):\n    return query\n")
+_round1 = ("We change the comment on the `_WIKI_LANG` line to describe the languages it maps.\n\n"
+           "=== FILE: " + _wiki_rel + " ===\n<<<<<<<\n" + _ua + "\n" + _lang + "\n=======\n"
+           + _ua + "\n" + _lang_lines[0] + "\n" + _lang_lines[1] + _lang_comment + "\n>>>>>>> REPLACE\n")
+_round1_web = ("=== FILE: " + _web_rel + " ===\n<<<<<<<\n" + _ua + "\n=======\n"
+               + _ua_code + "    # parsed only\n>>>>>>> REPLACE\n")
+_round3 = ("The user-agent comment should say who is asking.\n\n```python\n<<<<<<<\n" + _ua + "\n=======\n"
+           + _ua_code + "    # this computer, asking Wikipedia\n>>>>>>> REPLACE\n")
+_round5 = ("```python\n<<<<<<<\n" + _ua_code + "\n=======\n"
+           + _ua_code + "    # identifies this computer to Wikipedia\n>>>>>>>\n")
+_task_wiki = "in " + _wiki_name + ", change only a comment"
+_round2f = ("=== FILE: " + _wiki_rel + " ===\n" + _ua + "\n" + _lang_lines[0] + "\n…\n"
+            "def _search_wikipedia(query, timeout=8):\n    …\n")
+_round4f = ("=== FILE: " + _wiki_rel + " ===\n" + _ua + "\n{\n" + '"english": "en", ...\n' + "}\n...\n")
+_e1w, _err1w = selfdev.explain_edits(_round1_web)
+check(_e1w and _e1w[0]["path"].endswith("/" + "web" + ".py") and not _err1w,
+      "FILE line with a trailing === and a bare <<<<<<< parses (%s)" % (_err1w,))
+open(_wiki_full, "w", encoding="utf-8").write(_wiki_body)
+try:
+    _e1, _err1 = selfdev.explain_edits(_round1)
+    check(_e1 and not _err1, "round 1 parses against the fixture (%s)" % (_err1,))
+    _ap, _pr, _bk, _nt = selfdev.apply_live(_e1)
+    _got = open(_wiki_full, encoding="utf-8").read()
+    check(_ap == 1 and _lang_comment.strip() in _got and "Wikipedia asks programs" in _got,
+          "round 1 applies the _WIKI_LANG comment (%s)" % (_pr[:1],))
+    selfdev.restore(_bk)
+    open(_wiki_full, "w", encoding="utf-8").write(_wiki_body)
+    _e3, _err3 = selfdev.explain_edits(_round3, _task_wiki)
+    check(_e3 and _e3[0]["path"].endswith(_wiki_name) and not _err3,
+          "round 3 infers the one file the task names (%s)" % (_err3,))
+    _ap, _pr, _bk, _nt = selfdev.apply_live(_e3)
+    _got = open(_wiki_full, encoding="utf-8").read()
+    check(_ap == 1 and "this computer, asking Wikipedia" in _got and "Wikipedia asks programs" not in _got,
+          "round 3 applies the new _WIKI_UA comment (%s)" % (_pr[:1],))
+    selfdev.restore(_bk)
+    open(_wiki_full, "w", encoding="utf-8").write(_wiki_body)
+    _e5, _err5 = selfdev.explain_edits(_round5, _task_wiki)
+    check(_e5 and not _err5, "round 5 parses a bare >>>>>>> with no FILE line (%s)" % (_err5,))
+    _ap, _pr, _bk, _nt = selfdev.apply_live(_e5)
+    _got = open(_wiki_full, encoding="utf-8").read()
+    check(_ap == 1 and "identifies this computer to Wikipedia" in _got and "Wikipedia asks programs" not in _got,
+          "round 5 replaces the whole line, dropping the old trailing comment (%s)" % (_pr[:1],))
+    selfdev.restore(_bk)
+    open(_wiki_full, "w", encoding="utf-8").write(_wiki_body)
+    for _label, _reply in (("round 2", _round2f), ("round 4", _round4f)):
+        _ef, _errf = selfdev.explain_edits(_reply)
+        check(not _ef and "fragment" in _errf and "SEARCH/REPLACE" in _errf,
+              "%s is rejected as a fragment (%s)" % (_label, _errf[:200]))
+        check(open(_wiki_full, encoding="utf-8").read() == _wiki_body, "%s does not write the file" % _label)
+    _new, _aerr = selfdev._apply_search(_ua + "\n" + _ua + "\n", _ua_code, "X")
+    check(_new is None and "2" in (_aerr or "") and "trailing comment" in (_aerr or ""),
+          "a prefix that hits two lines is ambiguous (%s)" % (_aerr,))
+    _new, _aerr = selfdev._apply_search(_ua + "\n", _ua_code + " NOT-IN-FILE", "X")
+    check(_new is None and "Closest line" in (_aerr or "") and "_WIKI_UA" in (_aerr or ""),
+          "a SEARCH that does not match quotes the closest line (%s)" % (_aerr,))
+finally:
+    selfdev.journal_clear()
+    selfdev._ACTIVE["backups"] = None
+    if os.path.isfile(_wiki_full):
+        os.remove(_wiki_full)
+
 # --- paths a patch must not be able to touch (the gate, or anywhere outside the OS package) ---
 applied, probs, backups, _new = selfdev.apply_live(
     [{"path": "src/rootfs/usr/lib/llmos/llmos/../../../../etc/passwd", "search": "root", "replace": "nope"}])
