@@ -25,8 +25,17 @@ Two gates, chosen with --gate:
     tools/selfdev.py --show                                    # show the staged change and its test result
     tools/selfdev.py --apply                                   # a HUMAN applies the staged, tested change
     tools/selfdev.py --discard
+    tools/selfdev.py --backend local "the change"              # on-device model only; still stops before install
+    tools/selfdev.py --local-install "the change"              # owner-invoked: test, install, verify, or roll back
+    tools/selfdev.py --rollback                                # put the previous runtime bytes back
 
-Shipping to devices is still a separate, deliberate `tools/ota.py publish` a human runs after --apply.
+--backend local never reads the online-model config and never calls it. --local-install is that backend plus
+the bounded light gate, then an install of the tested bytes into the runtime tree (not only the dev checkout).
+Exit 0 only when a read-back of those runtime bytes hashes to the tested artifact. A staged diff alone is not
+success. Zero tests, a timeout, a failed test, a stale stage, a malformed edit, an interruption, or a failed
+read-back exits non-zero and leaves the previous runtime bytes in place. The command does not ask for a second
+confirmation. A run without --local-install still stops at the staged diff; shipping that one is still a
+separate, deliberate `tools/ota.py publish` a human runs after --apply.
 Run the loop on a dev machine when you can, and ship the result to the laptop afterwards. --gate light exists so
 a run on the laptop does not have to execute all 200+ suites."""
 import argparse
@@ -47,6 +56,10 @@ ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, "src/rootfs/usr/lib/llmos")       # parent of the llmos package (for `import llmos`)
 PKG = os.path.join(SRC, "llmos")                          # the package itself: web.py, agent.py, … live here
 STAGE = os.path.join(ROOT, "run", "selfdev")
+# Tests point this at a scratch directory. Unset, the stage stays next to the checkout.
+_stage_env = os.environ.get("LLMOS_SELFDEV_STAGE", "").strip()
+if _stage_env:
+    STAGE = os.path.realpath(_stage_env)
 JOURNAL = os.path.join(STAGE, "journal")
 TESTS = os.path.join(HERE, "run-host-tests.sh")
 MAX_ROUNDS = 3
@@ -97,6 +110,7 @@ sys.path.insert(0, "/usr/lib/llmos")
 sys.path.insert(0, SRC)
 
 _ACTIVE = {"proc": None, "backups": None}
+_CALLS = {"cloud": 0, "local": 0}
 _HOOKS = False
 _BASELINES = {}
 _INDEX = None
@@ -210,6 +224,7 @@ def _on_signal(signum, frame):
         restore(backups)
     else:
         journal_recover()
+    install_journal_recover()
     raise SystemExit(128 + (signum or 0))
 
 
@@ -218,6 +233,7 @@ def _on_exit():
     if proc is not None and proc.poll() is None:
         _kill_group(proc)
     journal_recover()
+    install_journal_recover()
 
 
 def _install_signals():
@@ -404,16 +420,28 @@ def _llm():
     return llm
 
 
-def _chat(messages, **kw):
+def _chat_local(messages, **kw):
+    """On-device endpoint only. Does not read cloud config and does not call the online model.
+    If the on-device model fails, the error propagates. There is no cloud fallback."""
+    _CALLS["local"] = _CALLS.get("local", 0) + 1
+    return _llm().chat(messages, **kw)
+
+
+def _chat(messages, backend="auto", **kw):
     """The configured online model when one is set, otherwise the on-device model.
+    backend='local' is _chat_local: cloud config is not consulted.
     This loop does not escalate to another model when the reply is a refusal."""
+    if (backend or "auto").lower() == "local":
+        return _chat_local(messages, **kw)
     llm = _llm()
     try:
         from llmos import config
         if config.cloud():
+            _CALLS["cloud"] = _CALLS.get("cloud", 0) + 1
             return llm.cloud_chat(messages, **kw)
     except Exception:
         pass
+    _CALLS["local"] = _CALLS.get("local", 0) + 1
     return llm.chat(messages, **kw)
 
 
@@ -499,7 +527,7 @@ def _snippets(text, words, limit, pad=5):
     return "\n   …\n".join(parts)
 
 
-def propose(task, note=""):
+def propose(task, note="", backend="auto"):
     """Ask the model for a set of edits. Returns the raw text."""
     ctx = gather_context(task + " " + note)
     sysmsg = ("You edit the source code of LLM OS, an operating system, to carry out a change its owner asked for. "
@@ -509,7 +537,8 @@ def propose(task, note=""):
     if note:
         user += f"\nThe last attempt did not work: {note}\n"
     user += f"\nRELEVANT FILES:\n{ctx}"
-    r = _chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}], max_tokens=1200, temperature=0.1)
+    r = _chat([{"role": "system", "content": sysmsg}, {"role": "user", "content": user}],
+              max_tokens=1200, temperature=0.1, backend=backend)
     return (r.get("content") or "").strip()
 
 
@@ -740,9 +769,514 @@ def _limits_line():
             f"per-test timeout {LIGHT_TEST_TIMEOUT}s")
 
 
-def do_task(task, gate_request="auto"):
+_INSTALL_PREFIX = "src/rootfs/usr/lib/llmos/"
+_STAGE_NAMES = ("staged.json", "staged.diff", "tests.txt")
+
+
+def install_root():
+    """The runtime package directory (parent of llmos/*.py). None when it is not there.
+    LLMOS_SELFDEV_INSTALL_ROOT overrides /usr/lib/llmos so tests can use a scratch tree."""
+    env = os.environ.get("LLMOS_SELFDEV_INSTALL_ROOT", "").strip()
+    if env:
+        root = os.path.realpath(env)
+        return root if os.path.isdir(root) else None
+    default = "/usr/lib/llmos"
+    if os.path.isdir(default):
+        return os.path.realpath(default)
+    return None
+
+
+def _install_root_is_checkout(root):
+    return bool(root) and os.path.realpath(root) == os.path.realpath(SRC)
+
+
+def runtime_path(rel, root=None):
+    """Map a repo path onto the runtime tree. Refuse anything that escapes that tree."""
+    root = root or install_root()
+    if not root:
+        return None, "no runtime install root"
+    raw = (rel or "").replace("\\", "/").strip()
+    if not raw.startswith(_INSTALL_PREFIX):
+        return None, f"{raw}: not an OS package file"
+    parts = [p for p in raw[len(_INSTALL_PREFIX):].split("/")]
+    if not parts or any(p in ("", ".", "..") for p in parts):
+        return None, f"{raw}: path escapes the runtime install"
+    full = os.path.realpath(os.path.join(root, *parts))
+    root_real = os.path.realpath(root)
+    if full != root_real and not full.startswith(root_real + os.sep):
+        return None, f"{raw}: path escapes the runtime install"
+    return full, None
+
+
+def install_journal_dir():
+    return os.path.join(STAGE, "install-journal")
+
+
+def runtime_backup_dir():
+    return os.path.join(STAGE, "runtime-backup")
+
+
+def _atomic_write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".selfdev-tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    _fsync_dir(os.path.dirname(path))
+
+
+def write_evidence(payload):
+    """The last local-install result. accepted is true only when the runtime bytes match the tested artifact."""
+    os.makedirs(STAGE, exist_ok=True)
+    body = dict(payload)
+    body.setdefault("when", time.strftime("%Y-%m-%d %H:%M:%S"))
+    body.setdefault("ok", False)
+    body.setdefault("accepted", False)
+    _atomic_write(os.path.join(STAGE, "evidence.json"), json.dumps(body, indent=2, sort_keys=True) + "\n")
+    return body
+
+
+def _read_stage_files():
+    saved = {}
+    for name in _STAGE_NAMES:
+        path = os.path.join(STAGE, name)
+        if os.path.isfile(path):
+            try:
+                saved[name] = open(path, encoding="utf-8").read()
+            except OSError:
+                pass
+    return saved
+
+
+def _restore_preserved_stage(saved):
+    """Put staged.json, staged.diff, and tests.txt back. A name that was absent is removed."""
+    if saved is None:
+        return
+    os.makedirs(STAGE, exist_ok=True)
+    for name in _STAGE_NAMES:
+        dest = os.path.join(STAGE, name)
+        if name in saved:
+            _atomic_write(dest, saved[name])
+        elif os.path.isfile(dest):
+            os.remove(dest)
+
+
+def _archive_previous_stage(saved):
+    """Keep the stage this run replaced. A later failure does not delete that copy."""
+    if not saved:
+        return
+    for name, text in saved.items():
+        _atomic_write(os.path.join(STAGE, "previous-" + name), text)
+
+
+def _tests_ran_count(summary):
+    match = re.search(r"host suites:\s*(\d+)\s*run", summary or "")
+    if not match:
+        return 0
+    return int(match.group(1))
+
+
+def stage_acceptable(meta, check_checkout=True):
+    """'' when meta is a tested local-light artifact that still matches the checkout it was tested against.
+    Anything else must not be installed."""
+    if not isinstance(meta, dict):
+        return "staged state is malformed"
+    files = meta.get("files") or {}
+    arts = meta.get("artifact_hashes") or {}
+    bases = meta.get("base_hashes") or {}
+    if not isinstance(files, dict) or not files:
+        return "nothing staged"
+    if not isinstance(arts, dict) or not arts or not isinstance(bases, dict) or not bases:
+        return "staged change has no artifact or base hashes"
+    if meta.get("timed_out"):
+        return "the test run timed out"
+    if meta.get("new_fails"):
+        return "the staged change has failing tests"
+    if not meta.get("ran"):
+        return "the test suite did not run"
+    if _tests_ran_count(meta.get("tests") or "") <= 0:
+        return "zero tests ran"
+    if meta.get("backend") != "local":
+        return "staged change was not produced by the local backend"
+    if meta.get("gate") != "light":
+        return "staged change was not produced by the bounded light gate"
+    for rel, content in files.items():
+        if not isinstance(content, str):
+            return f"{rel}: staged content is malformed"
+        if arts.get(rel) != _sha256(content):
+            return f"{rel}: artifact hash does not match the staged bytes"
+        full, cleaned, err = edit_target(rel)
+        if err:
+            return err
+        if check_checkout:
+            expect = bases.get(rel, bases.get(cleaned))
+            if not expect:
+                return f"{cleaned}: no base hash"
+            try:
+                current = open(full, encoding="utf-8").read()
+            except OSError as e:
+                return f"cannot read {cleaned}: {e}"
+            if _sha256(current) != expect:
+                return f"stale stage: {cleaned} has changed since the change was tested"
+    return ""
+
+
+def install_journal_save(entries, artifact_hashes=None):
+    """Fsync the previous runtime and checkout bytes before either tree is changed."""
+    jdir = install_journal_dir()
+    os.makedirs(jdir, exist_ok=True)
+    commit = os.path.join(jdir, "COMMIT")
+    if os.path.isfile(commit):
+        os.remove(commit)
+    root = install_root()
+    manifest = {"install_root": root, "artifact_hashes": artifact_hashes or {}, "files": {}}
+    for rel, ent in entries.items():
+        fn = hashlib.sha256(rel.encode("utf-8")).hexdigest()
+        rec = {"had_runtime": bool(ent.get("had_runtime")),
+               "runtime_name": fn + ".runtime", "checkout_name": fn + ".checkout"}
+        if ent.get("had_runtime"):
+            _atomic_write(os.path.join(jdir, rec["runtime_name"]), ent.get("runtime") or "")
+        _atomic_write(os.path.join(jdir, rec["checkout_name"]), ent.get("checkout") or "")
+        manifest["files"][rel] = rec
+    _atomic_write(os.path.join(jdir, "manifest.json"), json.dumps(manifest))
+    return manifest
+
+
+def _runtime_matches(root, artifact_hashes):
+    if not root or not artifact_hashes:
+        return False
+    for rel, digest in artifact_hashes.items():
+        path, err = runtime_path(rel, root)
+        if err or not path or not os.path.isfile(path):
+            return False
+        try:
+            got = open(path, encoding="utf-8").read()
+        except OSError:
+            return False
+        if _sha256(got) != digest:
+            return False
+    return True
+
+
+def install_journal_recover():
+    """Undo an install that did not commit. A commit whose runtime bytes still match is left in place.
+    Returns the relative paths restored."""
+    jdir = install_journal_dir()
+    man_path = os.path.join(jdir, "manifest.json")
+    commit_path = os.path.join(jdir, "COMMIT")
+    if os.path.isfile(commit_path):
+        try:
+            info = json.loads(open(commit_path, encoding="utf-8").read())
+        except (OSError, json.JSONDecodeError):
+            info = {}
+        root = info.get("install_root")
+        arts = info.get("artifact_hashes") or {}
+        if _runtime_matches(root, arts):
+            shutil.rmtree(jdir, ignore_errors=True)
+            return []
+    if not os.path.isfile(man_path):
+        return []
+    try:
+        manifest = json.load(open(man_path, encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        print("[selfdev] WARNING: the install journal is unreadable; runtime files were left as they are",
+              flush=True)
+        return []
+    root = manifest.get("install_root")
+    if not root or not os.path.isdir(root):
+        print("[selfdev] WARNING: install journal root is missing; runtime files were left as they are",
+              flush=True)
+        return []
+    files = manifest.get("files") or {}
+    restored = []
+    for rel, rec in files.items():
+        path, err = runtime_path(rel, root)
+        if err or not path:
+            print(f"[selfdev] WARNING: journal entry {rel} is not in the runtime tree; skipped", flush=True)
+            continue
+        full, cleaned, co_err = _package_file(rel)
+        try:
+            if rec.get("had_runtime"):
+                name = os.path.basename(rec.get("runtime_name") or "")
+                original = open(os.path.join(jdir, name), encoding="utf-8").read()
+                _atomic_write(path, original)
+            elif os.path.isfile(path):
+                os.remove(path)
+            if full and not co_err:
+                name = os.path.basename(rec.get("checkout_name") or "")
+                original_co = open(os.path.join(jdir, name), encoding="utf-8").read()
+                _atomic_write(full, original_co)
+        except OSError as e:
+            print(f"[selfdev] WARNING: could not roll back {rel}: {e}", flush=True)
+            continue
+        restored.append(rel)
+    if restored and len(restored) == len(files):
+        shutil.rmtree(jdir, ignore_errors=True)
+    return restored
+
+
+def install_journal_clear():
+    jdir = install_journal_dir()
+    if os.path.isdir(jdir):
+        shutil.rmtree(jdir, ignore_errors=True)
+
+
+def _mark_install_commit(artifact_hashes):
+    _atomic_write(os.path.join(install_journal_dir(), "COMMIT"), json.dumps({
+        "install_root": install_root(), "artifact_hashes": artifact_hashes or {}}))
+
+
+def save_runtime_backup(entries, artifact_hashes, runtime_hashes):
+    """Previous runtime bytes kept after a successful install, so --rollback has something to restore."""
+    bdir = runtime_backup_dir()
+    os.makedirs(bdir, exist_ok=True)
+    manifest = {"install_root": install_root(), "artifact_hashes": artifact_hashes or {},
+                "runtime_hashes": runtime_hashes or {}, "files": {}}
+    for rel, ent in entries.items():
+        fn = hashlib.sha256(("prior:" + rel).encode("utf-8")).hexdigest()
+        rec = {"had_runtime": bool(ent.get("had_runtime")),
+               "runtime_name": fn + ".runtime", "checkout_name": fn + ".checkout"}
+        if ent.get("had_runtime"):
+            _atomic_write(os.path.join(bdir, rec["runtime_name"]), ent.get("runtime") or "")
+        _atomic_write(os.path.join(bdir, rec["checkout_name"]), ent.get("checkout") or "")
+        manifest["files"][rel] = rec
+    _atomic_write(os.path.join(bdir, "manifest.json"), json.dumps(manifest))
+    return manifest
+
+
+def verify_runtime(files, root=None):
+    """Read the runtime files back. Problems is empty only when every hash matches and the file compiles."""
+    problems, hashes = [], {}
+    for rel, content in files.items():
+        path, err = runtime_path(rel, root)
+        if err or not path:
+            problems.append(err or f"{rel}: no runtime path")
+            continue
+        try:
+            got = open(path, encoding="utf-8").read()
+        except OSError as e:
+            problems.append(f"{rel}: cannot read installed file: {e}")
+            continue
+        digest = _sha256(got)
+        hashes[rel] = digest
+        if digest != _sha256(content):
+            problems.append(f"{rel}: installed bytes do not match the tested artifact")
+            continue
+        try:
+            compile(got, path, "exec")
+        except SyntaxError as e:
+            problems.append(f"{rel}: installed file does not compile: {e}")
+    return problems, hashes
+
+
+def _not_installed(reason, phase, saved_stage=None, rolled_back=False, extra=None):
+    if saved_stage is not None:
+        _restore_preserved_stage(saved_stage)
+    payload = {"ok": False, "accepted": False, "phase": phase, "reason": reason, "backend": "local",
+               "installed": False, "rolled_back": bool(rolled_back), "cloud_calls": _CALLS.get("cloud", 0)}
+    if extra:
+        payload.update(extra)
+    write_evidence(payload)
+    print(f"[selfdev] NOT INSTALLED: {reason}", flush=True)
+    return 2
+
+
+def install_verified(meta, saved_stage=None):
+    """Install the tested artifact into the runtime tree and the checkout.
+    Returns 0 only when the runtime read-back matches that artifact. Any problem rolls the runtime
+    bytes back and returns non-zero. saved_stage is the unrelated stage this run must not destroy."""
+    if _CALLS.get("cloud", 0):
+        return _not_installed("the online model was called", "generate", saved_stage)
+    reason = stage_acceptable(meta)
+    if reason:
+        return _not_installed(reason, "stage", saved_stage, extra={
+            "tests": meta.get("tests") if isinstance(meta, dict) else "",
+            "gate": meta.get("gate") if isinstance(meta, dict) else ""})
+    root = install_root()
+    if not root:
+        return _not_installed("no runtime install root", "install", saved_stage)
+    if _install_root_is_checkout(root):
+        return _not_installed("the install root is the dev checkout, not the runtime tree", "install", saved_stage)
+    files = meta["files"]
+    entries = {}
+    for rel, content in files.items():
+        path, err = runtime_path(rel)
+        if err or not path:
+            return _not_installed(err or f"{rel}: no runtime path", "install", saved_stage)
+        had = os.path.isfile(path)
+        try:
+            runtime_text = open(path, encoding="utf-8").read() if had else None
+        except OSError as e:
+            return _not_installed(f"cannot read runtime {rel}: {e}", "install", saved_stage)
+        full, cleaned, err = edit_target(rel)
+        if err or not full:
+            return _not_installed(err or f"{rel}: no checkout file", "install", saved_stage)
+        try:
+            checkout_text = open(full, encoding="utf-8").read()
+        except OSError as e:
+            return _not_installed(f"cannot read {cleaned}: {e}", "install", saved_stage)
+        entries[rel] = {"runtime": runtime_text, "checkout": checkout_text, "had_runtime": had}
+    arts = meta.get("artifact_hashes") or {}
+    try:
+        install_journal_save(entries, arts)
+        write_evidence({"ok": False, "accepted": False, "phase": "install", "reason": "install in progress",
+                        "backend": "local", "installed": False, "rolled_back": False,
+                        "cloud_calls": _CALLS.get("cloud", 0), "tests": meta.get("tests"),
+                        "artifact_hashes": arts, "gate": "light"})
+        for rel, content in files.items():
+            path, _err = runtime_path(rel)
+            _atomic_write(path, content)
+        problems, hashes = verify_runtime(files)
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        for rel, content in files.items():
+            full, cleaned, err = edit_target(rel)
+            if err or not full:
+                raise RuntimeError(err or f"{rel}: no checkout file")
+            _atomic_write(full, content)
+            if _sha256(open(full, encoding="utf-8").read()) != _sha256(content):
+                raise RuntimeError(f"{cleaned}: checkout read-back does not match the tested artifact")
+        save_runtime_backup(entries, arts, hashes)
+        _mark_install_commit(arts)
+    except Exception as e:
+        restored = install_journal_recover()
+        return _not_installed(str(e), "verify", saved_stage, rolled_back=bool(restored), extra={
+            "tests": meta.get("tests"), "artifact_hashes": arts, "restored": restored, "gate": "light"})
+    evidence = {"ok": True, "accepted": True, "phase": "verified",
+                "reason": "runtime bytes match the tested artifact", "backend": "local",
+                "cloud_calls": _CALLS.get("cloud", 0), "rolled_back": False, "installed": True,
+                "gate": "light", "tests": meta.get("tests"), "artifact_hashes": arts,
+                "runtime_hashes": hashes, "install_root": root, "files": sorted(files)}
+    if evidence["cloud_calls"]:
+        rollback_installed()
+        return _not_installed("the online model was called during local install", "verify", saved_stage,
+                              rolled_back=True)
+    try:
+        write_evidence(evidence)
+    except OSError as e:
+        print(f"[selfdev] WARNING: installed and verified, but the evidence file could not be written: {e}",
+              flush=True)
+    _archive_previous_stage(saved_stage)
+    install_journal_clear()
+    print(f"[selfdev] INSTALLED and runtime-verified (local, light, {meta.get('tests')}).", flush=True)
+    for rel, digest in hashes.items():
+        print(f"[selfdev] {rel} sha256 {digest}", flush=True)
+    return 0
+
+
+def rollback_installed():
+    """Restore the runtime bytes saved by the last successful local install.
+    Refuses when the runtime is no longer that artifact, so a later edit is not overwritten."""
+    bdir = runtime_backup_dir()
+    man_path = os.path.join(bdir, "manifest.json")
+    if not os.path.isfile(man_path):
+        print("[selfdev] nothing to roll back")
+        write_evidence({"ok": False, "accepted": False, "phase": "rollback", "reason": "nothing to roll back",
+                        "backend": "local", "installed": False, "rolled_back": False, "cloud_calls": 0})
+        return 1
+    try:
+        manifest = json.load(open(man_path, encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        print("[selfdev] rollback backup is unreadable; nothing was changed")
+        return 1
+    root = manifest.get("install_root")
+    files = manifest.get("files") or {}
+    arts = manifest.get("runtime_hashes") or manifest.get("artifact_hashes") or {}
+    if not root or not os.path.isdir(root) or not files:
+        print("[selfdev] rollback backup is incomplete; nothing was changed")
+        return 1
+    for rel, rec in files.items():
+        path, err = runtime_path(rel, root)
+        if err or not path:
+            print(f"[selfdev] refusing rollback: {err or rel}")
+            return 1
+        expect = arts.get(rel)
+        try:
+            current = open(path, encoding="utf-8").read() if os.path.isfile(path) else None
+        except OSError as e:
+            print(f"[selfdev] refusing rollback: cannot read {rel}: {e}")
+            return 1
+        if expect and (current is None or _sha256(current) != expect):
+            print(f"[selfdev] refusing rollback: {rel} is not the installed artifact, so it was left as it is")
+            write_evidence({"ok": False, "accepted": False, "phase": "rollback",
+                            "reason": f"{rel} is not the installed artifact", "backend": "local",
+                            "installed": False, "rolled_back": False, "cloud_calls": 0})
+            return 1
+    for rel, rec in files.items():
+        path, _err = runtime_path(rel, root)
+        try:
+            if rec.get("had_runtime"):
+                text = open(os.path.join(bdir, os.path.basename(rec["runtime_name"])), encoding="utf-8").read()
+                _atomic_write(path, text)
+            elif os.path.isfile(path):
+                os.remove(path)
+            full, _cleaned, err = _package_file(rel)
+            if full and not err:
+                text = open(os.path.join(bdir, os.path.basename(rec["checkout_name"])), encoding="utf-8").read()
+                _atomic_write(full, text)
+        except OSError as e:
+            print(f"[selfdev] rollback failed while writing {rel}: {e}")
+            write_evidence({"ok": False, "accepted": False, "phase": "rollback", "reason": str(e),
+                            "backend": "local", "installed": False, "rolled_back": False, "cloud_calls": 0})
+            return 1
+    for rel, rec in files.items():
+        path, _err = runtime_path(rel, root)
+        if rec.get("had_runtime"):
+            text = open(os.path.join(bdir, os.path.basename(rec["runtime_name"])), encoding="utf-8").read()
+            try:
+                got = open(path, encoding="utf-8").read()
+            except OSError:
+                got = None
+            if got != text:
+                print(f"[selfdev] rollback read-back failed for {rel}")
+                return 1
+        elif path and os.path.exists(path):
+            print(f"[selfdev] rollback left {rel} in place")
+            return 1
+    print("[selfdev] rolled back the runtime install to the previous bytes")
+    write_evidence({"ok": True, "accepted": False, "phase": "rollback",
+                    "reason": "restored the previous runtime bytes", "backend": "local",
+                    "installed": False, "rolled_back": True, "cloud_calls": 0})
+    return 0
+
+
+def do_task(task, gate_request="auto", backend="auto", install=False):
     os.makedirs(STAGE, exist_ok=True)
     _ensure_hooks()
+    _CALLS["cloud"] = 0
+    _CALLS["local"] = 0
+    backend = (backend or "auto").lower()
+    saved_stage = _read_stage_files() if install else None
+
+    def stop(code, phase, reason):
+        if install:
+            _restore_preserved_stage(saved_stage)
+            write_evidence({"ok": False, "accepted": False, "phase": phase, "reason": reason,
+                            "backend": "local", "installed": False, "rolled_back": False,
+                            "cloud_calls": _CALLS.get("cloud", 0)})
+            if code == 0:
+                return 2
+        return code
+
+    if install:
+        backend = "local"
+        if (gate_request or "auto").lower() == "full":
+            print("[selfdev] REFUSING the full gate as part of local install. This lifecycle runs the bounded "
+                  "light gate only. Nothing was installed.", flush=True)
+            return stop(2, "gate", "full gate refused for local install")
+        root = install_root()
+        if not root:
+            print("[selfdev] NOT INSTALLED: no runtime install root. Nothing was changed.", flush=True)
+            return stop(2, "install", "no runtime install root")
+        if _install_root_is_checkout(root):
+            print("[selfdev] NOT INSTALLED: the install root is the dev checkout, not the runtime tree.",
+                  flush=True)
+            return stop(2, "install", "install root is the dev checkout")
+        gate_request = "light"
+        print("[selfdev] local install: on-device model only (cloud config is ignored); bounded light gate",
+              flush=True)
     gate, why = resolve_gate(gate_request)
     print(f"[selfdev] test gate: {gate} ({why})", flush=True)
     if gate == "full" and _is_live_install():
@@ -750,13 +1284,18 @@ def do_task(task, gate_request="auto"):
               "firewall and stops real services, and on a 16 GB machine it can wedge the box. Run the loop on a "
               "dev checkout and ship the result here afterwards. The light gate is allowed here: --gate light.",
               flush=True)
-        return 2
+        return stop(2, "gate", "full gate refused on a live install")
     if gate == "light":
         print(f"[selfdev] light-gate limits: {_limits_line()}", flush=True)
     note = ""
     for rnd in range(1, MAX_ROUNDS + 1):
         print(f"[selfdev] round {rnd}: asking the model for a change…", flush=True)
-        text = propose(task, note)
+        try:
+            text = propose(task, note, backend=backend)
+        except Exception as e:
+            note = "the model did not answer (%s)" % e
+            print(f"[selfdev] {note}", flush=True)
+            continue
         edits = parse_edits(text)
         if not edits:
             note = "no change block was produced in the required format"
@@ -768,7 +1307,7 @@ def do_task(task, gate_request="auto"):
                 # No test touches the module: do not guess, and do not fall through to the full suite.
                 if "Nothing was staged" in (info or ""):
                     print(f"[selfdev] NOT STAGING: {info}", flush=True)
-                    return 2
+                    return stop(2, "gate", info)
                 note = info or "no edit could be applied"
                 print(f"[selfdev] could not apply: {note}", flush=True)
                 continue
@@ -784,7 +1323,7 @@ def do_task(task, gate_request="auto"):
             base = baseline_fails(sel, limited=(gate == "light"))
         except RuntimeError as e:
             print(f"[selfdev] {e}", flush=True)
-            return 2
+            return stop(2, "test", str(e))
         applied, problems, backups, newtext = apply_live(edits)
         if applied == 0:
             restore(backups)
@@ -804,13 +1343,25 @@ def do_task(task, gate_request="auto"):
             restore(backups)                     # the real source is edited ONLY during the run, always put back
         if timed_out:
             print(f"[selfdev] {tail}. Stopped rather than trying again. Nothing was staged.", flush=True)
-            return 2
+            return stop(2, "test", tail)
         if ran and not new_fails:
+            meta = {"task": task, "when": time.strftime("%Y-%m-%d %H:%M:%S"), "tests": tail, "round": rnd,
+                    "gate": gate, "test_files": sel or [],
+                    "base_hashes": {rel: _sha256(backups[rel]) for rel in newtext},
+                    "artifact_hashes": {rel: _sha256(newtext[rel]) for rel in newtext},
+                    "ran": True, "new_fails": [], "timed_out": False, "backend": backend,
+                    "files": newtext}
             open(os.path.join(STAGE, "staged.diff"), "w", encoding="utf-8").write(d)
-            json.dump({"task": task, "when": time.strftime("%Y-%m-%d %H:%M:%S"), "tests": tail, "round": rnd,
-                       "gate": gate, "test_files": sel or [],
-                       "base_hashes": {rel: _sha256(backups[rel]) for rel in newtext},
-                       "files": newtext}, open(os.path.join(STAGE, "staged.json"), "w", encoding="utf-8"))
+            json.dump(meta, open(os.path.join(STAGE, "staged.json"), "w", encoding="utf-8"))
+            if install:
+                if _CALLS.get("cloud", 0):
+                    print("[selfdev] NOT INSTALLED: the online model was called. Nothing was installed.",
+                          flush=True)
+                    return stop(2, "generate", "the online model was called")
+                rc = install_verified(meta, saved_stage)
+                if rc != 0:
+                    _restore_preserved_stage(saved_stage)
+                return rc
             print(f"\n[selfdev] TESTS PASS ({gate}, {tail}). The change is staged, NOT shipped. "
                   f"The live source is back as it was.\n"
                   f"[selfdev] A person reviews it:  tools/selfdev.py --show   then  --apply  (or --discard).\n",
@@ -822,7 +1373,7 @@ def do_task(task, gate_request="auto"):
                 else f"the change broke tests that pass without it: {', '.join(sorted(new_fails))} ({tail})")
         print(f"[selfdev] {note}", flush=True)
     print("[selfdev] gave up after %d rounds without a change that passes the tests." % MAX_ROUNDS, flush=True)
-    return 1
+    return stop(1, "generate", note or "no change passed the tests")
 
 
 def show():
@@ -893,27 +1444,54 @@ def main(argv=None):
     if recovered:
         print("[selfdev] restored %d file(s) left edited by an interrupted run: %s"
               % (len(recovered), ", ".join(recovered)), flush=True)
+    interrupted = install_journal_recover()
+    if interrupted:
+        print("[selfdev] rolled back %d runtime file(s) left by an interrupted install: %s"
+              % (len(interrupted), ", ".join(interrupted)), flush=True)
+        write_evidence({"ok": False, "accepted": False, "phase": "rollback", "backend": "local",
+                        "installed": False, "rolled_back": True, "cloud_calls": 0,
+                        "reason": "interrupted install was rolled back on startup", "restored": interrupted})
     ap = argparse.ArgumentParser()
     ap.add_argument("task", nargs="?", default="")
     ap.add_argument("--show", action="store_true")
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--discard", action="store_true")
+    ap.add_argument("--rollback", action="store_true",
+                    help="restore the runtime bytes from the last successful --local-install")
+    ap.add_argument("--backend", choices=("auto", "local"), default="auto",
+                    help="auto (default): online model when one is configured, otherwise on-device. "
+                         "local: on-device endpoint only, never the online model.")
+    ap.add_argument("--install", action="store_true",
+                    help="owner-invoked local lifecycle: bounded light gate, then install the tested "
+                         "artifact into the runtime tree, verify the read-back, and roll back on failure. "
+                         "Does not ask for another confirmation. Implies --backend local.")
+    ap.add_argument("--local-install", action="store_true",
+                    help="same as --backend local --install")
     ap.add_argument("--gate", choices=("auto", "full", "light"), default="auto",
                     help="auto (default): full suite on a dev machine, light gate on a live install or when "
-                         "memory is low. full is refused on a live install. light is overridable anywhere.")
+                         "memory is low. full is refused on a live install. light is overridable anywhere. "
+                         "--install always uses the light gate and refuses --gate full.")
     a = ap.parse_args(argv)
     if a.show:
         return show()
+    if a.rollback:
+        return rollback_installed()
     if a.apply:
         return apply_staged()
     if a.discard:
         shutil.rmtree(STAGE, ignore_errors=True)
         print("Discarded the staged change.")
         return 0
+    if a.local_install:
+        a.backend = "local"
+        a.install = True
+    if (a.install or a.local_install) and not a.task:
+        print("The local install lifecycle needs the change to make. It does not install an existing stage.")
+        return 2
     if not a.task:
         ap.print_help()
         return 2
-    return do_task(a.task, a.gate)
+    return do_task(a.task, a.gate, backend=a.backend, install=a.install)
 
 
 if __name__ == "__main__":
