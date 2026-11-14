@@ -39,6 +39,51 @@ check(len(edits) == 2 and edits[0]["path"] == "src/x.py" and edits[0]["search"] 
       and edits[1]["replace"] == "bar", "parses each FILE/SEARCH/REPLACE block")
 check(selfdev.parse_edits("no blocks here") == [], "chatter with no blocks yields no edits")
 
+# --- small-model replies: fences, missing markers, renamed markers, diff, whole file ---
+_fenced = ("Sure, here is the edit:\n```python\n=== FILE: src/x.py\n<<<<<<< SEARCH\nold line\n=======\n"
+           "new line\n>>>>>>> REPLACE\n```\n")
+_fed = selfdev.parse_edits(_fenced)
+check(len(_fed) == 1 and _fed[0]["path"] == "src/x.py" and _fed[0]["search"] == "old line"
+      and _fed[0]["replace"] == "new line", "a fenced block still parses")
+_bare = ("src/x.py\n<<<<<<< SEARCH\nold line\n=======\nnew line\n>>>>>>> REPLACE\n")
+_bed = selfdev.parse_edits(_bare)
+check(len(_bed) == 1 and _bed[0]["path"] == "src/x.py" and _bed[0]["replace"] == "new line",
+      "a path line with no === FILE marker still parses")
+_renamed = ("=== FILE: src/x.py\n<<<<<<< ORIGINAL\nold line\n=======\nnew line\n>>>>>>> UPDATED\n")
+_red = selfdev.parse_edits(_renamed)
+check(len(_red) == 1 and _red[0]["search"] == "old line" and _red[0]["replace"] == "new line",
+      "ORIGINAL/UPDATED markers are accepted")
+_words = ("FILE: src/x.py\nSEARCH:\nold line\nREPLACE:\nnew line\n")
+_wed = selfdev.parse_edits(_words)
+check(len(_wed) == 1 and _wed[0]["path"] == "src/x.py" and _wed[0]["search"] == "old line"
+      and _wed[0]["replace"] == "new line", "SEARCH:/REPLACE: lines are accepted")
+_diff = ("--- a/src/x.py\n+++ b/src/x.py\n@@ -1,3 +1,3 @@\n def fetch():\n-    return 1\n+    return 2\n     return 1\n")
+_ded = selfdev.parse_edits(_diff)
+check(len(_ded) == 1 and _ded[0]["path"] == "src/x.py"
+      and _ded[0]["search"] == "def fetch():\n    return 1\n    return 1"
+      and _ded[0]["replace"] == "def fetch():\n    return 2\n    return 1",
+      "a unified diff becomes one SEARCH/REPLACE, keeping the context lines")
+_whole = ("=== FILE: src/x.py\n# kept\ndef fetch():\n    return 2\n")
+_hed = selfdev.parse_edits(_whole)
+check(len(_hed) == 1 and _hed[0].get("whole") and _hed[0]["path"] == "src/x.py"
+      and "return 2" in _hed[0]["replace"], "a whole-file reply under a FILE line is an edit")
+_web = selfdev.parse_edits("=== FILE: web.py\n<<<<<<< SEARCH\nold\n=======\nnew\n>>>>>>> REPLACE\n")
+check(len(_web) == 1 and _web[0]["path"].endswith("/llmos/web.py"),
+      "a bare web.py path is the package file")
+_none, _err = selfdev.explain_edits("I changed the comment already.")
+check(_none == [] and "FILE" in _err and "SEARCH" in _err,
+      "prose with no block returns the shape the next round is shown")
+_miss, _merr = selfdev.explain_edits("=== FILE: src/x.py\n<<<<<<< SEARCH\nold line\nnew line\n>>>>>>> REPLACE\n")
+check(_miss == [] and "=======" in _merr, "a block missing ======= names that missing line")
+check("explain_edits(" in open(os.path.join(HERE, "selfdev.py"), encoding="utf-8").read().split("def do_task", 1)[1],
+      "a format failure's exact parse error is what the next round is told")
+check(selfdev.DEPLOY_FILES == ("tools/selfdev.py", "tools/test-selfdev.py", "tools/run-host-tests.sh"),
+      "the laptop copy set is selfdev, its test, and the runner")
+check(all(os.path.isfile(os.path.join(ROOT, r)) for r in selfdev.DEPLOY_FILES),
+      "every file in the laptop copy set is in this tree")
+check("llm.py" not in selfdev.DEPLOY_FILES and "config.py" not in selfdev.DEPLOY_FILES,
+      "llm.py and config.py are not in the copy set")
+
 # --- paths a patch must not be able to touch (the gate, or anywhere outside the OS package) ---
 applied, probs, backups, _new = selfdev.apply_live(
     [{"path": "src/rootfs/usr/lib/llmos/llmos/../../../../etc/passwd", "search": "root", "replace": "nope"}])
@@ -76,6 +121,13 @@ try:
     _, p2, _, _ = selfdev.apply_live([{"path": rel, "search": "beta", "replace": "B"}])
     selfdev.restore({rel: original})
     check(p2 and "unique" in p2[0], "rejects an edit whose SEARCH text is not unique")
+    open(full, "w", encoding="utf-8").write(original)
+    applied, probs, backups, _new = selfdev.apply_live(
+        [{"path": rel, "whole": True, "replace": "# kept\ndef fetch():\n    return 2\n", "search": ""}])
+    check(applied == 1 and "return 2" in open(full, encoding="utf-8").read(),
+          "a whole-file reply replaces the package file")
+    selfdev.restore(backups)
+    check(open(full, encoding="utf-8").read() == original, "restore() puts a whole-file edit back")
     _, p3, _, _ = selfdev.apply_live(
         [{"path": "src/rootfs/usr/lib/llmos/llmos/_selfdev_missing.py", "search": "x", "replace": "y"}])
     check(p3 and "no such file" in p3[0], "rejects an edit to a missing file")
@@ -137,7 +189,8 @@ check("journal_save" in ast.get_source_segment(src, funcs["apply_live"])
       and "journal_recover()" in ast.get_source_segment(src, funcs["main"]),
       "originals are journaled before the write, and the next start restores them")
 sh = open(os.path.join(HERE, "run-host-tests.sh"), encoding="utf-8").read()
-check("LLMOS_TEST_TIMEOUT" in sh, "the runner honors a per-test timeout from the environment")
+_runner_caps = "LLMOS_TEST_TIMEOUT" in sh
+check(_runner_caps, "tools/run-host-tests.sh from this tree honors LLMOS_TEST_TIMEOUT; copy it with selfdev.py")
 
 
 def _pkg(mod):
@@ -224,20 +277,28 @@ finally:
 check(tiny_rc not in (0, None) and tiny_timed is False, "a test that allocates past the cap dies instead of wedging the machine")
 
 # --- per-test timeout in the runner ---
-sleep_py = "/tmp/llmos-selfdev-sleep-probe.py"
-open(sleep_py, "w", encoding="utf-8").write("import time\ntime.sleep(30)\n")
-try:
-    env = dict(os.environ)
-    env["LLMOS_TEST_TIMEOUT"] = "1"
-    t0 = time.time()
-    p = subprocess.run(["bash", os.path.join(HERE, "run-host-tests.sh"), sleep_py],
-                       cwd=ROOT, env=env, capture_output=True, text=True, timeout=20)
-    dt = time.time() - t0
-    check(p.returncode != 0 and "FAIL" in p.stdout and "1 run" in p.stdout and dt < 15,
-          "LLMOS_TEST_TIMEOUT stops a stuck test (%.1fs)" % dt)
-finally:
-    if os.path.isfile(sleep_py):
-        os.remove(sleep_py)
+# The 2026-10-23 runner has no LLMOS_TEST_TIMEOUT, so this probe must not be started against it:
+# the sleep runs until subprocess.run's own 20s timeout and that exception used to abort the suite.
+if _runner_caps:
+    sleep_py = "/tmp/llmos-selfdev-sleep-probe.py"
+    open(sleep_py, "w", encoding="utf-8").write("import time\ntime.sleep(30)\n")
+    try:
+        env = dict(os.environ)
+        env["LLMOS_TEST_TIMEOUT"] = "1"
+        t0 = time.time()
+        try:
+            p = subprocess.run(["bash", os.path.join(HERE, "run-host-tests.sh"), sleep_py],
+                               cwd=ROOT, env=env, capture_output=True, text=True, timeout=20)
+        except subprocess.TimeoutExpired:
+            p = None
+        dt = time.time() - t0
+        check(p is not None and p.returncode != 0 and "FAIL" in p.stdout and "1 run" in p.stdout and dt < 15,
+              "LLMOS_TEST_TIMEOUT stops a stuck test (%.1fs)" % dt)
+    finally:
+        if os.path.isfile(sleep_py):
+            os.remove(sleep_py)
+else:
+    check(False, "skipped the live timeout probe; copy tools/run-host-tests.sh with selfdev.py")
 
 # --- journal survives kill -9; the next start puts the file back ---
 # --- Ctrl-C restores before exiting ---
