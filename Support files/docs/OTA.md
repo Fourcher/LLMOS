@@ -39,3 +39,7 @@ Options:
 
 ## The on-device loop
 `tools/selfloop.py` in on-device mode installs through this same check, from disk instead of from the paired computer. It signs a manifest with `ssh-keygen -Y sign`, verifies it with `ota.verify_manifest` against a pinned public key, refuses paths outside LLM OS's program files, backs up what it replaces, and restores that backup when the health check fails. It does not restart network services, and it does not restart the desk or the model server; the new files are read the next time those start. The dev-machine loop still publishes with `tools/ota.py publish` and the `&&` test gate. See `docs/PROJECT-CONTEXT.md`.
+
+## This laptop as its own source
+
+Say **trust this laptop for updates**. The laptop makes an Ed25519 key, pins the public half, and tells you the key code. A fix you ask for while using the machine is staged, not installed, until you say **apply that fix**. **undo that fix** drops it, or puts the previous files back if it was already installed. **get updates from my computer** still pairs a different computer; trusting the laptop does not replace that. The steps, the GitHub token, and what the laptop will not do are in `docs/BUGFIX.md`.

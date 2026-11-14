@@ -2154,9 +2154,34 @@ def hardware(desk, line, low):
     return _say(desk, line, ", ".join(bits) + ".")
 
 
+_BUG = re.compile(
+    r"found a bug|fix (?:this|that) bug|(?:broken|not working|doesn'?t work),?\s*(?:please\s+)?fix|"
+    r"apply (?:that|the|this) fix|install (?:that|the|this) fix|"
+    r"(?:undo|revert|drop|discard) (?:that|the|this|the last) fix|"
+    r"file (?:that|it|this) as (?:an? |a github )?issue|"
+    r"open (?:an? |a )?(?:github )?issue for (?:that|this|the) bug|"
+    r"trust this (?:laptop|computer) for updates|sign my own updates|"
+    r"(?:make|use) this (?:laptop|computer) (?:the|as the) update source|"
+    r"stop signing (?:my own )?updates|what happened with that fix|status of that fix|"
+    r"try the github report again|retry the (?:pull request|github report)",
+    re.I)
+
+
+def bugfix_words(desk, line, low):
+    """'I found a bug, fix it', then 'apply that fix' or 'undo that fix'."""
+    from . import bugfix
+    if bugfix.classify(line) is None and bugfix.classify(low) is None:
+        return False
+    text = bugfix.handle_line(line if bugfix.classify(line) else low)
+    if not text:
+        return False
+    desk.instant_reply(line, text)
+    return True
+
+
 def handle(desk, line):
     low = line.lower().strip().rstrip("?.!")
-    for fn in (hardware, weekday_date, jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, model_answer, ota_updates, web_block, howto):
+    for fn in (bugfix_words, hardware, weekday_date, jokes, small_answers, free_space, quick, files_and_status, weather, net_and_dates, service_status, live_lookup, news, calendar, open_mail, focus, days_until, sites, work_timer, ports, web_server, health, hostname, access, sounds, autostart, vpn, discs, privacy, system_more, share_app, version_answer, model_answer, ota_updates, web_block, howto):
         try:
             if fn(desk, line, low):
                 return True
@@ -2165,4 +2190,4 @@ def handle(desk, line):
             return True
     return False
 
-MATCH = re.compile(f"(?:{MATCH.pattern})|(?:{_HW.pattern})|(?:{_WEEKDAY_Q.pattern})", MATCH.flags)   # the hardware facts answer at once too
+MATCH = re.compile(f"(?:{MATCH.pattern})|(?:{_HW.pattern})|(?:{_WEEKDAY_Q.pattern})|(?:{_BUG.pattern})", MATCH.flags)   # the hardware facts answer at once too

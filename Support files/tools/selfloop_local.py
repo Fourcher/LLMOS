@@ -647,6 +647,11 @@ def install_local(live_pkg, staging_pkg, state_dir, restart=None, signing_dir=No
             ota.rollback(rec)
             why = why_c if not compiled else why_h
             return False, "the health check failed, so the previous version was put back (" + why + ")"
+        _write_receipt(state_dir, {
+            "ok": True, "backup": rec.get("backup"), "new": rec.get("new") or [], "root": root,
+            "names": [arc for arc, _full, _data in files], "health": why_h or "ok",
+            "version": manifest["version"], "manifest": mid, "when": int(time.time()),
+        })
         return True, f"{len(files)} files installed"
     except Exception as e:
         if rec:
@@ -657,6 +662,16 @@ def install_local(live_pkg, staging_pkg, state_dir, restart=None, signing_dir=No
         return False, f"install failed, and the previous files were kept: {e}"[:300]
     finally:
         ota.ROOT, ota.STATE_DIR = old_root, old_state
+
+
+def _write_receipt(state_dir, receipt):
+    """The install record undo and the GitHub report read. Written only after the health check passes."""
+    path = os.path.join(state_dir, "last-install.json")
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump(receipt, handle, ensure_ascii=False, indent=1)
+        handle.write("\n")
+    os.replace(tmp, path)
 
 
 def _ota_root(live_pkg):

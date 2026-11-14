@@ -142,6 +142,23 @@ To turn it on after this code is on the laptop (ship this change with the normal
 - New files are on disk after a kept install. The desk and the model server are left running; they read the new
   code the next time they start. Do not expect this loop to restart Wi-Fi, ssh, or the firewall.
 
+**Saying "I found a bug, fix it" on the laptop.** The desk treats that sentence (and the close variants in
+`llmos/bugfix.py`) as one action. It records the front window, any screen text or screenshot the OS already has,
+and a short slice of logs, then starts `tools/selfloop.py --from-voice` in device mode on the local model.
+`require_approval` stays on for that run. The owner hears what changed and says **"apply that fix"** or
+**"undo that fix"**. Apply runs the light gate again, then the signed install. It does not run the full suite.
+
+The laptop signs that install with a key the owner creates by saying **"trust this laptop for updates"**. The key
+code is spoken. Pairing another computer with **"get updates from my computer"** still works beside it. A spoken
+fix is not installed until the laptop is trusted and the owner applies it.
+
+After the health check passes, the laptop opens a pull request on `Fourcher/LLMOS` with the bug, the diff, the
+light-test result, and the health-check result. It never merges. The token is a fine-grained PAT stored on the
+laptop (`llmos.bugfix.save_github_token`, or `/etc/llmos/github.token` mode 0600). If the network or the token is
+missing, the report is queued and **"try the github report again"** sends it later. A fix that does not pass can
+be filed as an issue: **"file that as an issue"**. The owner steps are in `docs/BUGFIX.md`.
+Regression-guarded by `tools/test-bugfix.py`.
+
 ## How to work here
 
 - Everything lives under the project folder; never touch personal Mac folders. Host tests only via

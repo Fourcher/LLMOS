@@ -695,6 +695,19 @@ def _improve(text):
     return ("improve_os", {"action": action})
 
 
+def _bugfix(text):
+    """'I found a bug, fix it', and the later 'apply that fix' / 'undo that fix'."""
+    from . import bugfix
+    hit = bugfix.classify(text)
+    if not hit:
+        return None
+    action, desc = hit
+    args = {"action": action}
+    if desc and action == "report":
+        args["description"] = desc
+    return ("fix_bug", args)
+
+
 def _models_discover(text):
     if _NEW_MODELS.match(text):
         return ("check_new_models", {})
@@ -2605,6 +2618,11 @@ def _remote(text):
 def _match(text):
     text = plain(text)
     t = text.strip()
+    # A bug report can be a sentence. It is one action, matched before the short-line cap.
+    if "\n" not in t and len(t) <= 2000:
+        bug = _bugfix(t)
+        if bug:
+            return bug
     # Before the length cap and the chain check: a typed command can be long, and 'then run'
     # must stay one action or the desk hands the pieces to the model.
     if "\n" not in t and len(t) <= 8000:
