@@ -233,6 +233,36 @@ def enqueue(item):
     return item
 
 
+def backlog_path():
+    return os.path.join(state_dir(), "backlog.json")
+
+
+def load_backlog(seed_path=""):
+    """The loop's task list. A missing state file falls back to the seed, and does not create one."""
+    try:
+        data = json.load(open(backlog_path(), encoding="utf-8"))
+        if isinstance(data, list):
+            return data
+    except (OSError, ValueError):
+        pass
+    if seed_path:
+        try:
+            data = json.load(open(seed_path, encoding="utf-8"))
+            if isinstance(data, list):
+                return data
+        except (OSError, ValueError):
+            pass
+    return []
+
+
+def save_backlog(rows):
+    os.makedirs(state_dir(), exist_ok=True)
+    tmp = backlog_path() + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(list(rows or []), f, ensure_ascii=False, indent=1)
+    os.replace(tmp, backlog_path())
+
+
 def _install_on_right(right):
     """The command after && is either ota publish or the on-device installer. Both stay behind the test gate."""
     ota = "ota.py" in right and "publish" in right
@@ -327,6 +357,8 @@ def summary():
     approval = "Owner approval is required before an update is published." if cfg["require_approval"] else (
         "Owner approval is off: a change that passes the light gate can be published.")
     queued = len(load_queue())
+    if any(isinstance(row, dict) and row.get("source") == "voice" for row in load_queue()):
+        approval += " A fix is staged. Say “apply that fix” or “undo that fix”."
     backend = cfg.get("backend") or "configured"
     if cfg.get("mode") == "device":
         where = ("On-device mode: the loop edits a staging copy of the installed program, runs only a light "

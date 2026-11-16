@@ -351,7 +351,7 @@ PRIORITY = ["run_command", "read_file", "write_file", "web_search", "read_webpag
             "look_at_screen", "click", "fill_in", "type_text", "press_keys", "scroll", "focus_window", "analyze_program", "security_check", "scan_network", "web_security_scan", "capture_traffic",
             "system_power", "install_app", "mail_inbox", "mail_read", "mail_send", "mail_reply", "mail_archive",
             "mail_delete", "mail_triage", "mail_setup", "show_image", "system_panel", "set_wallpaper",
-            "manage_models", "model_store", "improve_os", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
+            "manage_models", "model_store", "improve_os", "fix_bug", "manage_voice", "wifi_scan", "wifi_connect", "set_passphrase", "online_model",
             "manage_connectors", "check_new_models", "add_model", "edit_conduct", "install_to_disk"]
 
 
@@ -2292,6 +2292,21 @@ def improve_os(a, ctx):
     if act == "status":
         return selfloop_ctl.summary()
     return "error: unknown action"
+
+
+@tool("fix_bug", "A bug the owner found on this computer. action 'report' captures the window, any screen text, and "
+      "recent logs, and starts an on-device fix with the local model. Nothing is installed until action 'apply'. "
+      "'undo' drops a staged fix or restores the previous files. 'trust' lets this laptop sign its own updates. "
+      "'issue' files a failed fix on GitHub. 'retry' sends a saved report. A passing fix is opened as a pull request "
+      "and is not merged.",
+      {"action": {"type": "string", "enum": ["report", "apply", "undo", "issue", "trust", "distrust", "retry", "status"]},
+       "description": {"type": "string", "description": "what the owner said is wrong"}},
+      ["action"],
+      risk=lambda a: SECURITY if a.get("action") in ("apply", "undo", "trust", "distrust") else CHANGE,
+      network=lambda a: a.get("action") in ("apply", "issue", "retry"))
+def fix_bug(a, ctx):
+    from . import bugfix
+    return bugfix.handle_action(a.get("action"), a.get("description") or "")
 
 
 @tool("manage_voice", "Speech-to-text models, used by the microphone and by system-wide dictation (the owner presses "

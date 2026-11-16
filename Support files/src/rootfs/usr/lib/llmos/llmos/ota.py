@@ -191,10 +191,19 @@ def firewall_rule():
     return f"    ip daddr {m.group(1)} tcp dport {int(m.group(2))} accept\n"
 
 
+def _self_clause():
+    try:
+        from . import bugfix
+        return bugfix.source_clause()
+    except Exception:
+        return ""
+
+
 def status_text():
     o = paired()
     if not o:
-        return "Updates from your own computer are off. Say “get updates from my computer” to turn them on."
+        return ("Updates from your own computer are off. Say “get updates from my computer” to turn them on."
+                + _self_clause())
     st = _state()
     last = st.get("last") or {}
     line = f"Getting updates from {o['name']} ({o['url'].split('//')[1]}, key {o['fp']})."
@@ -202,7 +211,7 @@ def status_text():
         when = time.strftime("%b %d %H:%M", time.localtime(last.get("ts", 0)))
         line += f" Last update: {last.get('version', '?')} on {when}, " + ("installed." if last.get("ok") else
                                                                           f"undone ({last.get('detail', 'failed')}).")
-    return line + " This computer is on " + current_version() + "."
+    return line + " This computer is on " + current_version() + "." + _self_clause()
 
 
 # ---- the client service (root)

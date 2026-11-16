@@ -161,6 +161,9 @@ _ASKED_ONLY = {"real_quote": re.compile(r"\bquot|\bsaid\b|\bsayings?\b|\bwords o
 _W = lambda rx: re.compile(rx, re.I)
 _GATED = {
     # models, voices, the online model, connectors, the assistant's own rules, mail accounts, programs
+    "fix_bug": _W(r"\bbugs?\b|\bbroken\b|\bdoesn'?t work\b|\bnot working\b|\bfix (?:it|this|that)\b|"
+                  r"\bapply (?:that|the|this) fix\b|\bundo (?:that|the|this) fix\b|\bgithub\b|\bpull request\b|"
+                  r"trust this (?:laptop|computer)|sign my own updates"),
     "manage_models": _W(r"\bmodels?\b|\bllm\b|\bai\b|\bbrain\b|smarter|faster answers"),
     "check_new_models": _W(r"\bmodels?\b|\bnewer?\b.*\b(?:ai|brain)\b"),
     "add_model": _W(r"\bmodels?\b|\bgguf\b|hugging ?face"),
@@ -1851,6 +1854,7 @@ _ONLY_IF_ASKED = {
                 r"always|never|every time|i'?d rather|favou?rite|allergic|birthday)\b",
     # the vault's passphrase only when it is what was asked about ("store my passwords" is the browser's job, not this)
     "set_passphrase": r"\b(passphrase|pass phrase|vault|lock (?:my |the )?(?:data|files|computer)|(?:set|change|new|reset|choose|pick|make) (?:a |my |the )?(?:login |computer |unlock )?password)\b",
+    "fix_bug": r"\b(bug|broken|doesn'?t work|not working|fix|apply|undo|revert|github|pull request|issue|trust this|sign my own)\b",
     # a setting or the look changes only when the request is about it ("open the internet" must not turn it off)
     "change_setting": r"\b(internet|online|offline|network|tor|autonom\w*|hands|ask|asks|asking|confirm\w*|permission|brain|claude|"
                       r"cloud|online model|speak\w*|voice|aloud|think\w*|name|call me|focus|guidance|lectures?|caution\w*|"

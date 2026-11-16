@@ -6,6 +6,8 @@
     tools/selfloop.py --stop              # kill switch
     tools/selfloop.py --resume
     tools/selfloop.py --ship-approved     # the owner says yes: tests > log && install
+    tools/selfloop.py --ship-one ID       # the same, for one queued on-device fix
+    tools/selfloop.py --from-voice ID     # one bug the owner reported, device mode, local model
     tools/selfloop.py --install-local ID  # on-device: install one queued change (used after &&)
 
 Dev-machine mode (mode "dev", the default) checks out a separate branch, asks a model to
@@ -421,7 +423,9 @@ def run_device(result, item, rows, cfg, now, implement, select, gate, install, p
         selector = select or (lambda paths: tests_for_package(paths, cap, dest))
         outcome = develop_loop(dest, item, cfg, implement, selector, gate or run_light_gate, _iterations(cfg, True))
         if outcome.get("stopped"):
-            result.update(action="refused", detail=outcome.get("detail") or killed_reason(), item=item.get("id"))
+            detail = outcome.get("detail") or killed_reason()
+            result.update(action="refused", detail=detail, item=item.get("id"),
+                          spoken=_voice_speech(item, None, detail))
             _drop(dest)
             selfloop_ctl.record(result)
             return result
@@ -430,13 +434,15 @@ def run_device(result, item, rows, cfg, now, implement, select, gate, install, p
                 detail = outcome.get("detail") or "no tests"
             else:
                 detail = "the light gate did not pass"
-            result.update(action="discarded", detail=detail, item=item.get("id"))
+            speech = _voice_speech(item, None, detail)
+            result.update(action="discarded", detail=detail, item=item.get("id"), spoken=speech)
             _drop(dest)
             _save_backlog(_mark(rows, item, "discarded"))
             selfloop_ctl.record(result)
             return result
         sel, summary = outcome["tests"], outcome["summary"]
-        result.update(item=item.get("id"), tests=sel, gate="light", summary=str(summary)[:400])
+        spoken = _voice_speech(item, outcome)
+        result.update(item=item.get("id"), tests=sel, gate="light", summary=str(summary)[:400], spoken=spoken)
         log_path = os.path.join(dest, "run", "selfloop", "ship-gate.txt")
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         shell = selfloop_ctl.device_ship_shell(dest, sel, log_path, item.get("id"),
@@ -444,10 +450,13 @@ def run_device(result, item, rows, cfg, now, implement, select, gate, install, p
         queued = {"id": item.get("id"), "title": item.get("title"), "when": result["when"],
                   "support": dest, "staging": dest, "package": package_src, "kind": "device",
                   "tests": sel, "ship": shell, "install": "local", "require_approval": cfg["require_approval"],
-                  "backend": "local"}
+                  "backend": "local", "source": item.get("source") or "",
+                  "description": item.get("description") or "", "context": item.get("context") or {},
+                  "summary": str(summary)[:400], "spoken": spoken}
         if cfg["require_approval"]:
             selfloop_ctl.enqueue(queued)
-            result.update(action="queued", detail="gate passed; waiting for approval. Not installed.", ship=shell)
+            result.update(action="queued", detail="gate passed; waiting for approval. Not installed.", ship=shell,
+                          spoken=spoken)
             _save_backlog(_mark(rows, item, "queued"))
             selfloop_ctl.record(result)
             return result
@@ -470,8 +479,36 @@ def run_device(result, item, rows, cfg, now, implement, select, gate, install, p
         return result
 
 
+def voice_config(cfg=None):
+    """The laptop path for a bug the owner just reported. Approval stays on. The cap is the one already configured."""
+    cfg = dict(cfg or selfloop_ctl.load_config())
+    cfg["mode"] = "device"
+    cfg["backend"] = "local"
+    cfg["require_approval"] = True
+    return cfg
+
+
+def _voice_speech(item, outcome, detail=""):
+    if (item or {}).get("source") != "voice":
+        return ""
+    try:
+        from llmos import bugfix
+    except Exception:
+        return ""
+    if outcome and outcome.get("passed"):
+        return bugfix.spoken_for(item, outcome)
+    if detail:
+        try:
+            bugfix.remember_failure(item, detail)
+        except Exception:
+            pass
+        return bugfix.failed_speech(item, detail)
+    return ""
+
+
 def run_once(live=None, repo=None, backlog=None, log_text="", implement=None, select=None, gate=None,
-             ship=None, now=None, cfg=None, dest_parent=None, package_src=None, tools_src=None, install=None):
+             ship=None, now=None, cfg=None, dest_parent=None, package_src=None, tools_src=None, install=None,
+             only_id=None):
     """One pass. Returns a result dict and never publishes when the gate did not pass."""
     live = live or ROOT
     cfg = cfg or selfloop_ctl.load_config()
@@ -499,7 +536,17 @@ def run_once(live=None, repo=None, backlog=None, log_text="", implement=None, se
             result["detail"] = why
             selfloop_ctl.record(result)
             return result
-    item, rows = selfloop_ctl.pick_item(backlog if backlog is not None else _load_backlog(), log_text)
+    if only_id:
+        rows = list(backlog) if backlog is not None else _load_backlog()
+        item = next((row for row in rows
+                     if isinstance(row, dict) and str(row.get("id")) == str(only_id)
+                     and row.get("status", "open") == "open" and row.get("title")), None)
+        if item is None:
+            result["detail"] = "that bug is not an open task. Nothing was changed."
+            selfloop_ctl.record(result)
+            return result
+    else:
+        item, rows = selfloop_ctl.pick_item(backlog if backlog is not None else _load_backlog(), log_text)
     if item is None:
         result["detail"] = "the backlog is empty and the logs have no failing test to work from"
         selfloop_ctl.record(result)
@@ -591,27 +638,11 @@ def _backlog_path():
 
 
 def _load_backlog():
-    path = _backlog_path()
-    try:
-        data = json.load(open(path, encoding="utf-8"))
-        if isinstance(data, list):
-            return data
-    except (OSError, ValueError):
-        pass
-    seed = os.path.join(ROOT, "selfloop-backlog.json")
-    try:
-        data = json.load(open(seed, encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    return data if isinstance(data, list) else []
+    return selfloop_ctl.load_backlog(os.path.join(ROOT, "selfloop-backlog.json"))
 
 
 def _save_backlog(rows):
-    os.makedirs(selfloop_ctl.state_dir(), exist_ok=True)
-    tmp = _backlog_path() + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, _backlog_path())
+    selfloop_ctl.save_backlog(rows)
 
 
 def _mark(rows, item, status):
@@ -641,6 +672,11 @@ def install_queued(item_id):
     except RuntimeError as e:
         print(str(e), flush=True)
         return 2
+    if item.get("source") == "voice":
+        from llmos import bugfix
+        if not bugfix.self_trusted():
+            print("This laptop isn't trusted to sign updates yet. Nothing was installed.", flush=True)
+            return 2
     package = item.get("package") or ""
     support = item.get("support") or ""
     pkg = os.path.join(support, "src", "rootfs", "usr", "lib", "llmos")
@@ -658,11 +694,20 @@ def install_queued(item_id):
         return 1
     selfloop_ctl.save_queue([row for row in rows if str(row.get("id")) != str(item_id)])
     print(detail, flush=True)
+    if item.get("source") == "voice" and os.environ.get("LLMOS_BUGFIX_REPORT") != "0":
+        try:
+            from llmos import bugfix
+            extra = bugfix.finish_installed(item)
+            if extra:
+                print(extra, flush=True)
+        except Exception:
+            print("The fix is installed. The GitHub report was saved to try later.", flush=True)
     return 0
 
 
-def ship_approved():
-    """The owner approving the oldest queued change. The test gate runs again before anything is installed."""
+def ship_approved(item_id=None):
+    """The owner approving a queued change. The test gate runs again before anything is installed.
+    With no id, that is the oldest one. A spoken fix passes its own id so a different item is not installed."""
     if killed_reason():
         print(killed_reason(), flush=True)
         return 2
@@ -670,7 +715,13 @@ def ship_approved():
     if not rows:
         print("Nothing is waiting for approval.", flush=True)
         return 1
-    item = rows[0]
+    if item_id:
+        item = next((row for row in rows if str(row.get("id")) == str(item_id)), None)
+        if item is None:
+            print("That change is not waiting. Nothing was installed.", flush=True)
+            return 1
+    else:
+        item = rows[0]
     shell = item.get("ship") or ""
     support = item.get("support") or ""
     try:
@@ -700,12 +751,24 @@ def ship_approved():
     if code == 0:
         # --install-local, if the shell ran it, has already taken its own row off the queue.
         fresh = selfloop_ctl.load_queue()
-        if fresh and fresh[0].get("id") == item.get("id"):
-            selfloop_ctl.save_queue(fresh[1:])
+        selfloop_ctl.save_queue([row for row in fresh if str(row.get("id")) != str(item.get("id"))])
         print(f"Published {item.get('id')}. The test gate passed and the update was signed.", flush=True)
         return 0
     print("The test gate failed, so the update was not published.", flush=True)
     return code or 1
+
+
+def _voice_after(result):
+    speech = (result or {}).get("spoken") or ""
+    if not speech:
+        return
+    try:
+        from llmos import bugfix
+        bugfix.write_pending(speech)
+        if result.get("action") == "queued":
+            bugfix.notify_owner(speech)
+    except Exception:
+        pass
 
 
 def status_text():
@@ -724,6 +787,8 @@ def main(argv=None):
     ap.add_argument("--stop", action="store_true", help="kill switch: refuse every later run")
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--ship-approved", action="store_true", help="install or publish the queued change, tests && installer")
+    ap.add_argument("--ship-one", metavar="ID", help="install one queued on-device fix after its light gate")
+    ap.add_argument("--from-voice", metavar="ID", help="run one bug the owner reported, on this laptop, and queue it")
     ap.add_argument("--install-local", metavar="ID", help="install one queued on-device change after its test gate")
     args = ap.parse_args(argv)
     if args.status:
@@ -735,8 +800,23 @@ def main(argv=None):
     if args.resume:
         print(selfloop_ctl.set_killed(False))
         return 0
+    if args.ship_one:
+        return ship_approved(args.ship_one)
     if args.ship_approved:
         return ship_approved()
+    if args.from_voice:
+        cfg = voice_config()
+        print(f"[selfloop] voice bug {args.from_voice}. device mode, local model, approval required.", flush=True)
+        result = run_once(cfg=cfg, only_id=args.from_voice)
+        _voice_after(result)
+        print(f"[selfloop] {result['action']}: {result['detail']}", flush=True)
+        if result.get("spoken"):
+            print(result["spoken"], flush=True)
+        if result["action"] in ("queued", "installed"):
+            return 0
+        if result["action"] == "refused":
+            return 2
+        return 1
     if args.install_local:
         return install_queued(args.install_local)
     if not args.once:
