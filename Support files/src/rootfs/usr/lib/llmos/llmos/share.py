@@ -32,6 +32,14 @@ def current():
         with open(config.data(_STATE), encoding="utf-8") as f:
             st = json.load(f)
         os.kill(int(st["pid"]), 0)
+        try:
+            with open(f"/proc/{int(st['pid'])}/cmdline", "rb") as f:
+                if b"llmos.share" not in f.read():
+                    return None          # that pid is some other program now (a reboot, a crash): no share is on
+        except FileNotFoundError:
+            return None
+        except OSError:
+            pass
         return st
     except (OSError, ValueError, KeyError, TypeError):
         return None
@@ -94,20 +102,28 @@ def _serve(folder, code, port):
             return self.path.startswith(f"/{code}/")
 
         def translate_path(self, path):       # the code is part of every address, not a folder
-            return super().translate_path(path[len(code) + 1:] if path.startswith(f"/{code}/") else "/nonexistent-")
+            p = super().translate_path(path[len(code) + 1:] if path.startswith(f"/{code}/") else "/nonexistent-")
+            # a symlink inside the folder must not lead outside it: resolve, then require the folder itself
+            real, top = os.path.realpath(p), os.path.realpath(folder).rstrip("/") or "/"
+            if real != top and not real.startswith(top + "/"):
+                return os.path.join(top, ".nonexistent-outside")
+            return p
+
+        def _hidden(self):
+            return any(part.startswith(".") for part in urllib.parse.unquote(self.path.split("?")[0]).split("/") if part)
 
         def do_GET(self):
             if not self._ok():
                 self.send_error(404)
                 return
-            # no hidden files, nothing outside the folder (SimpleHTTPRequestHandler already keeps paths inside it)
-            if any(part.startswith(".") for part in urllib.parse.unquote(self.path.split("?")[0]).split("/") if part):
+            # no hidden files, nothing outside the folder (translate_path resolves symlinks)
+            if self._hidden():
                 self.send_error(404)
                 return
             super().do_GET()
 
         def do_HEAD(self):
-            if not self._ok():
+            if not self._ok() or self._hidden():
                 self.send_error(404)
                 return
             super().do_HEAD()

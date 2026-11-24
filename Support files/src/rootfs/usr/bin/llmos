@@ -61,7 +61,7 @@ if __name__ == "__main__":
     elif arg == "serve-argv":
         from llmos import models
         argv = models.serve_argv()
-        print(" ".join(argv) if argv else "", end="")
+        print("\n".join(argv) if argv else "", end="")     # one argument per line: a path with spaces stays whole
     elif arg in ("brightness", "volume"):     # hardware keys (labwc keybinds): +10 / -10 / 60 / toggle
         from llmos import devices
         v = sys.argv[2] if len(sys.argv) > 2 else "+10"

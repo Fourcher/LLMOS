@@ -276,6 +276,24 @@ def check_manifest(m):
     return m
 
 
+def manifest_fresh(m, st, host=None):
+    """True, or why a validly signed manifest is still not for this machine now: one made before the update already
+    installed here (an old manifest replayed to roll the system back), or one addressed to other machines only
+    (optional "hosts" list)."""
+    made, have = m.get("created"), st.get("created")
+    if made is not None and (isinstance(made, bool) or not isinstance(made, (int, float)) or made != made):
+        return "bad creation time"
+    if isinstance(made, (int, float)) and isinstance(have, (int, float)) and made < have:
+        return "older than the update already installed (replayed)"
+    hosts = m.get("hosts")
+    if hosts is not None:
+        if not isinstance(hosts, list) or not all(isinstance(h, str) for h in hosts):
+            raise ValueError("bad hosts list")
+        if (host or socket.gethostname()) not in hosts and "*" not in hosts:
+            return "made for other machines"
+    return True
+
+
 def preserved(name):
     """True when this path is Tailscale state, its config, or its runlevel link (an update leaves it alone)."""
     if not isinstance(name, str):
@@ -341,6 +359,19 @@ def install_missing_packages(log=None):
     return failed
 
 
+def _dir_inside(name):
+    """A folder that is LLM OS's own (usr/lib/llmos/x), whose mode and owner an update may set."""
+    d = name.rstrip("/") + "/"
+    return any(a.endswith("/") and d.startswith(a) for a in ALLOWED)
+
+
+def _dir_parent(name):
+    """A folder above one of LLM OS's own (usr, usr/lib, etc): it may be named in an archive but is only created when
+    missing, never re-permissioned (an update must not chmod /usr or /etc)."""
+    d = name.rstrip("/") + "/"
+    return any(a.startswith(d) and a != d for a in ALLOWED)
+
+
 def _member_ok(t):
     name = t.name[2:] if t.name.startswith("./") else t.name
     if not name or name in (".",):
@@ -348,7 +379,9 @@ def _member_ok(t):
     if preserved(name) or name.startswith("/") or ".." in name.split("/") or name in NEVER:
         raise ValueError(f"refused path {t.name}")
     if t.isdir():
-        return name
+        if _dir_inside(name) or _dir_parent(name):
+            return name
+        raise ValueError(f"refused path {t.name}")
     if not (t.isfile() or t.issym()) or not any(name.startswith(a) for a in ALLOWED):
         raise ValueError(f"refused path {t.name}")
     if t.issym() and (t.linkname.startswith("/") or ".." in t.linkname.split("/")):
@@ -384,6 +417,9 @@ def apply_files(payload, backup):
             t.uid = t.gid = 0
             t.uname = t.gname = "root"
             dest = os.path.join(ROOT, name)
+            if t.isdir() and not _dir_inside(name):
+                os.makedirs(dest, exist_ok=True)      # a parent such as usr/ or etc/: never its mode or owner
+                continue
             if not t.isdir() and os.path.lexists(dest) and not os.path.isdir(dest):
                 os.unlink(dest)                 # a new copy, never rewritten in place (a running script keeps its old one)
             tf.extract(t, ROOT, set_attrs=True, filter="fully_trusted") if _has_filter() else tf.extract(t, ROOT)
@@ -901,6 +937,13 @@ def client():
             m = check_manifest(json.loads(raw))
             if m["id"] != uid:
                 raise ValueError("manifest id mismatch")
+            fresh = manifest_fresh(m, st)
+            if fresh is not True:
+                print(f"ota: refused update {uid}: {fresh}", flush=True)
+                _report(base, {"host": socket.gethostname(), "id": uid, "ok": False, "detail": fresh})
+                st["failed"] = (st.get("failed", []) + [uid])[-20:]
+                _save_state(st)
+                continue
         except Exception as e:
             print(f"ota: bad update: {e}", flush=True)
             time.sleep(60)
@@ -920,6 +963,8 @@ def client():
                       "previous_id": previous_id}
         if ok:
             st["id"] = m["id"]
+            if isinstance(m.get("created"), (int, float)):
+                st["created"] = m["created"]
         else:
             st["failed"] = (st.get("failed", []) + [m["id"]])[-20:]
         _save_state(st)
