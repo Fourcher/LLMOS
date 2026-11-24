@@ -422,8 +422,11 @@ def web_server(desk, line, low):
     port = 8000
     while _listeners(port) and port < 8100:
         port += 1
-    _SERVER["p"] = subprocess.Popen(["python3", "-m", "http.server", str(port), "--bind", "127.0.0.1", "--directory", folder],
-                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ, PYTHONPATH=here + (":" + os.environ["PYTHONPATH"] if os.environ.get("PYTHONPATH") else ""))
+    _SERVER["p"] = subprocess.Popen(["python3", "-m", "llmos.webserve", str(port), folder],
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True,
+                                    env=env)
     time.sleep(0.6)
     url = f"http://127.0.0.1:{port}/" + urllib.parse.quote(page)
     _open(desk, url)

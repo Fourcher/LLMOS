@@ -2666,7 +2666,9 @@ class Desk:
     def describe_args(self, tool, args):
         a = args if isinstance(args, dict) else {}
         if tool.name == "run_command":
-            return str(a.get("command", ""))
+            from . import tools as _tools
+            cmds = _tools._listed_commands(a)
+            return "\n".join(cmds) if cmds else str(a.get("command", ""))
         if tool.name == "install_app":
             return str(a.get("packages", ""))
         if tool.name == "change_setting":

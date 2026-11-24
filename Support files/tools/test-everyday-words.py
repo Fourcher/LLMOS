@@ -98,7 +98,7 @@ try:
           and "Say “stop the local website” to end it." in d.said,
           f"start reply: {d.said!r}")
     check(not TECH.search(d.said), "start reply has no technical words")
-    check(POPENS and POPENS[-1][:3] == ["python3", "-m", "http.server"], "start launches the local website (patched)")
+    check(POPENS and POPENS[-1][:3] == ["python3", "-m", "llmos.webserve"], "start launches the local website (patched): localhost-only, no hidden files")
 
     for phrase in ("stop the local website", "stop the web server", "stop serving"):
         everyday._SERVER["p"] = FakeProc()

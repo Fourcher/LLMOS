@@ -239,17 +239,19 @@ def play_windowed(info, audio_only, env):
         pass
     # gpu output only through a Wayland GL context (never X11); without one
     # (a VM) mpv falls back to plain shared-memory frames
-    args = ["mpv", f"--input-ipc-server={IPC}", "--wayland-app-id=llmos-media", f"--title={info.get('title', 'LLM OS')[:80]}",
+    title = str(info.get('title') or 'LLM OS')[:80].replace("$", "$$")     # mpv would expand ${...} in a title
+    args = ["mpv", f"--input-ipc-server={IPC}", "--wayland-app-id=llmos-media", f"--title={title}",
             "--osc=yes", f"--input-conf={_input_conf()}", "--vo=gpu,wlshm", "--gpu-context=wayland", "--geometry=50%x50%", "--autofit-larger=90%x85%",
             *_common_args()]
     if os.environ.get("LIBGL_ALWAYS_SOFTWARE") == "1" or env.get("LIBGL_ALWAYS_SOFTWARE") == "1":
         args[args.index("--vo=gpu,wlshm")] = "--vo=wlshm"
     if audio_only:
         args += ["--no-video", "--force-window=no"]
-    args.append(info["url"])
+    args += ["--", info["url"]]           # a name that starts with "-" is a file or address, never an option
     log = open(LOG, "w")
+    # umask 077: the IPC socket (play/pause/seek control) is created owner-only
     p = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True,
-                         env=dict(env, HOME=config.home()))
+                         env=dict(env, HOME=config.home()), umask=0o077)
     with open(PIDFILE, "w") as f:
         f.write(str(p.pid))
     return p

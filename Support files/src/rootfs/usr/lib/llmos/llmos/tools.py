@@ -275,7 +275,8 @@ def uses_network(cmd):
     return False
 
 
-# the OS's own rules and code: writing any of them is a SECURITY change, confirmed even under hands-off
+# the OS's own rules and code: writing any of them is a SECURITY change (shown first under hands-on and balanced;
+# hands-off is the owner's full trust and asks nothing, see agent.needs_confirm)
 _POLICY_NAMES = ("settings.json", "conduct.txt", "cloud.json", "connectors.json")
 
 
@@ -794,7 +795,7 @@ def web_security_scan(a, ctx):
     addr = str(a.get("address", "")).strip()
     if not re.fullmatch(r"(?:https?://)?[\w.-]+(?::\d{1,5})?(?:/\S*)?", addr):
         return "error: give a web address to check"
-    url = addr if addr.startswith("http") else "http://" + addr
+    url = addr if re.match(r"https?://", addr, re.I) else "http://" + addr
     tool = shutil.which("nikto") or shutil.which("nikto.pl")
     try:
         p = subprocess.run([tool, "-h", url, "-Tuning", "1234", "-maxtime", "300"], capture_output=True, text=True, timeout=600)
@@ -813,6 +814,10 @@ def capture_traffic(a, ctx):
     secs = max(3, min(int(a.get("seconds") or 10), 60))
     out = os.path.join(config.home(), "Downloads", time.strftime("traffic-%Y%m%d-%H%M%S.pcapng"))
     os.makedirs(os.path.dirname(out), exist_ok=True)
+    try:
+        os.close(os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600))   # packets are private: owner-only
+    except OSError:
+        pass
     try:
         subprocess.run(["timeout", str(secs), "tshark", "-q", "-w", out], capture_output=True, text=True, timeout=secs + 20)
         p = subprocess.run(["tshark", "-r", out, "-q", "-z", "conv,ip"], capture_output=True, text=True, timeout=120)
@@ -2407,7 +2412,7 @@ _LAST_MAIL = []          # the message the owner last opened: "reply to it", "de
 _ORDINAL = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5, "5th": 5}
 
 
-def _mail_ref(a):
+def _mail_ref(a, exact=False):
     """Accept a message id or a sender/subject fragment ('latest' = the newest message, 'it' = the one last opened,
     'first'/'second'... = that place in the inbox list, newest first)."""
     ref = str(a.get("id", "")).strip()
@@ -2421,7 +2426,7 @@ def _mail_ref(a):
         items = mail.unread(limit=1)
         if items:
             return "INBOX", items[0]["uid"]
-    loc = mail.resolve(ref)
+    loc = mail.resolve(ref, exact=exact)
     if not loc:
         raise mail.MailError(f"no message matches '{ref}'. Use the numeric id shown by mail_inbox, or the "
                              f"sender's name as it appears there. Do not install or configure mail programs.")
@@ -2518,7 +2523,7 @@ def mail_send(a, ctx):
       available=lambda: mail.account() is not None)
 def mail_reply(a, ctx):
     try:
-        folder, uid = _mail_ref(a)
+        folder, uid = _mail_ref(a, exact=True)
         to, subject = mail.reply(uid, str(a.get("body", "")), folder)
     except mail.MailError as e:
         return f"error: {e}"
@@ -3066,6 +3071,9 @@ def _secs(v):
     return total if found else None
 
 
+_FFMPEG_LOCAL = "file,pipe"     # ffmpeg reads local files only: a playlist inside a media file cannot reach the network
+
+
 @tool("trim_video", "Cut a video (or sound file): remove seconds from its start and/or end, or keep only a part. Saves a new file "
       "'<name> (trimmed)' next to it; the original stays. With no file named: the newest video.",
       {"path": {"type": "string", "description": "the video (optional)"},
@@ -3114,10 +3122,10 @@ def trim_video(a, ctx):
         out, i = f"{stem} (trimmed {i}){ext}", i + 1
     audio_only = ext.lower() in _AUDIO_EXT
     # cut exactly where asked (re-encoded: a plain copy would jump to the nearest keyframe, seconds off)
-    argv = ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.3f}", "-i", path, "-t", f"{end - start:.3f}"] + \
+    argv = ["ffmpeg", "-v", "error", "-y", "-protocol_whitelist", _FFMPEG_LOCAL, "-ss", f"{start:.3f}", "-i", path, "-t", f"{end - start:.3f}"] + \
         ([] if audio_only else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]) + ["-c:a", "aac", "-b:a", "160k", out] \
         if ext.lower() in (".mp4", ".m4v", ".mov", ".mkv", ".m4a", ".aac") else \
-        ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.3f}", "-i", path, "-t", f"{end - start:.3f}", out]
+        ["ffmpeg", "-v", "error", "-y", "-protocol_whitelist", _FFMPEG_LOCAL, "-ss", f"{start:.3f}", "-i", path, "-t", f"{end - start:.3f}", out]
     ctx.status("cutting the video…")
     p = subprocess.run(argv, capture_output=True, text=True, timeout=7200)
     if p.returncode != 0 or not os.path.exists(out):
@@ -3287,7 +3295,8 @@ def convert_media(a, ctx):
         while os.path.exists(dest):
             dest, n = f"{os.path.splitext(p)[0]} ({n}).{to}", n + 1
         extra = ["-vf", "fps=12,scale=480:-1:flags=lanczos"] if to == "gif" else ["-q:a", "2"] if to == "mp3" else []
-        r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", p] + extra + [dest], capture_output=True, text=True, timeout=3600)
+        r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-protocol_whitelist", _FFMPEG_LOCAL, "-i", p] + extra + [dest],
+                           capture_output=True, text=True, timeout=3600)
         if r.returncode == 0 and os.path.exists(dest) and os.path.getsize(dest) > 0:
             made.append((p, dest))
         else:
@@ -3545,8 +3554,13 @@ def _looks_like_text(path):
 
 
 def _in_home(path):
-    home = config.home().rstrip("/")
-    return path == home or path.startswith(home + "/")
+    """Is this path inside the owner's home folder? Symlinks and ".." are resolved first, so a link in the home
+    folder that points elsewhere is not "in home"."""
+    try:
+        real, home = os.path.realpath(path), os.path.realpath(config.home()).rstrip("/") or "/"
+    except (OSError, ValueError):
+        return False
+    return real == home or real.startswith(home + "/")
 
 
 @tool("open_file", "Open one of the owner's files on the screen: text and code as a window, pictures as an image, "
@@ -3809,6 +3823,10 @@ def _image_step(step, w, h):
         re.match(r"(?:add|write|put)\s+(?:the\s+)?(?:words?|text|caption)\s+(?P<t>.+?)(?:\s+(?:at|on|in)\s+(?:the\s+)?(?:top|bottom|middle|center|centre)\b.*)?$", s, re.I)
     if m:
         text = m.group("t").strip().strip("'\"")
+        # -annotate reads "@file" as a file name and expands %[...] escapes: the words are drawn as written
+        text = text.replace("%", "%%")
+        if text.startswith("@"):
+            text = "\\" + text
         grav = "North" if re.search(r"\btop\b", low) else "South" if re.search(r"\bbottom\b", low) else "Center"
         col = next((c for c in ("red", "blue", "green", "yellow", "white", "black", "pink", "purple", "orange", "gold") if re.search(rf"\b{c}\b", low)), None)
         size = max(12, int(h / (6 if re.search(r"\b(?:big|large|huge)\b", low) else 16 if re.search(r"\b(?:small|tiny)\b", low) else 10)))
@@ -3878,6 +3896,21 @@ def _picture_ref(ref):
     return ref
 
 
+_MAGICK_POLICY_DIR = "/usr/share/llmos/imagemagick"
+
+
+def _magick_env():
+    """ImageMagick with LLM OS's own policy added (never fetch from the network, never run MSL/MVG scripts or read
+    "@file" lists): a picture or SVG that names a URL stays a local edit."""
+    env = dict(os.environ)
+    here = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+                        "share", "llmos", "imagemagick")
+    d = _MAGICK_POLICY_DIR if os.path.isfile(os.path.join(_MAGICK_POLICY_DIR, "policy.xml")) else here
+    if os.path.isfile(os.path.join(d, "policy.xml")):
+        env["MAGICK_CONFIGURE_PATH"] = d + (":" + env["MAGICK_CONFIGURE_PATH"] if env.get("MAGICK_CONFIGURE_PATH") else "")
+    return env
+
+
 @tool("edit_image", "Edit a picture and/or save it as another format (save_as 'x.pdf' makes a PDF): steps in order such as flip, "
       "rotate, resize, crop, add text, black and white. A new file; the original stays.",
       {"path": STR, "steps": {"type": "array", "items": {"type": "string"}, "description": _STEP_HELP},
@@ -3902,7 +3935,7 @@ def edit_image(a, ctx):
     try:
         w, h = (int(x) for x in subprocess.run([tool_, "identify", "-format", "%w %h", path] if tool_.endswith("magick") else
                                                [shutil.which("identify") or "identify", "-format", "%w %h", path],
-                                               capture_output=True, text=True, timeout=30).stdout.split()[:2])
+                                               capture_output=True, text=True, timeout=30, env=_magick_env()).stdout.split()[:2])
     except ValueError:
         return "error: could not read the picture"
     args, done, unknown = [], [], []
@@ -3934,7 +3967,7 @@ def edit_image(a, ctx):
     if os.path.splitext(dest)[1].lower() == ".pdf":
         args += ["-quality", "92"]
     dest = _free_path(dest)
-    p = subprocess.run([tool_, path] + args + [dest], capture_output=True, text=True, timeout=300)
+    p = subprocess.run([tool_, path] + args + [dest], capture_output=True, text=True, timeout=300, env=_magick_env())
     if p.returncode or not os.path.exists(dest):
         err = (p.stderr or p.stdout).strip()
         if ".pdf" in dest.lower() and "policy" in err.lower():
@@ -3951,6 +3984,9 @@ def edit_image(a, ctx):
     return (f"saved {shown} ({_human_size(os.path.getsize(dest))}) with: {', '.join(done) or 'no changes'}" +
             (f"; not understood (left out): {', '.join(unknown)}" if unknown else "") + "; the original is unchanged "
             f"[path for a next step: {dest}].")
+
+
+_BACKUP_FOLDERS = ("Documents", "Pictures", "Music", "Videos", "Desktop", "Downloads", "Apps")
 
 
 def _usb_target():
@@ -3973,7 +4009,7 @@ def backup_files(a, ctx):
     dest = os.path.join(where, "LLM OS backup", time.strftime("%Y-%m-%d"))
     os.makedirs(dest, exist_ok=True)
     total = 0
-    for f in ("Documents", "Pictures", "Music", "Videos", "Desktop", "Downloads", "Apps"):
+    for f in _BACKUP_FOLDERS:
         src = os.path.join(home, f)
         if not os.path.isdir(src):
             continue
@@ -3999,27 +4035,62 @@ def restore_backup(a, ctx):
         return "there is no LLM OS backup on that drive"
     src = os.path.join(root, dates[-1])
     n = 0
-    for f in os.listdir(src):
-        for dd, _, fs in os.walk(os.path.join(src, f)):
+    home = os.path.realpath(config.home())
+    # only the folders backup_files writes (never .llmos, .config or another hidden folder a stick may carry),
+    # never a symlink (it could point at any file on this computer), plain modes (no setuid, no group/other write)
+    for f in _BACKUP_FOLDERS:
+        top = os.path.join(src, f)
+        if os.path.islink(top) or not os.path.isdir(top):
+            continue
+        for dd, subdirs, fs in os.walk(top):
+            subdirs[:] = [s for s in subdirs if not os.path.islink(os.path.join(dd, s))]
             for name in fs:
-                rel = os.path.relpath(os.path.join(dd, name), src)
-                target = os.path.join(config.home(), rel)
-                if not os.path.exists(target):
+                srcf = os.path.join(dd, name)
+                if os.path.islink(srcf) or not os.path.isfile(srcf):
+                    continue
+                rel = os.path.relpath(srcf, src)
+                target = os.path.join(home, rel)
+                if not os.path.lexists(target):
                     os.makedirs(os.path.dirname(target), exist_ok=True)
-                    shutil.copy2(os.path.join(dd, name), target)
+                    shutil.copyfile(srcf, target, follow_symlinks=False)
+                    try:
+                        os.chmod(target, 0o755 if os.stat(srcf).st_mode & 0o100 else 0o644)
+                        os.utime(target, (os.stat(srcf).st_atime, os.stat(srcf).st_mtime))
+                    except OSError:
+                        pass
                     n += 1
     return f"brought back {n} file(s) from the backup of {dates[-1]}; files already here were left as they are. Done: reply in one sentence."
 
 
 @tool("format_drive", "Erase a USB stick or external drive and make it empty, readable by Windows, Mac and Linux (exFAT).",
-      {"name": {"type": "string", "description": "a label for the drive (optional)"}}, [], risk=DESTRUCTIVE)
+      {"name": {"type": "string", "description": "a label for the drive (optional)"},
+       "drive": {"type": "string", "description": "which drive, when more than one is plugged in: its current name or device (e.g. /dev/sdb)"}},
+      [], risk=DESTRUCTIVE)
 def format_drive(a, ctx):
     from . import syspanels
     drives = syspanels.removable()
     if not drives:
         return "no USB stick or drive is plugged in"
-    d = drives[0]
-    disk = d.get("disk") or d["path"]
+    disks = {}
+    for x in drives:
+        disks.setdefault(x.get("disk") or x["path"], x)
+    want = str(a.get("drive") or "").strip().lower()
+    if want:
+        hit = [k for k, x in disks.items() if want in (k.lower(), str(x.get("path", "")).lower(), str(x.get("label", "")).lower())] or \
+              [x.get("disk") or x["path"] for x in drives if want in (str(x.get("path", "")).lower(), str(x.get("label", "")).lower())]
+        if not hit:
+            return ("error: no plugged-in drive is called " + str(a.get("drive")) + ". The drives are: "
+                    + "; ".join(f"{k} ({x.get('label') or 'no name'}, {x.get('size')})" for k, x in disks.items()))
+        disk = hit[0]
+        d = disks.get(disk) or drives[0]
+    elif len(disks) > 1:
+        # which one is not guessed: the first drive found may be the owner's backup disk
+        return ("error: " + str(len(disks)) + " drives are plugged in: "
+                + "; ".join(f"{k} ({x.get('label') or 'no name'}, {x.get('size')})" for k, x in disks.items())
+                + ". Ask which one to erase, then call format_drive again with drive set to it.")
+    else:
+        d = drives[0]
+        disk = d.get("disk") or d["path"]
     label = re.sub(r"[^A-Za-z0-9 _-]", "", str(a.get("name") or "USB"))[:11] or "USB"
     if not (shutil.which("mkfs.exfat") or shutil.which("mkexfatfs")):
         return "the formatting program is missing (say 'install exfatprogs')"
@@ -4833,6 +4904,22 @@ def manage_apps(a, ctx):
     return "apps: " + (", ".join(x["title"] for x in items) or "none yet")
 
 
+_SHELL_SYNTAX = re.compile(r"[;&|<>`$(){}*?\[\]\n\\]|(?:^|\s)~")
+
+
+def _open_argv(cmd):
+    """A command line as the program's own argument list: "gimp '/home/me/My Photo.png'" is gimp with ONE file. A line
+    that uses the shell's own syntax (pipes, variables, globs, ~) still goes through /bin/sh as the owner wrote it."""
+    if not _SHELL_SYNTAX.search(cmd):
+        try:
+            argv = shlex.split(cmd)
+        except ValueError:
+            argv = None
+        if argv:
+            return argv
+    return ["/bin/sh", "-c", cmd]
+
+
 @tool("open_app", "Open a program for the owner to use directly, by what people call it ('the browser', 'files', "
       "'text editor', 'spreadsheet', 'terminal', 'calculator') or its name. Web sites: use browse instead, never a "
       "text-mode browser.",
@@ -4903,14 +4990,14 @@ def open_app(a, ctx):
         if not _display_available():
             return "there is no screen attached (or the display server is missing), so graphical programs can't open; text programs still can"
         if hasattr(ctx, "launch"):
-            r = ctx.launch(["/bin/sh", "-c", cmd], name=prog)
+            r = ctx.launch(_open_argv(cmd), name=prog)
             if isinstance(r, str):
                 return f"error: {r}"
             what = programs.EXTRA.get(prog, f"'{cmd}'")
             return f"opened {what} in a window. Done: if the request asked for more, do the next step now; otherwise reply in one sentence."
         if media.desk_env() is None:
             media.stop()   # a kiosk shows one thing at a time
-        media.kiosk_launch(["/bin/sh", "-c", cmd], os.path.join(config.RUN, "gui.log"))
+        media.kiosk_launch(_open_argv(cmd), os.path.join(config.RUN, "gui.log"))
         return f"opened '{cmd}' on the screen (close it there to return)"
     if ctx.headless:
         return "interactive programs need you at the console"

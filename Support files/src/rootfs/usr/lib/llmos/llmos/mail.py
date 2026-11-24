@@ -354,11 +354,29 @@ def find(query, limit=5):
         conn.logout()
 
 
-def resolve(ref):
+def resolve(ref, exact=False):
     """A numeric id -> ('INBOX', id); anything else -> the newest matching
-    message by sender or subject, or None."""
+    message by sender or subject, or None. exact (a reply, which sends mail): an exact address wins, and words that
+    match messages from more than one sender name which ones instead of picking the newest."""
     r = str(ref).strip().strip("[] ")
     if r.isdigit():
         return "INBOX", r
+    if exact:
+        hits = find(r, limit=10)
+        if not hits:
+            return None
+        addr = lambda h: (email.utils.parseaddr(h.get("from") or "")[1] or h.get("from") or "").lower()
+        same = [h for h in hits if addr(h) == r.lower()]
+        if same:
+            return same[0]["folder"], same[0]["uid"]
+        senders = []
+        for h in hits:
+            if addr(h) not in [addr(x) for x in senders]:
+                senders.append(h)
+        if len(senders) > 1:
+            raise MailError(f"'{r}' matches mail from {len(senders)} different senders: "
+                            + "; ".join(f"[{h['uid']}] {h['from']} ({h['subject'][:40]})" for h in senders[:5])
+                            + ". Reply by the numeric id of the one meant.")
+        return hits[0]["folder"], hits[0]["uid"]
     hits = find(r, limit=1)
     return (hits[0]["folder"], hits[0]["uid"]) if hits else None

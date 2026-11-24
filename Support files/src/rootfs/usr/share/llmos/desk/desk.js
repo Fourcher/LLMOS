@@ -18,7 +18,7 @@
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
   function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
   function t(k, d) { return S[k] || d || k; }
-  function fmt(k, vars) { let s = t(k); for (const [a, b] of Object.entries(vars)) s = s.split("{" + a + "}").join(b); return s; }
+  function fmt(k, vars) { return t(k).replace(/\{([^{}]+)\}/g, (all, a) => Object.prototype.hasOwnProperty.call(vars, a) ? String(vars[a]) : all); }
   function md(text) {
     // markdown-lite: paragraphs, bullets, numbered lists, **bold**, `code`, links
     const lines = String(text || "").split("\n");
@@ -878,7 +878,8 @@
         e.onsubmit = (ev) => {
           ev.preventDefault();
           if (b.submit.post) { const m = {}; for (const [k, inp] of Object.entries(inputs)) { if (k !== "t") m[k] = inp.value; if (inp.type !== "hidden") inp.value = ""; } m.t = b.submit.post; post(m); return; }
-          let s = b.submit.say || ""; for (const [k, inp] of Object.entries(inputs)) s = s.split("{" + k + "}").join(inp.value); say(s);
+          // one pass over the template: a typed value that contains "{other}" is kept as typed, never expanded again
+          const s = (b.submit.say || "").replace(/\{([^{}]+)\}/g, (all, k) => Object.prototype.hasOwnProperty.call(inputs, k) ? inputs[k].value : all); say(s);
         };
         return e;
       }

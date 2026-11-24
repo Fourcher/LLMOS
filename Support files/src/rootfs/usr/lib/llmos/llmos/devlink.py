@@ -10,6 +10,7 @@ server. "stop remote testing" turns it off (setting "devlink").
 """
 import base64
 import json
+import math
 import os
 import re
 import socket
@@ -128,7 +129,11 @@ def run():
         if not ok_sig:
             _post_safe(base, {"id": cid, "ok": False, "out": "refused: the signature does not match the paired key"})
             continue
-        if abs(time.time() - float(cmd.get("ts", 0))) > 120 or cid in _seen or cmd.get("host") not in (host, "*"):
+        try:
+            ts = float(cmd.get("ts", 0))
+        except (TypeError, ValueError):
+            ts = 0.0
+        if not math.isfinite(ts) or abs(time.time() - ts) > 120 or cid in _seen or cmd.get("host") not in (host, "*"):
             _post_safe(base, {"id": cid, "ok": False, "out": "refused: stale, repeated, or for another machine"})
             continue
         _seen.append(cid)

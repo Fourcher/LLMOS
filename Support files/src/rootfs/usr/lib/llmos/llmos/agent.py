@@ -2001,6 +2001,7 @@ def execute(ctx, name, arguments):
             return f"error: there's nothing called {p} to delete"   # nothing to ask about
         if str(args.get("path") or "") == str(p) and p:
             args = dict(args, path=tools._path(p))   # the activity line shows the real place, not the model's guess
+        shown = _redacted(args)                      # and so does any confirmation: the resolved path, not the guess
     # an unasked call (a gate miss, see above) is shown first like ALWAYS_CONFIRM, and runs without asking under full trust
     held = unasked is not None and not full_trust
     if always or held or tainted or needs_confirm(risk) or (getattr(ctx, "headless", False) and risk in (tools.DESTRUCTIVE, tools.SECURITY)):
